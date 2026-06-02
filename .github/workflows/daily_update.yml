@@ -1,0 +1,71 @@
+name: Daily Update
+
+on:
+
+  schedule:
+    - cron: "0 14 * * *"
+
+  workflow_dispatch:
+
+jobs:
+
+  update:
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+
+    - uses: actions/checkout@v4
+
+
+    - uses: actions/setup-python@v5
+
+      with:
+        python-version: "3.12"
+
+
+    - name: Install dependencies
+
+      run: |
+
+        pip install \
+        pandas \
+        numpy \
+        pybaseball \
+        notebook \
+        nbconvert
+
+
+    - name: Execute notebook
+
+      run: |
+
+        jupyter nbconvert \
+        --to notebook \
+        --execute \
+        --inplace \
+        model.ipynb
+
+
+    - name: Commit CSV
+
+      run: |
+
+        git config \
+        user.name \
+        github-actions
+
+        git config \
+        user.email \
+        actions@github.com
+
+        git add data/
+
+        git commit \
+        -m "Daily update" \
+        || exit 0
+
+        git push
