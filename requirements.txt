@@ -1,0 +1,6 @@
+pandas
+numpy
+pybaseball
+notebook
+nbconvert
+ipykernel
