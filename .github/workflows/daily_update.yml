@@ -47,7 +47,7 @@ jobs:
         --to notebook \
         --execute \
         --inplace \
-        model.ipynb
+        WAVE.ipynb
 
 
     - name: Commit CSV
