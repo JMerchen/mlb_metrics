@@ -176,10 +176,7 @@ pave,
 20
 )
 
-buildTable(
-confidence,
-"confidenceTable"
-)
+loadTeamExplorer()
 
 loadTeams(
 confidence
@@ -319,6 +316,72 @@ document
 )
 .innerHTML =
 ""
+
+}
+
+function loadTeamExplorer(){
+
+let html =
+""
+
+confidence.forEach(
+row=>{
+
+const team =
+row.team
+
+if(
+team
+){
+
+html +=
+
+`
+<button
+onclick="showTeam(
+'${team}'
+)">
+
+${team}
+
+</button>
+
+`
+
+}
+
+}
+
+)
+
+document
+.getElementById(
+"teamButtons"
+)
+.innerHTML =
+html
+
+}
+
+function showTeam(team){
+
+const result =
+confidence.find(
+r=>
+
+r.team
+===
+team
+
+)
+
+buildTable(
+
+[result],
+
+"teamResult"
+
+)
 
 }
 
