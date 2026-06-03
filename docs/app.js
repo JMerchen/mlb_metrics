@@ -189,13 +189,6 @@ confidence
   
 function searchPlayer(){
 
-const mode =
-document
-.getElementById(
-"playerType"
-)
-.value
-
 const query =
 document
 .getElementById(
@@ -205,20 +198,27 @@ document
 .trim()
 .toLowerCase()
 
-const data =
-mode==="wave"
+const source =
+document
+.getElementById(
+"playerType"
+)
+.value
+
+const players =
+source==="wave"
 ?
 wave
 :
 pave
 
-const match =
-data.find(
-player=>{
+const matches =
+players.filter(
+p=>{
 
 const first =
 (
-player.name_first
+p.name_first
 ||
 ""
 )
@@ -226,14 +226,11 @@ player.name_first
 
 const last =
 (
-player.name_last
+p.name_last
 ||
 ""
 )
 .toLowerCase()
-
-const full =
-`${first} ${last}`
 
 return(
 
@@ -249,7 +246,8 @@ query
 
 ||
 
-full.includes(
+`${first} ${last}`
+.includes(
 query
 )
 
@@ -259,63 +257,85 @@ query
 )
 
 if(
-!match
+matches.length===0
 ){
+
+document
+.getElementById(
+"playerChoices"
+)
+.innerHTML =
+"No players found"
 
 document
 .getElementById(
 "playerResult"
 )
 .innerHTML =
-"No player found"
+""
 
 return
 
 }
 
 let html =
-"<table>"
+""
 
-Object
-.entries(
-match
-)
-.forEach(
-([k,v])=>{
+matches.forEach(
+(
+player,
+index
+)=>{
 
 html +=
 
 `
-<tr>
+<button
+onclick="showPlayer(${index})">
 
-<th>
+${player.name_first}
+${player.name_last}
 
-${k}
+</button>
 
-</th>
-
-<td>
-
-${v}
-
-</td>
-
-</tr>
 `
 
 }
-
 )
 
-html +=
-"</table>"
+window.playerMatches =
+matches
+
+document
+.getElementById(
+"playerChoices"
+)
+.innerHTML =
+html
 
 document
 .getElementById(
 "playerResult"
 )
 .innerHTML =
-html
+""
+
+}
+
+function showPlayer(index){
+
+const player =
+window.playerMatches[
+index
+]
+
+buildTable(
+
+[player],
+
+"playerResult"
+
+)
 
 }
 
