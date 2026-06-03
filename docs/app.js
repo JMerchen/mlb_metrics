@@ -385,6 +385,164 @@ buildTable(
 
 }
 
+function predictOdds(){
+
+const teamA =
+document
+.getElementById(
+"teamA"
+)
+.value
+
+const teamB =
+document
+.getElementById(
+"teamB"
+)
+.value
+
+if(
+teamA===teamB
+){
+
+document
+.getElementById(
+"oddsResult"
+)
+.innerHTML =
+"Choose different teams"
+
+return
+
+}
+
+const A =
+confidence.find(
+r=>
+r.team===teamA
+)
+
+const B =
+confidence.find(
+r=>
+r.team===teamB
+)
+
+const scoreA =
+
+(
+Number(
+A.Confidence
+)
++
+Number(
+A.pyth_Confidence
+)
++
+Number(
+A.true_power
+)
+
+)
+/3
+
+const scoreB =
+
+(
+Number(
+B.Confidence
+)
++
+Number(
+B.pyth_Confidence
+)
++
+Number(
+B.true_power
+)
+
+)
+/3
+
+const probA =
+
+scoreA
+/
+(
+scoreA
++
+scoreB
+)
+
+const probB =
+1
+-
+probA
+
+document
+.getElementById(
+"oddsResult"
+)
+.innerHTML =
+
+`
+
+<h3>
+
+${teamA}
+vs
+${teamB}
+
+</h3>
+
+<p>
+
+${teamA}
+
+Win:
+
+<b>
+
+${(
+probA
+*
+100
+)
+.toFixed(
+1
+)
+}%
+
+</b>
+
+</p>
+
+<p>
+
+${teamB}
+
+Win:
+
+<b>
+
+${(
+probB
+*
+100
+)
+.toFixed(
+1
+)
+}%
+
+</b>
+
+</p>
+
+`
+
+}
+
 function showPlayer(index){
 
 const player =
