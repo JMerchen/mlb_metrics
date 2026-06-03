@@ -182,6 +182,8 @@ loadTeams(
 confidence
 )
 
+loadPitchers()
+
 }
   
 function searchPlayer(){
@@ -557,6 +559,160 @@ buildTable(
 "playerResult"
 
 )
+
+}
+
+let leaguePAVE = 1
+
+function loadPitchers(){
+
+const baseA =
+
+(
+Number(A.Confidence)
+*
+0.4
+
++
+
+Number(A.pyth_Confidence)
+*
+0.3
+
++
+
+Number(A.true_power)
+*
+0.3
+
+)
+
+const baseB =
+
+(
+Number(B.Confidence)
+*
+0.4
+
++
+
+Number(B.pyth_Confidence)
+*
+0.3
+
++
+
+Number(B.true_power)
+*
+0.3
+
+)
+
+const starterA =
+document
+.getElementById(
+"pitcherA"
+)
+.value
+
+const starterB =
+document
+.getElementById(
+"pitcherB"
+)
+.value
+
+function getPave(name){
+
+if(
+name==="League Average"
+){
+
+return leaguePAVE
+
+}
+
+const p =
+pave.find(
+x=>
+
+`${x.name_first}
+${x.name_last}`
+
+===
+
+name
+
+)
+
+return p
+?
+Number(
+p.probability
+)
+:
+leaguePAVE
+
+}
+
+const scoreA =
+
+baseA
+*
+getPave(
+starterB
+)
+
+const scoreB =
+
+baseB
+*
+getPave(
+starterA
+)
+
+a.innerHTML =
+"<option>League Average</option>"
+
+b.innerHTML =
+"<option>League Average</option>"
+
+const vals =
+pave
+.map(
+r=>
+Number(
+r.probability
+)
+)
+.filter(
+x=>
+!isNaN(x)
+)
+
+leaguePAVE =
+vals.reduce(
+(a,b)=>a+b,
+0
+)
+/
+vals.length
+
+pave.forEach(
+p=>{
+
+const name =
+
+`${p.name_first}
+${p.name_last}`
+
+a.innerHTML +=
+`<option>${name}</option>`
+
+b.innerHTML +=
+`<option>${name}</option>`
+
+})
 
 }
 
