@@ -149,17 +149,17 @@ b.innerHTML +=
 
 async function loadAll(){
 
-const wave =
+wave =
 await loadCSV(
 "./data/wave.csv"
 )
 
-const pave =
+pave =
 await loadCSV(
 "./data/pave.csv"
 )
 
-const confidence =
+confidence =
 await loadCSV(
 "./data/confidence.csv"
 )
@@ -181,18 +181,6 @@ confidence,
 "confidenceTable"
 )
 
-console.log(
-Object.keys(
-wave[0]
-)
-)
-
-console.log(
-Object.keys(
-pave[0]
-)
-)
-  
 loadTeams(
 confidence
 )
