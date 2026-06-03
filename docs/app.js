@@ -200,6 +200,7 @@ document
 "playerSearch"
 )
 .value
+.trim()
 .toLowerCase()
 
 const data =
@@ -211,17 +212,48 @@ pave
 
 const match =
 data.find(
-r=>
+player=>{
 
-Object
-.values(
-r)
-.join(" ")
+const first =
+(
+player.name_first
+||
+""
+)
 .toLowerCase()
-.includes(
+
+const last =
+(
+player.name_last
+||
+""
+)
+.toLowerCase()
+
+const full =
+`${first} ${last}`
+
+return(
+
+first.includes(
 query
 )
 
+||
+
+last.includes(
+query
+)
+
+||
+
+full.includes(
+query
+)
+
+)
+
+}
 )
 
 if(
@@ -247,9 +279,7 @@ Object
 match
 )
 .forEach(
-(
-[k,v]
-)=>{
+([k,v])=>{
 
 html +=
 
@@ -272,6 +302,7 @@ ${v}
 `
 
 }
+
 )
 
 html +=
