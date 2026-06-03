@@ -185,6 +185,8 @@ loadTeams(
 confidence
 )
 
+}
+  
 function searchPlayer(){
 
 const mode =
@@ -314,8 +316,6 @@ document
 )
 .innerHTML =
 html
-
-}
 
 }
 
