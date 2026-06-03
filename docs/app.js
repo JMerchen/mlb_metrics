@@ -1,3 +1,9 @@
+let wave=[]
+
+let pave=[]
+
+let confidence=[]
+
 async function loadCSV(path){
 
 const response =
@@ -178,6 +184,107 @@ confidence,
 loadTeams(
 confidence
 )
+
+function searchPlayer(){
+
+const mode =
+document
+.getElementById(
+"playerType"
+)
+.value
+
+const query =
+document
+.getElementById(
+"playerSearch"
+)
+.value
+.toLowerCase()
+
+const data =
+mode==="wave"
+?
+wave
+:
+pave
+
+const match =
+data.find(
+r=>
+
+Object
+.values(
+r)
+.join(" ")
+.toLowerCase()
+.includes(
+query
+)
+
+)
+
+if(
+!match
+){
+
+document
+.getElementById(
+"playerResult"
+)
+.innerHTML =
+"No player found"
+
+return
+
+}
+
+let html =
+"<table>"
+
+Object
+.entries(
+match
+)
+.forEach(
+(
+[k,v]
+)=>{
+
+html +=
+
+`
+<tr>
+
+<th>
+
+${k}
+
+</th>
+
+<td>
+
+${v}
+
+</td>
+
+</tr>
+`
+
+}
+)
+
+html +=
+"</table>"
+
+document
+.getElementById(
+"playerResult"
+)
+.innerHTML =
+html
+
+}
 
 }
 
