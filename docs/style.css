@@ -42,11 +42,23 @@ display:flex;
 
 gap:20px;
 
+width:100%;
+
+overflow:hidden;
+
+align-items:flex-start;
+
 }
 
 .leaderboards>div{
 
 flex:1;
+
+min-width:0;
+
+max-width:50%;
+
+overflow:hidden;
 
 }
 
@@ -56,11 +68,11 @@ width:100%;
 
 max-width:100%;
 
-overflow-x:auto;
+max-height:400px;
+
+overflow-x:scroll;
 
 overflow-y:auto;
-
-max-height:400px;
 
 background:#181818;
 
