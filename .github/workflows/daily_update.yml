@@ -2,70 +2,68 @@ name: Daily Update
 
 on:
 
-  schedule:
-    - cron: "0 14 * * *"
+schedule:
+- cron: "0 14 * * *"
 
-  workflow_dispatch:
+workflow_dispatch:
 
 jobs:
 
-  update:
+update:
 
-    runs-on: ubuntu-latest
+```
+runs-on: ubuntu-latest
 
-    permissions:
-      contents: write
+permissions:
+  contents: write
 
-    steps:
+steps:
 
-    - uses: actions/checkout@v4
+  - name: Checkout repository
+    uses: actions/checkout@v4
 
+  - name: Set up Python
+    uses: actions/setup-python@v5
 
-    - uses: actions/setup-python@v5
+    with:
+      python-version: "3.12"
 
-      with:
-        python-version: "3.12"
+  - name: Install dependencies
 
+    run: |
 
-    - name: Install dependencies
+      python -m pip install --upgrade pip
 
-      run: |
-
-        pip install \
+      pip install \
         pandas \
         numpy \
-        pybaseball \
-        notebook \
-        nbconvert
+        pybaseball
 
+  - name: Create output folders
 
-    - name: Execute notebook
+    run: |
 
-      run: |
+      mkdir -p docs/data
 
-        jupyter nbconvert \
-        --to notebook \
-        --execute \
-        --inplace \
-        WAVE.ipynb
+  - name: Run model
 
+    run: |
 
-    - name: Commit CSV
+      python scripts/wave.py
 
-      run: |
+  - name: Commit updates
 
-        git config \
-        user.name \
-        github-actions
+    run: |
 
-        git config \
-        user.email \
-        actions@github.com
+      git config user.name "github-actions"
 
-        git add data/
+      git config user.email "actions@github.com"
 
-        git commit \
+      git add docs/data/
+
+      git commit \
         -m "Daily update" \
-        || exit 0
+        || echo "No changes"
 
-        git push
+      git push
+```
