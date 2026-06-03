@@ -2,29 +2,29 @@ body{
 
 margin:0;
 
-font-family:Arial;
-
 background:#111;
 
 color:white;
+
+font-family:Arial;
 
 }
 
 .container{
 
-max-width:1200px;
+max-width:1400px;
 
 margin:auto;
 
-padding:30px;
+padding:20px;
 
 }
 
 h1{
 
-font-size:40px;
+font-size:42px;
 
-margin-bottom:10px;
+margin-bottom:25px;
 
 }
 
@@ -32,39 +32,75 @@ h2{
 
 font-size:20px;
 
-color:#aaa;
+margin-bottom:10px;
 
-margin-bottom:20px;
+}
+
+.leaderboards{
+
+display:flex;
+
+gap:20px;
+
+}
+
+.leaderboards>div{
+
+flex:1;
+
+}
+
+.scrollbox{
+
+max-height:400px;
+
+overflow:auto;
+
+background:#181818;
+
+padding:10px;
+
+border-radius:10px;
 
 }
 
 table{
 
-border-collapse:collapse;
-
 width:100%;
 
+border-collapse:collapse;
+
 }
 
+td,
 th{
 
-background:#222;
-
-padding:12px;
-
-text-align:left;
-
-}
-
-td{
-
-padding:10px;
+padding:8px;
 
 border-bottom:1px solid #333;
 
+font-size:14px;
+
 }
 
-tr:hover{
+select,
+input,
+button{
+
+padding:10px;
+
+margin:5px;
+
+}
+
+hr{
+
+margin:30px 0;
+
+border-color:#333;
+
+}
+
 
 background:#1a1a1a;
 
