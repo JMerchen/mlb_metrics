@@ -11,7 +11,6 @@ jobs:
 
 update:
 
-```
 runs-on: ubuntu-latest
 
 permissions:
@@ -49,7 +48,7 @@ steps:
 
     run: |
 
-      python scripts/wave.py
+      python scripts/model.py
 
   - name: Commit updates
 
@@ -66,4 +65,3 @@ steps:
         || echo "No changes"
 
       git push
-```
