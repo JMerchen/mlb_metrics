@@ -22,13 +22,115 @@ href="./style.css">
 MLB Metrics
 </h1>
 
+<div class="leaderboards">
+
+<div>
+
 <h2>
-Current WAVE Data
+Top WAVE Players
 </h2>
 
-<div id="output">
+<div
+class="scrollbox"
+id="waveTable">
 
-Loading WAVE...
+Loading...
+
+</div>
+
+</div>
+
+<div>
+
+<h2>
+Top PAVE Players
+</h2>
+
+<div
+class="scrollbox"
+id="paveTable">
+
+Loading...
+
+</div>
+
+</div>
+
+</div>
+
+<hr>
+
+<h2>
+Player Search
+</h2>
+
+<select id="playerType">
+
+<option value="wave">
+
+Hitter (WAVE)
+
+</option>
+
+<option value="pave">
+
+Pitcher (PAVE)
+
+</option>
+
+</select>
+
+<input
+id="playerSearch"
+placeholder="Search player">
+
+<button>
+
+Search
+
+</button>
+
+<div id="playerResult">
+
+</div>
+
+<hr>
+
+<h2>
+Team Confidence
+</h2>
+
+<div
+class="scrollbox"
+id="confidenceTable">
+
+Loading...
+
+</div>
+
+<hr>
+
+<h2>
+Series Odds
+</h2>
+
+<select id="teamA">
+
+</select>
+
+<select id="teamB">
+
+</select>
+
+<button>
+
+Predict
+
+</button>
+
+<div id="oddsResult">
+
+Select teams
 
 </div>
 
