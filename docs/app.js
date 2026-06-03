@@ -181,6 +181,18 @@ confidence,
 "confidenceTable"
 )
 
+console.log(
+Object.keys(
+wave[0]
+)
+)
+
+console.log(
+Object.keys(
+pave[0]
+)
+)
+  
 loadTeams(
 confidence
 )
