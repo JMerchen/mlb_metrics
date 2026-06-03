@@ -1,9 +1,19 @@
 async function loadWave(){
 
+try{
+
 const response =
 await fetch(
-"/mlb_metrics/data/wave.csv"
+"./data/wave.csv"
 )
+
+if(!response.ok){
+
+throw new Error(
+response.status
+)
+
+}
 
 const text =
 await response.text()
@@ -22,6 +32,23 @@ text
 )
 +
 "</pre>"
+
+}
+
+catch(err){
+
+document
+.getElementById(
+"output"
+)
+.innerHTML =
+"ERROR:<br><br>"
++
+err
+
+console.log(err)
+
+}
 
 }
 
