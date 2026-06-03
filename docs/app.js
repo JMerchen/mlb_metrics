@@ -1,17 +1,8 @@
 async function loadWave(){
 
-document
-.getElementById(
-"output"
-)
-.innerHTML =
-"attempting fetch"
-
-try{
-
 const response =
 await fetch(
-"../data/wave.csv"
+"./data/wave.csv"
 )
 
 const text =
@@ -30,19 +21,6 @@ text.slice(
 )
 +
 "</pre>"
-
-}
-
-catch(err){
-
-document
-.getElementById(
-"output"
-)
-.innerHTML =
-err
-
-}
 
 }
 
