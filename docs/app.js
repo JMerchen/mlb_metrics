@@ -504,8 +504,18 @@ document
 .innerHTML =
 
 `
+<div
+style="
+background:#1e7e34;
+padding:10px;
+border-radius:8px;
+font-weight:bold;
+">
+
 ✓ Selected:
-<b>${name}</b>
+${name}
+
+</div>
 `
 
 document
@@ -533,78 +543,41 @@ document
 .innerHTML =
 
 `
-
 <table>
 
 <tr>
-
-<th>
-
-Expected Hits
-
-</th>
-
-<td>
-
-${player.Expected_Hits}
-
-</td>
-
+<th>Expected Hits</th>
+<td>${player.Expected_Hits}</td>
 </tr>
 
 <tr>
-
-<th>
-
-Expected Bases
-
-</th>
-
-<td>
-
-${player.Expected_Bases}
-
-</td>
-
+<th>Expected Bases</th>
+<td>${player.Expected_Bases}</td>
 </tr>
 
 <tr>
-
-<th>
-
-Expected HRs
-
-</th>
-
-<td>
-
-${player.Expected_HRs}
-
-</td>
-
+<th>Expected HRs</th>
+<td>${player.Expected_HRs}</td>
 </tr>
 
 <tr>
-
-<th>
-
-PAVE+
-
-</th>
-
-<td>
-
-${player.PAVE_PLUS
-||
-"—"}
-
-</td>
-
+<th>PAVE+</th>
+<td>${player.PAVE_PLUS || "—"}</td>
 </tr>
 
 </table>
-
 `
+
+}
+
+else{
+
+document
+.getElementById(
+`pitcherStats${side}`
+)
+.innerHTML =
+""
 
 }
 
