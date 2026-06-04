@@ -518,7 +518,7 @@ document
 
 
 
-function getPave(name){
+function getPitchAdjustment(name){
 
 if(
 name===
@@ -532,18 +532,13 @@ return 1
 const player =
 
 pave.find(
-p=>{
+p=>
 
-const full =
+`${p.name_first} ${p.name_last}`
 
-`${p.name_first}
-${p.name_last}`
+===
 
-return(
-full===name
-)
-
-}
+name
 
 )
 
@@ -555,45 +550,51 @@ return 1
 
 }
 
-const possible =
+const hits =
 
-[
-"PAVE",
-"pave",
-"probability",
-"value",
-"score"
-]
-
-for(
-let col
-of
-possible
-){
-
-if(
-player[col]
-){
-
-console.log(
-name,
-col,
-player[col]
+Number(
+player.Expected_Hits
+||
+4.8
 )
 
-return Number(
-player[col]
+const bases =
+
+Number(
+player.Expected_Bases
+||
+10.5
 )
 
-}
+/*
+League average starter:
+4.8 hits
+10.5 bases
+*/
 
-}
+const hitFactor =
+hits
+/
+4.8
 
-console.log(
-player
+const baseFactor =
+bases
+/
+10.5
+
+return(
+
+hitFactor
+*
+0.5
+
++
+
+baseFactor
+*
+0.5
+
 )
-
-return 1
 
 }
 
@@ -679,7 +680,7 @@ const scoreA =
 
 baseA
 *
-getPave(
+getPitchAdjustment(
 starterB
 )
 
@@ -687,7 +688,7 @@ const scoreB =
 
 baseB
 *
-getPave(
+getPitchAdjustment(
 starterA
 )
 
