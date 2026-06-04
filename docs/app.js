@@ -469,7 +469,7 @@ name
 ){
 
 console.log(
-"SELECTED:",
+"SELECTED",
 side,
 name
 )
@@ -490,37 +490,16 @@ name
 
 }
 
-const box =
-
 document
 .getElementById(
 `pitcherSelected${side}`
 )
-
-box.innerHTML =
-
-`
-<div
-style="
-background:#1e7e34;
-padding:10px;
-border-radius:8px;
-font-weight:bold;
-">
-
-✓ Selected:
-${name}
-
-</div>
-
-`
-
-document
-.getElementById(
-`pitcherChoices${side}`
-)
 .innerHTML =
-""
+
+`
+✓ Selected:
+<b>${name}</b>
+`
 
 document
 .getElementById(
@@ -528,6 +507,13 @@ document
 )
 .value =
 name
+
+document
+.getElementById(
+`pitcherChoices${side}`
+)
+.innerHTML =
+""
 
 }
 
