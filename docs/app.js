@@ -304,63 +304,142 @@ function showTeam(team){
 
 const result =
 
-confidence
-.find(
+confidence.find(
 r=>
 r.team===team
 )
 
-buildTable(
+if(
+!result
+){
 
-[result],
-
-"teamResult"
-
-)
+return
 
 }
 
-
-
-function loadTeams(){
-
-const a =
-document
-.getElementById(
-"teamA"
-)
-
-const b =
-document
-.getElementById(
-"teamB"
-)
+const values =
 
 confidence
-.forEach(
-t=>{
+.map(
+r=>
 
-a.innerHTML +=
+Number(
+r.Confidence
+||
+0
+)
+
+)
+
+const min =
+
+Math.min(
+...values
+)
+
+const max =
+
+Math.max(
+...values
+)
+
+const val =
+
+Number(
+result.Confidence
+)
+
+const pct =
+
+(
+val
+-
+min
+)
+
+/
+
+(
+max
+-
+min
+)
+
+const red =
+
+Math.round(
+255
+*
+pct
+)
+
+const blue =
+
+Math.round(
+255
+*
+(
+1
+-
+pct
+)
+)
+
+const color =
+
+`rgb(
+${red},
+60,
+${blue}
+)`
+
+const container =
+
+document
+.getElementById(
+"teamResult"
+)
+
+container.innerHTML =
 
 `
-<option>
 
-${t.team}
+<h2>
 
-</option>
+${result.team}
+
+</h2>
+
+<div
+style="
+width:100%;
+height:18px;
+background:
+${color};
+border-radius:8px;
+margin-bottom:12px;
+"
+
+title="Confidence:
+${val.toFixed(3)}
+">
+
+</div>
+
+<div
+id="teamTable">
+
+</div>
+
 `
 
-b.innerHTML +=
+buildTable(
 
-`
-<option>
+[
+result
+],
 
-${t.team}
-
-</option>
-`
-
-}
+"teamTable"
 
 )
 
