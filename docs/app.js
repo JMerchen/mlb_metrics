@@ -532,24 +532,68 @@ return 1
 const player =
 
 pave.find(
-p=>
+p=>{
+
+const full =
 
 `${p.name_first}
 ${p.name_last}`
 
-===
+return(
+full===name
+)
 
-name
+}
 
 )
 
-return player
-?
-Number(
-player.probability
+if(
+!player
+){
+
+return 1
+
+}
+
+const possible =
+
+[
+"PAVE",
+"pave",
+"probability",
+"value",
+"score"
+]
+
+for(
+let col
+of
+possible
+){
+
+if(
+player[col]
+){
+
+console.log(
+name,
+col,
+player[col]
 )
-:
-1
+
+return Number(
+player[col]
+)
+
+}
+
+}
+
+console.log(
+player
+)
+
+return 1
 
 }
 
