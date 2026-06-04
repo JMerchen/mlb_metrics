@@ -874,20 +874,6 @@ getPitchAdjustment(
 starterA
 )
 
-const hrA =
-getHRAdjustment(
-A,
-starterB,
-parkFactor
-)
-
-const hrB =
-getHRAdjustment(
-B,
-starterA,
-parkFactor
-)
-
 const parkFactor =
 
 (
@@ -910,6 +896,20 @@ league avg
 
 /
 2.1
+
+const hrA =
+getHRAdjustment(
+A,
+starterB,
+parkFactor
+)
+
+const hrB =
+getHRAdjustment(
+B,
+starterA,
+parkFactor
+)
 
 const scoreA =
 
