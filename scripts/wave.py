@@ -1053,7 +1053,7 @@ master['offensive_edge'] = 1 + (((master['offensive_edge'] - mean_edge) / std_ed
 master = master.drop_duplicates()
 master['true_power'] = (master['offensive_edge'] + master['suppression_resistance'])/2
 master = master[['team', 'current', 'Strength', 'pyth_Strength', 'SOS', 'pyth_SOS', 'Confidence', 'pyth_Confidence', 'Confidence_Delta', 'true_power', 'offensive_edge', 'suppression_resistance', 'home_run_reliance', 'homer_per_game', 'game_homer_rate', 'team_home_run_rate', 'away_hr_rate']]
-master = master.sort_values('pyth_Confidence', ascending = False).reset_index(drop = True)
+master = master.sort_values('team').reset_index(drop = True)
 
 """#GITHUB"""
 
