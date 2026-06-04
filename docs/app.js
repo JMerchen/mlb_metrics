@@ -866,6 +866,160 @@ target.id
 
 }
 
+function confidenceLabel(prob){
+
+const pct =
+prob
+*
+100
+
+if(
+pct
+<
+55
+){
+
+return(
+"⚪ Toss Up"
+)
+
+}
+
+if(
+pct
+<
+60
+){
+
+return(
+"🟢 Lean"
+)
+
+}
+
+if(
+pct
+<
+65
+){
+
+return(
+"🟩 Strong Lean"
+)
+
+}
+
+if(
+pct
+<
+70
+){
+
+return(
+"🔵 Favorite"
+)
+
+}
+
+if(
+pct
+<
+75
+){
+
+return(
+"🟣 Heavy Favorite"
+)
+
+}
+
+return(
+"🟡 Dominant"
+)
+
+}
+
+
+
+function americanOdds(prob){
+
+if(
+prob
+<=
+0
+||
+prob
+>=
+1
+){
+
+return
+"—"
+
+}
+
+if(
+prob
+>=
+0.5
+){
+
+return
+
+"-"
+
++
+
+Math.round(
+
+100
+
+*
+
+prob
+
+/
+
+(
+
+1
+-
+prob
+
+)
+
+)
+
+}
+
+return
+
+"+"
+
++
+
+Math.round(
+
+100
+
+*
+
+(
+
+1
+-
+prob
+
+)
+
+/
+
+prob
+
+)
+
+}
+
 function predictOdds(){
 
 const A =
@@ -1078,19 +1232,26 @@ document
 
 <h2>
 
-${B.team}
-
-At
-
 ${A.team}
+
+vs
+
+${B.team}
 
 </h2>
 
-<p>
+<hr>
+
+<h3>
 
 ${A.team}
 
-:
+</h3>
+
+Win Probability:
+
+<b>
+
 ${(
 probA
 *
@@ -1101,13 +1262,44 @@ probA
 )
 }%
 
-</p>
+</b>
 
-<p>
+<br>
+
+Confidence:
+
+<b>
+
+${confidenceLabel(
+probA
+)}
+
+</b>
+
+<br>
+
+Fair Line:
+
+<b>
+
+${americanOdds(
+probA
+)}
+
+</b>
+
+<hr>
+
+<h3>
 
 ${B.team}
 
-:
+</h3>
+
+Win Probability:
+
+<b>
+
 ${(
 probB
 *
@@ -1118,7 +1310,31 @@ probB
 )
 }%
 
-</p>
+</b>
+
+<br>
+
+Confidence:
+
+<b>
+
+${confidenceLabel(
+probB
+)}
+
+</b>
+
+<br>
+
+Fair Line:
+
+<b>
+
+${americanOdds(
+probB
+)}
+
+</b>
 
 `
 
