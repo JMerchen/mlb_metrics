@@ -161,3 +161,17 @@ margin-top:10px;
 
 }
 
+.hitterbox{
+
+max-width:350px;
+
+max-height:250px;
+
+overflow-x:auto;
+
+overflow-y:auto;
+
+margin-top:10px;
+
+}
+
