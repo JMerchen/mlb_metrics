@@ -1482,22 +1482,84 @@ Expected_HRs:1
 
 }
 
-const pA =
-getPitcher(
-starterA
-)
+const winner =
 
-const pB =
+probA
+>=
+probB
+
+?
+"A"
+
+:
+"B"
+
+const favored =
+
+winner==="A"
+?
+A
+:
+B
+
+const dog =
+
+winner==="A"
+?
+B
+:
+A
+
+const favPitch =
+
 getPitcher(
+winner==="A"
+?
+starterA
+:
 starterB
 )
 
-const hrScoreA =
+const dogPitch =
+
+getPitcher(
+winner==="A"
+?
+starterB
+:
+starterA
+)
+
+const pitchingEdge =
 
 (
 
 Number(
-pB.Expected_HRs
+dogPitch.Expected_Bases
+||
+10
+)
+
+-
+
+Number(
+favPitch.Expected_Bases
+||
+10
+)
+
+)
+
+/*
+positive helps favorite
+*/
+
+const hrFav =
+
+(
+
+Number(
+dogPitch.Expected_HRs
 ||
 1
 )
@@ -1505,7 +1567,7 @@ pB.Expected_HRs
 *
 
 Number(
-A.homer_per_game
+favored.homer_per_game
 ||
 1
 )
@@ -1513,7 +1575,7 @@ A.homer_per_game
 *
 
 Number(
-A.home_run_reliance
+favored.home_run_reliance
 ||
 0.3
 )
@@ -1524,12 +1586,12 @@ parkFactor
 
 )
 
-const hrScoreB =
+const hrDog =
 
 (
 
 Number(
-pA.Expected_HRs
+favPitch.Expected_HRs
 ||
 1
 )
@@ -1537,7 +1599,7 @@ pA.Expected_HRs
 *
 
 Number(
-B.homer_per_game
+dog.homer_per_game
 ||
 1
 )
@@ -1545,7 +1607,7 @@ B.homer_per_game
 *
 
 Number(
-B.home_run_reliance
+dog.home_run_reliance
 ||
 0.3
 )
@@ -1558,59 +1620,41 @@ parkFactor
 
 const factors = {
 
-truePower:
+"True Power":
 
 Number(
-A.true_power
+favored.true_power
 )
 
 -
 
 Number(
-B.true_power
+dog.true_power
 ),
 
-confidence:
+"Confidence":
 
 Number(
-A.Confidence
+favored.Confidence
 )
 
 -
 
 Number(
-B.Confidence
+dog.Confidence
 ),
 
-pitching:
+"Pitching":
 
-(
-
-Number(
-pB.Expected_Bases
-)
-
--
-
-Number(
-pA.Expected_Bases
-)
-
-)
-
+pitchingEdge
 /
-
 10,
 
-homeRuns:
+"HR Environment":
 
-(
-
-hrScoreA
+hrFav
 -
-hrScoreB
-
-)
+hrDog
 
 }
 
@@ -1621,21 +1665,24 @@ Object
 factors
 )
 
+.filter(
+x=>
+
+x[1]
+>
+0
+
+)
+
 .sort(
 (
 a,
 b
 )=>
 
-Math.abs(
 b[1]
-)
-
 -
-
-Math.abs(
 a[1]
-)
 
 )[0]
 
@@ -1838,20 +1885,7 @@ probB
 
 Why the Model Likes
 
-${
-probA
->
-probB
-
-?
-
-A.team
-
-:
-
-B.team
-
-}
+${favored.team}
 
 </h3>
 
@@ -1867,7 +1901,7 @@ True Power
 
 <td>
 
-${factors.truePower
+${factors["True Power"]
 .toFixed(
 3
 )}
@@ -1886,7 +1920,7 @@ Confidence
 
 <td>
 
-${factors.confidence
+${factors["Confidence"]
 .toFixed(
 3
 )}
@@ -1905,7 +1939,7 @@ Pitching
 
 <td>
 
-${factors.pitching
+${factors["Pitching"]
 .toFixed(
 3
 )}
@@ -1924,7 +1958,7 @@ HR Environment
 
 <td>
 
-${factors.homeRuns
+${factors["HR Environment"]
 .toFixed(
 3
 )}
@@ -1943,11 +1977,7 @@ Biggest Edge:
 
 </b>
 
-${
-
-biggest[0]
-
-}
+${biggest?.[0] || "Balanced"}
 
 `
 
