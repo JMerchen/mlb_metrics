@@ -501,22 +501,9 @@ document
 .getElementById(
 `pitcherSelected${side}`
 )
-.innerHTML =
+.textContent =
 
-`
-<div
-style="
-background:#1e7e34;
-padding:10px;
-border-radius:8px;
-font-weight:bold;
-">
-
-✓ Selected:
-${name}
-
-</div>
-`
+`✓ Selected: ${name}`
 
 document
 .getElementById(
@@ -532,54 +519,81 @@ document
 .innerHTML =
 ""
 
-if(
-player
-){
+const statsBox =
 
 document
 .getElementById(
 `pitcherStats${side}`
 )
-.innerHTML =
+
+if(
+!player
+){
+
+statsBox.innerHTML =
+""
+
+return
+
+}
+
+statsBox.innerHTML =
 
 `
+
 <table>
 
 <tr>
-<th>Expected Hits</th>
-<td>${player.Expected_Hits}</td>
+
+<th>
+
+Expected Hits
+
+</th>
+
+<td>
+
+${player.Expected_Hits ?? "—"}
+
+</td>
+
 </tr>
 
 <tr>
-<th>Expected Bases</th>
-<td>${player.Expected_Bases}</td>
+
+<th>
+
+Expected Bases
+
+</th>
+
+<td>
+
+${player.Expected_Bases ?? "—"}
+
+</td>
+
 </tr>
 
 <tr>
-<th>Expected HRs</th>
-<td>${player.Expected_HRs}</td>
-</tr>
 
-<tr>
-<th>PAVE+</th>
-<td>${player.PAVE_PLUS || "—"}</td>
+<th>
+
+Expected HRs
+
+</th>
+
+<td>
+
+${player.Expected_HRs ?? "—"}
+
+</td>
+
 </tr>
 
 </table>
+
 `
-
-}
-
-else{
-
-document
-.getElementById(
-`pitcherStats${side}`
-)
-.innerHTML =
-""
-
-}
 
 }
 
