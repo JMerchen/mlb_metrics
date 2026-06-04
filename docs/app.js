@@ -474,6 +474,12 @@ side,
 name
 ){
 
+console.log(
+"SELECTED:",
+side,
+name
+)
+
 if(
 side==="A"
 ){
@@ -490,21 +496,29 @@ name
 
 }
 
+const box =
+
 document
 .getElementById(
 `pitcherSelected${side}`
 )
-.innerHTML =
+
+box.innerHTML =
 
 `
-✓
-Selected:
+<div
+style="
+background:#1e7e34;
+padding:10px;
+border-radius:8px;
+font-weight:bold;
+">
 
-<b>
-
+✓ Selected:
 ${name}
 
-</b>
+</div>
+
 `
 
 document
@@ -513,6 +527,13 @@ document
 )
 .innerHTML =
 ""
+
+document
+.getElementById(
+`pitcherSearch${side}`
+)
+.value =
+name
 
 }
 
