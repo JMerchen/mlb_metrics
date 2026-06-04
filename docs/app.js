@@ -380,18 +380,21 @@ document
 .trim()
 .toLowerCase()
 
-if(
-query.length
-<
-2
-){
+const container =
 
 document
 .getElementById(
 `pitcherChoices${side}`
 )
-.innerHTML =
+
+container.innerHTML =
 ""
+
+if(
+query.length
+<
+2
+){
 
 return
 
@@ -405,14 +408,11 @@ p=>{
 
 const full =
 
-`${p.name_first}
-${p.name_last}`
-
+`${p.name_first} ${p.name_last}`
 .toLowerCase()
 
 return full.includes(
-query
-)
+query)
 
 }
 
@@ -420,50 +420,44 @@ query
 
 .slice(
 0,
-10
-)
+10)
 
-let html =
-""
-
-matches
-.forEach(
+matches.forEach(
 p=>{
 
 const full =
 
-`${p.name_first}
-${p.name_last}`
+`${p.name_first} ${p.name_last}`
 
-html +=
+const btn =
+document.createElement(
+"button"
+)
 
-`
+btn.textContent =
+full
 
-<button
+btn.addEventListener(
+"click",
 
-onclick="selectPitcher(
-'${side}',
-'${full}'
-)"
+()=>{
 
->
-
-${full}
-
-</button>
-
-`
+selectPitcher(
+side,
+full
+)
 
 }
 
 )
 
-document
-.getElementById(
-`pitcherChoices${side}`
+container.appendChild(
+btn
 )
-.innerHTML =
-html
+
+}
+
+)
 
 }
 
