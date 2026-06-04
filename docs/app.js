@@ -442,7 +442,7 @@ btn.addEventListener(
 
 ()=>{
 
-selectPitcher(
+Pitcher(
 side,
 full
 )
@@ -563,6 +563,22 @@ Expected Bases
 <td>
 
 ${player.Expected_Bases}
+
+</td>
+
+</tr>
+
+<tr>
+
+<th>
+
+Expected HRs
+
+</th>
+
+<td>
+
+${player.Expected_HRs}
 
 </td>
 
