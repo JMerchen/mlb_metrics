@@ -1,8 +1,18 @@
-let wave=[]
+let wave = []
 
-let pave=[]
+let pave = []
 
-let confidence=[]
+let confidence = []
+
+let playerMatches = []
+
+let starterA =
+"League Average"
+
+let starterB =
+"League Average"
+
+
 
 async function loadCSV(path){
 
@@ -22,24 +32,28 @@ skipEmptyLines:true
 
 }
 
+
+
 function buildTable(
 data,
 id,
+limit=null
+){
+
+if(
 limit
 ){
 
-const rows =
-limit
-?
+data =
 data.slice(
 0,
 limit
 )
-:
-data
+
+}
 
 if(
-rows.length===0
+!data.length
 ){
 
 document
@@ -60,21 +74,18 @@ html +=
 
 Object
 .keys(
-rows[0]
+data[0]
 )
 .forEach(
-c=>{
-
+c=>
 html +=
 `<th>${c}</th>`
-
-}
 )
 
 html +=
 "</tr>"
 
-rows.forEach(
+data.forEach(
 row=>{
 
 html +=
@@ -85,12 +96,9 @@ Object
 row
 )
 .forEach(
-v=>{
-
+v=>
 html +=
 `<td>${v}</td>`
-
-}
 )
 
 html +=
@@ -105,12 +113,216 @@ html +=
 document
 .getElementById(
 id
-).innerHTML =
+)
+.innerHTML =
 html
 
 }
 
-function loadTeams(data){
+
+
+function searchPlayer(){
+
+const query =
+
+document
+.getElementById(
+"playerSearch"
+)
+.value
+.trim()
+.toLowerCase()
+
+const type =
+
+document
+.getElementById(
+"playerType"
+)
+.value
+
+const source =
+
+type==="wave"
+?
+wave
+:
+pave
+
+playerMatches =
+
+source
+.filter(
+p=>{
+
+const full =
+
+`${p.name_first}
+${p.name_last}`
+
+.toLowerCase()
+
+return full.includes(
+query
+)
+
+}
+)
+
+.slice(
+0,
+10
+)
+
+if(
+playerMatches.length===0
+){
+
+document
+.getElementById(
+"playerChoices"
+)
+.innerHTML =
+"No players found"
+
+document
+.getElementById(
+"playerResult"
+)
+.innerHTML =
+""
+
+return
+
+}
+
+let html =
+""
+
+playerMatches
+.forEach(
+(
+p,
+i
+)=>{
+
+html +=
+
+`
+
+<button
+
+onclick="showPlayer(
+${i}
+)"
+
+>
+
+${p.name_first}
+${p.name_last}
+
+</button>
+
+`
+
+}
+
+)
+
+document
+.getElementById(
+"playerChoices"
+)
+.innerHTML =
+html
+
+}
+
+
+
+function showPlayer(index){
+
+buildTable(
+
+[
+playerMatches[
+index
+]
+],
+
+"playerResult"
+
+)
+
+}
+
+
+
+function loadTeamExplorer(){
+
+let html =
+""
+
+confidence
+.forEach(
+team=>{
+
+html +=
+
+`
+
+<button
+
+onclick="showTeam(
+'${team.team}'
+)"
+
+>
+
+${team.team}
+
+</button>
+
+`
+
+}
+
+)
+
+document
+.getElementById(
+"teamButtons"
+)
+.innerHTML =
+html
+
+}
+
+
+
+function showTeam(team){
+
+const result =
+
+confidence
+.find(
+r=>
+r.team===team
+)
+
+buildTable(
+
+[result],
+
+"teamResult"
+
+)
+
+}
+
+
+
+function loadTeams(){
 
 const a =
 document
@@ -124,28 +336,379 @@ document
 "teamB"
 )
 
-data.forEach(
-row=>{
-
-const team =
-row.team
-
-if(
-team
-){
+confidence
+.forEach(
+t=>{
 
 a.innerHTML +=
-`<option>${team}</option>`
+
+`
+<option>
+
+${t.team}
+
+</option>
+`
 
 b.innerHTML +=
-`<option>${team}</option>`
+
+`
+<option>
+
+${t.team}
+
+</option>
+`
 
 }
 
-}
 )
 
 }
+
+
+
+function searchPitcher(side){
+
+const query =
+
+document
+.getElementById(
+`pitcherSearch${side}`
+)
+.value
+.trim()
+.toLowerCase()
+
+if(
+query.length
+<
+2
+){
+
+document
+.getElementById(
+`pitcherChoices${side}`
+)
+.innerHTML =
+""
+
+return
+
+}
+
+const matches =
+
+pave
+.filter(
+p=>{
+
+const full =
+
+`${p.name_first}
+${p.name_last}`
+
+.toLowerCase()
+
+return full.includes(
+query
+)
+
+}
+
+)
+
+.slice(
+0,
+10
+)
+
+let html =
+""
+
+matches
+.forEach(
+p=>{
+
+const full =
+
+`${p.name_first}
+${p.name_last}`
+
+html +=
+
+`
+
+<button
+
+onclick="selectPitcher(
+'${side}',
+'${full}'
+)"
+
+>
+
+${full}
+
+</button>
+
+`
+
+}
+
+)
+
+document
+.getElementById(
+`pitcherChoices${side}`
+)
+.innerHTML =
+html
+
+}
+
+
+
+function selectPitcher(
+side,
+name
+){
+
+if(
+side==="A"
+){
+
+starterA =
+name
+
+}
+
+else{
+
+starterB =
+name
+
+}
+
+document
+.getElementById(
+`pitcherSelected${side}`
+)
+.innerHTML =
+name
+
+document
+.getElementById(
+`pitcherChoices${side}`
+)
+.innerHTML =
+""
+
+}
+
+
+
+function getPave(name){
+
+if(
+name===
+"League Average"
+){
+
+return 1
+
+}
+
+const player =
+
+pave.find(
+p=>
+
+`${p.name_first}
+${p.name_last}`
+
+===
+
+name
+
+)
+
+return player
+?
+Number(
+player.probability
+)
+:
+1
+
+}
+
+
+
+function predictOdds(){
+
+const A =
+
+confidence.find(
+r=>
+
+r.team===
+
+document
+.getElementById(
+"teamA"
+)
+.value
+
+)
+
+const B =
+
+confidence.find(
+r=>
+
+r.team===
+
+document
+.getElementById(
+"teamB"
+)
+.value
+
+)
+
+const baseA =
+
+(
+Number(
+A.Confidence
+)
+
++
+
+Number(
+A.pyth_Confidence
+)
+
++
+
+Number(
+A.true_power
+)
+
+)
+/3
+
+const baseB =
+
+(
+Number(
+B.Confidence
+)
+
++
+
+Number(
+B.pyth_Confidence
+)
+
++
+
+Number(
+B.true_power
+)
+
+)
+/3
+
+const scoreA =
+
+baseA
+*
+getPave(
+starterB
+)
+
+const scoreB =
+
+baseB
+*
+getPave(
+starterA
+)
+
+const probA =
+
+scoreA
+/
+(
+scoreA
++
+scoreB
+)
+
+const probB =
+1
+-
+probA
+
+document
+.getElementById(
+"oddsResult"
+)
+.innerHTML =
+
+`
+
+<h2>
+
+${A.team}
+
+vs
+
+${B.team}
+
+</h2>
+
+<p>
+
+${A.team}
+
+:
+${(
+probA
+*
+100
+)
+.toFixed(
+1
+)
+}%
+
+</p>
+
+<p>
+
+${B.team}
+
+:
+${(
+probB
+*
+100
+)
+.toFixed(
+1
+)
+}%
+
+</p>
+
+`
+
+}
+
+
 
 async function loadAll(){
 
@@ -178,542 +741,9 @@ pave,
 
 loadTeamExplorer()
 
-loadTeams(
-confidence
-)
-
-loadPitchers()
-
-}
-  
-function searchPlayer(){
-
-const query =
-document
-.getElementById(
-"playerSearch"
-)
-.value
-.trim()
-.toLowerCase()
-
-const source =
-document
-.getElementById(
-"playerType"
-)
-.value
-
-const players =
-source==="wave"
-?
-wave
-:
-pave
-
-const matches =
-players.filter(
-p=>{
-
-const first =
-(
-p.name_first
-||
-""
-)
-.toLowerCase()
-
-const last =
-(
-p.name_last
-||
-""
-)
-.toLowerCase()
-
-return(
-
-first.includes(
-query
-)
-
-||
-
-last.includes(
-query
-)
-
-||
-
-`${first} ${last}`
-.includes(
-query
-)
-
-)
-
-}
-)
-
-if(
-matches.length===0
-){
-
-document
-.getElementById(
-"playerChoices"
-)
-.innerHTML =
-"No players found"
-
-document
-.getElementById(
-"playerResult"
-)
-.innerHTML =
-""
-
-return
+loadTeams()
 
 }
 
-let html =
-""
-
-matches.forEach(
-(
-player,
-index
-)=>{
-
-html +=
-
-`
-<button
-onclick="showPlayer(${index})">
-
-${player.name_first}
-${player.name_last}
-
-</button>
-
-`
-
-}
-)
-
-window.playerMatches =
-matches
-
-document
-.getElementById(
-"playerChoices"
-)
-.innerHTML =
-html
-
-document
-.getElementById(
-"playerResult"
-)
-.innerHTML =
-""
-
-}
-
-function loadTeamExplorer(){
-
-let html =
-""
-
-confidence.forEach(
-row=>{
-
-const team =
-row.team
-
-if(
-team
-){
-
-html +=
-
-`
-<button
-onclick="showTeam(
-'${team}'
-)">
-
-${team}
-
-</button>
-
-`
-
-}
-
-}
-
-)
-
-document
-.getElementById(
-"teamButtons"
-)
-.innerHTML =
-html
-
-}
-
-function showTeam(team){
-
-const result =
-confidence.find(
-r=>
-
-r.team
-===
-team
-
-)
-
-buildTable(
-
-[result],
-
-"teamResult"
-
-)
-
-}
-
-function predictOdds(){
-
-const teamA =
-document
-.getElementById(
-"teamA"
-)
-.value
-
-const teamB =
-document
-.getElementById(
-"teamB"
-)
-.value
-
-if(
-teamA===teamB
-){
-
-document
-.getElementById(
-"oddsResult"
-)
-.innerHTML =
-"Choose different teams"
-
-return
-
-}
-
-const A =
-confidence.find(
-r=>
-r.team===teamA
-)
-
-const B =
-confidence.find(
-r=>
-r.team===teamB
-)
-
-const scoreA =
-
-(
-Number(
-A.Confidence
-)
-+
-Number(
-A.pyth_Confidence
-)
-+
-Number(
-A.true_power
-)
-
-)
-/3
-
-const scoreB =
-
-(
-Number(
-B.Confidence
-)
-+
-Number(
-B.pyth_Confidence
-)
-+
-Number(
-B.true_power
-)
-
-)
-/3
-
-const probA =
-
-scoreA
-/
-(
-scoreA
-+
-scoreB
-)
-
-const probB =
-1
--
-probA
-
-document
-.getElementById(
-"oddsResult"
-)
-.innerHTML =
-
-`
-
-<h3>
-
-${teamA}
-vs
-${teamB}
-
-</h3>
-
-<p>
-
-${teamA}
-
-Win:
-
-<b>
-
-${(
-probA
-*
-100
-)
-.toFixed(
-1
-)
-}%
-
-</b>
-
-</p>
-
-<p>
-
-${teamB}
-
-Win:
-
-<b>
-
-${(
-probB
-*
-100
-)
-.toFixed(
-1
-)
-}%
-
-</b>
-
-</p>
-
-`
-
-}
-
-function showPlayer(index){
-
-const player =
-window.playerMatches[
-index
-]
-
-buildTable(
-
-[player],
-
-"playerResult"
-
-)
-
-}
-
-let leaguePAVE = 1
-
-function loadPitchers(){
-
-const baseA =
-
-(
-Number(A.Confidence)
-*
-0.4
-
-+
-
-Number(A.pyth_Confidence)
-*
-0.3
-
-+
-
-Number(A.true_power)
-*
-0.3
-
-)
-
-const baseB =
-
-(
-Number(B.Confidence)
-*
-0.4
-
-+
-
-Number(B.pyth_Confidence)
-*
-0.3
-
-+
-
-Number(B.true_power)
-*
-0.3
-
-)
-
-const starterA =
-document
-.getElementById(
-"pitcherA"
-)
-.value
-
-const starterB =
-document
-.getElementById(
-"pitcherB"
-)
-.value
-
-function getPave(name){
-
-if(
-name==="League Average"
-){
-
-return leaguePAVE
-
-}
-
-const p =
-pave.find(
-x=>
-
-`${x.name_first}
-${x.name_last}`
-
-===
-
-name
-
-)
-
-return p
-?
-Number(
-p.probability
-)
-:
-leaguePAVE
-
-}
-
-const scoreA =
-
-baseA
-*
-getPave(
-starterB
-)
-
-const scoreB =
-
-baseB
-*
-getPave(
-starterA
-)
-
-a.innerHTML =
-"<option>League Average</option>"
-
-b.innerHTML =
-"<option>League Average</option>"
-
-const vals =
-pave
-.map(
-r=>
-Number(
-r.probability
-)
-)
-.filter(
-x=>
-!isNaN(x)
-)
-
-leaguePAVE =
-vals.reduce(
-(a,b)=>a+b,
-0
-)
-/
-vals.length
-
-pave.forEach(
-p=>{
-
-const name =
-
-`${p.name_first}
-${p.name_last}`
-
-a.innerHTML +=
-`<option>${name}</option>`
-
-b.innerHTML +=
-`<option>${name}</option>`
-
-})
-
-}
 
 loadAll()
