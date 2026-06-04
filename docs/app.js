@@ -864,6 +864,30 @@ B.true_power
 )
 /3
 
+const pitchA =
+getPitchAdjustment(
+starterB
+)
+
+const pitchB =
+getPitchAdjustment(
+starterA
+)
+
+const hrA =
+getHRAdjustment(
+A,
+starterB,
+parkFactor
+)
+
+const hrB =
+getHRAdjustment(
+B,
+starterA,
+parkFactor
+)
+
 const parkFactor =
 
 (
@@ -893,16 +917,30 @@ baseA
 
 *
 
-getPitchAdjustment(
-starterB
+(
+
+0.65
+
++
+
+0.20
+*
+(
+pitchA
+-
+1
 )
 
-*
++
 
-getHRAdjustment(
-A,
-starterB,
-parkFactor
+0.15
+*
+(
+hrA
+-
+1
+)
+
 )
 
 const scoreB =
@@ -911,18 +949,32 @@ baseB
 
 *
 
-getPitchAdjustment(
-starterA
-)
+(
 
+0.65
+
++
+
+0.20
 *
-
-getHRAdjustment(
-B,
-starterA,
-parkFactor
+(
+pitchB
+-
+1
 )
 
++
+
+0.15
+*
+(
+hrB
+-
+1
+)
+
+)
+  
 const probA =
 
 scoreA
