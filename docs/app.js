@@ -468,12 +468,6 @@ side,
 name
 ){
 
-console.log(
-"SELECTED",
-side,
-name
-)
-
 if(
 side==="A"
 ){
@@ -489,6 +483,19 @@ starterB =
 name
 
 }
+
+const player =
+
+pave.find(
+p=>
+
+`${p.name_first} ${p.name_last}`
+
+===
+
+name
+
+)
 
 document
 .getElementById(
@@ -514,6 +521,76 @@ document
 )
 .innerHTML =
 ""
+
+if(
+player
+){
+
+document
+.getElementById(
+`pitcherStats${side}`
+)
+.innerHTML =
+
+`
+
+<table>
+
+<tr>
+
+<th>
+
+Expected Hits
+
+</th>
+
+<td>
+
+${player.Expected_Hits}
+
+</td>
+
+</tr>
+
+<tr>
+
+<th>
+
+Expected Bases
+
+</th>
+
+<td>
+
+${player.Expected_Bases}
+
+</td>
+
+</tr>
+
+<tr>
+
+<th>
+
+PAVE+
+
+</th>
+
+<td>
+
+${player.PAVE_PLUS
+||
+"—"}
+
+</td>
+
+</tr>
+
+</table>
+
+`
+
+}
 
 }
 
