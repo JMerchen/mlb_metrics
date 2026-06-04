@@ -473,16 +473,45 @@ side==="A"
 ){
 
 starterA =
+String(
 name
+)
 
 }
 
 else{
 
 starterB =
+String(
 name
+)
 
 }
+
+document
+.getElementById(
+`pitcherSelected${side}`
+)
+.innerHTML =
+
+`
+✓ Selected:
+<b>${name}</b>
+`
+
+document
+.getElementById(
+`pitcherSearch${side}`
+)
+.value =
+""
+
+document
+.getElementById(
+`pitcherChoices${side}`
+)
+.innerHTML =
+""
 
 const player =
 
@@ -497,29 +526,7 @@ name
 
 )
 
-document
-.getElementById(
-`pitcherSelected${side}`
-)
-.textContent =
-
-`✓ Selected: ${name}`
-
-document
-.getElementById(
-`pitcherSearch${side}`
-)
-.value =
-name
-
-document
-.getElementById(
-`pitcherChoices${side}`
-)
-.innerHTML =
-""
-
-const statsBox =
+const stats =
 
 document
 .getElementById(
@@ -530,69 +537,34 @@ if(
 !player
 ){
 
-statsBox.innerHTML =
+stats.innerHTML =
 ""
 
 return
 
 }
 
-statsBox.innerHTML =
+stats.innerHTML =
 
 `
-
 <table>
 
 <tr>
-
-<th>
-
-Expected Hits
-
-</th>
-
-<td>
-
-${player.Expected_Hits ?? "—"}
-
-</td>
-
+<th>Expected Hits</th>
+<td>${player.Expected_Hits}</td>
 </tr>
 
 <tr>
-
-<th>
-
-Expected Bases
-
-</th>
-
-<td>
-
-${player.Expected_Bases ?? "—"}
-
-</td>
-
+<th>Expected Bases</th>
+<td>${player.Expected_Bases}</td>
 </tr>
 
 <tr>
-
-<th>
-
-Expected HRs
-
-</th>
-
-<td>
-
-${player.Expected_HRs ?? "—"}
-
-</td>
-
+<th>Expected HRs</th>
+<td>${player.Expected_HRs}</td>
 </tr>
 
 </table>
-
 `
 
 }
@@ -790,7 +762,7 @@ bonus
 
 function showHitters(){
 
-const teamA =
+const home =
 
 document
 .getElementById(
@@ -798,7 +770,7 @@ document
 )
 .value
 
-const teamB =
+const away =
 
 document
 .getElementById(
@@ -806,15 +778,20 @@ document
 )
 .value
 
-function hitters(team){
+function render(team){
 
 const rows =
 
 wave
+
 .filter(
 p=>
 
+String(
 p.team
+)
+.trim()
+
 ===
 
 team
@@ -822,25 +799,18 @@ team
 )
 
 .sort(
-(
-a,
-b
-)=>
+(a,b)=>
 
 (
 
 Number(
-b.PA_L
-||
-0
+b.PA_L||0
 )
 
 +
 
 Number(
-b.PA_R
-||
-0
+b.PA_R||0
 )
 
 )
@@ -850,17 +820,13 @@ b.PA_R
 (
 
 Number(
-a.PA_L
-||
-0
+a.PA_L||0
 )
 
 +
 
 Number(
-a.PA_R
-||
-0
+a.PA_R||0
 )
 
 )
@@ -872,22 +838,41 @@ a.PA_R
 10
 )
 
+if(
+rows.length===0
+){
+
+return
+"No hitters found"
+
+}
+
 let html =
 "<table>"
 
 rows.forEach(
 p=>{
 
+const pa =
+
+Number(
+p.PA_L||0
+)
+
++
+
+Number(
+p.PA_R||0
+)
+
 html +=
 
 `
-
 <tr>
 
 <td>
 
 ${p.name_first}
-
 ${p.name_last}
 
 </td>
@@ -895,28 +880,11 @@ ${p.name_last}
 <td>
 
 PA:
-
-${
-Number(
-p.PA_L
-||
-0
-)
-
-+
-
-Number(
-p.PA_R
-||
-0
-)
-
-}
+${pa}
 
 </td>
 
 </tr>
-
 `
 
 }
@@ -935,9 +903,8 @@ document
 "teamAHitters"
 )
 .innerHTML =
-
-hitters(
-teamA
+render(
+home
 )
 
 document
@@ -945,9 +912,8 @@ document
 "teamBHitters"
 )
 .innerHTML =
-
-hitters(
-teamB
+render(
+away
 )
 
 }
