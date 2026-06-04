@@ -760,27 +760,37 @@ bonus
 
 }
 
-function showHitters(){
+function showHitters(
+side
+){
 
-const home =
-
-document
-.getElementById(
-"teamA"
-)
-.value
-
-const away =
+const team =
 
 document
 .getElementById(
-"teamB"
+`team${side}`
 )
 .value
 
-function render(team){
+const target =
 
-const rows =
+document
+.getElementById(
+`team${side}Hitters`
+)
+
+if(
+!team
+){
+
+target.innerHTML =
+""
+
+return
+
+}
+
+const hitters =
 
 wave
 
@@ -798,122 +808,60 @@ team
 
 )
 
+.map(
+p=>({
+
+...p,
+
+PA:
+
+Number(
+p.PA_L
+||
+0
+)
+
++
+
+Number(
+p.PA_R
+||
+0
+)
+
+})
+
+)
+
 .sort(
-(a,b)=>
-
 (
+a,
+b
+)=>
 
-Number(
-b.PA_L||0
-)
-
-+
-
-Number(
-b.PA_R||0
-)
-
-)
-
+b.PA
 -
-
-(
-
-Number(
-a.PA_L||0
-)
-
-+
-
-Number(
-a.PA_R||0
-)
-
-)
-
+a.PA
 )
 
 .slice(
 0,
-10
-)
+10)
 
 if(
-rows.length===0
+!hitters.length
 ){
 
+target.innerHTML =
+"No hitters"
+
 return
-"No hitters found"
 
 }
 
-let html =
-"<table>"
-
-rows.forEach(
-p=>{
-
-const pa =
-
-Number(
-p.PA_L||0
-)
-
-+
-
-Number(
-p.PA_R||0
-)
-
-html +=
-
-`
-<tr>
-
-<td>
-
-${p.name_first}
-${p.name_last}
-
-</td>
-
-<td>
-
-PA:
-${pa}
-
-</td>
-
-</tr>
-`
-
-}
-
-)
-
-html +=
-"</table>"
-
-return html
-
-}
-
-document
-.getElementById(
-"teamAHitters"
-)
-.innerHTML =
-render(
-home
-)
-
-document
-.getElementById(
-"teamBHitters"
-)
-.innerHTML =
-render(
-away
+buildTable(
+hitters,
+target.id
 )
 
 }
@@ -1119,8 +1067,6 @@ const probB =
 1
 -
 probA
-
-showHitters()
   
 document
 .getElementById(
@@ -1334,6 +1280,38 @@ pave,
 loadTeamExplorer()
 
 loadTeams()
+
+document
+.getElementById(
+"teamA"
+)
+.addEventListener(
+"change",
+
+()=>{
+
+showHitters(
+"A"
+)
+
+}
+)
+
+document
+.getElementById(
+"teamB"
+)
+.addEventListener(
+"change",
+
+()=>{
+
+showHitters(
+"B"
+)
+
+}
+)
 
 }
 
