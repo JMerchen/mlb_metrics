@@ -495,7 +495,17 @@ document
 `pitcherSelected${side}`
 )
 .innerHTML =
-name
+
+`
+✓
+Selected:
+
+<b>
+
+${name}
+
+</b>
+`
 
 document
 .getElementById(
