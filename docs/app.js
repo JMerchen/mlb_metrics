@@ -306,7 +306,12 @@ const result =
 
 confidence.find(
 r=>
-r.team===team
+
+r.team
+===
+
+team
+
 )
 
 if(
@@ -317,7 +322,7 @@ return
 
 }
 
-const values =
+const scores =
 
 confidence
 .map(
@@ -334,35 +339,37 @@ r.Confidence
 const min =
 
 Math.min(
-...values
+...scores
 )
 
 const max =
 
 Math.max(
-...values
-)
-
-const val =
-
-Number(
-result.Confidence
+...scores
 )
 
 const pct =
 
 (
-val
+
+Number(
+result.Confidence
+)
+
 -
+
 min
+
 )
 
 /
 
 (
+
 max
 -
 min
+
 )
 
 const red =
@@ -389,45 +396,46 @@ const color =
 
 `rgb(
 ${red},
-60,
+80,
 ${blue}
 )`
-
-const container =
 
 document
 .getElementById(
 "teamResult"
 )
-
-container.innerHTML =
+.innerHTML =
 
 `
 
-<h2>
-
-${result.team}
-
-</h2>
-
 <div
 style="
-width:100%;
-height:18px;
-background:
-${color};
-border-radius:8px;
-margin-bottom:12px;
+font-size:28px;
+font-weight:bold;
 "
 
-title="Confidence:
-${val.toFixed(3)}
-">
+>
+
+${result.team}
 
 </div>
 
 <div
-id="teamTable">
+style="
+height:14px;
+width:100%;
+background:${color};
+border-radius:8px;
+margin-top:8px;
+margin-bottom:15px;
+"
+
+>
+
+</div>
+
+<div
+id="teamStats">
 
 </div>
 
@@ -439,12 +447,11 @@ buildTable(
 result
 ],
 
-"teamTable"
+"teamStats"
 
 )
 
 }
-
 
 
 function searchPitcher(side){
