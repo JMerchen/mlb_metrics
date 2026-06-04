@@ -875,44 +875,32 @@ prob
 
 if(
 pct
-<
-55
+>=
+73
 ){
 
 return(
-"⚪ Toss Up"
+"🟡 Dominant"
 )
 
 }
 
 if(
 pct
-<
-60
+>=
+68
 ){
 
 return(
-"🟢 Lean"
+"🟣 Heavy Favorite"
 )
 
 }
 
 if(
 pct
-<
-65
-){
-
-return(
-"🟩 Strong Lean"
-)
-
-}
-
-if(
-pct
-<
-70
+>=
+63
 ){
 
 return(
@@ -923,18 +911,78 @@ return(
 
 if(
 pct
-<
-75
+>=
+58
 ){
 
 return(
-"🟣 Heavy Favorite"
+"🟩 Strong Lean"
+)
+
+}
+
+if(
+pct
+>=
+53
+){
+
+return(
+"🟢 Lean"
+)
+
+}
+
+if(
+pct
+>=
+47
+){
+
+return(
+"⚪ Toss Up"
+)
+
+}
+
+if(
+pct
+>=
+40
+){
+
+return(
+"🟠 Fade"
+)
+
+}
+
+if(
+pct
+>=
+35
+){
+
+return(
+"🔴 Strong Fade"
+)
+
+}
+
+if(
+pct
+>=
+30
+){
+
+return(
+"🟤 Underdog"
 )
 
 }
 
 return(
-"🟡 Dominant"
+"⚫ Heavy Underdog"
 )
 
 }
@@ -944,27 +992,42 @@ return(
 function americanOdds(prob){
 
 if(
+isNaN(
+prob
+)
+){
+
+return "—"
+
+}
+
+if(
 prob
 <=
 0
-||
-prob
->=
-1
 ){
 
-return
-"—"
+return "—"
 
 }
 
 if(
 prob
 >=
+1
+){
+
+return "—"
+
+}
+
+if(
+prob
+>
 0.5
 ){
 
-return
+return(
 
 "-"
 
@@ -972,19 +1035,20 @@ return
 
 Math.round(
 
-100
-
-*
-
+(
 prob
-
 /
 
 (
-
 1
 -
 prob
+)
+
+)
+
+*
+100
 
 )
 
@@ -992,7 +1056,7 @@ prob
 
 }
 
-return
+return(
 
 "+"
 
@@ -1000,26 +1064,23 @@ return
 
 Math.round(
 
-100
-
-*
-
 (
-
 1
 -
 prob
-
 )
 
 /
-
 prob
+
+*
+100
+
+)
 
 )
 
 }
-
 function predictOdds(){
 
 const A =
