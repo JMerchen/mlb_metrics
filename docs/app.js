@@ -1078,11 +1078,11 @@ document
 
 <h2>
 
-${A.team}
-
-vs
-
 ${B.team}
+
+At
+
+${A.team}
 
 </h2>
 
