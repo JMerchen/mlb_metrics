@@ -20,8 +20,8 @@ df['game_date'] = pd.to_datetime(
 
 dt = df[df['events'].isin(['field_out', 'force_out', 'single', 'double', 'strikeout', 'home_run', 'grounded_into_double_play', 'triple', 'fielders_choice_out', 'double_play', 'field_error', 'fielders_choice', 'strikeout_double_play', 'walk', 'hit_by_pitch']) == True][['game_date', 'batter', 'events', 'p_throws', 'home_team', 'away_team']]
 dt = dt[['game_date', 'batter', 'events', 'p_throws']]
-home = df[df['inning_topbot'] = 'Bot'][['batter', 'home_team', 'game_date']].drop_duplicates().rename(columns = {'home_team' : 'team'})
-away = df[df['inning_topbot'] = 'Top'][['batter', 'away_team', 'game_date']].drop_duplicates().rename(columns = {'away_team' : 'team'})
+home = df[df['inning_topbot'] == 'Bot'][['batter', 'home_team', 'game_date']].drop_duplicates().rename(columns = {'home_team' : 'team'})
+away = df[df['inning_topbot'] == 'Top'][['batter', 'away_team', 'game_date']].drop_duplicates().rename(columns = {'away_team' : 'team'})
 team = pd.concat([home, away])
 latest_player = df[['game_date', 'batter']].groupby('batter', as_index = False).max()
 latest_team = latest_player.merge(team, on = ['batter', 'game_date'], how = 'left')[['batter', 'team']].rename(columns = {'batter' : 'key_mlbam'})
