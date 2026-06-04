@@ -1271,10 +1271,57 @@ filteredWave,
 
 )
 
+const maxAB =
+
+Math.max(
+
+...
+
+pave.map(
+p=>
+
+Number(
+p.at_bats
+||
+0
+)
+
+)
+
+)
+
+const minAB =
+
+maxAB
+*
+0.25
+
+const filteredPave =
+
+pave
+.filter(
+p=>
+
+Number(
+p.at_bats
+||
+0
+)
+
+>=
+
+minAB
+
+)
+
 buildTable(
-pave,
+
+filteredPave,
+
 "paveTable",
+
 20
+
 )
 
 loadTeamExplorer()
