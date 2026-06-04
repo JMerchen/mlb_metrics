@@ -163,15 +163,38 @@ margin-top:10px;
 
 .hitterbox{
 
-max-width:350px;
+width:100%;
 
-max-height:250px;
-
-overflow-x:auto;
+max-height:500px;
 
 overflow-y:auto;
 
+overflow-x:hidden;
+
 margin-top:10px;
+
+}
+
+.hitterbox table{
+
+width:100%;
+
+table-layout:auto;
+
+}
+
+.hitterbox th,
+.hitterbox td{
+
+white-space:normal;
+
+word-break:break-word;
+
+font-size:12px;
+
+padding:6px;
+
+vertical-align:top;
 
 }
 
