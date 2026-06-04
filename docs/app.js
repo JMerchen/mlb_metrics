@@ -296,8 +296,16 @@ Math.max(
 ...values
 )
 
-confidence
-.forEach(
+container.style.display =
+"flex"
+
+container.style.flexWrap =
+"wrap"
+
+container.style.gap =
+"6px"
+
+confidence.forEach(
 team=>{
 
 const val =
@@ -348,17 +356,14 @@ document.createElement(
 "button"
 )
 
-btn.style.display =
-"block"
-
 btn.style.width =
-"100%"
+"60px"
 
-btn.style.margin =
-"6px"
+btn.style.height =
+"44px"
 
-btn.style.padding =
-"10px"
+btn.style.position =
+"relative"
 
 btn.style.border =
 "none"
@@ -367,8 +372,39 @@ btn.style.borderRadius =
 "8px"
 
 btn.style.background =
+"#222"
 
-`linear-gradient(
+btn.style.color =
+"white"
+
+btn.style.cursor =
+"pointer"
+
+btn.innerHTML =
+
+`
+
+<div
+style="
+font-weight:bold;
+">
+
+${team.team}
+
+</div>
+
+<div
+style="
+position:absolute;
+left:0;
+bottom:0;
+height:6px;
+width:100%;
+border-radius:0 0 8px 8px;
+
+background:
+
+linear-gradient(
 90deg,
 
 rgb(
@@ -377,17 +413,19 @@ ${red},
 ${blue}
 ),
 
-#222
+rgb(
+${red},
+80,
+${blue}
+)
 
-)`
+);
 
-btn.style.color =
-"white"
+">
 
-btn.textContent =
+</div>
 
-`${team.team}
-  ${team.Confidence}`
+`
 
 btn.onclick =
 ()=>{
@@ -408,7 +446,6 @@ btn
 )
 
 }
-
 
 
 function showTeam(team){
