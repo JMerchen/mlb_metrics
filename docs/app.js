@@ -442,7 +442,7 @@ btn.addEventListener(
 
 ()=>{
 
-Pitcher(
+selectPitcher(
 side,
 full
 )
