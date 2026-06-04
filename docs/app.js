@@ -708,7 +708,56 @@ probB
 
 }
 
+document
+.addEventListener(
+"keydown",
 
+e=>{
+
+if(
+e.key==="Enter"
+){
+
+if(
+
+document
+.activeElement
+.id
+
+===
+
+"pitcherSearchA"
+
+){
+
+searchPitcher(
+"A"
+)
+
+}
+
+if(
+
+document
+.activeElement
+.id
+
+===
+
+"pitcherSearchB"
+
+){
+
+searchPitcher(
+"B"
+)
+
+}
+
+}
+
+}
+)
 
 async function loadAll(){
 
