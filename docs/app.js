@@ -260,41 +260,152 @@ index
 
 function loadTeamExplorer(){
 
-let html =
-""
-
-confidence
-.forEach(
-team=>{
-
-html +=
-
-`
-
-<button
-
-onclick="showTeam(
-'${team.team}'
-)"
-
->
-
-${team.team}
-
-</button>
-
-`
-
-}
-
-)
+const container =
 
 document
 .getElementById(
 "teamButtons"
 )
-.innerHTML =
-html
+
+container.innerHTML =
+""
+
+const values =
+
+confidence
+.map(
+r=>
+
+Number(
+r.Confidence
+||
+0
+)
+
+)
+
+const min =
+
+Math.min(
+...values
+)
+
+const max =
+
+Math.max(
+...values
+)
+
+confidence
+.forEach(
+team=>{
+
+const val =
+
+Number(
+team.Confidence
+)
+
+const pct =
+
+(
+val
+-
+min
+)
+
+/
+
+(
+max
+-
+min
+)
+
+const red =
+
+Math.round(
+255
+*
+pct
+)
+
+const blue =
+
+Math.round(
+255
+*
+(
+1
+-
+pct
+)
+)
+
+const btn =
+
+document.createElement(
+"button"
+)
+
+btn.style.display =
+"block"
+
+btn.style.width =
+"100%"
+
+btn.style.margin =
+"6px"
+
+btn.style.padding =
+"10px"
+
+btn.style.border =
+"none"
+
+btn.style.borderRadius =
+"8px"
+
+btn.style.background =
+
+`linear-gradient(
+90deg,
+
+rgb(
+${red},
+80,
+${blue}
+),
+
+#222
+
+)`
+
+btn.style.color =
+"white"
+
+btn.textContent =
+
+`${team.team}
+  ${team.Confidence}`
+
+btn.onclick =
+()=>{
+
+showTeam(
+team.team
+)
+
+}
+
+container
+.appendChild(
+btn
+)
+
+}
+
+)
 
 }
 
@@ -1537,6 +1648,71 @@ searchPitcher(
 
 }
 )
+
+function loadTeams(){
+
+const teamA =
+
+document
+.getElementById(
+"teamA"
+)
+
+const teamB =
+
+document
+.getElementById(
+"teamB"
+)
+
+teamA.innerHTML =
+""
+
+teamB.innerHTML =
+""
+
+confidence.forEach(
+t=>{
+
+teamA.innerHTML +=
+
+`
+
+<option
+value="${t.team}">
+
+${t.team}
+
+</option>
+
+`
+
+teamB.innerHTML +=
+
+`
+
+<option
+value="${t.team}">
+
+${t.team}
+
+</option>
+
+`
+
+}
+
+)
+
+showHitters(
+"A"
+)
+
+showHitters(
+"B"
+)
+
+}
 
 async function loadAll(){
 
