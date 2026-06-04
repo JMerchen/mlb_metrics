@@ -128,19 +128,36 @@ Select a team
 Series Odds
 </h2>
 
+<h2>
+Series Odds
+</h2>
+
+<div class="matchup">
+
+<div>
+
+<h3>
+
+Team A
+
+</h3>
+
 <select id="teamA">
 
 </select>
 
-<label>
-
-Starter A
-
-</label>
+<br><br>
 
 <input
 id="pitcherSearchA"
-oninput="searchPitcher('A')"
+placeholder="Search starter">
+
+<button
+onclick="searchPitcher('A')">
+
+Search
+
+</button>
 
 <div
 id="pitcherChoicesA">
@@ -154,19 +171,32 @@ League Average
 
 </div>
 
+</div>
+
+<div>
+
+<h3>
+
+Team B
+
+</h3>
+
 <select id="teamB">
 
 </select>
 
-<label>
-
-Starter B
-
-</label>
+<br><br>
 
 <input
 id="pitcherSearchB"
-oninput="searchPitcher('B')"
+placeholder="Search starter">
+
+<button
+onclick="searchPitcher('B')">
+
+Search
+
+</button>
 
 <div
 id="pitcherChoicesB">
@@ -180,7 +210,14 @@ League Average
 
 </div>
 
-<button>
+</div>
+
+</div>
+
+<br>
+
+<button
+onclick="predictOdds()">
 
 Predict
 
@@ -188,6 +225,10 @@ Predict
 
 <div id="oddsResult">
 
+Choose teams
+
+</div>
+  
 Choose teams
 
 </div>
