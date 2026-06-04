@@ -679,7 +679,114 @@ baseFactor
 
 }
 
+function getHRAdjustment(
+offense,
+starter,
+parkFactor
+){
 
+if(
+starter===
+"League Average"
+){
+
+return 1
+
+}
+
+const pitcher =
+
+pave.find(
+p=>
+
+`${p.name_first} ${p.name_last}`
+
+===
+
+starter
+
+)
+
+if(
+!pitcher
+){
+
+return 1
+
+}
+
+const expectedHR =
+
+Number(
+pitcher.Expected_HRs
+||
+1
+)
+
+/*
+normalize to average starter
+*/
+
+const pitcherFactor =
+
+expectedHR
+/
+1
+
+const reliance =
+
+Number(
+offense.home_run_reliance
+||
+0.3
+)
+
+const bonus =
+
+1
++
+
+(
+
+(
+pitcherFactor
+-
+1
+)
+*
+0.35
+
++
+
+(
+reliance
+-
+0.3
+)
+*
+0.30
+
++
+
+(
+parkFactor
+-
+1
+)
+*
+0.35
+
+)
+
+return Math.max(
+0.85,
+Math.min(
+1.15,
+bonus
+)
+)
+
+}
 
 function predictOdds(){
 
@@ -757,20 +864,63 @@ B.true_power
 )
 /3
 
+const parkFactor =
+
+(
+
+Number(
+A.team_home_run_rate
+)
+
++
+
+Number(
+A.away_hr_rate
+)
+
+)
+
+/*
+league avg
+*/
+
+/
+2.1
+
 const scoreA =
 
 baseA
+
 *
+
 getPitchAdjustment(
 starterB
+)
+
+*
+
+getHRAdjustment(
+A,
+starterB,
+parkFactor
 )
 
 const scoreB =
 
 baseB
+
 *
+
 getPitchAdjustment(
 starterA
+)
+
+*
+
+getHRAdjustment(
+B,
+starterA,
+parkFactor
 )
 
 const probA =
