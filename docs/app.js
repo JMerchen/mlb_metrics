@@ -1469,6 +1469,29 @@ await loadCSV(
 "./data/confidence.csv"
 )
 
+confidence =
+
+confidence
+
+.sort(
+(
+a,
+b
+)=>
+
+String(
+a.team
+)
+.localeCompare(
+
+String(
+b.team
+)
+
+)
+
+)
+
 const meanPA =
 
 wave
