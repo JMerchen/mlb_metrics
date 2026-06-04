@@ -1438,6 +1438,124 @@ starterA,
 parkFactor
 )
 
+function getPitcher(name){
+
+if(
+name===
+"League Average"
+){
+
+return {
+
+Expected_Bases:10,
+
+Expected_HRs:1
+
+}
+
+}
+
+return (
+
+pave.find(
+p=>
+
+`${p.name_first} ${p.name_last}`
+
+===
+
+name
+
+)
+
+||
+
+{
+
+Expected_Bases:10,
+
+Expected_HRs:1
+
+}
+
+)
+
+}
+
+const pA =
+getPitcher(
+starterA
+)
+
+const pB =
+getPitcher(
+starterB
+)
+
+const hrScoreA =
+
+(
+
+Number(
+pB.Expected_HRs
+||
+1
+)
+
+*
+
+Number(
+A.homer_per_game
+||
+1
+)
+
+*
+
+Number(
+A.home_run_reliance
+||
+0.3
+)
+
+*
+
+parkFactor
+
+)
+
+const hrScoreB =
+
+(
+
+Number(
+pA.Expected_HRs
+||
+1
+)
+
+*
+
+Number(
+B.homer_per_game
+||
+1
+)
+
+*
+
+Number(
+B.home_run_reliance
+||
+0.3
+)
+
+*
+
+parkFactor
+
+)
+
 const factors = {
 
 truePower:
@@ -1452,29 +1570,47 @@ Number(
 B.true_power
 ),
 
-pyth:
+confidence:
 
 Number(
-A.pyth_Confidence
+A.Confidence
 )
 
 -
 
 Number(
-B.pyth_Confidence
+B.Confidence
 ),
 
 pitching:
 
-pitchA
+(
+
+Number(
+pB.Expected_Bases
+)
+
 -
-pitchB,
+
+Number(
+pA.Expected_Bases
+)
+
+)
+
+/
+
+10,
 
 homeRuns:
 
-hrA
+(
+
+hrScoreA
 -
-hrB
+hrScoreB
+
+)
 
 }
 
@@ -1744,13 +1880,13 @@ ${factors.truePower
 
 <th>
 
-Pyth Confidence
+Confidence
 
 </th>
 
 <td>
 
-${factors.pyth
+${factors.confidence
 .toFixed(
 3
 )}
