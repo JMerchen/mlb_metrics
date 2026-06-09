@@ -1454,101 +1454,6 @@ prob
 
 }
 
-function resetMatchup(){
-
-starterA =
-"League Average"
-
-starterB =
-"League Average"
-
-document
-.getElementById(
-"pitcherSearchA"
-)
-.value =
-""
-
-document
-.getElementById(
-"pitcherSearchB"
-)
-.value =
-""
-
-document
-.getElementById(
-"pitcherChoicesA"
-)
-.innerHTML =
-""
-
-document
-.getElementById(
-"pitcherChoicesB"
-)
-.innerHTML =
-""
-
-document
-.getElementById(
-"pitcherStatsA"
-)
-.innerHTML =
-""
-
-document
-.getElementById(
-"pitcherStatsB"
-)
-.innerHTML =
-""
-
-document
-.getElementById(
-"oddsResult"
-)
-.innerHTML =
-""
-
-document
-.getElementById(
-"teamAHitters"
-)
-.innerHTML =
-""
-
-document
-.getElementById(
-"teamBHitters"
-)
-.innerHTML =
-""
-
-document
-.getElementById(
-"teamA"
-)
-.selectedIndex =
-0
-
-document
-.getElementById(
-"teamB"
-)
-.selectedIndex =
-0
-
-showHitters(
-"A"
-)
-
-showHitters(
-"B"
-)
-
-}
-
 function predictOdds(){
 
 const A =
@@ -2543,5 +2448,89 @@ showHitters(
 
 }
 
+function resetMatchup(){
+
+starterA =
+"League Average"
+
+starterB =
+"League Average"
+
+document
+.getElementById(
+"pitcherSearchA"
+)
+.value =
+""
+
+document
+.getElementById(
+"pitcherSearchB"
+)
+.value =
+""
+
+document
+.getElementById(
+"pitcherChoicesA"
+)
+.innerHTML =
+""
+
+document
+.getElementById(
+"pitcherChoicesB"
+)
+.innerHTML =
+""
+
+document
+.getElementById(
+"pitcherStatsA"
+)
+.innerHTML =
+""
+
+document
+.getElementById(
+"pitcherStatsB"
+)
+.innerHTML =
+""
+
+document
+.getElementById(
+"oddsResult"
+)
+.innerHTML =
+""
+
+document
+.getElementById(
+"teamA"
+)
+.selectedIndex =
+0
+
+document
+.getElementById(
+"teamB"
+)
+.selectedIndex =
+0
+
+showHitters(
+"A"
+)
+
+showHitters(
+"B"
+)
+
+console.log(
+"reset complete"
+)
+
+}
 
 loadAll()
