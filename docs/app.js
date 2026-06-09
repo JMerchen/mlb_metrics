@@ -790,6 +790,22 @@ return
 
 }
 
+const existing =
+
+stats.querySelector(
+
+`[data-name="${name}"]`
+
+)
+
+if(
+existing
+){
+
+existing.remove()
+
+}
+
 const card =
 
 document
@@ -803,60 +819,32 @@ card.className =
 card.dataset.name =
 name
 
-const remove =
-
-document
-.createElement(
-"button"
-)
-
-remove.innerHTML =
-"✕"
-
-remove.style.float =
-"right"
-
-remove.style.cursor =
-"pointer"
-
-remove.onclick =
-()=>{
-
-card.remove()
-
-if(
-side==="A"
-&&
-starterA===name
-){
-
-starterA =
-"League Average"
-
-}
-
-if(
-side==="B"
-&&
-starterB===name
-){
-
-starterB =
-"League Average"
-
-}
-
-}
-
-card.innerHTML +=
+card.innerHTML =
 
 `
+
+<div
+style="
+display:flex;
+justify-content:space-between;
+align-items:center;
+margin-bottom:8px;
+">
 
 <b>
 
 ${name}
 
 </b>
+
+<button
+class="removePitcher">
+
+✕
+
+</button>
+
+</div>
 
 <table>
 
@@ -912,26 +900,41 @@ ${player.Expected_HRs}
 
 `
 
-card.prepend(
-remove
+card
+.querySelector(
+".removePitcher"
 )
 
-const existing =
+.onclick =
 
-stats.querySelector(
+()=>{
 
-`[data-name="${name}"]`
-
-)
+card.remove()
 
 if(
-existing
+side==="A"
+&&
+starterA===name
 ){
 
-existing.remove()
+starterA =
+"League Average"
 
 }
-  
+
+if(
+side==="B"
+&&
+starterB===name
+){
+
+starterB =
+"League Average"
+
+}
+
+}
+
 stats.appendChild(
 card
 )
