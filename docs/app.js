@@ -2160,8 +2160,6 @@ probA
 
 }
 
-}
-
 document
 .addEventListener(
 "keydown",
