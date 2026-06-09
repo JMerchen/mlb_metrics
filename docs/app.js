@@ -290,6 +290,30 @@ class="infoCard">
 class="cardHeader">
 
 <div
+style="
+display:flex;
+gap:16px;
+align-items:center;
+">
+
+<img
+
+src=
+"${playerImage(
+player.key_mlbam
+)}"
+
+class=
+"playerHeadshot"
+
+onerror=
+"this.style.display='none'"
+
+>
+
+<div>
+
+<div
 class="cardTitle">
 
 ${player.name_first}
@@ -300,9 +324,31 @@ ${player.name_last}
 
 <div
 style="
-font-size:14px;
 opacity:.7;
+margin-top:4px;
+display:flex;
+align-items:center;
+gap:8px;
 ">
+
+<img
+
+src=
+"${teamLogo(
+player.team
+)}"
+
+class=
+"smallTeamLogo"
+
+onerror=
+"this.style.display='none'"
+
+>
+
+${player.team}
+
+•
 
 ${
 isPave
@@ -311,6 +357,10 @@ isPave
 :
 "WAVE"
 }
+
+</div>
+
+</div>
 
 </div>
 
@@ -732,6 +782,23 @@ selectedTeams.shift()
 }
 
 showTeam()
+
+}
+
+function playerImage(id){
+
+if(
+!id
+){
+
+return
+""
+
+}
+
+return
+
+`https://img.mlbstatic.com/mlb-photos/image/upload/w_240,q_auto:best/v1/people/${id}/headshot/67/current`
 
 }
 
