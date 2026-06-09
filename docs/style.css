@@ -433,3 +433,23 @@ row-gap:8px;
 column-gap:16px;
 
 }
+
+#teamStats{
+
+display:flex;
+
+gap:20px;
+
+align-items:flex-start;
+
+overflow-x:auto;
+
+}
+
+#teamStats .infoCard{
+
+flex:1;
+
+min-width:420px;
+
+}
