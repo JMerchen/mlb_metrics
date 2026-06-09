@@ -735,6 +735,14 @@ showTeam()
 
 }
 
+function teamLogo(team){
+
+return
+
+`https://www.mlbstatic.com/team-logos/${team}.svg`
+
+}
+
 function showTeam(){
 
 const results =
@@ -1004,16 +1012,40 @@ class="infoCard">
 class="cardHeader">
 
 <div
+style="
+display:flex;
+align-items:center;
+gap:12px;
+">
+
+<img
+
+src=
+"${teamLogo(
+result.team
+)}"
+
+class=
+"teamLogo"
+
+>
+
+<div
 class="cardTitle">
 
 ${result.team}
 
 </div>
 
+</div>
+
 <div
 class="cardBadge"
 
-style="background:${color}"
+style="
+background:
+${color}
+"
 
 >
 
