@@ -273,8 +273,8 @@ pave = pave[pave['PAVE_PLUS'] > 0]
 pave['Expected_Hits'] = pave['baa'] * 22
 pave['Expected_Bases'] = pave['power_a'] * 22
 pave['Expected_HRs'] = pave['hr_per'] * 22
-pave = pave[['key_mlbam', 'name_first', 'name_last', 'at_bats', 'PAVE_PLUS', 'Expected_Hits', 'Expected_Bases', 'Expected_HRs']]
 pave = pave.merge(latest_pitcher_team, on='key_mlbam', how='left')
+pave = pave[['key_mlbam', 'name_first', 'name_last', 'team', 'at_bats', 'PAVE_PLUS', 'Expected_Hits', 'Expected_Bases', 'Expected_HRs']]
 pave = pave.sort_values('PAVE_PLUS', ascending=False)
 
 """# Hit_Prob"""
