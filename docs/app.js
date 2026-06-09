@@ -842,40 +842,122 @@ result,
 list
 ){
 
-return list.map(
-k=>
+const other =
 
-`
+results.find(
+r=>
 
-<div>
+r.team
+!==
 
-${k.replaceAll(
-"_",
-" "
-)}
+result.team
 
-</div>
+)
 
-<div>
+return list
 
-${Number(
+.map(
+k=>{
+
+const value =
+
+Number(
 result[
 k
 ]
 ||
 0
-).toFixed(
+)
+
+const otherValue =
+
+other
+
+?
+
+Number(
+other[
+k
+]
+||
+0
+)
+
+:
+
+value
+
+let arrow =
+""
+
+if(
+results.length
+===
+2
+){
+
+if(
+value
+>
+otherValue
+){
+
+arrow =
+
+`<span class="compareUp">▲</span>`
+
+}
+
+else if(
+value
+<
+otherValue
+){
+
+arrow =
+
+`<span class="compareDown">▼</span>`
+
+}
+
+}
+
+return
+
+`
+
+<div>
+
+${
+
+k.replaceAll(
+"_",
+" "
+)
+
+}
+
+</div>
+
+<div>
+
+${value.toFixed(
 3
 )}
+
+${arrow}
 
 </div>
 
 `
 
+}
+
 )
 
 .join(
 ""
+
 )
 
 }
