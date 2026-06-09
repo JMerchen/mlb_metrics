@@ -847,42 +847,6 @@ id="teamStats">
 
 `
 
-const pct =
-
-(
-Number(
-result.Confidence
-)
--
-min
-)
-
-/
-
-(
-max
--
-min
-)
-
-const red =
-
-Math.round(
-255
-*
-pct
-)
-
-const blue =
-
-Math.round(
-255
-*
-(
-1-pct
-)
-)
-
 document
 .getElementById(
 "teamStats"
