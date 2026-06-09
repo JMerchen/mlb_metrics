@@ -17,7 +17,19 @@ let starterB =
 async function loadCSV(path){
 
 const response =
-await fetch(path)
+
+await fetch(
+
+`${path}?t=${Date.now()}`,
+
+{
+
+cache:
+"no-store"
+
+}
+
+)
 
 const text =
 await response.text()
