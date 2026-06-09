@@ -12,6 +12,9 @@ let starterA =
 let starterB =
 []
 
+let selectedTeams =
+[]
+
 
 
 async function loadCSV(path){
@@ -688,7 +691,7 @@ ${blue}
 btn.onclick =
 ()=>{
 
-showTeam(
+selectTeam(
 team.team
 )
 
@@ -705,10 +708,39 @@ btn
 
 }
 
+function selectTeam(team){
 
-function showTeam(team){
+selectedTeams =
 
-const result =
+selectedTeams.filter(
+t=>
+t!==team
+)
+
+selectedTeams.push(
+team
+)
+
+if(
+selectedTeams.length
+>
+2
+){
+
+selectedTeams.shift()
+
+}
+
+showTeam()
+
+}
+
+function showTeam(){
+
+const results =
+
+selectedTeams.map(
+team=>
 
 confidence.find(
 r=>
@@ -719,6 +751,20 @@ r.team
 team
 
 )
+
+).filter(
+Boolean
+)
+
+if(
+results.length
+===
+0
+){
+
+return
+
+}
 
 if(
 !result
@@ -944,6 +990,10 @@ document
 )
 .innerHTML =
 
+results.map(
+result=>
+{
+
 `
 
 <div
@@ -1059,6 +1109,14 @@ park
 </div>
 
 `
+
+}
+
+)
+
+.join(
+""
+)
 }
 
 
