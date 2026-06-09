@@ -772,6 +772,29 @@ return
 
 }
 
+const values =
+
+confidence.map(
+r=>
+
+Number(
+r.Confidence
+)
+
+)
+
+const min =
+
+Math.min(
+...values
+)
+
+const max =
+
+Math.max(
+...values
+)
+
 const winning = [
 
 "current",
