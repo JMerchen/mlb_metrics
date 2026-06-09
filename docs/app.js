@@ -790,29 +790,83 @@ return
 
 }
 
-stats.innerHTML =
+const card =
+
+document
+.createElement(
+"div"
+)
+
+card.className =
+"pitcherCard"
+
+card.innerHTML =
 
 `
+
+<b>
+
+${name}
+
+</b>
+
 <table>
 
 <tr>
-<th>Expected Hits</th>
-<td>${player.Expected_Hits}</td>
+
+<td>
+
+Hits
+
+</td>
+
+<td>
+
+${player.Expected_Hits}
+
+</td>
+
 </tr>
 
 <tr>
-<th>Expected Bases</th>
-<td>${player.Expected_Bases}</td>
+
+<td>
+
+Bases
+
+</td>
+
+<td>
+
+${player.Expected_Bases}
+
+</td>
+
 </tr>
 
 <tr>
-<th>Expected HRs</th>
-<td>${player.Expected_HRs}</td>
+
+<td>
+
+HR
+
+</td>
+
+<td>
+
+${player.Expected_HRs}
+
+</td>
+
 </tr>
 
 </table>
+
 `
 
+stats.appendChild(
+card
+)
 }
 
 
