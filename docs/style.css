@@ -198,3 +198,36 @@ vertical-align:top;
 
 }
 
+.pitcherCards{
+
+display:flex;
+
+gap:10px;
+
+overflow-x:auto;
+
+padding-top:10px;
+
+}
+
+.pitcherCard{
+
+min-width:180px;
+
+padding:10px;
+
+border-radius:8px;
+
+background:#222;
+
+color:white;
+
+flex-shrink:0;
+
+}
+
+.pitcherCard table{
+
+width:100%;
+
+}
