@@ -847,6 +847,97 @@ id="teamStats">
 
 `
 
+const winning = [
+
+"current",
+
+"Strength",
+
+"pyth_Strength",
+
+"SOS",
+
+"pyth_SOS",
+
+"Confidence",
+
+"pyth_Confidence"
+
+]
+
+const offense = [
+
+"true_power",
+
+"offensive_edge",
+
+"suppression_resistance",
+
+"home_run_reliance",
+
+"homer_per_game",
+
+"game_homer_rate"
+
+]
+
+const park = [
+
+"team_home_run_rate",
+
+"away_hr_rate"
+
+]
+
+function buildRows(list){
+
+return list.map(
+k=>
+
+`
+
+<div>
+
+${
+
+k
+
+.replaceAll(
+"_",
+" "
+)
+
+}
+
+</div>
+
+<div>
+
+${
+
+Number(
+result[
+k
+]
+||
+0
+)
+.toFixed(
+3
+)
+
+}
+
+</div>
+
+`
+
+).join(
+""
+)
+
+}
+
 document
 .getElementById(
 "teamStats"
@@ -873,11 +964,7 @@ class="cardBadge"
 
 style="
 background:
-rgb(
-${red},
-80,
-${blue}
-)
+${color}
 "
 
 >
@@ -887,85 +974,83 @@ ${blue}
 </div>
 
 <div
-class="cardStats">
+class="profileColumns">
 
-<div>
+<div
+class="profileColumn">
 
-Confidence
+<div
+class="profileSection">
+
+<div
+class="profileHeader">
+
+Winning Profile
 
 </div>
 
-<div>
+<div
+class="profileRows">
 
-${Number(
-result.Confidence
-).toFixed(
-3
+${buildRows(
+winning
 )}
 
 </div>
 
-<div>
-
-True Power
+</div>
 
 </div>
 
-<div>
+<div
+class="profileColumn">
 
-${Number(
-result.true_power
-).toFixed(
-3
+<div
+class="profileSection">
+
+<div
+class="profileHeader">
+
+Offensive Profile
+
+</div>
+
+<div
+class="profileRows">
+
+${buildRows(
+offense
 )}
 
 </div>
 
-<div>
-
-Pyth Conf
+</div>
 
 </div>
 
-<div>
+<div
+class="profileColumn">
 
-${Number(
-result.pyth_Confidence
-).toFixed(
-3
+<div
+class="profileSection">
+
+<div
+class="profileHeader">
+
+Ballpark Profile
+
+</div>
+
+<div
+class="profileRows">
+
+${buildRows(
+park
 )}
 
 </div>
 
-<div>
-
-SOS
-
 </div>
-
-<div>
-
-${Number(
-result.SOS
-).toFixed(
-3
-)}
-
-</div>
-
-<div>
-
-HR Reliance
-
-</div>
-
-<div>
-
-${Number(
-result.home_run_reliance
-).toFixed(
-3
-)}
 
 </div>
 
