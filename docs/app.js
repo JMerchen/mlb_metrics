@@ -1976,34 +1976,77 @@ ${game+1}
 
 `
 
+<div
+class="gameRow">
+
+<div
+class="gameCol">
+
+<div
+class="gameCard">
+
 <h2>
 
 ${A.team}
 
-vs
+</h2>
+
+Win Probability:
+
+<b>
+
+${(
+probA
+*
+100
+).toFixed(
+1
+)
+}%
+
+</b>
+
+<br>
+
+Confidence:
+
+${confidenceLabel(
+probA
+)}
+
+<br>
+
+Fair Line:
+
+${americanOdds(
+probA
+)}
+
+</div>
+
+</div>
+
+<div
+class="gameCol">
+
+<div
+class="gameCard">
+
+<h2>
 
 ${B.team}
 
 </h2>
 
-<hr>
-
-<h3>
-
-${A.team}
-
-</h3>
-
 Win Probability:
 
 <b>
 
 ${(
-probA
+probB
 *
 100
-)
-.toFixed(
+).toFixed(
 1
 )
 }%
@@ -2014,173 +2057,86 @@ probA
 
 Confidence:
 
-<b>
-
 ${confidenceLabel(
-probA
+probB
 )}
-
-</b>
 
 <br>
 
 Fair Line:
 
-<b>
-
-${americanOdds(
-probA
-)}
-
-</b>
-
-<hr>
-
-<h3>
-
-${B.team}
-
-</h3>
-
-Win Probability:
-
-<b>
-
-${(
-probB
-*
-100
-)
-.toFixed(
-1
-)
-}%
-
-</b>
-
-<br>
-
-Confidence:
-
-<b>
-
-${confidenceLabel(
-probB
-)}
-
-</b>
-
-<br>
-
-Fair Line:
-
-<b>
-
 ${americanOdds(
 probB
 )}
 
-</b>
+</div>
 
-<hr>
+</div>
 
-<h3>
+</div>
+
+<div
+class="gameExplain">
+
+<b>
 
 Why the Model Likes
 
 ${favored.team}
 
-</h3>
-
-<table>
-
-<tr>
-
-<th>
-
-True Power
-
-</th>
-
-<td>
-
-${factors["True Power"]
-.toFixed(
-3
-)}
-
-</td>
-
-</tr>
-
-<tr>
-
-<th>
-
-Confidence
-
-</th>
-
-<td>
-
-${factors["Confidence"]
-.toFixed(
-3
-)}
-
-</td>
-
-</tr>
-
-<tr>
-
-<th>
-
-Pitching
-
-</th>
-
-<td>
-
-${factors["Pitching"]
-.toFixed(
-3
-)}
-
-</td>
-
-</tr>
-
-<tr>
-
-<th>
-
-HR Environment
-
-</th>
-
-<td>
-
-${factors["HR Environment"]
-.toFixed(
-3
-)}
-
-</td>
-
-</tr>
-
-</table>
+</b>
 
 <br>
 
-<b>
+True Power:
+
+${factors[
+"True Power"
+]
+.toFixed(
+3
+)}
+
+<br>
+
+Confidence:
+
+${factors[
+"Confidence"
+]
+.toFixed(
+3
+)}
+
+<br>
+
+Pitching:
+
+${factors[
+"Pitching"
+]
+.toFixed(
+3
+)}
+
+<br>
+
+HR:
+
+${factors[
+"HR Environment"
+]
+.toFixed(
+3
+)}
+
+<br><br>
 
 Biggest Edge:
 
-</b>
-
 ${biggest?.[0] || "Balanced"}
+
+</div>
 
 `
 
