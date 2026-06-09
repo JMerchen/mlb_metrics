@@ -772,9 +772,25 @@ WSH:120
 
 }
 
-return
+const key =
 
-`https://www.mlbstatic.com/team-logos/team-cap-on-light/${ids[team]}.svg`
+String(
+team
+)
+
+.trim()
+
+.toUpperCase()
+
+return ids[key]
+
+?
+
+`https://www.mlbstatic.com/team-logos/team-cap-on-light/${ids[key]}.svg`
+
+:
+
+""
 
 }
 
@@ -1062,6 +1078,9 @@ result.team
 
 class=
 "teamLogo"
+
+onerror=
+"this.style.display='none'"
 
 >
 
