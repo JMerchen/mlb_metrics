@@ -459,3 +459,27 @@ justify-content:center;
 overflow-x:auto;
 
 }
+
+.compareUp{
+
+font-size:10px;
+
+color:#228822;
+
+margin-left:4px;
+
+vertical-align:middle;
+
+}
+
+.compareDown{
+
+font-size:10px;
+
+color:#aa3333;
+
+margin-left:4px;
+
+vertical-align:middle;
+
+}
