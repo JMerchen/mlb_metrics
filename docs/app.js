@@ -7,10 +7,10 @@ let confidence = []
 let playerMatches = []
 
 let starterA =
-"League Average"
+[]
 
 let starterB =
-"League Average"
+[]
 
 
 
@@ -718,18 +718,20 @@ if(
 side==="A"
 ){
 
-starterA =
+starterA.push(
 String(
 name
 )
-
+)
+  
 }
 
 else{
 
-starterB =
+starterB.push(
 String(
 name
+)
 )
 
 }
@@ -919,7 +921,11 @@ starterA===name
 ){
 
 starterA =
-"League Average"
+
+starterA.filter(
+x=>
+x!==name
+)
 
 }
 
@@ -930,7 +936,11 @@ starterB===name
 ){
 
 starterB =
-"League Average"
+
+starterB.filter(
+x=>
+x!==name
+)
 
 }
 
@@ -1456,6 +1466,24 @@ prob
 
 function predictOdds(){
 
+const games =
+
+Math.max(
+
+starterA.length,
+
+starterB.length,
+
+1
+
+)
+
+let allGames =
+""
+
+let allProbs =
+[]
+  
 const A =
 
 confidence.find(
@@ -1530,14 +1558,40 @@ B.true_power
 )
 /3
 
+for(
+let game=0;
+game<games;
+game++
+){
+
+const currentStarterA =
+
+starterA[
+game
+]
+
+||
+"League Average"
+
+const currentStarterB =
+
+starterB[
+game
+]
+
+||
+"League Average"
+
 const pitchA =
+
 getPitchAdjustment(
-starterB
+currentStarterB
 )
 
 const pitchB =
+
 getPitchAdjustment(
-starterA
+currentStarterA
 )
 
 const parkFactor =
@@ -1564,16 +1618,18 @@ league avg
 2.1
 
 const hrA =
+
 getHRAdjustment(
 A,
-starterB,
+currentStarterB,
 parkFactor
 )
 
 const hrB =
+
 getHRAdjustment(
 B,
-starterA,
+currentStarterA,
 parkFactor
 )
 
@@ -1733,9 +1789,9 @@ const favPitch =
 getPitcher(
 winner==="A"
 ?
-starterA
+currentStarterA
 :
-starterB
+currentStarterB
 )
 
 const dogPitch =
@@ -1743,9 +1799,9 @@ const dogPitch =
 getPitcher(
 winner==="A"
 ?
-starterB
+currentStarterB
 :
-starterA
+currentStarterA
 )
 
 const pitchingEdge =
@@ -1903,12 +1959,20 @@ b[1]
 a[1]
 
 )[0]
-  
-document
-.getElementById(
-"oddsResult"
-)
-.innerHTML =
+
+allGames +=
+`
+<h2>
+
+Game
+
+${game+1}
+
+</h2>
+
+`
+
++
 
 `
 
@@ -2121,6 +2185,14 @@ ${biggest?.[0] || "Balanced"}
 `
 
 }
+
+document
+.getElementById(
+"oddsResult"
+)
+.innerHTML =
+
+allGames
 
 document
 .addEventListener(
