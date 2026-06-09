@@ -739,159 +739,38 @@ function showTeam(){
 
 const results =
 
-selectedTeams.map(
+selectedTeams
+
+.map(
 team=>
 
 confidence.find(
 r=>
 
-r.team
-===
-
-team
+r.team===team
 
 )
 
-).filter(
+)
+
+.filter(
 Boolean
 )
 
 if(
-results.length
-===
-0
+results.length===0
 ){
-
-return
-
-}
-
-if(
-!result
-){
-
-return
-
-}
-
-const scores =
-
-confidence
-.map(
-r=>
-
-Number(
-r.Confidence
-||
-0
-)
-
-)
-
-const min =
-
-Math.min(
-...scores
-)
-
-const max =
-
-Math.max(
-...scores
-)
-
-const pct =
-
-(
-
-Number(
-result.Confidence
-)
-
--
-
-min
-
-)
-
-/
-
-(
-
-max
--
-min
-
-)
-
-const red =
-
-Math.round(
-255
-*
-pct
-)
-
-const blue =
-
-Math.round(
-255
-*
-(
-1
--
-pct
-)
-)
-
-const color =
-
-`rgb(
-${red},
-80,
-${blue}
-)`
 
 document
 .getElementById(
 "teamResult"
 )
 .innerHTML =
+""
 
-`
+return
 
-<div
-style="
-font-size:28px;
-font-weight:bold;
-"
-
->
-
-${result.team}
-
-</div>
-
-<div
-style="
-height:14px;
-width:100%;
-background:${color};
-border-radius:8px;
-margin-top:8px;
-margin-bottom:15px;
-"
-
->
-
-</div>
-
-<div
-id="teamStats">
-
-</div>
-
-`
+}
 
 const winning = [
 
@@ -935,7 +814,10 @@ const park = [
 
 ]
 
-function buildRows(list){
+function rows(
+result,
+list
+){
 
 return list.map(
 k=>
@@ -944,41 +826,32 @@ k=>
 
 <div>
 
-${
-
-k
-
-.replaceAll(
+${k.replaceAll(
 "_",
 " "
-)
-
-}
+)}
 
 </div>
 
 <div>
 
-${
-
-Number(
+${Number(
 result[
 k
 ]
 ||
 0
-)
-.toFixed(
+).toFixed(
 3
-)
-
-}
+)}
 
 </div>
 
 `
 
-).join(
+)
+
+.join(
 ""
 )
 
@@ -986,14 +859,58 @@ k
 
 document
 .getElementById(
-"teamStats"
+"teamResult"
 )
 .innerHTML =
 
-results.map(
-result=>
+results
 
-`
+.map(
+result=>{
+
+const pct =
+
+(
+
+Number(
+result.Confidence
+)
+
+-
+
+min
+
+)
+
+/
+
+(
+
+max
+
+-
+
+min
+
+)
+
+const color =
+
+`rgb(
+
+${Math.round(
+255*pct
+)},
+
+80,
+
+${Math.round(
+255*(1-pct)
+)}
+
+)`
+
+return `
 
 <div
 class="infoCard">
@@ -1011,10 +928,7 @@ ${result.team}
 <div
 class="cardBadge"
 
-style="
-background:
-${color}
-"
+style="background:${color}"
 
 >
 
@@ -1029,9 +943,6 @@ class="profileColumns">
 class="profileColumn">
 
 <div
-class="profileSection">
-
-<div
 class="profileHeader">
 
 Winning Profile
@@ -1041,7 +952,8 @@ Winning Profile
 <div
 class="profileRows">
 
-${buildRows(
+${rows(
+result,
 winning
 )}
 
@@ -1049,13 +961,8 @@ winning
 
 </div>
 
-</div>
-
 <div
 class="profileColumn">
-
-<div
-class="profileSection">
 
 <div
 class="profileHeader">
@@ -1067,7 +974,8 @@ Offensive Profile
 <div
 class="profileRows">
 
-${buildRows(
+${rows(
+result,
 offense
 )}
 
@@ -1075,13 +983,8 @@ offense
 
 </div>
 
-</div>
-
 <div
 class="profileColumn">
-
-<div
-class="profileSection">
 
 <div
 class="profileHeader">
@@ -1093,7 +996,8 @@ Ballpark Profile
 <div
 class="profileRows">
 
-${buildRows(
+${rows(
+result,
 park
 )}
 
@@ -1105,15 +1009,17 @@ park
 
 </div>
 
-</div>
-
 `
+
+}
 
 )
 
 .join(
 ""
+
 )
+
 }
 
 
