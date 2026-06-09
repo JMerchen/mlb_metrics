@@ -2154,6 +2154,14 @@ document
 
 allGames
 
+allProbs.push(
+probA
+)
+
+}
+
+}
+
 document
 .addEventListener(
 "keydown",
