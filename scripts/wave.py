@@ -259,9 +259,9 @@ from pybaseball import chadwick_register
 names = chadwick_register()
 
 pave =pave.rename(columns = {'pitcher' : 'key_mlbam'}).merge(names, on='key_mlbam', how='left')
-pave = pave.drop(['key_mlbam', 'key_retro', 'key_bbref', 'key_fangraphs', 'mlb_played_first', 'mlb_played_last'], axis=1)
+pave = pave.drop(['key_retro', 'key_bbref', 'key_fangraphs', 'mlb_played_first', 'mlb_played_last'], axis=1)
 
-pave = pave[['name_first', 'name_last', 'PAVE', 'at_bats', 'hits', 'TBA', 'pave_fif', 'pave_thir', 'pave_half', 'pave_full', 'power_a', 'baa', 'hr_per']]
+pave = pave[['key_mlbam', 'name_first', 'name_last', 'PAVE', 'at_bats', 'hits', 'TBA', 'pave_fif', 'pave_thir', 'pave_half', 'pave_full', 'power_a', 'baa', 'hr_per']]
 
 qual = pave['at_bats'].max() * .75
 mean_p = pave[pave['at_bats'] > qual]['PAVE'].mean()
@@ -271,7 +271,7 @@ pave = pave[pave['PAVE_PLUS'] > 0]
 pave['Expected_Hits'] = pave['baa'] * 22
 pave['Expected_Bases'] = pave['power_a'] * 22
 pave['Expected_HRs'] = pave['hr_per'] * 22
-pave = pave[['name_first', 'name_last', 'at_bats', 'PAVE_PLUS', 'Expected_Hits', 'Expected_Bases', 'Expected_HRs']]
+pave = pave[['key_mlbam', 'name_first', 'name_last', 'at_bats', 'PAVE_PLUS', 'Expected_Hits', 'Expected_Bases', 'Expected_HRs']]
 pave = pave.sort_values('PAVE_PLUS', ascending=False)
 
 """# Hit_Prob"""
@@ -589,7 +589,7 @@ WAVE = WAVE.merge(WTB, on='key_mlbam', how ='left').merge(prob, on = 'key_mlbam'
 WAVE = WAVE.merge(latest_team, on = 'key_mlbam', how = 'left')
 WAVE['Consistency'] = WAVE['Game_Hit_Probability'] - WAVE['probability']
 WAVE['Approach'] = WAVE['Game_Hit_Probability'] * WAVE['probability']
-WAVE = WAVE[['name_first', 'name_last', 'team', 'pa_lfull', 'pa_rfull', 'probability_L', 'probability_R', 'probability', 'Game_Hit_Probability', 'Consistency', 'Approach', 'Expected_Bases']].fillna(0)
+WAVE = WAVE[['key_mlbam', 'name_first', 'name_last', 'team', 'pa_lfull', 'pa_rfull', 'probability_L', 'probability_R', 'probability', 'Game_Hit_Probability', 'Consistency', 'Approach', 'Expected_Bases']].fillna(0)
 WAVE = WAVE.sort_values('Game_Hit_Probability', ascending=False)
 WAVE = WAVE.rename(columns = {'pa_lfull' : 'PA_L', 'pa_rfull' : 'PA_R'})
 
