@@ -1961,7 +1961,9 @@ a[1]
 )[0]
 
 allGames +=
+
 `
+
 <h2>
 
 Game
@@ -1969,12 +1971,6 @@ Game
 ${game+1}
 
 </h2>
-
-`
-
-+
-
-`
 
 <div
 class="gameRow">
@@ -1985,11 +1981,11 @@ class="gameCol">
 <div
 class="gameCard">
 
-<h2>
+<h3>
 
 ${A.team}
 
-</h2>
+</h3>
 
 Win Probability:
 
@@ -1999,7 +1995,8 @@ ${(
 probA
 *
 100
-).toFixed(
+)
+.toFixed(
 1
 )
 }%
@@ -2032,11 +2029,11 @@ class="gameCol">
 <div
 class="gameCard">
 
-<h2>
+<h3>
 
 ${B.team}
 
-</h2>
+</h3>
 
 Win Probability:
 
@@ -2046,7 +2043,8 @@ ${(
 probB
 *
 100
-).toFixed(
+)
+.toFixed(
 1
 )
 }%
@@ -2078,15 +2076,15 @@ probB
 <div
 class="gameExplain">
 
-<b>
-
 Why the Model Likes
+
+<b>
 
 ${favored.team}
 
 </b>
 
-<br>
+<br><br>
 
 True Power:
 
@@ -2121,7 +2119,7 @@ ${factors[
 
 <br>
 
-HR:
+HR Environment:
 
 ${factors[
 "HR Environment"
@@ -2134,9 +2132,15 @@ ${factors[
 
 Biggest Edge:
 
+<b>
+
 ${biggest?.[0] || "Balanced"}
 
+</b>
+
 </div>
+
+<hr>
 
 `
 
