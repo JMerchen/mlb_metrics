@@ -306,9 +306,6 @@ player.key_mlbam
 class=
 "playerHeadshot"
 
-onerror=
-"this.style.display='none'"
-
 >
 
 <div>
