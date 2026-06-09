@@ -800,7 +800,55 @@ document
 card.className =
 "pitcherCard"
 
-card.innerHTML =
+card.dataset.name =
+name
+
+const remove =
+
+document
+.createElement(
+"button"
+)
+
+remove.innerHTML =
+"✕"
+
+remove.style.float =
+"right"
+
+remove.style.cursor =
+"pointer"
+
+remove.onclick =
+()=>{
+
+card.remove()
+
+if(
+side==="A"
+&&
+starterA===name
+){
+
+starterA =
+"League Average"
+
+}
+
+if(
+side==="B"
+&&
+starterB===name
+){
+
+starterB =
+"League Average"
+
+}
+
+}
+
+card.innerHTML +=
 
 `
 
@@ -864,6 +912,26 @@ ${player.Expected_HRs}
 
 `
 
+card.prepend(
+remove
+)
+
+const existing =
+
+stats.querySelector(
+
+`[data-name="${name}"]`
+
+)
+
+if(
+existing
+){
+
+existing.remove()
+
+}
+  
 stats.appendChild(
 card
 )
