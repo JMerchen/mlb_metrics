@@ -862,80 +862,62 @@ k=>{
 const value =
 
 Number(
-result[
-k
-]
+result[k]
 ||
 0
 )
-
-const otherValue =
-
-other
-
-?
-
-Number(
-other[
-k
-]
-||
-0
-)
-
-:
-
-value
 
 let arrow =
 ""
 
 if(
-results.length
-===
-2
+results.length===2
+&&
+other
 ){
+
+const compare =
+
+Number(
+other[k]
+||
+0
+)
 
 if(
 value
 >
-otherValue
+compare
 ){
 
 arrow =
 
-`<span class="compareUp">▲</span>`
+'<span class="compareUp">▲</span>'
 
 }
 
 else if(
 value
 <
-otherValue
+compare
 ){
 
 arrow =
 
-`<span class="compareDown">▼</span>`
+'<span class="compareDown">▼</span>'
 
 }
 
 }
 
-return
-
-`
+return `
 
 <div>
 
-${
-
-k.replaceAll(
+${k.replaceAll(
 "_",
 " "
-)
-
-}
+)}
 
 </div>
 
@@ -951,9 +933,7 @@ ${arrow}
 
 `
 
-}
-
-)
+})
 
 .join(
 ""
