@@ -2561,11 +2561,36 @@ class="gameCol">
 <div
 class="gameCard">
 
+<div
+style="
+display:flex;
+align-items:center;
+gap:10px;
+margin-bottom:8px;
+">
+
+<img
+
+src=
+"${teamLogo(
+A.team
+)}"
+
+class=
+"teamLogo"
+
+onerror=
+"this.style.display='none'"
+
+>
+
 <h3>
 
 ${A.team}
 
 </h3>
+
+</div>
 
 Win Probability:
 
@@ -2609,11 +2634,36 @@ class="gameCol">
 <div
 class="gameCard">
 
+<div
+style="
+display:flex;
+align-items:center;
+gap:10px;
+margin-bottom:8px;
+">
+
+<img
+
+src=
+"${teamLogo(
+B.team
+)}"
+
+class=
+"teamLogo"
+
+onerror=
+"this.style.display='none'"
+
+>
+
 <h3>
 
 ${B.team}
 
 </h3>
+
+</div>
 
 Win Probability:
 
