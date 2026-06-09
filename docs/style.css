@@ -511,13 +511,17 @@ width:92px;
 
 height:92px;
 
+min-width:92px;
+
+min-height:92px;
+
 border-radius:50%;
 
 object-fit:cover;
 
 background:#ddd;
 
-flex-shrink:0;
+display:block;
 
 }
 
