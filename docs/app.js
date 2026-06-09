@@ -838,9 +838,10 @@ ${name}
 </b>
 
 <button
+type="button"
 class="removePitcher">
 
-✕
+×
 
 </button>
 
