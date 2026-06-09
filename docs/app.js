@@ -992,7 +992,6 @@ document
 
 results.map(
 result=>
-{
 
 `
 
@@ -1109,8 +1108,6 @@ park
 </div>
 
 `
-
-}
 
 )
 
