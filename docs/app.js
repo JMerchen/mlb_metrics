@@ -788,7 +788,13 @@ showTeam()
 function playerImage(id){
 
 if(
-!id
+id
+===
+undefined
+||
+id
+===
+null
 ){
 
 return
@@ -796,9 +802,21 @@ return
 
 }
 
+const clean =
+
+String(
+id
+)
+
+.split(
+"."
+)[0]
+
+.trim()
+
 return
 
-`https://img.mlbstatic.com/mlb-photos/image/upload/w_240,q_auto:best/v1/people/${id}/headshot/67/current`
+`https://img.mlbstatic.com/mlb-photos/image/upload/w_240,q_auto:best/v1/people/${clean}/headshot/67/current`
 
 }
 
