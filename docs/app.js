@@ -306,6 +306,11 @@ player.key_mlbam
 class=
 "playerHeadshot"
 
+title=
+"${playerImage(
+player.key_mlbam
+)}"
+
 >
 
 <div>
