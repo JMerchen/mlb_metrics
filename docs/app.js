@@ -302,16 +302,11 @@ align-items:center;
 
 <img
 
-src=
-"${playerImage(
-playerId
-)}"
+src="${playerImage(playerId)}"
 
-class=
-"playerHeadshot"
+class="playerHeadshot"
 
-title=
-"${playerId}"
+alt="${player.name_first} ${player.name_last}"
 
 >
 
@@ -792,35 +787,14 @@ showTeam()
 function playerImage(id){
 
 if(
-id
-===
-undefined
-||
-id
-===
-null
+!id
 ){
 
-return
-""
+return ""
 
 }
 
-const clean =
-
-String(
-id
-)
-
-.split(
-"."
-)[0]
-
-.trim()
-
-return
-
-`https://img.mlbstatic.com/mlb-photos/image/upload/w_240,q_auto:best/v1/people/${clean}/headshot/67/current`
+return `https://img.mlbstatic.com/mlb-photos/image/upload/w_240,q_auto:best/v1/people/${String(id).trim()}/headshot/67/current`
 
 }
 
