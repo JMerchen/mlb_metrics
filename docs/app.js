@@ -263,6 +263,10 @@ playerMatches[
 index
 ]
 
+const playerId =
+
+player.key_mlbam
+
 const isPave =
 
 document
@@ -300,16 +304,14 @@ align-items:center;
 
 src=
 "${playerImage(
-player.key_mlbam
+playerId
 )}"
 
 class=
 "playerHeadshot"
 
 title=
-"${playerImage(
-player.key_mlbam
-)}"
+"${playerId}"
 
 >
 
@@ -3003,14 +3005,6 @@ await loadCSV(
 pave =
 await loadCSV(
 "./data/pave.csv"
-)
-
-console.log(
-wave[0]
-)
-
-console.log(
-pave[0]
 )
 
 confidence =
