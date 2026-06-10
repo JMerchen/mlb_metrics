@@ -3005,6 +3005,14 @@ await loadCSV(
 "./data/pave.csv"
 )
 
+console.log(
+wave[0]
+)
+
+console.log(
+pave[0]
+)
+
 confidence =
 await loadCSV(
 "./data/confidence.csv"
