@@ -22,8 +22,8 @@ dt = df[df['events'].isin(['field_out', 'force_out', 'single', 'double', 'strike
 dt = dt[['game_date', 'batter', 'events', 'p_throws']]
 home = df[df['inning_topbot'] == 'Bot'][['batter', 'home_team', 'game_date']].drop_duplicates().rename(columns = {'home_team' : 'team'})
 away = df[df['inning_topbot'] == 'Top'][['batter', 'away_team', 'game_date']].drop_duplicates().rename(columns = {'away_team' : 'team'})
-homep = df[df['inning_topbot'] == 'Bot'][['pitcher', 'home_team', 'game_date']].drop_duplicates().rename(columns = {'home_team' : 'team'})
-awayp = df[df['inning_topbot'] == 'Top'][['pitcher', 'away_team', 'game_date']].drop_duplicates().rename(columns = {'away_team' : 'team'})
+homep = df[df['inning_topbot'] == 'Bot'][['pitcher', 'away_team', 'game_date']].drop_duplicates().rename(columns = {'home_team' : 'team'})
+awayp = df[df['inning_topbot'] == 'Top'][['pitcher', 'home_team', 'game_date']].drop_duplicates().rename(columns = {'away_team' : 'team'})
 team = pd.concat([home, away])
 teamp = pd.concat([homep, awayp])
 latest_player = df[['game_date', 'batter']].groupby('batter', as_index = False).max()
