@@ -1015,9 +1015,9 @@ nf['pyth_full'] = (
 nf = nf.fillna(0)
 
 from numpy._core.fromnumeric import std
-nf['strength'] = (nf['rolling_10']*.35 + nf['rolling_30']*.3 + nf['rolling_81']*.2 + nf['full']*.15)
-nf['current_strength'] = nf['roll_10_cur']*.35 + nf['roll_30_cur']*.3 + nf['roll_81_cur']*.2 + nf['full_cur']*.15
-nf['pyth_strength'] = (nf['pyth_10']*.35 + nf['pyth_30']*.3 + nf['pyth_81']*.2 + nf['pyth_full']*.15)
+nf['strength'] = (nf['rolling_10']*.5 + nf['rolling_30']*.3 + nf['rolling_81']*.1 + nf['full']*.1)
+nf['current_strength'] = nf['roll_10_cur']*.5 + nf['roll_30_cur']*.3 + nf['roll_81_cur']*.1 + nf['full_cur']*.1
+nf['pyth_strength'] = (nf['pyth_10']*.5 + nf['pyth_30']*.3 + nf['pyth_81']*.1 + nf['pyth_full']*.1)
 sos = nf.groupby('opp', as_index = False)[['strength', 'pyth_strength']].mean()
 sos = sos.rename(columns = {'opp' : 'team', 'strength' : 'SOS', 'pyth_strength' : 'pyth_SOS'})
 latest = nf.groupby('team', as_index = False)['game_id'].max()
