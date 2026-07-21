@@ -1,13 +1,8 @@
 date,key_mlbam,name,rank,predicted_probability,metric,actual_hit
 2026-06-09,808982,Jung Hoo Lee,1,0.8580912025827281,Game_Hit_Probability,1.0
-2026-06-09,808982,Jung Hoo Lee,1,0.8580912025827281,Game_Hit_Probability,1.0
-2026-06-09,691777,Max Muncy,2,0.837037037037037,Game_Hit_Probability,0.0
 2026-06-09,691777,Max Muncy,2,0.837037037037037,Game_Hit_Probability,0.0
 2026-06-09,805367,Chase Meidroth,3,0.8271164021164021,Game_Hit_Probability,1.0
-2026-06-09,805367,Chase Meidroth,3,0.8271164021164021,Game_Hit_Probability,1.0
 2026-06-09,650333,Luis Arráez,4,0.8198079937304075,Game_Hit_Probability,1.0
-2026-06-09,650333,Luis Arráez,4,0.8198079937304075,Game_Hit_Probability,1.0
-2026-06-09,676391,Ernie Clement,5,0.8196943573667712,Game_Hit_Probability,0.0
 2026-06-09,676391,Ernie Clement,5,0.8196943573667712,Game_Hit_Probability,0.0
 2026-06-10,808982,Jung Hoo Lee,1,0.8602380952380952,Game_Hit_Probability,1.0
 2026-06-10,682626,Francisco Álvarez,2,0.8486486486486486,Game_Hit_Probability,1.0
@@ -155,14 +150,9 @@ date,key_mlbam,name,rank,predicted_probability,metric,actual_hit
 2026-07-08,669699,Braden Shewmake,4,0.8400000000000001,Game_Hit_Probability,
 2026-07-08,672640,Otto Lopez,5,0.8397061965811966,Game_Hit_Probability,1.0
 2026-07-09,593871,Jorge Polanco,1,0.9234375,Game_Hit_Probability,
-2026-07-09,593871,Jorge Polanco,1,0.9234375,Game_Hit_Probability,
-2026-07-09,811965,Joshua Kuroda-Grauer,2,0.875,Game_Hit_Probability,0.0
 2026-07-09,811965,Joshua Kuroda-Grauer,2,0.875,Game_Hit_Probability,0.0
 2026-07-09,671218,Heliot Ramos,3,0.8464417989417989,Game_Hit_Probability,1.0
-2026-07-09,671218,Heliot Ramos,3,0.8464417989417989,Game_Hit_Probability,1.0
 2026-07-09,672640,Otto Lopez,4,0.840090811965812,Game_Hit_Probability,1.0
-2026-07-09,672640,Otto Lopez,4,0.840090811965812,Game_Hit_Probability,1.0
-2026-07-09,669699,Braden Shewmake,5,0.8400000000000001,Game_Hit_Probability,
 2026-07-09,669699,Braden Shewmake,5,0.8400000000000001,Game_Hit_Probability,
 2026-07-10,593871,Jorge Polanco,1,0.9234375,Game_Hit_Probability,0.0
 2026-07-10,663853,Romy Gonzalez,2,0.915625,Game_Hit_Probability,0.0

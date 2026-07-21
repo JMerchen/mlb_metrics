@@ -44,7 +44,9 @@ def select_picks(
 
 def append_predictions(picks: pd.DataFrame, log_path: str) -> pd.DataFrame:
     """Append `picks` to the predictions log at `log_path`, deduping on
-    (date, key_mlbam, metric) so re-running a day's pipeline doesn't create
+    (date, key_mlbam, metric) so re-running a day's pipeline - or a `picks`
+    batch that already contains duplicates itself, e.g. from git history
+    replaying the same date via more than one commit - doesn't create
     duplicate log entries. Existing rows (including already-resolved
     actual_hit values) always win over a re-logged pick for the same key."""
     os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
@@ -52,10 +54,10 @@ def append_predictions(picks: pd.DataFrame, log_path: str) -> pd.DataFrame:
     if os.path.exists(log_path):
         existing = pd.read_csv(log_path, parse_dates=["date"])
         combined = pd.concat([picks, existing], ignore_index=True)
-        combined = combined.drop_duplicates(subset=["date", "key_mlbam", "metric"], keep="last")
     else:
         combined = picks
 
+    combined = combined.drop_duplicates(subset=["date", "key_mlbam", "metric"], keep="last")
     combined = combined.sort_values(["date", "rank"]).reset_index(drop=True)
     combined.to_csv(log_path, index=False)
     return combined

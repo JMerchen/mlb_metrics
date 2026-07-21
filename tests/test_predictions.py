@@ -63,6 +63,23 @@ def test_append_predictions_dedupes_and_prefers_existing_row(tmp_path):
     assert pd.isna(row_20["actual_hit"])
 
 
+def test_append_predictions_dedupes_within_a_single_fresh_batch(tmp_path):
+    """Regression test: a `picks` batch that already contains duplicate
+    (date, key_mlbam, metric) rows - e.g. from git_backtest reconstructing
+    the same date via two different commits - must be deduped even on the
+    very first write, when there's no existing log to merge against yet."""
+    log_path = str(tmp_path / "predictions.csv")
+
+    day = predictions.select_picks(_hitters([(1, 0, 40, 0.9)]), "2026-06-19", top_n=1, min_plate_appearances=30)
+    duplicated_batch = pd.concat([day, day.copy()], ignore_index=True)
+
+    combined = predictions.append_predictions(duplicated_batch, log_path)
+
+    assert len(combined) == 1
+    logged = pd.read_csv(log_path, parse_dates=["date"])
+    assert len(logged) == 1
+
+
 def test_resolve_predictions_fills_pending_and_leaves_resolved_rows_alone(tmp_path):
     log_path = str(tmp_path / "predictions.csv")
     log = pd.DataFrame([
