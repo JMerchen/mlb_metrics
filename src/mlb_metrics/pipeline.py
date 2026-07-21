@@ -31,6 +31,17 @@ def build_pitcher_events(df: pd.DataFrame) -> pd.DataFrame:
     return data.completed_events(df, ["game_date", "pitcher", "events"])
 
 
+def build_pitcher_events_with_role(data_with_game_id: pd.DataFrame, roles: pd.DataFrame) -> pd.DataFrame:
+    """Completed at-bat events keyed by pitcher, with the pitching `team` and
+    `is_starter` for that appearance attached, used by compute_bullpen_pave."""
+    completed = data.completed_events(
+        data_with_game_id, ["game_date", "pitcher", "events", "game_id"]
+    )
+    return completed.merge(
+        roles[["game_id", "pitcher", "team", "is_starter"]], on=["game_id", "pitcher"], how="left"
+    )
+
+
 def compute_outputs(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     """Run all three metric families against an already as-of-date-filtered
     Statcast dataframe. Returns {"wave": ..., "pave": ..., "confidence": ...}."""
@@ -38,14 +49,17 @@ def compute_outputs(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     latest_batter_team = data.latest_team_for_batters(df)
     latest_pitcher_team = data.latest_team_for_pitchers(df)
     data_with_game_id = data.assign_game_ids(df)
+    roles = data.label_pitcher_roles(data_with_game_id)
 
     dt = build_pitch_events(df)
     pdf = build_pitcher_events(df)
+    pdf_with_role = build_pitcher_events_with_role(data_with_game_id, roles)
+    bullpen_pave = pitchers.compute_bullpen_pave(pdf_with_role)
 
     return {
         "wave": hitters.assemble_hitters(dt, data_with_game_id, names, latest_batter_team),
         "pave": pitchers.assemble_pitchers(pdf, names, latest_pitcher_team),
-        "confidence": teams.assemble_team_metrics(data_with_game_id),
+        "confidence": teams.assemble_team_metrics(data_with_game_id, bullpen_pave),
     }
 
 

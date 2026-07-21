@@ -14,9 +14,14 @@ to `docs/` as a GitHub Pages dashboard.
 - `data/raw/` - persisted raw Statcast pulls, one parquet file per season,
   committed daily alongside the output CSVs so history accumulates run over run.
 - `docs/data/` - the published `wave.csv` / `pave.csv` / `confidence.csv`
-  consumed by the `docs/` dashboard.
+  consumed by the `docs/` dashboard. `confidence.csv` includes `Bullpen_PAVE_PLUS`
+  (and `Bullpen_BAA`/`Bullpen_Power_A`/`Bullpen_HR_Per`/`Bullpen_AtBats`): PAVE
+  computed only from each team's relief appearances, not its starters - a hitter
+  typically sees the bullpen for 1-3 of their 3-5 at-bats in a game, so evaluating
+  a matchup against "the starter's PAVE" alone ignores most of the at-bats.
 - `tests/` - pytest suite covering the event classifiers and the window-blend
-  formulas (WAVE, PAVE, Game_Hit_Probability) against hand-computed expected values.
+  formulas (WAVE, PAVE, Bullpen_PAVE, Game_Hit_Probability) against hand-computed
+  expected values.
 
 ## Running
 

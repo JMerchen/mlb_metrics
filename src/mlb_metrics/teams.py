@@ -281,8 +281,14 @@ def compute_strength_metrics(record: pd.DataFrame):
     return current_strength, sos
 
 
-def assemble_team_metrics(data: pd.DataFrame) -> pd.DataFrame:
-    """Build the final team output table (equivalent to the original script's `master` dataframe)."""
+def assemble_team_metrics(data: pd.DataFrame, bullpen_pave: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Build the final team output table (equivalent to the original script's `master` dataframe).
+
+    `bullpen_pave` is the output of pitchers.compute_bullpen_pave() - team
+    Bullpen_PAVE_PLUS/Bullpen_BAA/etc, describing how tough *this* team's
+    bullpen is to hit against. It's optional so teams.py stays independently
+    testable/usable without requiring pitcher-role data.
+    """
     for_merge, sus = compute_home_run_stats(data)
     latest_off = compute_offensive_edge(data)
     record = build_team_record(data)
@@ -323,12 +329,15 @@ def assemble_team_metrics(data: pd.DataFrame) -> pd.DataFrame:
     master = master.drop_duplicates()
     master["true_power"] = (master["offensive_edge"] + master["suppression_resistance"]) / 2
 
-    master = master[
-        [
-            "team", "current", "Strength", "pyth_Strength", "SOS", "pyth_SOS",
-            "Confidence", "pyth_Confidence", "Confidence_Delta", "true_power",
-            "offensive_edge", "suppression_resistance", "home_run_reliance",
-            "homer_per_game", "game_homer_rate", "team_home_run_rate", "away_hr_rate",
-        ]
+    output_columns = [
+        "team", "current", "Strength", "pyth_Strength", "SOS", "pyth_SOS",
+        "Confidence", "pyth_Confidence", "Confidence_Delta", "true_power",
+        "offensive_edge", "suppression_resistance", "home_run_reliance",
+        "homer_per_game", "game_homer_rate", "team_home_run_rate", "away_hr_rate",
     ]
+    if bullpen_pave is not None:
+        master = master.merge(bullpen_pave, on="team", how="left")
+        output_columns += ["Bullpen_PAVE_PLUS", "Bullpen_BAA", "Bullpen_Power_A", "Bullpen_HR_Per", "Bullpen_AtBats"]
+
+    master = master[output_columns]
     return master.sort_values("team").reset_index(drop=True)

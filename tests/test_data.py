@@ -36,3 +36,23 @@ def test_persist_raw_statcast_appends_and_dedupes_by_pitch(tmp_path):
 
 def test_load_persisted_statcast_returns_none_when_absent(tmp_path):
     assert data.load_persisted_statcast(str(tmp_path / "raw"), 2026) is None
+
+
+def test_label_pitcher_roles_picks_lowest_at_bat_number_as_starter():
+    # Top half = home_team pitching to away_team's batters; Bot half =
+    # away_team pitching to home_team's batters (matches the convention
+    # used throughout data.py's other team-lookup helpers).
+    rows = [
+        {"game_id": 1, "inning_topbot": "Top", "home_team": "A", "away_team": "B", "pitcher": 101, "at_bat_number": 1},
+        {"game_id": 1, "inning_topbot": "Bot", "home_team": "A", "away_team": "B", "pitcher": 201, "at_bat_number": 2},
+        {"game_id": 1, "inning_topbot": "Top", "home_team": "A", "away_team": "B", "pitcher": 102, "at_bat_number": 3},
+        {"game_id": 1, "inning_topbot": "Bot", "home_team": "A", "away_team": "B", "pitcher": 202, "at_bat_number": 4},
+    ]
+    data_with_game_id = pd.DataFrame(rows)
+
+    roles = data.label_pitcher_roles(data_with_game_id).set_index(["team", "pitcher"])
+
+    assert roles.loc[("A", 101), "is_starter"]
+    assert not roles.loc[("A", 102), "is_starter"]
+    assert roles.loc[("B", 201), "is_starter"]
+    assert not roles.loc[("B", 202), "is_starter"]

@@ -152,3 +152,38 @@ def latest_team_for_pitchers(df: pd.DataFrame) -> pd.DataFrame:
 def completed_events(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
     """Filter pitch-by-pitch rows down to one row per completed plate-appearance event."""
     return df[df["events"].isin(config.COUNTED_EVENTS)][columns]
+
+
+def label_pitcher_roles(data_with_game_id: pd.DataFrame) -> pd.DataFrame:
+    """One row per (game_id, pitching team, pitcher): `is_starter` is True
+    for whichever pitcher faced that team's opponent first (lowest
+    at_bat_number) in that game, False for every other pitcher who appeared
+    for that team in that game.
+
+    Role is determined per game-appearance rather than as a season-long
+    per-pitcher label, so a pitcher who both starts and relieves across the
+    season (a swingman, an opener's follower, etc.) is classified correctly
+    in each individual game rather than bucketed into one role for all of it.
+    """
+    top = data_with_game_id[data_with_game_id["inning_topbot"] == "Top"][
+        ["game_id", "home_team", "pitcher", "at_bat_number"]
+    ].rename(columns={"home_team": "team"})
+    bot = data_with_game_id[data_with_game_id["inning_topbot"] == "Bot"][
+        ["game_id", "away_team", "pitcher", "at_bat_number"]
+    ].rename(columns={"away_team": "team"})
+    appearances = pd.concat([top, bot])
+
+    first_ab = (
+        appearances.groupby(["game_id", "team"], as_index=False)["at_bat_number"]
+        .min()
+        .rename(columns={"at_bat_number": "first_ab"})
+    )
+    tagged = appearances.merge(first_ab, on=["game_id", "team"])
+    starters = tagged[tagged["at_bat_number"] == tagged["first_ab"]][["game_id", "team", "pitcher"]]
+    starters = starters.drop_duplicates().rename(columns={"pitcher": "starting_pitcher"})
+
+    roles = appearances[["game_id", "team", "pitcher"]].drop_duplicates().merge(
+        starters, on=["game_id", "team"], how="left"
+    )
+    roles["is_starter"] = roles["pitcher"] == roles["starting_pitcher"]
+    return roles[["game_id", "team", "pitcher", "is_starter"]]
