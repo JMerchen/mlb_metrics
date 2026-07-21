@@ -79,6 +79,38 @@ after every daily run and every backtest run - so the picks that make up the
 streak are always the ones that were actually recommended *at the time*
 (from `data/predictions/predictions.csv`), not recomputed with hindsight.
 
+## Lineup awareness
+
+Backtesting found ~30% of logged top-5 picks had zero at-bats on the day
+they were picked - the batter wasn't even in the lineup. Two independent
+fixes, both applied in `predictions.select_picks`:
+
+- **Batting-order consistency** (`data.assign_batting_order`, `lineup.py`) -
+  derived entirely from Statcast data already persisted, no new dependency,
+  works retroactively. A batter only qualifies if their average batting-order
+  slot over their current team's last `LINEUP_WINDOW_GAMES` games is in the
+  top half (`LINEUP_TOP_HALF_MAX_SLOT`) *and* they've actually started at
+  that rate (`LINEUP_MIN_START_RATE`) - together these exclude both a bench
+  player's hot week and a recent call-up without a real track record. A
+  mid-season trade resets the window to the batter's new team only.
+- **Probable-pitcher matchup blending** (`schedule.py`, `matchup.py`) - a new
+  dependency (`MLB-StatsAPI`, since `pybaseball` has no schedule/lineup
+  support at all) fetches today's probable starters and blends each batter's
+  `Game_Hit_Probability` with their opponent's probable starter's
+  `PAVE_PLUS` and `Bullpen_PAVE_PLUS`, weighted by assumed at-bat share, into
+  a separate `Matchup_Hit_Probability` metric - logged alongside the
+  original via the existing multi-metric comparison rather than replacing
+  it, since it's an unvalidated first pass that should be backtested before
+  ever becoming the "recommended" metric. Also adds a "team is actually
+  playing today" qualifier (an off day currently produces zero picks under
+  either metric, not a stale recommendation).
+
+Confirmed starting lineups (batting order 1-9 for *today's* game) are
+explicitly out of scope for now - they post only ~2-4 hours before first
+pitch, too late for the pipeline's 8am ET run regardless of data source, and
+would need a second later run plus a decision about revising an
+already-logged morning pick.
+
 ## Running
 
 ```
