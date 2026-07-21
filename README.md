@@ -54,12 +54,26 @@ pure sample-size noise.
 
 ## Beat the Streak Tracker (dashboard)
 
-The dashboard's top section simulates actually playing Beat the Streak with
-2 picks/day (`DAILY_PICK_COUNT`, config.py): current streak, longest streak,
-day-level success rate, and a history of every day's 2 picks with
-hit/miss/pending status. A day only "continues the streak" if **both** picks
-get a hit (`DAILY_PICK_REQUIRE_ALL`), matching Beat the Streak's actual
-multi-pick mode. This reads `docs/data/beat_the_streak_picks.csv` and
+The dashboard's top section simulates actually playing Beat the Streak,
+following its real rules rather than a simplified per-day win/loss model
+(see `evaluation.streak_progression()`):
+
+- A batter is only "recommended" if `predicted_probability` clears
+  `DAILY_PICK_MIN_PROBABILITY` (config.py, default 0.80) - a day can
+  surface 0, 1, or up to `DAILY_PICK_MAX` (2) picks depending on how many
+  clear the bar, not a fixed count regardless of matchup quality.
+- A pick with an at-bat and no hit resets the streak to 0.
+- A pick with zero at-bats that day (rained out, DNP, not in the lineup)
+  is neutral - it neither advances nor resets the streak.
+- Otherwise the streak increases by however many picks got a hit (0, 1,
+  or 2).
+
+Distinguishing "confirmed zero at-bats" from "outcome not known yet"
+needed an `at_bats` field per pick (`predictions.py`) - a row only
+resolves once its date falls within the coverage of the fetched/persisted
+Statcast data, not just once that specific batter shows up in it.
+
+This reads `docs/data/beat_the_streak_picks.csv` and
 `beat_the_streak_summary.csv`, written by `evaluation.build_beat_the_streak_export()`
 after every daily run and every backtest run - so the picks that make up the
 streak are always the ones that were actually recommended *at the time*
