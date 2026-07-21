@@ -56,3 +56,53 @@ def test_label_pitcher_roles_picks_lowest_at_bat_number_as_starter():
     assert not roles.loc[("A", 102), "is_starter"]
     assert roles.loc[("B", 201), "is_starter"]
     assert not roles.loc[("B", 202), "is_starter"]
+
+
+def test_assign_batting_order_uses_away_bats_top_home_bats_bottom():
+    # A batter who only appears during Top-half at-bats must be credited to
+    # the AWAY team (they're batting while the home team pitches) - this is
+    # the OPPOSITE convention from label_pitcher_roles's pitching-team split
+    # above, and easy to invert by accident since the two functions look
+    # nearly identical.
+    rows = [
+        {"game_id": 1, "inning_topbot": "Top", "home_team": "A", "away_team": "B", "batter": 501, "at_bat_number": 1},
+        {"game_id": 1, "inning_topbot": "Bot", "home_team": "A", "away_team": "B", "batter": 601, "at_bat_number": 2},
+    ]
+    data_with_game_id = pd.DataFrame(rows)
+
+    order = data.assign_batting_order(data_with_game_id)
+
+    top_row = order[order["batter"] == 501].iloc[0]
+    assert top_row["team"] == "B"  # away team bats during Top
+
+    bot_row = order[order["batter"] == 601].iloc[0]
+    assert bot_row["team"] == "A"  # home team bats during Bot
+
+
+def test_assign_batting_order_ranks_by_first_at_bat_and_flags_late_entries():
+    rows = []
+    # Away team B's 9 starters, first at-bats at 1, 3, 5, ..., 17.
+    for i, batter in enumerate(range(901, 910)):
+        rows.append({
+            "game_id": 1, "inning_topbot": "Top", "home_team": "A", "away_team": "B",
+            "batter": batter, "at_bat_number": 1 + 2 * i,
+        })
+    # Home team A's 9 starters, first at-bats at 2, 4, 6, ..., 18.
+    for i, batter in enumerate(range(801, 810)):
+        rows.append({
+            "game_id": 1, "inning_topbot": "Bot", "home_team": "A", "away_team": "B",
+            "batter": batter, "at_bat_number": 2 + 2 * i,
+        })
+    # A substitute for team B enters after all 9 starters have batted once.
+    rows.append({
+        "game_id": 1, "inning_topbot": "Top", "home_team": "A", "away_team": "B",
+        "batter": 999, "at_bat_number": 19,
+    })
+
+    order = data.assign_batting_order(pd.DataFrame(rows)).set_index(["team", "batter"])
+
+    assert order.loc[("B", 901), "batting_order"] == 1
+    assert order.loc[("B", 909), "batting_order"] == 9
+    assert order.loc[("B", 999), "batting_order"] == 10  # substitute, not part of the starting 9
+    assert order.loc[("A", 801), "batting_order"] == 1
+    assert order.loc[("A", 809), "batting_order"] == 9

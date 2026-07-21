@@ -109,3 +109,41 @@ def test_assemble_hitters_output_columns_and_derived_fields():
     assert row["name_last"] == "Player"
     assert row["Consistency"] == pytest.approx(row["Game_Hit_Probability"] - row["probability"])
     assert row["Approach"] == pytest.approx(row["Game_Hit_Probability"] * row["probability"])
+
+
+def test_assemble_hitters_merges_lineup_consistency_when_provided():
+    dt = pd.DataFrame(_at_bats(1, "R", [("2026-06-15", "single"), ("2026-06-16", "field_out")]))
+    data_with_game_id = pd.DataFrame([
+        {"batter": 1, "game_id": 1, "game_date": pd.Timestamp("2026-06-15"), "events": "single"},
+        {"batter": 1, "game_id": 2, "game_date": pd.Timestamp("2026-06-16"), "events": "field_out"},
+    ])
+    names = pd.DataFrame([{"key_mlbam": 1, "name_first": "Test", "name_last": "Player"}])
+    latest_team = pd.DataFrame([{"key_mlbam": 1, "team": "NYY"}])
+    # Batter 1 has a lineup-consistency row; the population itself is
+    # untouched by omitting one (a defensive merge, not expected in practice
+    # since lineup_consistency is normally computed for the same population).
+    lineup_consistency = pd.DataFrame([{"key_mlbam": 1, "avg_batting_order": 2.5, "start_rate": 0.8}])
+
+    result = hitters.assemble_hitters(dt, data_with_game_id, names, latest_team, lineup_consistency)
+
+    assert "avg_batting_order" in result.columns and "start_rate" in result.columns
+    row = result.iloc[0]
+    assert row["avg_batting_order"] == pytest.approx(2.5)
+    assert row["start_rate"] == pytest.approx(0.8)
+
+
+def test_assemble_hitters_lineup_consistency_missing_batter_is_null_not_zero():
+    dt = pd.DataFrame(_at_bats(1, "R", [("2026-06-15", "single"), ("2026-06-16", "field_out")]))
+    data_with_game_id = pd.DataFrame([
+        {"batter": 1, "game_id": 1, "game_date": pd.Timestamp("2026-06-15"), "events": "single"},
+        {"batter": 1, "game_id": 2, "game_date": pd.Timestamp("2026-06-16"), "events": "field_out"},
+    ])
+    names = pd.DataFrame([{"key_mlbam": 1, "name_first": "Test", "name_last": "Player"}])
+    latest_team = pd.DataFrame([{"key_mlbam": 1, "team": "NYY"}])
+    lineup_consistency = pd.DataFrame(columns=["key_mlbam", "avg_batting_order", "start_rate"])
+
+    result = hitters.assemble_hitters(dt, data_with_game_id, names, latest_team, lineup_consistency)
+
+    row = result.iloc[0]
+    assert pd.isna(row["avg_batting_order"])  # never filled to 0 - that would look like batting 1st
+    assert row["start_rate"] == 0

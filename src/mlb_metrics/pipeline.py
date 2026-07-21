@@ -18,7 +18,7 @@ import os
 
 import pandas as pd
 
-from mlb_metrics import config, data, evaluation, hitters, pitchers, predictions, teams
+from mlb_metrics import config, data, evaluation, hitters, lineup, pitchers, predictions, teams
 
 
 def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
@@ -56,8 +56,11 @@ def compute_outputs(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     pdf_with_role = build_pitcher_events_with_role(data_with_game_id, roles)
     bullpen_pave = pitchers.compute_bullpen_pave(pdf_with_role)
 
+    batting_order = data.assign_batting_order(data_with_game_id)
+    lineup_consistency = lineup.compute_lineup_consistency(batting_order, latest_batter_team)
+
     return {
-        "wave": hitters.assemble_hitters(dt, data_with_game_id, names, latest_batter_team),
+        "wave": hitters.assemble_hitters(dt, data_with_game_id, names, latest_batter_team, lineup_consistency),
         "pave": pitchers.assemble_pitchers(pdf, names, latest_pitcher_team),
         "confidence": teams.assemble_team_metrics(data_with_game_id, bullpen_pave),
     }

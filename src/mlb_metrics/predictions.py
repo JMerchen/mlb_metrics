@@ -24,12 +24,35 @@ def select_picks(
     top_n: int = config.BACKTEST_TOP_N,
     min_plate_appearances: int = config.BACKTEST_MIN_PLATE_APPEARANCES,
     metric: str = "Game_Hit_Probability",
+    max_avg_batting_order: float = config.LINEUP_TOP_HALF_MAX_SLOT,
+    min_start_rate: float = config.LINEUP_MIN_START_RATE,
+    teams_playing_today: set[str] | None = None,
 ) -> pd.DataFrame:
     """Rank a computed hitters table (the wave.csv-equivalent output of
     hitters.assemble_hitters) by `metric` and return the top `top_n`
     qualified picks for `date`, in PREDICTION_COLUMNS shape with `actual_hit`
-    left null (unresolved)."""
+    left null (unresolved).
+
+    `max_avg_batting_order`/`min_start_rate` only take effect if `hitters`
+    has avg_batting_order/start_rate columns (see hitters.assemble_hitters's
+    optional `lineup_consistency` param) - absent columns mean a no-op, so
+    old wave.csv snapshots in git history (which predate this feature) are
+    unaffected. A null avg_batting_order (never started for their current
+    team) fails the comparison and is correctly excluded, not treated as 0.
+
+    `teams_playing_today`, if given, additionally requires a batter's team
+    to be in the set - unlike the lineup qualifiers this isn't column-gated
+    (whether a team is playing today isn't a property of the hitters table
+    itself); defaults to None, i.e. off.
+    """
     qualified = hitters[(hitters["PA_L"] + hitters["PA_R"]) >= min_plate_appearances].copy()
+    if "avg_batting_order" in qualified.columns:
+        qualified = qualified[qualified["avg_batting_order"] <= max_avg_batting_order]
+    if "start_rate" in qualified.columns:
+        qualified = qualified[qualified["start_rate"] >= min_start_rate]
+    if teams_playing_today is not None:
+        qualified = qualified[qualified["team"].isin(teams_playing_today)]
+
     picks = qualified.sort_values(metric, ascending=False).head(top_n).reset_index(drop=True)
 
     picks["rank"] = picks.index + 1

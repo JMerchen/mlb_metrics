@@ -39,6 +39,48 @@ def test_select_picks_applies_plate_appearance_qualifier_and_ranks():
     assert picks.loc[0, "name"] == "F2 L2"
 
 
+def test_select_picks_applies_lineup_qualifiers_when_columns_present():
+    hitters = _hitters([
+        (1, 0, 40, 0.90),  # top-half slot, consistent starter -> qualifies
+        (2, 0, 40, 0.85),  # bats bottom of the order -> excluded
+        (3, 0, 40, 0.80),  # bats top-half, but inconsistent (low start_rate) -> excluded
+        (4, 0, 40, 0.70),  # never started at all (null avg) -> excluded, not treated as slot 0
+    ])
+    hitters["avg_batting_order"] = [2.0, 7.0, 2.0, float("nan")]
+    hitters["start_rate"] = [0.9, 0.9, 0.2, 0.0]
+
+    picks = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30)
+
+    assert list(picks["key_mlbam"]) == [1]
+
+
+def test_select_picks_lineup_qualifiers_are_noop_without_columns():
+    # A batter who would fail the lineup qualifiers if they applied must
+    # still be picked when the columns simply aren't present (old wave.csv
+    # snapshots from before this feature existed).
+    hitters = _hitters([(1, 0, 40, 0.90)])
+    assert "avg_batting_order" not in hitters.columns
+
+    picks = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30)
+
+    assert list(picks["key_mlbam"]) == [1]
+
+
+def test_select_picks_filters_by_teams_playing_today():
+    hitters = _hitters([
+        (1, 0, 40, 0.90),
+        (2, 0, 40, 0.80),
+    ])
+    hitters.loc[hitters["key_mlbam"] == 1, "team"] = "NYY"
+    hitters.loc[hitters["key_mlbam"] == 2, "team"] = "BOS"
+
+    picks = predictions.select_picks(
+        hitters, "2026-06-20", top_n=5, min_plate_appearances=30, teams_playing_today={"BOS"}
+    )
+
+    assert list(picks["key_mlbam"]) == [2]
+
+
 def test_append_predictions_dedupes_and_prefers_existing_row(tmp_path):
     log_path = str(tmp_path / "predictions.csv")
 

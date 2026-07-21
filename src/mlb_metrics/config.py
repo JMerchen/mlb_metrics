@@ -119,6 +119,58 @@ BACKTEST_TOP_N = 5
 DAILY_PICK_MAX = 2
 DAILY_PICK_MIN_PROBABILITY = 0.80
 
+# --- Lineup awareness ---
+#
+# Backtesting found ~30% of logged top-5 picks had zero at-bats on the day
+# they were picked - the batter wasn't even in the lineup. These qualifiers
+# (see lineup.py, predictions.select_picks) use each batter's *historical*
+# batting-order slot - derived from Statcast data already persisted, via
+# data.assign_batting_order - as a proxy for "reliably plays, and plays high
+# enough in the order to get real at-bats", without needing same-day lineup
+# confirmation (which isn't available until a few hours before first pitch -
+# see schedule.py).
+
+# Rolling window (team games, not days) used to compute batting-order
+# consistency. A game-count window, unlike the day-count *_WINDOWS lists
+# above, since roster usage doesn't follow a calendar cadence.
+LINEUP_WINDOW_GAMES = 20
+
+# A batter's average batting-order slot over the window must be strictly
+# above this to count as "top half" - the 9-man order's true median is 5,
+# so 4.5 means strictly better than a 50/50 split, matching "more at-bats
+# than the bottom of the order" precisely (a mean of exactly 5.0 is not
+# "top half").
+LINEUP_TOP_HALF_MAX_SLOT = 4.5
+
+# Fraction of the team's games in the window (or fewer, early in the season)
+# a batter must have actually started in to count as a regular, not a bench
+# player on a hot week or a recent call-up riding an unsustainable streak.
+# A rate, not an absolute game count, so it doesn't hard-disqualify every
+# batter before a team has played LINEUP_WINDOW_GAMES games.
+LINEUP_MIN_START_RATE = 0.6
+
+# --- Matchup awareness (Part B) ---
+#
+# Blends a batter's own hit probability with the specific pitching they're
+# projected to face today: their team's opponent's probable starter (most of
+# their at-bats) and that opponent's bullpen (the rest). Unvalidated first
+# pass - see matchup.py - meant to be logged alongside the unblended metric
+# and backtested before ever becoming the "recommended" metric.
+
+# Assumed share of a batter's at-bats against the opposing starter vs. the
+# opposing bullpen (roughly 2-3 of a 3-5 AB game). Sums to 1.0 so the blend
+# has no systematic bias vs. Game_Hit_Probability's own average, since
+# PAVE_PLUS/Bullpen_PAVE_PLUS are both normalized to a league mean of 1.0.
+MATCHUP_STARTER_AB_SHARE = 0.6
+MATCHUP_BULLPEN_AB_SHARE = 0.4
+
+# PAVE_PLUS/Bullpen_PAVE_PLUS are clipped to this range before blending (not
+# just clipping the final probability) - assemble_pitchers has no upper
+# bound on individual PAVE_PLUS, so a small-sample outlier (an opener's short
+# outing, early season) could otherwise multiply a good Game_Hit_Probability
+# past 1.0 and erase real distinctions at the ceiling clip.
+MATCHUP_PAVE_PLUS_CLIP = (0.5, 1.75)
+
 # Statcast plate-appearance outcome values that count as a "completed" event
 # (used to filter pitch-by-pitch data down to one row per at-bat outcome).
 COUNTED_EVENTS = [
