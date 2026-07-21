@@ -9,14 +9,14 @@ pitchers, which are typically settled days in advance.
 
 This queries the lower-level `statsapi.get("schedule", ...)` call (the raw
 MLB Stats API JSON) rather than the `statsapi.schedule()` convenience
-wrapper, because the raw schedule endpoint is documented to include each
-probable pitcher's numeric MLB player ID - the same ID space as Statcast's
-batter/pitcher columns - while the convenience wrapper's exact field
-coverage for that ID wasn't confirmed against a live response while this
-was built (this sandbox can't reach statsapi.mlb.com at all). Verify the
-assumed JSON shape below with `scripts/debug_statsapi.py` (run via the
-`Debug statsapi` GitHub Actions workflow, which has real network access)
-before trusting this against a live season if anything looks off.
+wrapper. Confirmed via a live run of `scripts/debug_statsapi.py` (the
+`Debug statsapi` GitHub Actions workflow, run 29878447354): the convenience
+wrapper's `home_probable_pitcher`/`away_probable_pitcher` fields are name
+strings only, with no numeric ID anywhere in that response - the raw
+endpoint's `teams.{home,away}.probablePitcher.id` is genuinely required to
+get the same ID space as Statcast's batter/pitcher columns. The field paths
+parsed below (`teams.{home,away}.team.id`, `.probablePitcher.id`) match the
+live response exactly.
 """
 
 import pandas as pd
