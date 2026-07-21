@@ -35,7 +35,50 @@ def test_select_picks_applies_plate_appearance_qualifier_and_ranks():
     assert list(picks["predicted_probability"]) == [0.80, 0.70]
     assert (picks["metric"] == "Game_Hit_Probability").all()
     assert picks["actual_hit"].isna().all()
+    assert picks["at_bats"].isna().all()
     assert picks.loc[0, "name"] == "F2 L2"
+
+
+def test_select_picks_applies_lineup_qualifiers_when_columns_present():
+    hitters = _hitters([
+        (1, 0, 40, 0.90),  # top-half slot, consistent starter -> qualifies
+        (2, 0, 40, 0.85),  # bats bottom of the order -> excluded
+        (3, 0, 40, 0.80),  # bats top-half, but inconsistent (low start_rate) -> excluded
+        (4, 0, 40, 0.70),  # never started at all (null avg) -> excluded, not treated as slot 0
+    ])
+    hitters["avg_batting_order"] = [2.0, 7.0, 2.0, float("nan")]
+    hitters["start_rate"] = [0.9, 0.9, 0.2, 0.0]
+
+    picks = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30)
+
+    assert list(picks["key_mlbam"]) == [1]
+
+
+def test_select_picks_lineup_qualifiers_are_noop_without_columns():
+    # A batter who would fail the lineup qualifiers if they applied must
+    # still be picked when the columns simply aren't present (old wave.csv
+    # snapshots from before this feature existed).
+    hitters = _hitters([(1, 0, 40, 0.90)])
+    assert "avg_batting_order" not in hitters.columns
+
+    picks = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30)
+
+    assert list(picks["key_mlbam"]) == [1]
+
+
+def test_select_picks_filters_by_teams_playing_today():
+    hitters = _hitters([
+        (1, 0, 40, 0.90),
+        (2, 0, 40, 0.80),
+    ])
+    hitters.loc[hitters["key_mlbam"] == 1, "team"] = "NYY"
+    hitters.loc[hitters["key_mlbam"] == 2, "team"] = "BOS"
+
+    picks = predictions.select_picks(
+        hitters, "2026-06-20", top_n=5, min_plate_appearances=30, teams_playing_today={"BOS"}
+    )
+
+    assert list(picks["key_mlbam"]) == [2]
 
 
 def test_append_predictions_dedupes_and_prefers_existing_row(tmp_path):
@@ -63,28 +106,83 @@ def test_append_predictions_dedupes_and_prefers_existing_row(tmp_path):
     assert pd.isna(row_20["actual_hit"])
 
 
+def test_append_predictions_dedupes_within_a_single_fresh_batch(tmp_path):
+    """Regression test: a `picks` batch that already contains duplicate
+    (date, key_mlbam, metric) rows - e.g. from git_backtest reconstructing
+    the same date via two different commits - must be deduped even on the
+    very first write, when there's no existing log to merge against yet."""
+    log_path = str(tmp_path / "predictions.csv")
+
+    day = predictions.select_picks(_hitters([(1, 0, 40, 0.9)]), "2026-06-19", top_n=1, min_plate_appearances=30)
+    duplicated_batch = pd.concat([day, day.copy()], ignore_index=True)
+
+    combined = predictions.append_predictions(duplicated_batch, log_path)
+
+    assert len(combined) == 1
+    logged = pd.read_csv(log_path, parse_dates=["date"])
+    assert len(logged) == 1
+
+
 def test_resolve_predictions_fills_pending_and_leaves_resolved_rows_alone(tmp_path):
     log_path = str(tmp_path / "predictions.csv")
     log = pd.DataFrame([
-        {"date": "2026-06-18", "key_mlbam": 1, "name": "A", "rank": 1, "predicted_probability": 0.9, "metric": "Game_Hit_Probability", "actual_hit": 1},
-        {"date": "2026-06-19", "key_mlbam": 1, "name": "A", "rank": 1, "predicted_probability": 0.8, "metric": "Game_Hit_Probability", "actual_hit": None},
-        {"date": "2026-06-19", "key_mlbam": 2, "name": "B", "rank": 2, "predicted_probability": 0.7, "metric": "Game_Hit_Probability", "actual_hit": None},
+        # Already resolved (at_bats already set) - must be left alone even
+        # though completed_events below would compute a *different* result
+        # for it (a miss instead of the stored hit), proving it's skipped.
+        {"date": "2026-06-18", "key_mlbam": 1, "name": "A", "rank": 1, "predicted_probability": 0.9, "metric": "Game_Hit_Probability", "actual_hit": 1, "at_bats": 1},
+        {"date": "2026-06-19", "key_mlbam": 1, "name": "A", "rank": 1, "predicted_probability": 0.8, "metric": "Game_Hit_Probability", "actual_hit": None, "at_bats": None},
+        {"date": "2026-06-19", "key_mlbam": 2, "name": "B", "rank": 2, "predicted_probability": 0.7, "metric": "Game_Hit_Probability", "actual_hit": None, "at_bats": None},
+        # Batter 3 had zero at-bats on 06-19 (not in completed_events at all
+        # for that date) - should resolve to a confirmed no_game, not stay pending.
+        {"date": "2026-06-19", "key_mlbam": 3, "name": "C", "rank": 3, "predicted_probability": 0.6, "metric": "Game_Hit_Probability", "actual_hit": None, "at_bats": None},
+        # 06-20 is beyond the outcome data's coverage - must stay pending.
+        {"date": "2026-06-20", "key_mlbam": 1, "name": "A", "rank": 1, "predicted_probability": 0.85, "metric": "Game_Hit_Probability", "actual_hit": None, "at_bats": None},
     ])
     log.to_csv(log_path, index=False)
 
     completed_events = pd.DataFrame([
-        {"game_date": pd.Timestamp("2026-06-18"), "batter": 1, "events": "home_run"},  # already resolved, ignored
+        {"game_date": pd.Timestamp("2026-06-18"), "batter": 1, "events": "field_out"},  # would be a miss - must be ignored
         {"game_date": pd.Timestamp("2026-06-19"), "batter": 1, "events": "single"},
         {"game_date": pd.Timestamp("2026-06-19"), "batter": 2, "events": "field_out"},
+        # note: no rows at all for batter 3 on 06-19, and 06-20 doesn't appear anywhere.
     ])
 
     result = predictions.resolve_predictions(log_path, completed_events).set_index(["date", "key_mlbam"])
 
-    assert result.loc[(pd.Timestamp("2026-06-18"), 1), "actual_hit"] == 1  # untouched
-    assert result.loc[(pd.Timestamp("2026-06-19"), 1), "actual_hit"] == 1  # single -> hit
-    assert result.loc[(pd.Timestamp("2026-06-19"), 2), "actual_hit"] == 0  # field_out -> no hit
+    row_18 = result.loc[(pd.Timestamp("2026-06-18"), 1)]
+    assert row_18["actual_hit"] == 1 and row_18["at_bats"] == 1  # untouched, not recomputed
+
+    row_19_1 = result.loc[(pd.Timestamp("2026-06-19"), 1)]
+    assert row_19_1["actual_hit"] == 1 and row_19_1["at_bats"] == 1  # single -> hit
+
+    row_19_2 = result.loc[(pd.Timestamp("2026-06-19"), 2)]
+    assert row_19_2["actual_hit"] == 0 and row_19_2["at_bats"] == 1  # field_out -> miss
+
+    row_19_3 = result.loc[(pd.Timestamp("2026-06-19"), 3)]
+    assert pd.isna(row_19_3["actual_hit"]) and row_19_3["at_bats"] == 0  # confirmed no_game
+
+    row_20 = result.loc[(pd.Timestamp("2026-06-20"), 1)]
+    assert pd.isna(row_20["actual_hit"]) and pd.isna(row_20["at_bats"])  # still genuinely pending
 
 
 def test_resolve_predictions_missing_log_returns_empty():
     result = predictions.resolve_predictions("/nonexistent/path.csv", pd.DataFrame(columns=["game_date", "batter", "events"]))
     assert result.empty
+
+
+def test_resolve_predictions_migrates_a_log_written_before_at_bats_existed(tmp_path):
+    log_path = str(tmp_path / "predictions.csv")
+    # No at_bats column at all - simulates a log written by an older version.
+    legacy_log = pd.DataFrame([
+        {"date": "2026-06-18", "key_mlbam": 1, "name": "A", "rank": 1, "predicted_probability": 0.9, "metric": "Game_Hit_Probability", "actual_hit": None},
+    ])
+    legacy_log.to_csv(log_path, index=False)
+
+    completed_events = pd.DataFrame([
+        {"game_date": pd.Timestamp("2026-06-18"), "batter": 1, "events": "single"},
+    ])
+
+    result = predictions.resolve_predictions(log_path, completed_events)
+
+    assert result.loc[0, "actual_hit"] == 1
+    assert result.loc[0, "at_bats"] == 1

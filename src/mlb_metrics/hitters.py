@@ -207,8 +207,18 @@ def assemble_hitters(
     data_with_game_id: pd.DataFrame,
     names: pd.DataFrame,
     latest_team: pd.DataFrame,
+    lineup_consistency: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """Build the final hitter output table (equivalent to the original script's `WAVE` dataframe)."""
+    """Build the final hitter output table (equivalent to the original script's `WAVE` dataframe).
+
+    `lineup_consistency` (see lineup.compute_lineup_consistency) is optional
+    so existing callers/tests are unaffected; when given, it adds
+    avg_batting_order/start_rate columns that predictions.select_picks's
+    lineup qualifiers key off of. avg_batting_order is deliberately left
+    null (not filled to 0) for a batter with no recorded starts - a null
+    correctly fails the "top half of the order" qualifier downstream,
+    whereas a 0 would look like the best possible batting slot.
+    """
     wave = compute_wave(dt)
     wtb = compute_wtb(dt)
     game_hit_prob = compute_game_hit_probability(data_with_game_id)
@@ -231,5 +241,10 @@ def assemble_hitters(
             "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
         ]
     ].fillna(0)
+
+    if lineup_consistency is not None:
+        hitters = hitters.merge(lineup_consistency, on="key_mlbam", how="left")
+        hitters["start_rate"] = hitters["start_rate"].fillna(0)
+
     hitters = hitters.sort_values("Game_Hit_Probability", ascending=False)
     return hitters.rename(columns={"pa_lfull": "PA_L", "pa_rfull": "PA_R"})

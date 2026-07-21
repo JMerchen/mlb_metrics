@@ -90,6 +90,7 @@ def test_run_backtest_reconstructs_resolves_and_summarizes(tmp_path, monkeypatch
             "--raw-dir", str(raw_dir),
             "--predictions-log", str(predictions_log),
             "--summary-out", str(summary_out),
+            "--docs-data-dir", str(tmp_path / "docs_data"),
             "--top-n", "1",
             "--min-plate-appearances", "30",
         ],
@@ -105,3 +106,15 @@ def test_run_backtest_reconstructs_resolves_and_summarizes(tmp_path, monkeypatch
     summary = pd.read_csv(summary_out)
     assert summary.loc[0, "n_resolved"] == 2
     assert summary.loc[0, "any_of_top_1_hit_rate"] == pytest.approx(0.5)
+
+    docs_data_dir = tmp_path / "docs_data"
+    streak_picks = pd.read_csv(docs_data_dir / "beat_the_streak_picks.csv")
+    # 06-18's pick (0.80 predicted) clears the default 0.80 "good matchup"
+    # bar and gets a hit; 06-19's (0.70) doesn't clear the bar at all, so
+    # that day is a no-op with zero recommended picks.
+    assert len(streak_picks) == 1
+    assert streak_picks.loc[0, "status"] == "hit"
+    streak_summary = pd.read_csv(docs_data_dir / "beat_the_streak_summary.csv")
+    assert streak_summary.loc[0, "n_days_resolved"] == 1
+    assert streak_summary.loc[0, "current_streak"] == 1
+    assert streak_summary.loc[0, "longest_streak"] == 1

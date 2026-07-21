@@ -24,7 +24,11 @@ WAVE_CSV_PATH = "docs/data/wave.csv"
 
 
 def list_wave_csv_commits(repo_dir: str = ".", path: str = WAVE_CSV_PATH) -> pd.DataFrame:
-    """Returns [commit, date] for every commit that touched `path`, oldest first."""
+    """Returns [commit, date] for every commit that touched `path`, oldest first -
+    one commit per calendar date. A date with more than one commit (e.g. an
+    automated daily update plus a manual same-day fix) only keeps the most
+    recent one, since we want a single as-of-that-date snapshot per day, not
+    to replay the same date's picks twice."""
     result = subprocess.run(
         ["git", "log", "--follow", "--format=%H %ad", "--date=short", "--", path],
         cwd=repo_dir,
@@ -35,6 +39,9 @@ def list_wave_csv_commits(repo_dir: str = ".", path: str = WAVE_CSV_PATH) -> pd.
     rows = [line.split(" ", 1) for line in result.stdout.strip().splitlines() if line.strip()]
     commits = pd.DataFrame(rows, columns=["commit", "date"])
     commits["date"] = pd.to_datetime(commits["date"])
+    # `git log` lists newest-first, so the first row for a given date is its
+    # most recent commit.
+    commits = commits.drop_duplicates(subset="date", keep="first")
     return commits.sort_values("date").reset_index(drop=True)
 
 

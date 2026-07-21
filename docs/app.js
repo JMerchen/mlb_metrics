@@ -3264,4 +3264,124 @@ console.log(
 
 }
 
+async function loadBeatTheStreak(){
+
+let summary = []
+let picks = []
+
+try{
+summary = await loadCSV("./data/beat_the_streak_summary.csv")
+}catch(e){
+console.log("no beat_the_streak_summary.csv yet", e)
+}
+
+try{
+picks = await loadCSV("./data/beat_the_streak_picks.csv")
+}catch(e){
+console.log("no beat_the_streak_picks.csv yet", e)
+}
+
+renderStreakStats(summary)
+renderTodaysPicks(picks)
+renderStreakHistory(picks)
+
+}
+
+function renderStreakStats(summary){
+
+const el = document.getElementById("streakStats")
+
+if(!summary.length){
+el.innerHTML = "No picks tracked yet"
+return
+}
+
+const s = summary[0]
+
+const survivalRate =
+s.day_survival_rate && s.day_survival_rate !== ""
+? (Number(s.day_survival_rate) * 100).toFixed(1) + "%"
+: "-"
+
+const stat = (value, label) =>
+`<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div></div>`
+
+el.innerHTML =
+stat(s.current_streak || 0, "Current Streak") +
+stat(s.longest_streak || 0, "Longest Streak") +
+stat(survivalRate, "Day Survival Rate") +
+stat(s.n_days_resolved || 0, "Days Tracked")
+
+}
+
+function renderTodaysPicks(picks){
+
+const el = document.getElementById("todaysPicks")
+
+// Only days with at least one "good matchup" pick appear in `picks` at
+// all - a day with zero recommendations is simply absent, not a blank
+// row - so this naturally shows the most recent day that had a pick.
+if(!picks.length){
+el.innerHTML = "No strong matchups recommended yet"
+return
+}
+
+const latestDate = picks
+.map(p=>p.date)
+.sort()
+.slice(-1)[0]
+
+const todays = picks
+.filter(p=>p.date === latestDate)
+.sort((a,b)=>Number(a.rank) - Number(b.rank))
+
+if(!todays.length){
+el.innerHTML = "No strong matchups today"
+return
+}
+
+const statusLabels = {
+hit: "hit",
+miss: "miss",
+no_game: "no game",
+pending: "pending",
+}
+
+el.innerHTML = todays
+.map(p=>{
+
+const prob =
+p.predicted_probability && p.predicted_probability !== ""
+? (Number(p.predicted_probability) * 100).toFixed(1) + "% predicted"
+: ""
+
+return `
+<div class="pickCard ${p.status}">
+<div class="pickName">${p.name}</div>
+<div class="pickProb">${prob}</div>
+<div class="pickStatus">${statusLabels[p.status] || p.status}</div>
+</div>
+`
+
+})
+.join("")
+
+}
+
+function renderStreakHistory(picks){
+
+const sorted = picks
+.slice()
+.sort((a,b)=>b.date.localeCompare(a.date) || Number(a.rank) - Number(b.rank))
+
+buildTable(
+sorted,
+"streakHistoryTable",
+100
+)
+
+}
+
 loadAll()
+
+loadBeatTheStreak()

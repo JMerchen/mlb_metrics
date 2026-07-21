@@ -18,7 +18,7 @@ import os
 
 import pandas as pd
 
-from mlb_metrics import config, data, hitters, pitchers, predictions, teams
+from mlb_metrics import config, data, evaluation, hitters, lineup, matchup, pitchers, predictions, schedule, teams
 
 
 def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
@@ -56,11 +56,32 @@ def compute_outputs(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     pdf_with_role = build_pitcher_events_with_role(data_with_game_id, roles)
     bullpen_pave = pitchers.compute_bullpen_pave(pdf_with_role)
 
+    batting_order = data.assign_batting_order(data_with_game_id)
+    lineup_consistency = lineup.compute_lineup_consistency(batting_order, latest_batter_team)
+
     return {
-        "wave": hitters.assemble_hitters(dt, data_with_game_id, names, latest_batter_team),
+        "wave": hitters.assemble_hitters(dt, data_with_game_id, names, latest_batter_team, lineup_consistency),
         "pave": pitchers.assemble_pitchers(pdf, names, latest_pitcher_team),
         "confidence": teams.assemble_team_metrics(data_with_game_id, bullpen_pave),
     }
+
+
+def write_beat_the_streak_export(predictions_log_path: str, output_dir: str) -> None:
+    """Read the full predictions log and (re)write the two CSVs the
+    dashboard's Beat the Streak section reads: each day's recommended picks
+    (0 to DAILY_PICK_MAX, gated by DAILY_PICK_MIN_PROBABILITY - "no good
+    matchup" means zero) with hit/miss/no_game/pending status, and a
+    longest_streak/current_streak summary following Beat the Streak's actual
+    rules (see evaluation.streak_progression). No-op if nothing's logged yet."""
+    if not os.path.exists(predictions_log_path):
+        return
+    log = pd.read_csv(predictions_log_path, parse_dates=["date"])
+    picks, summary = evaluation.build_beat_the_streak_export(
+        log, max_picks=config.DAILY_PICK_MAX, min_probability=config.DAILY_PICK_MIN_PROBABILITY
+    )
+    os.makedirs(output_dir, exist_ok=True)
+    picks.to_csv(os.path.join(output_dir, "beat_the_streak_picks.csv"), index=False)
+    summary.to_csv(os.path.join(output_dir, "beat_the_streak_summary.csv"), index=False)
 
 
 def run(
@@ -99,8 +120,36 @@ def run(
         completed = data.completed_events(df, ["game_date", "batter", "events"])
         predictions.resolve_predictions(predictions_log_path, completed)
 
-        picks = predictions.select_picks(outputs["wave"], as_of_date)
-        predictions.append_predictions(picks, predictions_log_path)
+        # A new external dependency (statsapi) must not be able to break the
+        # whole daily update - on failure, fall back to no schedule
+        # awareness at all for this run rather than skipping Game_Hit_Probability too.
+        schedule_df = None
+        try:
+            schedule_df = schedule.fetch_probable_pitchers(as_of_date)
+        except Exception as exc:
+            print(f"WARNING: failed to fetch today's schedule/probable pitchers ({exc}); "
+                  f"skipping Matchup_Hit_Probability and the teams-playing-today qualifier for this run.")
+
+        # None (fetch failed) means "unknown, don't filter"; an empty set
+        # (fetch succeeded, zero games today) correctly excludes every pick.
+        teams_playing_today = set(schedule_df["team"]) if schedule_df is not None else None
+
+        game_hit_picks = predictions.select_picks(
+            outputs["wave"], as_of_date, teams_playing_today=teams_playing_today
+        )
+        predictions.append_predictions(game_hit_picks, predictions_log_path)
+
+        if schedule_df is not None and not schedule_df.empty:
+            matchup_probability = matchup.compute_matchup_hit_probability(
+                outputs["wave"], outputs["pave"], outputs["confidence"], schedule_df
+            )
+            matchup_wave = outputs["wave"].merge(matchup_probability, on="key_mlbam", how="inner")
+            matchup_picks = predictions.select_picks(
+                matchup_wave, as_of_date, metric="Matchup_Hit_Probability", teams_playing_today=teams_playing_today
+            )
+            predictions.append_predictions(matchup_picks, predictions_log_path)
+
+        write_beat_the_streak_export(predictions_log_path, output_dir)
 
     return outputs
 

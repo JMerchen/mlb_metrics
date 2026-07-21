@@ -53,6 +53,30 @@ def test_list_wave_csv_commits_returns_dates_oldest_first(tmp_path):
     assert list(commits["date"]) == [pd.Timestamp("2026-06-18"), pd.Timestamp("2026-06-19")]
 
 
+def test_list_wave_csv_commits_keeps_only_latest_commit_per_date(tmp_path):
+    """Regression test: a date with two commits (e.g. an automated daily
+    update plus a manual same-day fix) must only be replayed once, using the
+    later commit's content - not both, which would double-log that date's
+    picks (this happened for real in git history: 2026-07-09 had 2 commits)."""
+    repo = _init_repo_with_wave_history(tmp_path)
+    wave_path = repo / "docs" / "data" / "wave.csv"
+
+    # A second, same-day commit for 2026-06-18 with different content.
+    _wave_csv([(4, 40, 0.95)]).to_csv(wave_path, index=False)
+    _git(["add", "docs/data/wave.csv"], repo)
+    _git(["commit", "-q", "-m", "day1-fix", "--date=2026-06-18T18:00:00"], repo)
+
+    commits = git_backtest.list_wave_csv_commits(repo_dir=str(repo))
+
+    assert list(commits["date"]) == [pd.Timestamp("2026-06-18"), pd.Timestamp("2026-06-19")]
+    assert len(commits) == 2
+
+    day1_content = git_backtest.read_csv_at_commit(
+        commits.iloc[0]["commit"], git_backtest.WAVE_CSV_PATH, repo_dir=str(repo)
+    )
+    assert list(day1_content["key_mlbam"]) == [4]  # the later same-day commit's content
+
+
 def test_reconstruct_historical_picks_replays_each_commit_through_select_picks(tmp_path):
     repo = _init_repo_with_wave_history(tmp_path)
 

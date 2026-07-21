@@ -187,3 +187,32 @@ def label_pitcher_roles(data_with_game_id: pd.DataFrame) -> pd.DataFrame:
     )
     roles["is_starter"] = roles["pitcher"] == roles["starting_pitcher"]
     return roles[["game_id", "team", "pitcher", "is_starter"]]
+
+
+def assign_batting_order(data_with_game_id: pd.DataFrame) -> pd.DataFrame:
+    """One row per (game_id, team, batter) who batted in that game:
+    `batting_order` is their rank (1, 2, 3, ...) by first at_bat_number
+    within their team's batting half-innings for that game. Ranks 1-9 are
+    the starting lineup in order; rank >9 is a substitute (pinch hitter/
+    runner) who entered mid-game - callers that only want the starting
+    lineup should filter to batting_order <= 9. A substitute's first at-bat
+    necessarily comes after all 9 starters' first at-bats, so this needs no
+    special-casing for extra-inning bench-emptying.
+
+    Batting-team convention is the OPPOSITE of label_pitcher_roles's
+    pitching-team convention above: Top half -> away_team bats, Bot half ->
+    home_team bats (matches latest_team_for_batters, not label_pitcher_roles).
+    """
+    top = data_with_game_id[data_with_game_id["inning_topbot"] == "Top"][
+        ["game_id", "away_team", "batter", "at_bat_number"]
+    ].rename(columns={"away_team": "team"})
+    bot = data_with_game_id[data_with_game_id["inning_topbot"] == "Bot"][
+        ["game_id", "home_team", "batter", "at_bat_number"]
+    ].rename(columns={"home_team": "team"})
+    appearances = pd.concat([top, bot])
+
+    first_ab = appearances.groupby(["game_id", "team", "batter"], as_index=False)["at_bat_number"].min()
+    first_ab["batting_order"] = (
+        first_ab.groupby(["game_id", "team"])["at_bat_number"].rank(method="first").astype(int)
+    )
+    return first_ab[["game_id", "team", "batter", "batting_order"]]
