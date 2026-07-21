@@ -49,6 +49,10 @@ def test_run_rejects_as_of_date_before_season_start(tmp_path):
         pass
 
 
+def _no_schedule(date):
+    raise RuntimeError("no network in tests")
+
+
 def test_run_logs_and_resolves_predictions(monkeypatch, tmp_path):
     """End-to-end check that run() both logs today's picks and resolves any
     pick from a previous run whose target date has now happened, using
@@ -61,6 +65,11 @@ def test_run_logs_and_resolves_predictions(monkeypatch, tmp_path):
     })
     monkeypatch.setattr(pipeline.data, "fetch_statcast_range", lambda start, end: raw)
     monkeypatch.setattr(pipeline.data, "persist_raw_statcast", lambda df, raw_dir, season: df)
+    # This test only cares about Game_Hit_Probability picks/streak wiring,
+    # not matchup blending - and must not depend on live network access
+    # (statsapi is reachable in CI but not in every sandbox, which would
+    # make this test's outcome nondeterministic depending on where it runs).
+    monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", _no_schedule)
 
     wave = pd.DataFrame([
         {
