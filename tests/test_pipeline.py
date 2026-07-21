@@ -71,7 +71,10 @@ def test_run_logs_and_resolves_predictions(monkeypatch, tmp_path):
         {
             "key_mlbam": 2, "name_first": "Test", "name_last": "PlayerTwo", "team": "BOS",
             "PA_L": 0, "PA_R": 35, "probability_L": 0, "probability_R": 0.8, "probability": 0.8,
-            "Game_Hit_Probability": 0.7, "Consistency": -0.1, "Approach": 0.56, "Expected_Bases": 1.2,
+            # Above DAILY_PICK_MIN_PROBABILITY (0.80) too, so both picks
+            # qualify as "recommended" and the streak wiring below covers a
+            # genuine 2-hit day, not just a 1-pick day.
+            "Game_Hit_Probability": 0.85, "Consistency": -0.1, "Approach": 0.56, "Expected_Bases": 1.2,
         },
     ])
     monkeypatch.setattr(
@@ -114,13 +117,14 @@ def test_run_logs_and_resolves_predictions(monkeypatch, tmp_path):
     assert pending_rows["actual_hit"].isna().all()
 
     # write_beat_the_streak_export() should have run after each pass and
-    # reflect that 06-19's day (both picks hit) succeeded the streak.
+    # reflect that 06-19's day (both picks hit) added 2 to the streak.
     picks_export = pd.read_csv(f"{tmp_path}/out/beat_the_streak_picks.csv", parse_dates=["date"])
     assert set(picks_export["date"].dt.strftime("%Y-%m-%d")) == {"2026-06-19", "2026-06-20"}
     resolved_export_rows = picks_export[picks_export["date"] == "2026-06-19"]
+    assert len(resolved_export_rows) == 2  # both picks cleared the recommendation threshold
     assert (resolved_export_rows["status"] == "hit").all()
 
     summary_export = pd.read_csv(f"{tmp_path}/out/beat_the_streak_summary.csv")
     assert summary_export.loc[0, "n_days_resolved"] == 1
-    assert summary_export.loc[0, "current_streak"] == 1
-    assert summary_export.loc[0, "longest_streak"] == 1
+    assert summary_export.loc[0, "current_streak"] == 2
+    assert summary_export.loc[0, "longest_streak"] == 2

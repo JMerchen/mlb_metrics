@@ -1,2 +1,2 @@
-k,require_all,metric,n_days_resolved,streak_success_rate,longest_streak,current_streak
-2,True,Game_Hit_Probability,26,0.34615384615384615,4,1
+metric,max_picks,min_probability,n_days_resolved,day_survival_rate,longest_streak,current_streak
+Game_Hit_Probability,2,0.8,40,0.475,8,2

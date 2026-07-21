@@ -3298,9 +3298,9 @@ return
 
 const s = summary[0]
 
-const successRate =
-s.streak_success_rate && s.streak_success_rate !== ""
-? (Number(s.streak_success_rate) * 100).toFixed(1) + "%"
+const survivalRate =
+s.day_survival_rate && s.day_survival_rate !== ""
+? (Number(s.day_survival_rate) * 100).toFixed(1) + "%"
 : "-"
 
 const stat = (value, label) =>
@@ -3309,7 +3309,7 @@ const stat = (value, label) =>
 el.innerHTML =
 stat(s.current_streak || 0, "Current Streak") +
 stat(s.longest_streak || 0, "Longest Streak") +
-stat(successRate, "Day Success Rate") +
+stat(survivalRate, "Day Survival Rate") +
 stat(s.n_days_resolved || 0, "Days Tracked")
 
 }
@@ -3318,8 +3318,11 @@ function renderTodaysPicks(picks){
 
 const el = document.getElementById("todaysPicks")
 
+// Only days with at least one "good matchup" pick appear in `picks` at
+// all - a day with zero recommendations is simply absent, not a blank
+// row - so this naturally shows the most recent day that had a pick.
 if(!picks.length){
-el.innerHTML = "No picks logged yet"
+el.innerHTML = "No strong matchups recommended yet"
 return
 }
 
@@ -3331,6 +3334,18 @@ const latestDate = picks
 const todays = picks
 .filter(p=>p.date === latestDate)
 .sort((a,b)=>Number(a.rank) - Number(b.rank))
+
+if(!todays.length){
+el.innerHTML = "No strong matchups today"
+return
+}
+
+const statusLabels = {
+hit: "hit",
+miss: "miss",
+no_game: "no game",
+pending: "pending",
+}
 
 el.innerHTML = todays
 .map(p=>{
@@ -3344,7 +3359,7 @@ return `
 <div class="pickCard ${p.status}">
 <div class="pickName">${p.name}</div>
 <div class="pickProb">${prob}</div>
-<div class="pickStatus">${p.status}</div>
+<div class="pickStatus">${statusLabels[p.status] || p.status}</div>
 </div>
 `
 

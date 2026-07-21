@@ -110,12 +110,14 @@ BACKTEST_MIN_PLATE_APPEARANCES = 30
 # Default number of top-ranked picks to log/evaluate per day.
 BACKTEST_TOP_N = 5
 
-# Number of picks shown on the dashboard as "today's recommended picks" and
-# used for the Beat the Streak simulation (see evaluation.py). Beat the
-# Streak's actual multi-pick mode requires every pick to get a hit for the
-# streak to continue - that's the semantics DAILY_PICK_REQUIRE_ALL encodes.
-DAILY_PICK_COUNT = 2
-DAILY_PICK_REQUIRE_ALL = True
+# Beat the Streak Tracker (dashboard): a batter is only "recommended" if
+# their predicted_probability clears this bar - on a day with no good
+# matchups, that's zero picks; on a strong day, up to DAILY_PICK_MAX picks.
+# 0.80 is close to the real historical rank-3/4 probability range (see
+# evaluation.py docstring for the actual accuracy at that band), so most
+# days still surface 2 picks and 0-pick days are the exception, not the rule.
+DAILY_PICK_MAX = 2
+DAILY_PICK_MIN_PROBABILITY = 0.80
 
 # Statcast plate-appearance outcome values that count as a "completed" event
 # (used to filter pitch-by-pitch data down to one row per at-bat outcome).

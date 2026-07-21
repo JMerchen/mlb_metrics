@@ -65,14 +65,16 @@ def compute_outputs(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
 def write_beat_the_streak_export(predictions_log_path: str, output_dir: str) -> None:
     """Read the full predictions log and (re)write the two CSVs the
-    dashboard's Beat the Streak section reads: today's/recent DAILY_PICK_COUNT
-    picks with hit/miss/pending status, and a streak_success_rate/
-    longest_streak/current_streak summary. No-op if nothing's been logged yet."""
+    dashboard's Beat the Streak section reads: each day's recommended picks
+    (0 to DAILY_PICK_MAX, gated by DAILY_PICK_MIN_PROBABILITY - "no good
+    matchup" means zero) with hit/miss/no_game/pending status, and a
+    longest_streak/current_streak summary following Beat the Streak's actual
+    rules (see evaluation.streak_progression). No-op if nothing's logged yet."""
     if not os.path.exists(predictions_log_path):
         return
     log = pd.read_csv(predictions_log_path, parse_dates=["date"])
     picks, summary = evaluation.build_beat_the_streak_export(
-        log, k=config.DAILY_PICK_COUNT, require_all=config.DAILY_PICK_REQUIRE_ALL
+        log, max_picks=config.DAILY_PICK_MAX, min_probability=config.DAILY_PICK_MIN_PROBABILITY
     )
     os.makedirs(output_dir, exist_ok=True)
     picks.to_csv(os.path.join(output_dir, "beat_the_streak_picks.csv"), index=False)
