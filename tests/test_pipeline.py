@@ -128,3 +128,67 @@ def test_run_logs_and_resolves_predictions(monkeypatch, tmp_path):
     assert summary_export.loc[0, "n_days_resolved"] == 1
     assert summary_export.loc[0, "current_streak"] == 2
     assert summary_export.loc[0, "longest_streak"] == 2
+
+
+def _minimal_outputs():
+    wave = pd.DataFrame([
+        {
+            "key_mlbam": 1, "name_first": "Test", "name_last": "PlayerOne", "team": "NYY",
+            "PA_L": 0, "PA_R": 40, "probability_L": 0, "probability_R": 0.9, "probability": 0.9,
+            "Game_Hit_Probability": 0.85, "Consistency": -0.1, "Approach": 0.72, "Expected_Bases": 1.5,
+        },
+    ])
+    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE_PLUS": 0.9}])
+    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE_PLUS": 1.0}])
+    return {"wave": wave, "pave": pave, "confidence": confidence}
+
+
+def test_run_logs_matchup_probability_when_schedule_fetch_succeeds(monkeypatch, tmp_path):
+    monkeypatch.setattr(pipeline.data, "fetch_statcast_range", lambda start, end: pd.DataFrame({
+        "game_date": pd.to_datetime([]), "batter": [], "events": [],
+    }))
+    monkeypatch.setattr(pipeline.data, "persist_raw_statcast", lambda df, raw_dir, season: df)
+    monkeypatch.setattr(pipeline, "compute_outputs", lambda df: _minimal_outputs())
+
+    schedule_df = pd.DataFrame([{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999}])
+    monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", lambda date: schedule_df)
+
+    predictions_dir = str(tmp_path / "predictions")
+    pipeline.run(
+        datetime.date(2026, 6, 20),
+        raw_dir=str(tmp_path / "raw"),
+        output_dir=str(tmp_path / "out"),
+        predictions_dir=predictions_dir,
+        persist_raw=False,
+    )
+
+    logged = pd.read_csv(f"{predictions_dir}/predictions.csv")
+    assert set(logged["metric"]) == {"Game_Hit_Probability", "Matchup_Hit_Probability"}
+    assert (logged["key_mlbam"] == 1).all()
+
+
+def test_run_continues_without_matchup_when_schedule_fetch_fails(monkeypatch, tmp_path):
+    monkeypatch.setattr(pipeline.data, "fetch_statcast_range", lambda start, end: pd.DataFrame({
+        "game_date": pd.to_datetime([]), "batter": [], "events": [],
+    }))
+    monkeypatch.setattr(pipeline.data, "persist_raw_statcast", lambda df, raw_dir, season: df)
+    monkeypatch.setattr(pipeline, "compute_outputs", lambda df: _minimal_outputs())
+
+    def raise_error(date):
+        raise RuntimeError("statsapi is down")
+
+    monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", raise_error)
+
+    predictions_dir = str(tmp_path / "predictions")
+    # Must not raise - a new external dependency can't be allowed to break
+    # the whole daily update.
+    pipeline.run(
+        datetime.date(2026, 6, 20),
+        raw_dir=str(tmp_path / "raw"),
+        output_dir=str(tmp_path / "out"),
+        predictions_dir=predictions_dir,
+        persist_raw=False,
+    )
+
+    logged = pd.read_csv(f"{predictions_dir}/predictions.csv")
+    assert set(logged["metric"]) == {"Game_Hit_Probability"}  # no Matchup_Hit_Probability logged

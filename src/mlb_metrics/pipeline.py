@@ -18,7 +18,7 @@ import os
 
 import pandas as pd
 
-from mlb_metrics import config, data, evaluation, hitters, lineup, pitchers, predictions, teams
+from mlb_metrics import config, data, evaluation, hitters, lineup, matchup, pitchers, predictions, schedule, teams
 
 
 def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
@@ -120,8 +120,34 @@ def run(
         completed = data.completed_events(df, ["game_date", "batter", "events"])
         predictions.resolve_predictions(predictions_log_path, completed)
 
-        picks = predictions.select_picks(outputs["wave"], as_of_date)
-        predictions.append_predictions(picks, predictions_log_path)
+        # A new external dependency (statsapi) must not be able to break the
+        # whole daily update - on failure, fall back to no schedule
+        # awareness at all for this run rather than skipping Game_Hit_Probability too.
+        schedule_df = None
+        try:
+            schedule_df = schedule.fetch_probable_pitchers(as_of_date)
+        except Exception as exc:
+            print(f"WARNING: failed to fetch today's schedule/probable pitchers ({exc}); "
+                  f"skipping Matchup_Hit_Probability and the teams-playing-today qualifier for this run.")
+
+        # None (fetch failed) means "unknown, don't filter"; an empty set
+        # (fetch succeeded, zero games today) correctly excludes every pick.
+        teams_playing_today = set(schedule_df["team"]) if schedule_df is not None else None
+
+        game_hit_picks = predictions.select_picks(
+            outputs["wave"], as_of_date, teams_playing_today=teams_playing_today
+        )
+        predictions.append_predictions(game_hit_picks, predictions_log_path)
+
+        if schedule_df is not None and not schedule_df.empty:
+            matchup_probability = matchup.compute_matchup_hit_probability(
+                outputs["wave"], outputs["pave"], outputs["confidence"], schedule_df
+            )
+            matchup_wave = outputs["wave"].merge(matchup_probability, on="key_mlbam", how="inner")
+            matchup_picks = predictions.select_picks(
+                matchup_wave, as_of_date, metric="Matchup_Hit_Probability", teams_playing_today=teams_playing_today
+            )
+            predictions.append_predictions(matchup_picks, predictions_log_path)
 
         write_beat_the_streak_export(predictions_log_path, output_dir)
 
