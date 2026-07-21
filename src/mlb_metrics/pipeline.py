@@ -18,7 +18,7 @@ import os
 
 import pandas as pd
 
-from mlb_metrics import config, data, hitters, pitchers, teams
+from mlb_metrics import config, data, hitters, pitchers, predictions, teams
 
 
 def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
@@ -67,7 +67,9 @@ def run(
     as_of_date: datetime.date,
     raw_dir: str = "data/raw",
     output_dir: str = "docs/data",
+    predictions_dir: str = "data/predictions",
     persist_raw: bool = True,
+    log_predictions: bool = True,
 ) -> dict[str, pd.DataFrame]:
     fetch_start = config.SEASON_START
     fetch_end = min(config.SEASON_END, as_of_date - datetime.timedelta(days=1))
@@ -89,6 +91,17 @@ def run(
     outputs["pave"].to_csv(os.path.join(output_dir, "pave.csv"), index=False)
     outputs["confidence"].to_csv(os.path.join(output_dir, "confidence.csv"), index=False)
 
+    if log_predictions:
+        predictions_log_path = os.path.join(predictions_dir, "predictions.csv")
+        # `df` already covers every completed game strictly before as_of_date,
+        # i.e. exactly what's needed to resolve any pick logged on an earlier
+        # run whose target date has since happened.
+        completed = data.completed_events(df, ["game_date", "batter", "events"])
+        predictions.resolve_predictions(predictions_log_path, completed)
+
+        picks = predictions.select_picks(outputs["wave"], as_of_date)
+        predictions.append_predictions(picks, predictions_log_path)
+
     return outputs
 
 
@@ -104,17 +117,30 @@ def main():
     )
     parser.add_argument("--raw-dir", type=str, default="data/raw")
     parser.add_argument("--output-dir", type=str, default="docs/data")
+    parser.add_argument("--predictions-dir", type=str, default="data/predictions")
     parser.add_argument(
         "--no-persist-raw",
         action="store_true",
         help="Skip saving the Statcast pull to --raw-dir (useful for local/backtest runs).",
+    )
+    parser.add_argument(
+        "--no-log-predictions",
+        action="store_true",
+        help="Skip logging today's picks / resolving past ones (useful for local/backtest runs).",
     )
     args = parser.parse_args()
 
     as_of_date = (
         datetime.date.fromisoformat(args.as_of_date) if args.as_of_date else datetime.date.today()
     )
-    run(as_of_date, raw_dir=args.raw_dir, output_dir=args.output_dir, persist_raw=not args.no_persist_raw)
+    run(
+        as_of_date,
+        raw_dir=args.raw_dir,
+        output_dir=args.output_dir,
+        predictions_dir=args.predictions_dir,
+        persist_raw=not args.no_persist_raw,
+        log_predictions=not args.no_log_predictions,
+    )
 
 
 if __name__ == "__main__":

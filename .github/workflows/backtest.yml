@@ -1,12 +1,15 @@
-name: Daily Update
+name: Backtest
 
 on:
-  schedule:
-    - cron: "0 12 * * *"
   workflow_dispatch:
+    inputs:
+      fetch_missing:
+        description: "Fetch outcome data for historical dates not already persisted in data/raw/"
+        type: boolean
+        default: true
 
 jobs:
-  update:
+  backtest:
     runs-on: ubuntu-latest
 
     permissions:
@@ -15,6 +18,10 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          # git_backtest.py replays the full commit history of docs/data/wave.csv,
+          # which needs more than the default shallow (1-commit) checkout.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -36,17 +43,21 @@ jobs:
           mkdir -p data/raw
           mkdir -p data/predictions
 
-      - name: Run model
+      - name: Run backtest
         run: |
-          python scripts/wave.py
+          if [ "${{ inputs.fetch_missing }}" = "true" ]; then
+            python scripts/run_backtest.py --fetch-missing
+          else
+            python scripts/run_backtest.py
+          fi
 
       - name: Commit updates
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add docs/data/ data/raw/ data/predictions/
+          git add docs/data/backtest_summary.csv data/raw/ data/predictions/
 
-          git commit -m "Daily update" || echo "No changes"
+          git commit -m "Run backtest" || echo "No changes"
 
           git push

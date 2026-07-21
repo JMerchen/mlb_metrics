@@ -97,6 +97,19 @@ NORMALIZATION_Z_SCALE = 0.15
 # Confidence = Strength + SOS * CONFIDENCE_SOS_WEIGHT (and same for pyth_*).
 CONFIDENCE_SOS_WEIGHT = 0.3
 
+# --- Backtesting (Phase B) ---
+
+# Minimum combined full-season plate appearances (PA_L + PA_R) for a batter
+# to be eligible as a daily "pick" - without this, a batter with a handful
+# of at-bats and a lucky hit can show a probability of 1.0 and dominate the
+# top of the rankings on pure sample-size noise. This matches a filter the
+# original script computed but never actually applied to its output
+# (`WAVE[(WAVE['l_at_bat'] + WAVE['r_at_bat']) > 30]`, wave.py:129).
+BACKTEST_MIN_PLATE_APPEARANCES = 30
+
+# Default number of top-ranked picks to log/evaluate per day.
+BACKTEST_TOP_N = 5
+
 # Statcast plate-appearance outcome values that count as a "completed" event
 # (used to filter pitch-by-pitch data down to one row per at-bat outcome).
 COUNTED_EVENTS = [

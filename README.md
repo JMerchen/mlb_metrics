@@ -9,19 +9,48 @@ to `docs/` as a GitHub Pages dashboard.
 - `src/mlb_metrics/` - the pipeline: `config.py` (window lengths and blend
   weights), `helpers.py` (event classifiers), `data.py` (Statcast fetch/raw
   persistence), `hitters.py`, `pitchers.py`, `teams.py` (metric computation),
-  `pipeline.py` (orchestration + CLI).
-- `scripts/wave.py` - thin entrypoint (`python scripts/wave.py`).
+  `pipeline.py` (orchestration + CLI), `predictions.py`/`evaluation.py`/
+  `git_backtest.py` (backtesting - see below).
+- `scripts/wave.py` - daily pipeline entrypoint (`python scripts/wave.py`).
+- `scripts/run_backtest.py` - backtest entrypoint (`python scripts/run_backtest.py`).
 - `data/raw/` - persisted raw Statcast pulls, one parquet file per season,
   committed daily alongside the output CSVs so history accumulates run over run.
+- `data/predictions/predictions.csv` - append-only log of every daily pick
+  (date, player, predicted probability, realized actual_hit once known).
 - `docs/data/` - the published `wave.csv` / `pave.csv` / `confidence.csv`
-  consumed by the `docs/` dashboard. `confidence.csv` includes `Bullpen_PAVE_PLUS`
+  consumed by the `docs/` dashboard, plus `backtest_summary.csv` (see below).
+  `confidence.csv` includes `Bullpen_PAVE_PLUS`
   (and `Bullpen_BAA`/`Bullpen_Power_A`/`Bullpen_HR_Per`/`Bullpen_AtBats`): PAVE
   computed only from each team's relief appearances, not its starters - a hitter
   typically sees the bullpen for 1-3 of their 3-5 at-bats in a game, so evaluating
   a matchup against "the starter's PAVE" alone ignores most of the at-bats.
-- `tests/` - pytest suite covering the event classifiers and the window-blend
-  formulas (WAVE, PAVE, Bullpen_PAVE, Game_Hit_Probability) against hand-computed
-  expected values.
+- `tests/` - pytest suite covering the event classifiers, the window-blend
+  formulas (WAVE, PAVE, Bullpen_PAVE, Game_Hit_Probability), and the
+  backtesting pipeline, against hand-computed expected values and synthetic
+  end-to-end scenarios.
+
+## Backtesting
+
+Every daily `scripts/wave.py` run now also logs that day's top picks to
+`data/predictions/predictions.csv` (before the games happen) and resolves
+any previous day's pending picks against the newly-fetched data - this is
+what finally answers whether WAVE/Game_Hit_Probability actually predicts
+hits, which nothing in the project did before.
+
+`scripts/run_backtest.py` additionally replays the ~40+ days of `wave.csv`
+already sitting in git history through the same pick-selection logic (see
+`git_backtest.py`), so there's a backtestable dataset immediately rather than
+waiting weeks for new predictions to accumulate. It resolves against
+`data/raw/` and, with `--fetch-missing`, against Statcast directly for any
+date not already persisted - then writes `docs/data/backtest_summary.csv`
+(hit rate by pick rank, Brier score, log loss, calibration) via
+`evaluation.py`. A `Backtest` GitHub Actions workflow (`workflow_dispatch`)
+runs this with real network access and commits the results.
+
+Every pick is qualified by `BACKTEST_MIN_PLATE_APPEARANCES` (config.py,
+default 30) before ranking - without it, a batter with a handful of at-bats
+and one lucky hit can show a probability of 1.0 and dominate the picks on
+pure sample-size noise.
 
 ## Running
 
