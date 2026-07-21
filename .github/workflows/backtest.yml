@@ -56,7 +56,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add docs/data/backtest_summary.csv data/raw/ data/predictions/
+          git add docs/data/backtest_summary.csv docs/data/beat_the_streak_picks.csv docs/data/beat_the_streak_summary.csv data/raw/ data/predictions/
 
           git commit -m "Run backtest" || echo "No changes"
 

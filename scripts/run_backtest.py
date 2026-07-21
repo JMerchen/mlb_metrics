@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import pandas as pd
 
-from mlb_metrics import config, data, evaluation, git_backtest, predictions
+from mlb_metrics import config, data, evaluation, git_backtest, pipeline, predictions
 
 
 def main():
@@ -25,6 +25,11 @@ def main():
     parser.add_argument("--predictions-log", default="data/predictions/predictions.csv")
     parser.add_argument("--raw-dir", default="data/raw")
     parser.add_argument("--summary-out", default="docs/data/backtest_summary.csv")
+    parser.add_argument(
+        "--docs-data-dir",
+        default="docs/data",
+        help="Where to (re)write beat_the_streak_picks.csv/beat_the_streak_summary.csv.",
+    )
     parser.add_argument("--repo-dir", default=".", help="Git checkout to replay docs/data/wave.csv history from.")
     parser.add_argument("--top-n", type=int, default=config.BACKTEST_TOP_N)
     parser.add_argument("--min-plate-appearances", type=int, default=config.BACKTEST_MIN_PLATE_APPEARANCES)
@@ -81,6 +86,8 @@ def main():
     if persisted is not None:
         completed = data.completed_events(persisted, ["game_date", "batter", "events"])
         predictions.resolve_predictions(args.predictions_log, completed)
+
+    pipeline.write_beat_the_streak_export(args.predictions_log, args.docs_data_dir)
 
     log = (
         pd.read_csv(args.predictions_log, parse_dates=["date"])

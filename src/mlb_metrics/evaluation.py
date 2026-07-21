@@ -78,6 +78,89 @@ def calibration_table(predictions: pd.DataFrame, n_bins: int = 10) -> pd.DataFra
     return grouped
 
 
+def _filter_metric(predictions: pd.DataFrame, metric: str | None) -> pd.DataFrame:
+    return predictions if metric is None else predictions[predictions["metric"] == metric]
+
+
+def streak_series(predictions: pd.DataFrame, k: int, require_all: bool = True, metric: str | None = None) -> pd.DataFrame:
+    """One row per day that has `k` *resolved* picks at rank <= k for
+    `metric`, sorted oldest-first, with whether that day's picks satisfy the
+    streak condition (all k hit if require_all, else any of the k). Days
+    with fewer than k resolved picks (a pending day, or a day too early in
+    the season to have k qualified batters) are left out rather than counted
+    as a break - they simply haven't happened/resolved yet."""
+    top_k = _filter_metric(predictions, metric)
+    top_k = top_k[top_k["rank"] <= k]
+    resolved = resolved_only(top_k)
+
+    complete_days = resolved.groupby("date").size()
+    complete_days = complete_days[complete_days >= k].index
+    resolved = resolved[resolved["date"].isin(complete_days)]
+    if resolved.empty:
+        return pd.DataFrame(columns=["date", "streak_continues"])
+
+    per_day = resolved.groupby("date")["actual_hit"]
+    outcome = (per_day.min() if require_all else per_day.max()).astype(bool)
+    return outcome.rename("streak_continues").reset_index().sort_values("date").reset_index(drop=True)
+
+
+def longest_streak(predictions: pd.DataFrame, k: int, require_all: bool = True, metric: str | None = None) -> int:
+    """Longest run of consecutive resolved pick-days (not necessarily
+    consecutive calendar dates - off-days don't break a streak) satisfying
+    the streak condition."""
+    series = streak_series(predictions, k, require_all, metric)
+    longest = current = 0
+    for continues in series["streak_continues"]:
+        current = current + 1 if continues else 0
+        longest = max(longest, current)
+    return longest
+
+
+def current_streak(predictions: pd.DataFrame, k: int, require_all: bool = True, metric: str | None = None) -> int:
+    """Streak length as of the most recent resolved pick-day (0 if that day broke it)."""
+    series = streak_series(predictions, k, require_all, metric)
+    current = 0
+    for continues in series["streak_continues"]:
+        current = current + 1 if continues else 0
+    return current
+
+
+def build_beat_the_streak_export(
+    predictions: pd.DataFrame,
+    k: int = 2,
+    require_all: bool = True,
+    metric: str = "Game_Hit_Probability",
+):
+    """Build the two tables the dashboard's Beat the Streak section reads:
+    (picks_table, summary_row). picks_table is every logged rank<=k pick
+    (most recent day first) with a hit/miss/pending status; summary_row is
+    one row of streak_success_rate/longest_streak/current_streak."""
+    picks = _filter_metric(predictions, metric)
+    picks = picks[picks["rank"] <= k].copy()
+    picks["status"] = picks["actual_hit"].map({1.0: "hit", 0.0: "miss"}).fillna("pending")
+    picks = picks[["date", "rank", "name", "predicted_probability", "actual_hit", "status"]]
+    picks = picks.sort_values(["date", "rank"], ascending=[False, True]).reset_index(drop=True)
+
+    series = streak_series(predictions, k, require_all, metric)
+    n_days = len(series)
+    success_rate = float(series["streak_continues"].mean()) if n_days else float("nan")
+
+    summary = pd.DataFrame(
+        [
+            {
+                "k": k,
+                "require_all": require_all,
+                "metric": metric,
+                "n_days_resolved": n_days,
+                "streak_success_rate": success_rate,
+                "longest_streak": longest_streak(predictions, k, require_all, metric),
+                "current_streak": current_streak(predictions, k, require_all, metric),
+            }
+        ]
+    )
+    return picks, summary
+
+
 def summarize(predictions: pd.DataFrame, top_k_values=(1, 2, 5)) -> pd.DataFrame:
     """One-row-per-metric summary table, split by the `metric` column so
     multiple candidate metrics (e.g. "probability" vs "Game_Hit_Probability")

@@ -18,7 +18,7 @@ import os
 
 import pandas as pd
 
-from mlb_metrics import config, data, hitters, pitchers, predictions, teams
+from mlb_metrics import config, data, evaluation, hitters, pitchers, predictions, teams
 
 
 def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
@@ -63,6 +63,22 @@ def compute_outputs(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     }
 
 
+def write_beat_the_streak_export(predictions_log_path: str, output_dir: str) -> None:
+    """Read the full predictions log and (re)write the two CSVs the
+    dashboard's Beat the Streak section reads: today's/recent DAILY_PICK_COUNT
+    picks with hit/miss/pending status, and a streak_success_rate/
+    longest_streak/current_streak summary. No-op if nothing's been logged yet."""
+    if not os.path.exists(predictions_log_path):
+        return
+    log = pd.read_csv(predictions_log_path, parse_dates=["date"])
+    picks, summary = evaluation.build_beat_the_streak_export(
+        log, k=config.DAILY_PICK_COUNT, require_all=config.DAILY_PICK_REQUIRE_ALL
+    )
+    os.makedirs(output_dir, exist_ok=True)
+    picks.to_csv(os.path.join(output_dir, "beat_the_streak_picks.csv"), index=False)
+    summary.to_csv(os.path.join(output_dir, "beat_the_streak_summary.csv"), index=False)
+
+
 def run(
     as_of_date: datetime.date,
     raw_dir: str = "data/raw",
@@ -101,6 +117,8 @@ def run(
 
         picks = predictions.select_picks(outputs["wave"], as_of_date)
         predictions.append_predictions(picks, predictions_log_path)
+
+        write_beat_the_streak_export(predictions_log_path, output_dir)
 
     return outputs
 

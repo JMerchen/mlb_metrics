@@ -90,6 +90,7 @@ def test_run_backtest_reconstructs_resolves_and_summarizes(tmp_path, monkeypatch
             "--raw-dir", str(raw_dir),
             "--predictions-log", str(predictions_log),
             "--summary-out", str(summary_out),
+            "--docs-data-dir", str(tmp_path / "docs_data"),
             "--top-n", "1",
             "--min-plate-appearances", "30",
         ],
@@ -105,3 +106,9 @@ def test_run_backtest_reconstructs_resolves_and_summarizes(tmp_path, monkeypatch
     summary = pd.read_csv(summary_out)
     assert summary.loc[0, "n_resolved"] == 2
     assert summary.loc[0, "any_of_top_1_hit_rate"] == pytest.approx(0.5)
+
+    docs_data_dir = tmp_path / "docs_data"
+    streak_picks = pd.read_csv(docs_data_dir / "beat_the_streak_picks.csv")
+    assert len(streak_picks) == 2
+    streak_summary = pd.read_csv(docs_data_dir / "beat_the_streak_summary.csv")
+    assert streak_summary.loc[0, "n_days_resolved"] == 0  # only 1 pick/day logged (top_n=1), never a complete k=2 day

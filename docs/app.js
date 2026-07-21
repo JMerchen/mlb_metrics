@@ -3264,4 +3264,109 @@ console.log(
 
 }
 
+async function loadBeatTheStreak(){
+
+let summary = []
+let picks = []
+
+try{
+summary = await loadCSV("./data/beat_the_streak_summary.csv")
+}catch(e){
+console.log("no beat_the_streak_summary.csv yet", e)
+}
+
+try{
+picks = await loadCSV("./data/beat_the_streak_picks.csv")
+}catch(e){
+console.log("no beat_the_streak_picks.csv yet", e)
+}
+
+renderStreakStats(summary)
+renderTodaysPicks(picks)
+renderStreakHistory(picks)
+
+}
+
+function renderStreakStats(summary){
+
+const el = document.getElementById("streakStats")
+
+if(!summary.length){
+el.innerHTML = "No picks tracked yet"
+return
+}
+
+const s = summary[0]
+
+const successRate =
+s.streak_success_rate && s.streak_success_rate !== ""
+? (Number(s.streak_success_rate) * 100).toFixed(1) + "%"
+: "-"
+
+const stat = (value, label) =>
+`<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div></div>`
+
+el.innerHTML =
+stat(s.current_streak || 0, "Current Streak") +
+stat(s.longest_streak || 0, "Longest Streak") +
+stat(successRate, "Day Success Rate") +
+stat(s.n_days_resolved || 0, "Days Tracked")
+
+}
+
+function renderTodaysPicks(picks){
+
+const el = document.getElementById("todaysPicks")
+
+if(!picks.length){
+el.innerHTML = "No picks logged yet"
+return
+}
+
+const latestDate = picks
+.map(p=>p.date)
+.sort()
+.slice(-1)[0]
+
+const todays = picks
+.filter(p=>p.date === latestDate)
+.sort((a,b)=>Number(a.rank) - Number(b.rank))
+
+el.innerHTML = todays
+.map(p=>{
+
+const prob =
+p.predicted_probability && p.predicted_probability !== ""
+? (Number(p.predicted_probability) * 100).toFixed(1) + "% predicted"
+: ""
+
+return `
+<div class="pickCard ${p.status}">
+<div class="pickName">${p.name}</div>
+<div class="pickProb">${prob}</div>
+<div class="pickStatus">${p.status}</div>
+</div>
+`
+
+})
+.join("")
+
+}
+
+function renderStreakHistory(picks){
+
+const sorted = picks
+.slice()
+.sort((a,b)=>b.date.localeCompare(a.date) || Number(a.rank) - Number(b.rank))
+
+buildTable(
+sorted,
+"streakHistoryTable",
+100
+)
+
+}
+
 loadAll()
+
+loadBeatTheStreak()

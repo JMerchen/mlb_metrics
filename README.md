@@ -52,6 +52,19 @@ default 30) before ranking - without it, a batter with a handful of at-bats
 and one lucky hit can show a probability of 1.0 and dominate the picks on
 pure sample-size noise.
 
+## Beat the Streak Tracker (dashboard)
+
+The dashboard's top section simulates actually playing Beat the Streak with
+2 picks/day (`DAILY_PICK_COUNT`, config.py): current streak, longest streak,
+day-level success rate, and a history of every day's 2 picks with
+hit/miss/pending status. A day only "continues the streak" if **both** picks
+get a hit (`DAILY_PICK_REQUIRE_ALL`), matching Beat the Streak's actual
+multi-pick mode. This reads `docs/data/beat_the_streak_picks.csv` and
+`beat_the_streak_summary.csv`, written by `evaluation.build_beat_the_streak_export()`
+after every daily run and every backtest run - so the picks that make up the
+streak are always the ones that were actually recommended *at the time*
+(from `data/predictions/predictions.csv`), not recomputed with hindsight.
+
 ## Running
 
 ```

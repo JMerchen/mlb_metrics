@@ -77,3 +77,74 @@ def test_summarize_splits_by_metric():
     assert set(summary.index) == {"m", "other"}
     assert summary.loc["m", "n_resolved"] == 6
     assert summary.loc["m", "any_of_top_1_hit_rate"] == pytest.approx(2 / 3)
+
+
+def _pick_pair(date, hit1, hit2, metric="Game_Hit_Probability"):
+    return [
+        {"date": date, "rank": 1, "name": "A", "predicted_probability": 0.9, "metric": metric, "actual_hit": hit1},
+        {"date": date, "rank": 2, "name": "B", "predicted_probability": 0.8, "metric": metric, "actual_hit": hit2},
+    ]
+
+
+def _streak_predictions():
+    rows = (
+        _pick_pair("2026-06-18", 1, 1)  # both hit
+        + _pick_pair("2026-06-19", 1, 1)  # both hit -> streak of 2
+        + _pick_pair("2026-06-20", 1, 0)  # one misses -> breaks it
+        + _pick_pair("2026-06-21", 1, 1)  # both hit -> new streak of 1
+        + _pick_pair("2026-06-22", None, None)  # pending -> excluded, not a break
+    )
+    # An incomplete day (only rank 1 resolved) - should also be excluded, not
+    # counted as a miss.
+    rows.append(
+        {"date": "2026-06-23", "rank": 1, "predicted_probability": 0.9, "metric": "Game_Hit_Probability", "actual_hit": 1}
+    )
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    return df
+
+
+def test_streak_series_excludes_pending_and_incomplete_days():
+    series = evaluation.streak_series(_streak_predictions(), k=2, require_all=True)
+    assert list(series["date"].dt.strftime("%Y-%m-%d")) == ["2026-06-18", "2026-06-19", "2026-06-20", "2026-06-21"]
+    assert list(series["streak_continues"]) == [True, True, False, True]
+
+
+def test_longest_and_current_streak():
+    preds = _streak_predictions()
+    assert evaluation.longest_streak(preds, k=2, require_all=True) == 2
+    assert evaluation.current_streak(preds, k=2, require_all=True) == 1
+
+
+def test_current_streak_is_zero_after_a_break():
+    preds = pd.DataFrame(_pick_pair("2026-06-18", 1, 1) + _pick_pair("2026-06-19", 1, 0))
+    assert evaluation.current_streak(preds, k=2, require_all=True) == 0
+    assert evaluation.longest_streak(preds, k=2, require_all=True) == 1
+
+
+def test_require_all_false_only_needs_one_pick_to_hit():
+    # Day where rank 2 hits but rank 1 doesn't: fails require_all=True but
+    # should count under require_all=False ("any of the k").
+    preds = pd.DataFrame(_pick_pair("2026-06-18", 0, 1))
+    assert evaluation.current_streak(preds, k=2, require_all=True) == 0
+    assert evaluation.current_streak(preds, k=2, require_all=False) == 1
+
+
+def test_build_beat_the_streak_export_picks_table_and_summary():
+    preds = _streak_predictions()
+    picks, summary = evaluation.build_beat_the_streak_export(preds, k=2, require_all=True)
+
+    # Most recent day first, includes the still-pending and incomplete days.
+    assert picks["date"].iloc[0] == picks["date"].max()
+    assert set(picks["date"].dt.strftime("%Y-%m-%d")) == {
+        "2026-06-18", "2026-06-19", "2026-06-20", "2026-06-21", "2026-06-22", "2026-06-23"
+    }
+    pending_rows = picks[picks["date"] == "2026-06-22"]
+    assert (pending_rows["status"] == "pending").all()
+    miss_row = picks[(picks["date"] == "2026-06-20") & (picks["rank"] == 2)].iloc[0]
+    assert miss_row["status"] == "miss"
+
+    assert summary.loc[0, "n_days_resolved"] == 4
+    assert summary.loc[0, "longest_streak"] == 2
+    assert summary.loc[0, "current_streak"] == 1
+    assert summary.loc[0, "streak_success_rate"] == pytest.approx(3 / 4)

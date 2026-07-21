@@ -54,19 +54,25 @@ def test_run_logs_and_resolves_predictions(monkeypatch, tmp_path):
     pick from a previous run whose target date has now happened, using
     exactly the data fetched for this run (no extra data source)."""
     raw = pd.DataFrame({
-        "game_date": pd.to_datetime(["2026-06-18", "2026-06-19"]),
-        "batter": [1, 1],
-        "events": ["field_out", "single"],  # batter 1 gets a hit on 06-19, the date that gets picked/resolved
+        "game_date": pd.to_datetime(["2026-06-18", "2026-06-18", "2026-06-19", "2026-06-19"]),
+        "batter": [1, 2, 1, 2],
+        # Both of 06-19's picks get a hit -> the Beat the Streak day should succeed.
+        "events": ["field_out", "field_out", "single", "double"],
     })
     monkeypatch.setattr(pipeline.data, "fetch_statcast_range", lambda start, end: raw)
     monkeypatch.setattr(pipeline.data, "persist_raw_statcast", lambda df, raw_dir, season: df)
 
     wave = pd.DataFrame([
         {
-            "key_mlbam": 1, "name_first": "Test", "name_last": "Player", "team": "NYY",
+            "key_mlbam": 1, "name_first": "Test", "name_last": "PlayerOne", "team": "NYY",
             "PA_L": 0, "PA_R": 40, "probability_L": 0, "probability_R": 0.9, "probability": 0.9,
             "Game_Hit_Probability": 0.8, "Consistency": -0.1, "Approach": 0.72, "Expected_Bases": 1.5,
-        }
+        },
+        {
+            "key_mlbam": 2, "name_first": "Test", "name_last": "PlayerTwo", "team": "BOS",
+            "PA_L": 0, "PA_R": 35, "probability_L": 0, "probability_R": 0.8, "probability": 0.8,
+            "Game_Hit_Probability": 0.7, "Consistency": -0.1, "Approach": 0.56, "Expected_Bases": 1.2,
+        },
     ])
     monkeypatch.setattr(
         pipeline, "compute_outputs",
@@ -86,12 +92,12 @@ def test_run_logs_and_resolves_predictions(monkeypatch, tmp_path):
         log_predictions=True,
     )
     logged = pd.read_csv(log_path, parse_dates=["date"])
-    assert len(logged) == 1
-    assert pd.isna(logged.loc[0, "actual_hit"])
+    assert len(logged) == 2  # both ranked picks for 06-19
+    assert logged["actual_hit"].isna().all()
 
     # Second run: as_of_date=2026-06-20 fetches through 06-19, which resolves
-    # the pending 06-19 pick (batter 1 had a single that day -> hit) and logs
-    # a new pending pick for 06-20.
+    # both pending 06-19 picks (both batters got a hit that day) and logs new
+    # pending picks for 06-20.
     pipeline.run(
         datetime.date(2026, 6, 20),
         raw_dir=str(tmp_path / "raw"),
@@ -101,8 +107,20 @@ def test_run_logs_and_resolves_predictions(monkeypatch, tmp_path):
         log_predictions=True,
     )
     logged = pd.read_csv(log_path, parse_dates=["date"])
-    assert len(logged) == 2
-    resolved_row = logged[logged["date"] == "2026-06-19"].iloc[0]
-    assert resolved_row["actual_hit"] == 1.0
-    pending_row = logged[logged["date"] == "2026-06-20"].iloc[0]
-    assert pd.isna(pending_row["actual_hit"])
+    assert len(logged) == 4
+    resolved_rows = logged[logged["date"] == "2026-06-19"]
+    assert (resolved_rows["actual_hit"] == 1.0).all()
+    pending_rows = logged[logged["date"] == "2026-06-20"]
+    assert pending_rows["actual_hit"].isna().all()
+
+    # write_beat_the_streak_export() should have run after each pass and
+    # reflect that 06-19's day (both picks hit) succeeded the streak.
+    picks_export = pd.read_csv(f"{tmp_path}/out/beat_the_streak_picks.csv", parse_dates=["date"])
+    assert set(picks_export["date"].dt.strftime("%Y-%m-%d")) == {"2026-06-19", "2026-06-20"}
+    resolved_export_rows = picks_export[picks_export["date"] == "2026-06-19"]
+    assert (resolved_export_rows["status"] == "hit").all()
+
+    summary_export = pd.read_csv(f"{tmp_path}/out/beat_the_streak_summary.csv")
+    assert summary_export.loc[0, "n_days_resolved"] == 1
+    assert summary_export.loc[0, "current_streak"] == 1
+    assert summary_export.loc[0, "longest_streak"] == 1
