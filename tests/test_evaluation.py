@@ -95,6 +95,22 @@ def test_summarize_splits_by_metric():
     assert summary.loc["m", "any_of_top_1_hit_rate"] == pytest.approx(2 / 3)
 
 
+def test_summarize_model_version_filters_to_only_that_version():
+    preds = _predictions()
+    preds["model_version"] = "v1"
+    new_version_row = pd.DataFrame(
+        [{"date": "2026-06-21", "rank": 1, "predicted_probability": 0.9, "metric": "m",
+          "actual_hit": 1, "model_version": "v2"}]
+    )
+    combined = pd.concat([preds, new_version_row], ignore_index=True)
+
+    all_time = evaluation.summarize(combined).set_index("metric")
+    assert all_time.loc["m", "n_resolved"] == 7  # every version blended, unchanged default behavior
+
+    v2_only = evaluation.summarize(combined, model_version="v2").set_index("metric")
+    assert v2_only.loc["m", "n_resolved"] == 1
+
+
 def _pick(date, rank, predicted_probability, at_bats, actual_hit, metric="Game_Hit_Probability", name="Player"):
     return {
         "date": date, "rank": rank, "name": name, "predicted_probability": predicted_probability,
@@ -211,4 +227,20 @@ def test_build_beat_the_streak_export_picks_table_status_and_summary():
     assert summary.loc[0, "n_days_resolved"] == 5
     assert summary.loc[0, "longest_streak"] == 3
     assert summary.loc[0, "current_streak"] == 2
+    assert summary.loc[0, "model_version"] == "all_time"  # unfiltered (model_version=None) default label
+
+
+def test_build_beat_the_streak_export_model_version_filters_and_labels_summary():
+    preds = _streak_predictions()
+    preds["model_version"] = "v1"
+    # A lone v2 pick that would otherwise change the v1-only picture if not filtered out.
+    preds = pd.concat([preds, pd.DataFrame([
+        _pick("2026-06-23", 1, 0.85, 4, 1) | {"model_version": "v2"}
+    ])], ignore_index=True)
+
+    picks, summary = evaluation.build_beat_the_streak_export(preds, min_probability=0.0, model_version="v1")
+
+    assert "2026-06-23" not in set(picks["date"])
+    assert summary.loc[0, "model_version"] == "v1"
+    assert summary.loc[0, "n_days_resolved"] == 5  # unchanged from the all-v1 fixture above
     assert summary.loc[0, "day_survival_rate"] == pytest.approx(4 / 5)  # 4 of 5 resolved days didn't reset

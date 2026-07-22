@@ -33,6 +33,13 @@ def test_compute_pave_blends_windows_with_strikeout_adjustment():
     expected = 0.6 * 0.3 + 1.0 * 0.265 + 0.75 * 0.23 + 1.0 * 0.205
     assert pave.loc[1, "PAVE"] == pytest.approx(expected)
 
+    # power_a (total bases allowed per PA): full=3/6=.5, 30d=2/3, 81d=3/5=.6,
+    # 15d=1/1=1.0 - happens to equal "baa" here since every hit in this
+    # fixture is a single (tba == hit for a single), but power_a and baa are
+    # independently computed and diverge whenever extra-base hits appear.
+    expected_power_a = 0.5 * 0.3 + (2 / 3) * 0.265 + 0.6 * 0.23 + 1.0 * 0.205
+    assert pave.loc[1, "power_a"] == pytest.approx(expected_power_a)
+
 
 def test_assemble_pitchers_normalizes_pave_plus_to_qualified_mean():
     # Pitcher 1: same data as above (PAVE ~= 0.8225, at_bats=6, qualifies).
@@ -64,6 +71,13 @@ def test_assemble_pitchers_normalizes_pave_plus_to_qualified_mean():
 
     # baa blended = .5*.3 + (2/3)*.265 + .6*.23 + 1*.205 = .669675 -> Expected_Hits = baa * 22
     assert result.loc[1, "Expected_Hits"] == pytest.approx(0.669675 * 22, rel=1e-3)
+
+    # power_a blended is the same .669675 here (every hit in this fixture is
+    # a single) - pitcher 1 (the only qualified pitcher) is its own
+    # baseline, so Power_A_PLUS(1) == 1.0; pitcher 2 (a single-AB sample,
+    # power_a=1.0 since its lone at-bat was a single) is above that baseline.
+    assert result.loc[1, "Power_A_PLUS"] == pytest.approx(1.0)
+    assert result.loc[2, "Power_A_PLUS"] == pytest.approx(1.0 / 0.669675, rel=1e-3)
 
 
 def _bullpen_row(team, pitcher, date, events, is_starter):
@@ -101,3 +115,10 @@ def test_compute_bullpen_pave_excludes_starters_and_pools_by_team():
     mean_pave = (0.8225 + 1.0) / 2
     assert result.loc["X", "Bullpen_PAVE_PLUS"] == pytest.approx(0.8225 / mean_pave, rel=1e-3)
     assert result.loc["Y", "Bullpen_PAVE_PLUS"] == pytest.approx(1.0 / mean_pave, rel=1e-3)
+
+    # Same underlying at-bats as the power_a test above: team X's power_a
+    # blended = .669675 (all singles, so it matches PAVE here); team Y's
+    # lone at-bat is also a single, so power_a=1.0 too.
+    mean_power_a = (0.669675 + 1.0) / 2
+    assert result.loc["X", "Bullpen_Power_A_PLUS"] == pytest.approx(0.669675 / mean_power_a, rel=1e-3)
+    assert result.loc["Y", "Bullpen_Power_A_PLUS"] == pytest.approx(1.0 / mean_power_a, rel=1e-3)

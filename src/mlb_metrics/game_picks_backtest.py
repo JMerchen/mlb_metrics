@@ -86,6 +86,7 @@ def reconstruct_historical_game_picks(
     raw_dir: str = "data/raw",
     season: int | None = None,
     days: int = 40,
+    model_version: str = game_predictions.LEGACY_MODEL_VERSION,
 ) -> pd.DataFrame:
     """Replay the last `days` daily commits of confidence.csv/pave.csv
     through game_picks.compute_game_win_probabilities +
@@ -95,7 +96,14 @@ def reconstruct_historical_game_picks(
     (e.g. Bullpen_PAVE_PLUS was added partway through this project's
     history - clip_and_blend_pitching_quality already treats a missing
     bullpen column as neutral, so those dates aren't skipped for that
-    reason, only for missing the four REQUIRED_CONFIDENCE_COLUMNS)."""
+    reason, only for missing the four REQUIRED_CONFIDENCE_COLUMNS).
+
+    `model_version` defaults to game_predictions.LEGACY_MODEL_VERSION, not
+    config.GAME_PICK_MODEL_VERSION - same reasoning as
+    git_backtest.reconstruct_historical_picks: this reconstructs what old
+    logic *would have* picked using old-era confidence.csv/pave.csv
+    snapshots, so tagging it as the current live version would misrepresent
+    it once both kinds of rows coexist in the same game_predictions.csv."""
     season = season or config.SEASON_START.year
 
     commits = git_backtest.list_wave_csv_commits(repo_dir, path=CONFIDENCE_CSV_PATH)
@@ -125,7 +133,7 @@ def reconstruct_historical_game_picks(
             continue
 
         win_probabilities = game_picks.compute_game_win_probabilities(confidence, pave, todays_games)
-        picks = game_predictions.select_game_picks(win_probabilities, date)
+        picks = game_predictions.select_game_picks(win_probabilities, date, model_version=model_version)
         if picks.empty:
             continue
 

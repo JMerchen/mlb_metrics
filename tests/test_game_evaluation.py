@@ -88,6 +88,24 @@ def test_build_game_picks_export_ignores_other_metrics():
     assert set(picks["game_pk"]) == {1, 2, 3, 4, 5}
 
 
+def test_build_game_picks_export_model_version_filters_and_labels_summary():
+    preds = _predictions()
+    preds["model_version"] = "v1"
+    v2_row = pd.DataFrame([_pick("2026-07-22", 6, "SD", "COL", "SD", 0.66, "SD", 1)])
+    v2_row["date"] = pd.to_datetime(v2_row["date"])
+    v2_row["model_version"] = "v2"
+    combined = pd.concat([preds, v2_row], ignore_index=True)
+
+    all_time_picks, all_time_summary = game_evaluation.build_game_picks_export(combined)
+    assert all_time_summary.loc[0, "model_version"] == "all_time"
+    assert set(all_time_picks["game_pk"]) == {1, 2, 3, 4, 5, 6}
+
+    v1_picks, v1_summary = game_evaluation.build_game_picks_export(combined, model_version="v1")
+    assert v1_summary.loc[0, "model_version"] == "v1"
+    assert 6 not in set(v1_picks["game_pk"])
+    assert v1_summary.loc[0, "n_games_resolved"] == 3
+
+
 def test_build_game_picks_export_no_resolved_games_yet():
     preds = pd.DataFrame([_pick("2026-07-21", 1, "ATL", "PHI", "ATL", 0.62, None, None)])
     preds["date"] = pd.to_datetime(preds["date"])

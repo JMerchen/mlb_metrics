@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from mlb_metrics import predictions
+from mlb_metrics import config, predictions
 
 
 def _hitters(rows):
@@ -40,6 +40,32 @@ def test_select_picks_applies_plate_appearance_qualifier_and_ranks():
     assert picks["actual_hit"].isna().all()
     assert picks["at_bats"].isna().all()
     assert picks.loc[0, "name"] == "F2 L2"
+    assert (picks["model_version"] == config.HITTER_MODEL_VERSION).all()
+
+
+def test_select_picks_model_version_is_configurable():
+    hitters = _hitters([(1, 0, 40, 0.9)])
+
+    picks = predictions.select_picks(hitters, "2026-06-20", top_n=1, min_plate_appearances=30, model_version="test-v")
+
+    assert picks.loc[0, "model_version"] == "test-v"
+
+
+def test_append_predictions_migrates_a_log_written_before_model_version_existed(tmp_path):
+    log_path = str(tmp_path / "predictions.csv")
+    legacy_log = pd.DataFrame([
+        {"date": "2026-06-18", "key_mlbam": 1, "name": "A", "rank": 1, "predicted_probability": 0.9,
+         "metric": "Game_Hit_Probability", "actual_hit": 1, "at_bats": 1},
+    ])
+    legacy_log.to_csv(log_path, index=False)
+
+    new_pick = predictions.select_picks(_hitters([(2, 0, 40, 0.9)]), "2026-06-19", top_n=1, min_plate_appearances=30)
+    combined = predictions.append_predictions(new_pick, log_path)
+
+    row_18 = combined[combined["date"] == "2026-06-18"].iloc[0]
+    assert row_18["model_version"] == predictions.LEGACY_MODEL_VERSION
+    row_19 = combined[combined["date"] == "2026-06-19"].iloc[0]
+    assert row_19["model_version"] == config.HITTER_MODEL_VERSION
 
 
 def test_select_picks_applies_lineup_qualifiers_when_columns_present():
@@ -238,3 +264,20 @@ def test_resolve_predictions_migrates_a_log_written_before_at_bats_existed(tmp_p
 
     assert result.loc[0, "actual_hit"] == 1
     assert result.loc[0, "at_bats"] == 1
+
+
+def test_resolve_predictions_migrates_a_log_written_before_model_version_existed(tmp_path):
+    log_path = str(tmp_path / "predictions.csv")
+    legacy_log = pd.DataFrame([
+        {"date": "2026-06-18", "key_mlbam": 1, "name": "A", "rank": 1, "predicted_probability": 0.9,
+         "metric": "Game_Hit_Probability", "actual_hit": None, "at_bats": None},
+    ])
+    legacy_log.to_csv(log_path, index=False)
+
+    completed_events = pd.DataFrame([
+        {"game_date": pd.Timestamp("2026-06-18"), "batter": 1, "events": "single"},
+    ])
+
+    result = predictions.resolve_predictions(log_path, completed_events)
+
+    assert result.loc[0, "model_version"] == predictions.LEGACY_MODEL_VERSION

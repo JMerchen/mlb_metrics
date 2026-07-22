@@ -10,6 +10,18 @@ starter's PAVE" alone ignores that. Bullpen_PAVE is team-level (a bullpen is
 a shared pool, not one pitcher), computed the same recency-weighted way as
 PAVE, restricted to appearances where the pitcher was not that game's
 starter (see data.label_pitcher_roles).
+
+Power_A_PLUS (and its bullpen analog Bullpen_Power_A_PLUS) is a second,
+complementary pitching-quality signal: PAVE treats every hit allowed
+identically, so a pitcher who mostly allows singles and one who mostly
+allows home runs can show the same PAVE despite very different
+run-prevention profiles - closer to what ERA actually measures. Rather than
+pulling in ERA (ties to sequencing/inherited runners, not just this
+pitcher's own stuff, and isn't computed from this project's own Statcast
+data), Power_A_PLUS normalizes the already-blended `power_a` (total bases
+allowed per plate appearance, blended across the same config.PAVE_WINDOWS
+recency windows as PAVE) the same way PAVE_PLUS normalizes PAVE - "who is
+currently susceptible to allowing damage," not just hits.
 """
 
 import pandas as pd
@@ -107,6 +119,8 @@ def compute_bullpen_pave(pdf_with_role: pd.DataFrame) -> pd.DataFrame:
 
     mean_bullpen_pave = result["PAVE"].mean()
     result["Bullpen_PAVE_PLUS"] = result["PAVE"] / mean_bullpen_pave
+    mean_bullpen_power_a = result["power_a"].mean()
+    result["Bullpen_Power_A_PLUS"] = result["power_a"] / mean_bullpen_power_a
 
     return result.rename(
         columns={
@@ -121,7 +135,7 @@ def compute_bullpen_pave(pdf_with_role: pd.DataFrame) -> pd.DataFrame:
     )[
         [
             "team", "Bullpen_AtBats", "Bullpen_PAVE", "Bullpen_PAVE_PLUS",
-            "Bullpen_BAA", "Bullpen_Power_A", "Bullpen_HR_Per",
+            "Bullpen_Power_A_PLUS", "Bullpen_BAA", "Bullpen_Power_A", "Bullpen_HR_Per",
         ]
     ]
 
@@ -131,8 +145,11 @@ def assemble_pitchers(pdf: pd.DataFrame, names: pd.DataFrame, latest_pitcher_tea
     pave = compute_pave(pdf)
 
     qualified_threshold = pave["at_bats"].max() * config.PAVE_QUALIFIED_AB_FRACTION
-    mean_qualified_pave = pave.loc[pave["at_bats"] > qualified_threshold, "PAVE"].mean()
+    qualified = pave["at_bats"] > qualified_threshold
+    mean_qualified_pave = pave.loc[qualified, "PAVE"].mean()
+    mean_qualified_power_a = pave.loc[qualified, "power_a"].mean()
     pave["PAVE_PLUS"] = (pave["PAVE"] / mean_qualified_pave).fillna(0)
+    pave["Power_A_PLUS"] = (pave["power_a"] / mean_qualified_power_a).fillna(0)
     pave = pave[pave["PAVE_PLUS"] > 0]
 
     pave["Expected_Hits"] = pave["baa"] * config.PAVE_PA_PER_START
@@ -143,6 +160,10 @@ def assemble_pitchers(pdf: pd.DataFrame, names: pd.DataFrame, latest_pitcher_tea
     pave = pave.merge(latest_pitcher_team, on="key_mlbam", how="left")
 
     pave = pave[
-        ["key_mlbam", "name_first", "name_last", "team", "at_bats", "PAVE", "PAVE_PLUS", "Expected_Hits", "Expected_Bases", "Expected_HRs"]
+        [
+            "key_mlbam", "name_first", "name_last", "team", "at_bats",
+            "PAVE", "PAVE_PLUS", "Power_A_PLUS",
+            "Expected_Hits", "Expected_Bases", "Expected_HRs",
+        ]
     ]
     return pave.sort_values("PAVE_PLUS", ascending=False)

@@ -15,8 +15,13 @@ from mlb_metrics import config
 
 GAME_PREDICTION_COLUMNS = [
     "date", "game_pk", "home_team", "away_team", "predicted_winner",
-    "predicted_probability", "metric", "actual_winner", "game_played",
+    "predicted_probability", "metric", "actual_winner", "game_played", "model_version",
 ]
+
+# Same purpose as predictions.LEGACY_MODEL_VERSION - tagged onto any row
+# logged before model_version existed, or reconstructed by a historical
+# replay (see game_picks_backtest.py).
+LEGACY_MODEL_VERSION = "legacy"
 
 
 def select_game_picks(
@@ -24,6 +29,7 @@ def select_game_picks(
     date,
     min_probability: float = config.GAME_PICK_MIN_PROBABILITY,
     metric: str = "GamePick_Win_Probability",
+    model_version: str = config.GAME_PICK_MODEL_VERSION,
 ) -> pd.DataFrame:
     """Turn game_picks.compute_game_win_probabilities' output into the
     day's picked games: only games where the favored side's win probability
@@ -31,7 +37,10 @@ def select_game_picks(
     day can have 0 or more picks, never padded to a fixed count.
     `predicted_winner` is whichever side (home_team/away_team) has the
     higher probability; `predicted_probability` is that side's probability
-    (always >= 0.5)."""
+    (always >= 0.5). `model_version` (see config.GAME_PICK_MODEL_VERSION) is
+    stamped onto every row so game_evaluation.py/the dashboard can segment
+    accuracy by which win-probability logic actually produced a pick - same
+    reasoning as predictions.select_picks' own model_version."""
     df = win_probabilities.copy()
     favors_home = df["home_win_probability"] >= 0.5
     df["predicted_winner"] = df["home_team"].where(favors_home, df["away_team"])
@@ -42,6 +51,7 @@ def select_game_picks(
     picks["metric"] = metric
     picks["actual_winner"] = pd.NA
     picks["game_played"] = pd.NA
+    picks["model_version"] = model_version
 
     return picks[GAME_PREDICTION_COLUMNS]
 
@@ -55,6 +65,8 @@ def append_game_predictions(picks: pd.DataFrame, log_path: str) -> pd.DataFrame:
 
     if os.path.exists(log_path):
         existing = pd.read_csv(log_path, parse_dates=["date"])
+        if "model_version" not in existing.columns:
+            existing["model_version"] = LEGACY_MODEL_VERSION  # migrate a log written before model_version existed
         combined = pd.concat([picks, existing], ignore_index=True)
     else:
         combined = picks
@@ -93,6 +105,8 @@ def resolve_game_predictions(log_path: str, fetch_results_fn, as_of_date) -> pd.
         return log
     if "game_played" not in log.columns:
         log["game_played"] = pd.NA  # migrate a log written before game_played existed
+    if "model_version" not in log.columns:
+        log["model_version"] = LEGACY_MODEL_VERSION  # migrate a log written before model_version existed
     # A log with no resolved games yet round-trips actual_winner as an
     # all-null float64 column (empty strings -> NaN on read) - cast back to
     # object so assigning a team abbreviation string into it doesn't raise.

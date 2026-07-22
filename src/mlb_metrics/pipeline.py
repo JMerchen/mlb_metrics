@@ -70,35 +70,66 @@ def compute_outputs(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
 
 def write_beat_the_streak_export(predictions_log_path: str, output_dir: str) -> None:
-    """Read the full predictions log and (re)write the two CSVs the
-    dashboard's Beat the Streak section reads: each day's recommended picks
-    (0 to DAILY_PICK_MAX, gated by DAILY_PICK_MIN_PROBABILITY - "no good
-    matchup" means zero) with hit/miss/no_game/pending status, and a
+    """Read the full predictions log and (re)write the CSVs the dashboard's
+    Beat the Streak section reads: each day's recommended picks (0 to
+    DAILY_PICK_MAX, gated by DAILY_PICK_MIN_PROBABILITY - "no good matchup"
+    means zero) with hit/miss/no_game/pending status, an all-time
     longest_streak/current_streak summary following Beat the Streak's actual
-    rules (see evaluation.streak_progression). No-op if nothing's logged yet."""
+    rules (see evaluation.streak_progression), and a small by-version
+    summary (all_time plus config.HITTER_MODEL_VERSION) so a selection-logic
+    change's real effect on accuracy is visible without waiting for
+    pre-change history to stop dominating the all-time numbers. No-op if
+    nothing's logged yet."""
     if not os.path.exists(predictions_log_path):
         return
     log = pd.read_csv(predictions_log_path, parse_dates=["date"])
     picks, summary = evaluation.build_beat_the_streak_export(
         log, max_picks=config.DAILY_PICK_MAX, min_probability=config.DAILY_PICK_MIN_PROBABILITY
     )
+    _, current_version_summary = evaluation.build_beat_the_streak_export(
+        log, max_picks=config.DAILY_PICK_MAX, min_probability=config.DAILY_PICK_MIN_PROBABILITY,
+        model_version=config.HITTER_MODEL_VERSION,
+    )
+    by_version_summary = pd.concat([summary, current_version_summary], ignore_index=True)
+
     os.makedirs(output_dir, exist_ok=True)
     picks.to_csv(os.path.join(output_dir, "beat_the_streak_picks.csv"), index=False)
     summary.to_csv(os.path.join(output_dir, "beat_the_streak_summary.csv"), index=False)
+    by_version_summary.to_csv(os.path.join(output_dir, "beat_the_streak_summary_by_version.csv"), index=False)
+
+
+def write_probable_pitchers_export(schedule_df: pd.DataFrame, pave: pd.DataFrame, output_dir: str) -> None:
+    """(Re)write the small CSV the dashboard's Probable Pitchers list reads:
+    one row per team playing today with their probable starter's PAVE/
+    PAVE_PLUS/Power_A_PLUS (see schedule.build_probable_pitchers_table).
+    Callers should only invoke this when `schedule_df` is non-empty - see
+    run()'s resilience handling for a failed/empty schedule fetch."""
+    table = schedule.build_probable_pitchers_table(schedule_df, pave)
+    os.makedirs(output_dir, exist_ok=True)
+    table.to_csv(os.path.join(output_dir, "probable_pitchers.csv"), index=False)
 
 
 def write_game_picks_export(game_predictions_log_path: str, output_dir: str) -> None:
-    """Read the full game-predictions log and (re)write the two CSVs the
+    """Read the full game-predictions log and (re)write the CSVs the
     dashboard's Automated Game Picks section reads: each picked game with a
-    win/loss/not_played/pending status, and an accuracy/streak summary (see
-    game_evaluation.build_game_picks_export). No-op if nothing's logged yet."""
+    win/loss/not_played/pending status, an all-time accuracy/streak summary,
+    and a small by-version summary (all_time plus config.GAME_PICK_MODEL_VERSION -
+    see game_evaluation.build_game_picks_export), same reasoning as
+    write_beat_the_streak_export's own by-version split. No-op if nothing's
+    logged yet."""
     if not os.path.exists(game_predictions_log_path):
         return
     log = pd.read_csv(game_predictions_log_path, parse_dates=["date"])
     picks, summary = game_evaluation.build_game_picks_export(log)
+    _, current_version_summary = game_evaluation.build_game_picks_export(
+        log, model_version=config.GAME_PICK_MODEL_VERSION
+    )
+    by_version_summary = pd.concat([summary, current_version_summary], ignore_index=True)
+
     os.makedirs(output_dir, exist_ok=True)
     picks.to_csv(os.path.join(output_dir, "game_picks_picks.csv"), index=False)
     summary.to_csv(os.path.join(output_dir, "game_picks_summary.csv"), index=False)
+    by_version_summary.to_csv(os.path.join(output_dir, "game_picks_summary_by_version.csv"), index=False)
 
 
 def run(
@@ -188,6 +219,8 @@ def run(
             pick_pool = outputs["wave"].merge(matchup_probability, on="key_mlbam", how="inner")
             pick_pool["Matchup_Approach"] = pick_pool["Approach"] * pick_pool["Matchup_Hit_Probability"]
             rank_metric = "Matchup_Approach"
+
+            write_probable_pitchers_export(schedule_df, outputs["pave"], output_dir)
 
         game_hit_picks = predictions.select_picks(
             pick_pool, as_of_date, rank_metric=rank_metric, teams_playing_today=teams_playing_today

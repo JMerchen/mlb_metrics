@@ -84,11 +84,26 @@ def _filter_metric(predictions: pd.DataFrame, metric: str | None) -> pd.DataFram
     return predictions if metric is None else predictions[predictions["metric"] == metric]
 
 
+def _filter_model_version(predictions: pd.DataFrame, model_version: str | None) -> pd.DataFrame:
+    """Restricts to rows tagged with `model_version` (see
+    predictions.select_picks/config.HITTER_MODEL_VERSION) - None (the
+    default everywhere below) means "all versions, unfiltered", preserving
+    every existing caller's behavior byte-for-byte. Passing a specific
+    version is what lets a real recalibration's effect actually show up in
+    these stats instead of being diluted by pre-change history forever."""
+    if model_version is None:
+        return predictions
+    if "model_version" not in predictions.columns:
+        return predictions.iloc[0:0]
+    return predictions[predictions["model_version"] == model_version]
+
+
 def _recommended_picks(
     predictions: pd.DataFrame,
     metric: str | None,
     max_picks: int,
     min_probability: float,
+    model_version: str | None = None,
 ) -> pd.DataFrame:
     """The subset of logged picks that actually count as "recommended" for
     a given day: top-ranked, capped at `max_picks`, and only those that
@@ -96,6 +111,7 @@ def _recommended_picks(
     `max_picks` rows here depending on how many clear the bar - it's never
     padded out to a fixed count."""
     df = _filter_metric(predictions, metric)
+    df = _filter_model_version(df, model_version)
     df = df[(df["rank"] <= max_picks) & (df["predicted_probability"] >= min_probability)]
     return df
 
@@ -118,6 +134,7 @@ def streak_progression(
     metric: str = "Game_Hit_Probability",
     max_picks: int = 2,
     min_probability: float = 0.0,
+    model_version: str | None = None,
 ) -> pd.DataFrame:
     """Day-by-day Beat the Streak simulation using the real game's actual
     rules, not a simplified win/loss-per-day model:
@@ -137,7 +154,7 @@ def streak_progression(
     Returns one row per resolved day, oldest first: date, the running
     streak value after that day, and whether that day reset it.
     """
-    df = _recommended_picks(predictions, metric, max_picks, min_probability).copy()
+    df = _recommended_picks(predictions, metric, max_picks, min_probability, model_version).copy()
     df["outcome"] = _classify_outcome(df)
 
     rows = []
@@ -160,8 +177,9 @@ def longest_streak(
     metric: str = "Game_Hit_Probability",
     max_picks: int = 2,
     min_probability: float = 0.0,
+    model_version: str | None = None,
 ) -> int:
-    progression = streak_progression(predictions, metric, max_picks, min_probability)
+    progression = streak_progression(predictions, metric, max_picks, min_probability, model_version)
     return int(progression["streak"].max()) if len(progression) else 0
 
 
@@ -170,10 +188,11 @@ def current_streak(
     metric: str = "Game_Hit_Probability",
     max_picks: int = 2,
     min_probability: float = 0.0,
+    model_version: str | None = None,
 ) -> int:
     """Streak value as of the most recently *resolved* day (a trailing
     run of still-pending or no-pick days doesn't change this)."""
-    progression = streak_progression(predictions, metric, max_picks, min_probability)
+    progression = streak_progression(predictions, metric, max_picks, min_probability, model_version)
     return int(progression["streak"].iloc[-1]) if len(progression) else 0
 
 
@@ -182,6 +201,7 @@ def build_beat_the_streak_export(
     metric: str = "Game_Hit_Probability",
     max_picks: int = 2,
     min_probability: float = 0.0,
+    model_version: str | None = None,
 ):
     """Build the two tables the dashboard's Beat the Streak section reads:
     (picks_table, summary_row). picks_table is every *recommended* pick
@@ -189,19 +209,27 @@ def build_beat_the_streak_export(
     hit/miss/no_game/pending status, most recent day first; summary_row has
     longest_streak/current_streak plus a day_survival_rate (fraction of
     resolved days that didn't reset the streak - a looser sanity metric than
-    the streak count itself, since a single miss zeroes a long streak)."""
-    picks = _recommended_picks(predictions, metric, max_picks, min_probability).copy()
+    the streak count itself, since a single miss zeroes a long streak).
+
+    `model_version` (default None, i.e. every version blended together -
+    unchanged behavior) restricts to picks tagged with a specific
+    predictions.select_picks model_version (see config.HITTER_MODEL_VERSION)
+    - the summary row's own "model_version" column is set to whatever was
+    passed (or "all_time" when None), so pipeline.py can build one small
+    CSV covering both views without ambiguity about which row is which."""
+    picks = _recommended_picks(predictions, metric, max_picks, min_probability, model_version).copy()
     picks["status"] = _classify_outcome(picks)
     picks = picks[["date", "rank", "name", "predicted_probability", "actual_hit", "status"]]
     picks = picks.sort_values(["date", "rank"], ascending=[False, True]).reset_index(drop=True)
 
-    progression = streak_progression(predictions, metric, max_picks, min_probability)
+    progression = streak_progression(predictions, metric, max_picks, min_probability, model_version)
     n_days = len(progression)
     survival_rate = float((~progression["reset"]).mean()) if n_days else float("nan")
 
     summary = pd.DataFrame(
         [
             {
+                "model_version": model_version if model_version is not None else "all_time",
                 "metric": metric,
                 "max_picks": max_picks,
                 "min_probability": min_probability,
@@ -215,10 +243,17 @@ def build_beat_the_streak_export(
     return picks, summary
 
 
-def summarize(predictions: pd.DataFrame, top_k_values=(1, 2, 5)) -> pd.DataFrame:
+def summarize(predictions: pd.DataFrame, top_k_values=(1, 2, 5), model_version: str | None = None) -> pd.DataFrame:
     """One-row-per-metric summary table, split by the `metric` column so
     multiple candidate metrics (e.g. "probability" vs "Game_Hit_Probability")
-    logged into the same predictions file can be compared directly."""
+    logged into the same predictions file can be compared directly.
+
+    `model_version` (default None, i.e. every version blended together -
+    unchanged behavior) restricts to picks tagged with a specific
+    predictions.select_picks model_version (see config.HITTER_MODEL_VERSION) -
+    this is what lets a real recalibration's effect on accuracy/Brier/etc.
+    actually show up, instead of being diluted by pre-change history."""
+    predictions = _filter_model_version(predictions, model_version)
     rows = []
     for metric_name, group in predictions.groupby("metric"):
         resolved = resolved_only(group)
