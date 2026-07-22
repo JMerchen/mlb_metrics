@@ -58,6 +58,31 @@ def test_label_pitcher_roles_picks_lowest_at_bat_number_as_starter():
     assert not roles.loc[("B", 202), "is_starter"]
 
 
+def test_extract_game_results_finds_final_score_per_game():
+    rows = [
+        # Game 1: NYY (home) beats BOS (away) 5-2, score climbing over 4 rows.
+        {"game_id": 1, "game_date": pd.Timestamp("2026-06-01"), "home_team": "NYY", "away_team": "BOS",
+         "post_home_score": 0, "post_away_score": 0},
+        {"game_id": 1, "game_date": pd.Timestamp("2026-06-01"), "home_team": "NYY", "away_team": "BOS",
+         "post_home_score": 1, "post_away_score": 0},
+        {"game_id": 1, "game_date": pd.Timestamp("2026-06-01"), "home_team": "NYY", "away_team": "BOS",
+         "post_home_score": 1, "post_away_score": 2},
+        {"game_id": 1, "game_date": pd.Timestamp("2026-06-01"), "home_team": "NYY", "away_team": "BOS",
+         "post_home_score": 5, "post_away_score": 2},
+        # Game 2: LAD (home) loses to SF (away) 1-3.
+        {"game_id": 2, "game_date": pd.Timestamp("2026-06-01"), "home_team": "LAD", "away_team": "SF",
+         "post_home_score": 0, "post_away_score": 1},
+        {"game_id": 2, "game_date": pd.Timestamp("2026-06-01"), "home_team": "LAD", "away_team": "SF",
+         "post_home_score": 1, "post_away_score": 3},
+    ]
+    results = data.extract_game_results(pd.DataFrame(rows)).set_index("game_id")
+
+    assert results.loc[1, "home_score"] == 5
+    assert results.loc[1, "away_score"] == 2
+    assert results.loc[2, "home_score"] == 1
+    assert results.loc[2, "away_score"] == 3
+
+
 def test_assign_batting_order_uses_away_bats_top_home_bats_bottom():
     # A batter who only appears during Top-half at-bats must be credited to
     # the AWAY team (they're batting while the home team pitches) - this is

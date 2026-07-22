@@ -189,6 +189,25 @@ def label_pitcher_roles(data_with_game_id: pd.DataFrame) -> pd.DataFrame:
     return roles[["game_id", "team", "pitcher", "is_starter"]]
 
 
+def extract_game_results(data_with_game_id: pd.DataFrame) -> pd.DataFrame:
+    """One row per game_id with its final state: [game_id, game_date,
+    home_team, away_team, home_score, away_score] - the actual final score,
+    found the same way teams.build_team_record finds each game's final
+    scoring state (the row with the maximum combined score), but kept in
+    home/away form rather than pivoted to a team/opponent perspective.
+    Used to reconstruct real historical games (actual outcomes, not a
+    schedule-API fetch) for backtesting - see game_picks_backtest.py."""
+    totals = data_with_game_id[
+        ["game_id", "game_date", "home_team", "away_team", "post_home_score", "post_away_score"]
+    ].copy()
+    totals["fs"] = totals["post_home_score"] + totals["post_away_score"]
+    final_state = totals.groupby("game_id", as_index=False)["fs"].max()
+    final_state = final_state.merge(totals, on=["game_id", "fs"]).drop_duplicates(subset="game_id")
+    return final_state.rename(columns={"post_home_score": "home_score", "post_away_score": "away_score"})[
+        ["game_id", "game_date", "home_team", "away_team", "home_score", "away_score"]
+    ]
+
+
 def assign_batting_order(data_with_game_id: pd.DataFrame) -> pd.DataFrame:
     """One row per (game_id, team, batter) who batted in that game:
     `batting_order` is their rank (1, 2, 3, ...) by first at_bat_number

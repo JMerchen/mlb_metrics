@@ -69,6 +69,26 @@ def test_missing_probable_starter_uses_neutral_multiplier():
     assert result.iloc[0]["home_win_probability"] == pytest.approx(0.5)
 
 
+def test_missing_bullpen_pave_plus_column_uses_neutral_multiplier():
+    # confidence.csv snapshots from before Bullpen_PAVE_PLUS existed (see
+    # game_picks_backtest.py, which replays confidence.csv git history
+    # going back further than that column) lack the column ENTIRELY, not
+    # just have missing values in it - a real KeyError this test guards
+    # against regressing.
+    confidence = pd.DataFrame([
+        {"team": "NYY", "pyth_Strength": 1.0, "pyth_Confidence": 1.0,
+         "suppression_resistance": 1.0, "true_power": 1.0},
+        {"team": "BOS", "pyth_Strength": 1.0, "pyth_Confidence": 1.0,
+         "suppression_resistance": 1.0, "true_power": 1.0},
+    ])
+    pave = pd.DataFrame(columns=["key_mlbam", "PAVE_PLUS"])
+    schedule_games = _schedule_games(home_pitcher=None, away_pitcher=None)
+
+    result = game_picks.compute_game_win_probabilities(confidence, pave, schedule_games)
+
+    assert result.iloc[0]["home_win_probability"] == pytest.approx(0.5)
+
+
 def test_rating_floor_prevents_division_blowup():
     confidence = _confidence([
         {"team": "NYY", "pyth_Strength": 0.0, "pyth_Confidence": 0.0,
