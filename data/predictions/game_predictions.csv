@@ -1,0 +1,4 @@
+date,game_pk,home_team,away_team,predicted_winner,predicted_probability,metric,actual_winner,game_played
+2026-07-22,823438,PHI,LAD,LAD,0.6090774306572677,GamePick_Win_Probability,,
+2026-07-22,823519,NYY,PIT,NYY,0.6139766711517302,GamePick_Win_Probability,,
+2026-07-22,825055,AZ,ATH,AZ,0.6047345511104647,GamePick_Win_Probability,,
