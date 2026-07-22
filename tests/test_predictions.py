@@ -5,14 +5,17 @@ from mlb_metrics import predictions
 
 
 def _hitters(rows):
-    """rows: list of (key_mlbam, pa_l, pa_r, game_hit_prob)."""
+    """rows: list of (key_mlbam, pa_l, pa_r, game_hit_prob). probability
+    mirrors game_hit_prob (a reasonable synthetic stand-in) so these
+    fixtures clear select_picks' joint HITTER_MIN_PROBABILITY gate on both
+    columns unless a test is specifically exercising that gate."""
     return pd.DataFrame(
         [
             {
                 "key_mlbam": key, "name_first": f"F{key}", "name_last": f"L{key}", "team": "NYY",
                 "PA_L": pa_l, "PA_R": pa_r,
-                "probability_L": 0, "probability_R": 0, "probability": 0,
-                "Game_Hit_Probability": ghp, "Consistency": 0, "Approach": 0, "Expected_Bases": 0,
+                "probability_L": 0, "probability_R": 0, "probability": ghp,
+                "Game_Hit_Probability": ghp, "Consistency": 0, "Approach": ghp * ghp, "Expected_Bases": 0,
             }
             for key, pa_l, pa_r, ghp in rows
         ]
@@ -64,6 +67,55 @@ def test_select_picks_lineup_qualifiers_are_noop_without_columns():
     picks = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30)
 
     assert list(picks["key_mlbam"]) == [1]
+
+
+def test_select_picks_requires_both_probability_and_game_hit_probability_above_threshold():
+    hitters = _hitters([
+        (1, 0, 40, 0.90),  # both signals strong -> qualifies
+        (2, 0, 40, 0.85),  # high Game_Hit_Probability but a divergent, low probability -> excluded
+        (3, 0, 40, 0.75),  # high probability but a divergent, low Game_Hit_Probability -> excluded
+    ])
+    hitters.loc[hitters["key_mlbam"] == 2, "probability"] = 0.5
+    hitters.loc[hitters["key_mlbam"] == 3, "Game_Hit_Probability"] = 0.5
+
+    picks = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30)
+
+    assert list(picks["key_mlbam"]) == [1]
+
+
+def test_select_picks_min_probability_is_configurable():
+    hitters = _hitters([(1, 0, 40, 0.65)])  # would fail the default 0.7 gate
+
+    excluded = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30)
+    assert excluded.empty
+
+    included = predictions.select_picks(
+        hitters, "2026-06-20", top_n=5, min_plate_appearances=30, min_probability=0.6
+    )
+    assert list(included["key_mlbam"]) == [1]
+
+
+def test_select_picks_rank_metric_chooses_differently_than_metric_but_reports_metric():
+    # Player 2 has the higher Game_Hit_Probability, but player 1 has the
+    # higher Approach (Game_Hit_Probability * probability) once ranked on a
+    # combined signal - rank_metric picks among qualified hitters by
+    # whichever column it names, while predicted_probability/metric always
+    # still reflect `metric` (Game_Hit_Probability here), not rank_metric.
+    hitters = _hitters([(1, 0, 40, 0.80), (2, 0, 40, 0.82)])
+    hitters.loc[hitters["key_mlbam"] == 1, "probability"] = 0.95
+    hitters.loc[hitters["key_mlbam"] == 1, "Approach"] = 0.80 * 0.95
+    hitters.loc[hitters["key_mlbam"] == 2, "probability"] = 0.72
+    hitters.loc[hitters["key_mlbam"] == 2, "Approach"] = 0.82 * 0.72
+
+    by_metric = predictions.select_picks(hitters, "2026-06-20", top_n=1, min_plate_appearances=30)
+    assert list(by_metric["key_mlbam"]) == [2]
+
+    by_rank_metric = predictions.select_picks(
+        hitters, "2026-06-20", top_n=1, min_plate_appearances=30, rank_metric="Approach"
+    )
+    assert list(by_rank_metric["key_mlbam"]) == [1]
+    assert by_rank_metric.iloc[0]["predicted_probability"] == 0.80  # still Game_Hit_Probability
+    assert by_rank_metric.iloc[0]["metric"] == "Game_Hit_Probability"
 
 
 def test_select_picks_filters_by_teams_playing_today():

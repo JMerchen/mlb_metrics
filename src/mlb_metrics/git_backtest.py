@@ -57,12 +57,20 @@ def reconstruct_historical_picks(
     top_n: int = config.BACKTEST_TOP_N,
     min_plate_appearances: int = config.BACKTEST_MIN_PLATE_APPEARANCES,
     metric: str = "Game_Hit_Probability",
+    rank_metric: str | None = "Approach",
 ) -> pd.DataFrame:
     """Replay every historical wave.csv commit through select_picks(),
     skipping commits whose schema predates the columns select_picks needs
-    (i.e. anything from before this project had PA_L/PA_R/Game_Hit_Probability)."""
+    (i.e. anything from before this project had PA_L/PA_R/Game_Hit_Probability).
+
+    `rank_metric` defaults to "Approach" (Game_Hit_Probability * probability)
+    rather than `metric` itself - matching the live pipeline's default (see
+    pipeline.run) and empirically validated via this same replay technique
+    (see config.HITTER_MIN_PROBABILITY's docstring)."""
     commits = list_wave_csv_commits(repo_dir)
     required_columns = {"PA_L", "PA_R", metric, "key_mlbam", "name_first", "name_last"}
+    if rank_metric:
+        required_columns = required_columns | {rank_metric}
 
     all_picks = []
     for _, row in commits.iterrows():
@@ -73,7 +81,8 @@ def reconstruct_historical_picks(
         if not required_columns.issubset(wave.columns) or wave.empty:
             continue
         picks = predictions.select_picks(
-            wave, row["date"], top_n=top_n, min_plate_appearances=min_plate_appearances, metric=metric
+            wave, row["date"], top_n=top_n, min_plate_appearances=min_plate_appearances,
+            metric=metric, rank_metric=rank_metric,
         )
         all_picks.append(picks)
 

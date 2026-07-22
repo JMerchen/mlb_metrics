@@ -169,8 +169,13 @@ def run(
         # (fetch succeeded, zero games today) correctly excludes every pick.
         teams_playing_today = set(schedule_df["team"]) if schedule_df is not None else None
 
+        # rank_metric="Approach" (Game_Hit_Probability * probability) picks
+        # among the HITTER_MIN_PROBABILITY-qualified pool by both signals
+        # combined, not Game_Hit_Probability alone - empirically validated via
+        # git-history replay (see config.HITTER_MIN_PROBABILITY's docstring).
+        # predicted_probability/metric logged still reflect Game_Hit_Probability.
         game_hit_picks = predictions.select_picks(
-            outputs["wave"], as_of_date, teams_playing_today=teams_playing_today
+            outputs["wave"], as_of_date, rank_metric="Approach", teams_playing_today=teams_playing_today
         )
         predictions.append_predictions(game_hit_picks, predictions_log_path)
 

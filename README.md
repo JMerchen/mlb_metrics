@@ -117,6 +117,48 @@ pitch, too late for the pipeline's 8am ET run regardless of data source, and
 would need a second later run plus a decision about revising an
 already-logged morning pick.
 
+## Pick qualification: probability vs. Game_Hit_Probability
+
+`hitters.py` computes two independent estimates of "will this batter get a
+hit in their next game": `probability` (a binomial-style model applied to
+the at-bat-level WAVE rate, assuming `WAVE_TRIALS_PER_GAME` trials per game)
+and `Game_Hit_Probability` (the directly observed, independently
+recency-blended rate of games with >=1 hit - no binomial modeling). When
+these two diverge, it's informative, not noise: a high `Game_Hit_Probability`
+with a low `probability` is a batter who barely gets a hit most games (a lot
+of 1-for-4/5s); a high `probability` with a low `Game_Hit_Probability` is
+boom-or-bust (occasional multi-hit games mixed with a lot of 0-fors). Neither
+pattern is the "reliable to get a hit today" signal a pick is supposed to
+represent.
+
+`predictions.select_picks` requires *both* columns to clear
+`config.HITTER_MIN_PROBABILITY` (0.7) before a hitter qualifies as a
+candidate at all, and by default ranks the qualified pool by `Approach`
+(`Game_Hit_Probability * probability`, already computed in
+`hitters.assemble_hitters`) rather than `Game_Hit_Probability` alone - a
+`rank_metric` parameter picks *which* qualified hitters get chosen without
+changing what `predicted_probability`/`metric` report (still
+`Game_Hit_Probability`, so `DAILY_PICK_MIN_PROBABILITY` and the rest of the
+Beat the Streak tracking logic are unaffected). This was empirically
+validated, not just theorized: a 42-day git-history replay backtest (the
+same technique `git_backtest.py` uses to reconstruct picks) found that
+`Game_Hit_Probability`-only ranking scored a 0.284 Brier score on resolved
+picks - effectively a coin flip - with the picks that actually cleared
+`DAILY_PICK_MIN_PROBABILITY` hitting only 55% of the time. Adding the joint
+qualifier and ranking by `Approach` improved the Brier score to 0.260 and
+raised that same recommended-pick hit rate to 65%, without reducing pick
+coverage (still at least one pick on all 42 backtested days). Matchup
+quality (`Matchup_Hit_Probability`) still applies on top of this qualifier
+when today's schedule is available - it isn't a substitute for
+`probability`/`Game_Hit_Probability` both being solid, but a further
+tiebreaker among hitters who already are.
+
+`Automated Game Picks` (below) uses a much smaller resolved sample (69
+backtested games as of this writing) - not enough to safely recalibrate its
+`GAME_PICK_MIN_PROBABILITY` threshold or ranking without overfitting to
+noise (its per-bin calibration isn't monotonic at that sample size). That
+recalibration should wait until more games accumulate.
+
 ## Automated Game Picks (dashboard)
 
 A second, independent dashboard section predicts a winner for each of

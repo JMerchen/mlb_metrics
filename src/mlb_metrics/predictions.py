@@ -24,14 +24,19 @@ def select_picks(
     top_n: int = config.BACKTEST_TOP_N,
     min_plate_appearances: int = config.BACKTEST_MIN_PLATE_APPEARANCES,
     metric: str = "Game_Hit_Probability",
+    rank_metric: str | None = None,
+    min_probability: float = config.HITTER_MIN_PROBABILITY,
     max_avg_batting_order: float = config.LINEUP_TOP_HALF_MAX_SLOT,
     min_start_rate: float = config.LINEUP_MIN_START_RATE,
     teams_playing_today: set[str] | None = None,
 ) -> pd.DataFrame:
     """Rank a computed hitters table (the wave.csv-equivalent output of
-    hitters.assemble_hitters) by `metric` and return the top `top_n`
-    qualified picks for `date`, in PREDICTION_COLUMNS shape with `actual_hit`
-    left null (unresolved).
+    hitters.assemble_hitters) by `rank_metric` (defaults to `metric`) and
+    return the top `top_n` qualified picks for `date`, in PREDICTION_COLUMNS
+    shape with `actual_hit` left null (unresolved). `predicted_probability`
+    and the logged `metric` name always come from `metric`, regardless of
+    which column was used to rank - `rank_metric` only changes *which*
+    qualified hitters get chosen, not what probability gets reported/scored.
 
     `max_avg_batting_order`/`min_start_rate` only take effect if `hitters`
     has avg_batting_order/start_rate columns (see hitters.assemble_hitters's
@@ -39,6 +44,12 @@ def select_picks(
     old wave.csv snapshots in git history (which predate this feature) are
     unaffected. A null avg_batting_order (never started for their current
     team) fails the comparison and is correctly excluded, not treated as 0.
+
+    `min_probability` requires BOTH `probability` and `Game_Hit_Probability`
+    to clear this bar (see config.HITTER_MIN_PROBABILITY) - a hitter can look
+    good on one of those two signals while being unreliable on the other
+    (see config.py for what each divergence means). Column-gated like the
+    lineup qualifiers, so it's a no-op against a table missing either column.
 
     `teams_playing_today`, if given, additionally requires a batter's team
     to be in the set - unlike the lineup qualifiers this isn't column-gated
@@ -52,8 +63,13 @@ def select_picks(
         qualified = qualified[qualified["start_rate"] >= min_start_rate]
     if teams_playing_today is not None:
         qualified = qualified[qualified["team"].isin(teams_playing_today)]
+    if {"probability", "Game_Hit_Probability"}.issubset(qualified.columns):
+        qualified = qualified[
+            (qualified["probability"] >= min_probability)
+            & (qualified["Game_Hit_Probability"] >= min_probability)
+        ]
 
-    picks = qualified.sort_values(metric, ascending=False).head(top_n).reset_index(drop=True)
+    picks = qualified.sort_values(rank_metric or metric, ascending=False).head(top_n).reset_index(drop=True)
 
     picks["rank"] = picks.index + 1
     picks["date"] = pd.Timestamp(date)

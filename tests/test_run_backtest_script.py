@@ -27,13 +27,15 @@ def _git(args, cwd):
 
 
 def _wave_csv(rows):
+    # probability mirrors Game_Hit_Probability so these fixtures clear
+    # select_picks' joint HITTER_MIN_PROBABILITY gate on both columns.
     return pd.DataFrame(
         [
             {
                 "key_mlbam": key, "name_first": f"F{key}", "name_last": f"L{key}", "team": "NYY",
                 "PA_L": 0, "PA_R": pa_r,
-                "probability_L": 0, "probability_R": 0, "probability": 0,
-                "Game_Hit_Probability": ghp, "Consistency": 0, "Approach": 0, "Expected_Bases": 0,
+                "probability_L": 0, "probability_R": 0, "probability": ghp,
+                "Game_Hit_Probability": ghp, "Consistency": 0, "Approach": ghp * ghp, "Expected_Bases": 0,
             }
             for key, pa_r, ghp in rows
         ]
