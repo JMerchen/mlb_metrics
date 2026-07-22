@@ -101,15 +101,14 @@ fixes, both applied in `predictions.select_picks`:
   mid-season trade resets the window to the batter's new team only.
 - **Probable-pitcher matchup blending** (`schedule.py`, `matchup.py`) - a new
   dependency (`MLB-StatsAPI`, since `pybaseball` has no schedule/lineup
-  support at all) fetches today's probable starters and blends each batter's
-  `Game_Hit_Probability` with their opponent's probable starter's
-  `PAVE_PLUS` and `Bullpen_PAVE_PLUS`, weighted by assumed at-bat share, into
-  a separate `Matchup_Hit_Probability` metric - logged alongside the
-  original via the existing multi-metric comparison rather than replacing
-  it, since it's an unvalidated first pass that should be backtested before
-  ever becoming the "recommended" metric. Also adds a "team is actually
-  playing today" qualifier (an off day currently produces zero picks under
-  either metric, not a stale recommendation).
+  support at all) fetches today's probable starters and, via a log5
+  (odds-ratio) combination of the batter's own AB-level `WAVE` rate with the
+  opposing starter's/bullpen's raw `PAVE`/`Bullpen_PAVE`, produces a
+  `Matchup_Hit_Probability` for that specific matchup (see "Pick
+  qualification" below for the full formula and why it actually drives picks
+  now, not just a logged-alongside comparison). Also adds a "team is
+  actually playing today" qualifier (an off day currently produces zero
+  picks, not a stale recommendation).
 
 Confirmed starting lineups (batting order 1-9 for *today's* game) are
 explicitly out of scope for now - they post only ~2-4 hours before first
@@ -158,6 +157,55 @@ backtested games as of this writing) - not enough to safely recalibrate its
 `GAME_PICK_MIN_PROBABILITY` threshold or ranking without overfitting to
 noise (its per-bin calibration isn't monotonic at that sample size). That
 recalibration should wait until more games accumulate.
+
+### Matchup quality: probability, Game_Hit_Probability, and the opposing pitching
+
+A good matchup is now checked just as much as a hitter's own form, not
+logged as an unused side metric. When today's probable starters are known,
+`matchup.compute_matchup_hit_probability` combines a batter's own AB-level
+`WAVE` rate with the opposing pitching's AB-level rate they're actually
+projected to face - `PAVE`/`Bullpen_PAVE` (the real batting-average-against
+scale, not the league-normalized `PAVE_PLUS` ratio `game_picks.py`'s
+team-level model uses) blended by assumed at-bat share
+(`MATCHUP_STARTER_AB_SHARE`/`MATCHUP_BULLPEN_AB_SHARE`) - via log5 (the
+odds-ratio method, a generalization of Bill James' log5 formula for
+combining two rates against a shared league baseline into the rate expected
+specifically between them). The resulting matchup AB-level rate converts to
+a per-game `Matchup_Hit_Probability` via the same binomial-trials formula
+`probability` itself uses, so all three land on the same 0-1 scale.
+
+`predictions.select_picks`'s joint qualifier (see above) extends
+automatically to `Matchup_Hit_Probability` whenever it's present on the
+table passed in - a hitter needs `probability`, `Game_Hit_Probability`,
+*and* a good matchup all above `HITTER_MIN_PROBABILITY`, not just the first
+two. `pipeline.run` ranks that qualified pool by `Matchup_Approach`
+(`Approach * Matchup_Hit_Probability`) on days matchup data is available,
+falling back to `Approach` alone (no matchup qualifier at all) if the
+schedule fetch fails - the same resilience pattern as the fetch itself.
+`predicted_probability`/`metric` logged still reflect `Game_Hit_Probability`
+either way, so `DAILY_PICK_MIN_PROBABILITY`'s calibration is unaffected.
+
+Validation here is necessarily partial: `WAVE`/`PAVE`/`Bullpen_PAVE` are all
+AB-level and reliably reproducible from persisted Statcast at any past
+as-of-date (unlike `Game_Hit_Probability`, see below), which made a 30-day
+backtest possible even without git-history CSVs (raw `PAVE`/`WAVE` were
+never persisted before this change). Ranking a `probability`-qualified pool
+by `Matchup_Hit_Probability` scored modestly better than `probability` alone
+(Brier 0.270 vs 0.277, hit rate 62.5% vs 61.5%, n=104) - a real but not
+statistically decisive edge at this sample size, unlike the
+probability/Game_Hit_Probability joint-threshold work above. Treat it as
+directionally validated, not proven, and watch it accumulate real results
+going forward the same way any first-pass signal here has.
+
+That investigation also surfaced a real, pre-existing bug worth flagging
+even though it's out of scope to fix here: `data.assign_game_ids` can badly
+fragment real games (one calendar date's game split into 2-3 different
+`game_id` values) when replayed against a large multi-month reconstructed
+dataset - confirmed on ~97% of one sample batter's game dates. This is why
+the matchup backtest above deliberately avoided any `Game_Hit_Probability`-
+based qualifier rather than risk validating against corrupted numbers, and
+it's worth a dedicated look separately given how much (including the live
+daily `Game_Hit_Probability`) depends on that function.
 
 ## Automated Game Picks (dashboard)
 

@@ -17,6 +17,11 @@ from mlb_metrics import config, helpers
 
 PREDICTION_COLUMNS = ["date", "key_mlbam", "name", "rank", "predicted_probability", "metric", "actual_hit", "at_bats"]
 
+# The set of probability-like signals select_picks jointly gates on (each
+# must clear min_probability), whichever of them happen to be present on the
+# `hitters` table passed in - see select_picks's docstring.
+JOINT_PROBABILITY_GATE_COLUMNS = ["probability", "Game_Hit_Probability", "Matchup_Hit_Probability"]
+
 
 def select_picks(
     hitters: pd.DataFrame,
@@ -45,11 +50,15 @@ def select_picks(
     unaffected. A null avg_batting_order (never started for their current
     team) fails the comparison and is correctly excluded, not treated as 0.
 
-    `min_probability` requires BOTH `probability` and `Game_Hit_Probability`
-    to clear this bar (see config.HITTER_MIN_PROBABILITY) - a hitter can look
-    good on one of those two signals while being unreliable on the other
-    (see config.py for what each divergence means). Column-gated like the
-    lineup qualifiers, so it's a no-op against a table missing either column.
+    `min_probability` requires EVERY column in JOINT_PROBABILITY_GATE_COLUMNS
+    that's actually present on `hitters` to clear this bar (see
+    config.HITTER_MIN_PROBABILITY) - a hitter can look good on one signal
+    while being unreliable on another (see config.py for what each
+    divergence means). On a normal day that's `probability` and
+    `Game_Hit_Probability`; on a day `Matchup_Hit_Probability` has been
+    merged in too (see pipeline.run), a good matchup is required just as
+    much as the other two. Column-gated like the lineup qualifiers, so a
+    missing column is simply skipped, not a required 0.
 
     `teams_playing_today`, if given, additionally requires a batter's team
     to be in the set - unlike the lineup qualifiers this isn't column-gated
@@ -63,11 +72,9 @@ def select_picks(
         qualified = qualified[qualified["start_rate"] >= min_start_rate]
     if teams_playing_today is not None:
         qualified = qualified[qualified["team"].isin(teams_playing_today)]
-    if {"probability", "Game_Hit_Probability"}.issubset(qualified.columns):
-        qualified = qualified[
-            (qualified["probability"] >= min_probability)
-            & (qualified["Game_Hit_Probability"] >= min_probability)
-        ]
+    for gate_column in JOINT_PROBABILITY_GATE_COLUMNS:
+        if gate_column in qualified.columns:
+            qualified = qualified[qualified[gate_column] >= min_probability]
 
     picks = qualified.sort_values(rank_metric or metric, ascending=False).head(top_n).reset_index(drop=True)
 

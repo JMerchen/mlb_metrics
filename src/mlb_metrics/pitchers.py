@@ -110,6 +110,7 @@ def compute_bullpen_pave(pdf_with_role: pd.DataFrame) -> pd.DataFrame:
 
     return result.rename(
         columns={
+            "PAVE": "Bullpen_PAVE",
             "baa": "Bullpen_BAA",
             "power_a": "Bullpen_Power_A",
             "hr_per": "Bullpen_HR_Per",
@@ -117,7 +118,12 @@ def compute_bullpen_pave(pdf_with_role: pd.DataFrame) -> pd.DataFrame:
             "hits": "Bullpen_Hits",
             "TBA": "Bullpen_TBA",
         }
-    )[["team", "Bullpen_AtBats", "Bullpen_PAVE_PLUS", "Bullpen_BAA", "Bullpen_Power_A", "Bullpen_HR_Per"]]
+    )[
+        [
+            "team", "Bullpen_AtBats", "Bullpen_PAVE", "Bullpen_PAVE_PLUS",
+            "Bullpen_BAA", "Bullpen_Power_A", "Bullpen_HR_Per",
+        ]
+    ]
 
 
 def assemble_pitchers(pdf: pd.DataFrame, names: pd.DataFrame, latest_pitcher_team: pd.DataFrame) -> pd.DataFrame:
@@ -137,6 +143,6 @@ def assemble_pitchers(pdf: pd.DataFrame, names: pd.DataFrame, latest_pitcher_tea
     pave = pave.merge(latest_pitcher_team, on="key_mlbam", how="left")
 
     pave = pave[
-        ["key_mlbam", "name_first", "name_last", "team", "at_bats", "PAVE_PLUS", "Expected_Hits", "Expected_Bases", "Expected_HRs"]
+        ["key_mlbam", "name_first", "name_last", "team", "at_bats", "PAVE", "PAVE_PLUS", "Expected_Hits", "Expected_Bases", "Expected_HRs"]
     ]
     return pave.sort_values("PAVE_PLUS", ascending=False)

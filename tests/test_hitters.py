@@ -102,7 +102,7 @@ def test_assemble_hitters_output_columns_and_derived_fields():
 
     assert list(result.columns) == [
         "key_mlbam", "name_first", "name_last", "team", "PA_L", "PA_R",
-        "probability_L", "probability_R", "probability",
+        "WAVE", "probability_L", "probability_R", "probability",
         "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
     ]
     row = result.iloc[0]

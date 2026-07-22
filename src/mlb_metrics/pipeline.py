@@ -169,25 +169,30 @@ def run(
         # (fetch succeeded, zero games today) correctly excludes every pick.
         teams_playing_today = set(schedule_df["team"]) if schedule_df is not None else None
 
-        # rank_metric="Approach" (Game_Hit_Probability * probability) picks
-        # among the HITTER_MIN_PROBABILITY-qualified pool by both signals
-        # combined, not Game_Hit_Probability alone - empirically validated via
-        # git-history replay (see config.HITTER_MIN_PROBABILITY's docstring).
-        # predicted_probability/metric logged still reflect Game_Hit_Probability.
-        game_hit_picks = predictions.select_picks(
-            outputs["wave"], as_of_date, rank_metric="Approach", teams_playing_today=teams_playing_today
-        )
-        predictions.append_predictions(game_hit_picks, predictions_log_path)
-
+        # On a normal day (schedule fetch succeeded), pick from a table that
+        # also carries Matchup_Hit_Probability - select_picks' joint gate
+        # then requires a good matchup just as much as probability/
+        # Game_Hit_Probability, and rank_metric="Matchup_Approach" (the
+        # three-way product) ranks the qualified pool by all three signals
+        # combined. Falls back to Approach-only ranking (no matchup
+        # qualifier at all) when schedule/matchup data isn't available -
+        # same resilience pattern as the schedule_df fetch itself.
+        # predicted_probability/metric logged still reflect Game_Hit_Probability
+        # either way, so DAILY_PICK_MIN_PROBABILITY's calibration is unaffected.
+        pick_pool = outputs["wave"]
+        rank_metric = "Approach"
         if schedule_df is not None and not schedule_df.empty:
             matchup_probability = matchup.compute_matchup_hit_probability(
                 outputs["wave"], outputs["pave"], outputs["confidence"], schedule_df
             )
-            matchup_wave = outputs["wave"].merge(matchup_probability, on="key_mlbam", how="inner")
-            matchup_picks = predictions.select_picks(
-                matchup_wave, as_of_date, metric="Matchup_Hit_Probability", teams_playing_today=teams_playing_today
-            )
-            predictions.append_predictions(matchup_picks, predictions_log_path)
+            pick_pool = outputs["wave"].merge(matchup_probability, on="key_mlbam", how="inner")
+            pick_pool["Matchup_Approach"] = pick_pool["Approach"] * pick_pool["Matchup_Hit_Probability"]
+            rank_metric = "Matchup_Approach"
+
+        game_hit_picks = predictions.select_picks(
+            pick_pool, as_of_date, rank_metric=rank_metric, teams_playing_today=teams_playing_today
+        )
+        predictions.append_predictions(game_hit_picks, predictions_log_path)
 
         write_beat_the_streak_export(predictions_log_path, output_dir)
 
