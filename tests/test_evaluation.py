@@ -67,6 +67,22 @@ def test_calibration_table_covers_every_resolved_row():
     assert table["n"].sum() == 6
 
 
+def test_outcome_col_parameter_works_with_a_different_column_name():
+    # Same fixture, but the outcome lives in "actual_correct" instead of
+    # "actual_hit" - the shape game_evaluation.py's game-pick scoring needs
+    # (see build_game_picks_export). Proves the outcome_col plumbing added
+    # to resolved_only/brier_score/log_loss/etc. actually works, not just
+    # that the default ("actual_hit") still does.
+    preds = _predictions().rename(columns={"actual_hit": "actual_correct"})
+    assert evaluation.brier_score(preds, outcome_col="actual_correct") == pytest.approx(
+        evaluation.brier_score(_predictions())
+    )
+    assert evaluation.log_loss(preds, outcome_col="actual_correct") == pytest.approx(
+        evaluation.log_loss(_predictions())
+    )
+    assert len(evaluation.resolved_only(preds, outcome_col="actual_correct")) == 6
+
+
 def test_summarize_splits_by_metric():
     preds = _predictions()
     other_metric = preds.copy()

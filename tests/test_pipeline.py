@@ -1,4 +1,5 @@
 import datetime
+import os
 
 import pandas as pd
 
@@ -66,10 +67,12 @@ def test_run_logs_and_resolves_predictions(monkeypatch, tmp_path):
     monkeypatch.setattr(pipeline.data, "fetch_statcast_range", lambda start, end: raw)
     monkeypatch.setattr(pipeline.data, "persist_raw_statcast", lambda df, raw_dir, season: df)
     # This test only cares about Game_Hit_Probability picks/streak wiring,
-    # not matchup blending - and must not depend on live network access
-    # (statsapi is reachable in CI but not in every sandbox, which would
-    # make this test's outcome nondeterministic depending on where it runs).
+    # not matchup blending or game picks - and must not depend on live
+    # network access (statsapi is reachable in CI but not in every sandbox,
+    # which would make this test's outcome nondeterministic depending on
+    # where it runs).
     monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", _no_schedule)
+    monkeypatch.setattr(pipeline.schedule, "fetch_todays_games", _no_schedule)
 
     wave = pd.DataFrame([
         {
@@ -161,6 +164,8 @@ def test_run_logs_matchup_probability_when_schedule_fetch_succeeds(monkeypatch, 
 
     schedule_df = pd.DataFrame([{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999}])
     monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", lambda date: schedule_df)
+    # Scoped to hitter-pick metrics only - game picks get their own tests below.
+    monkeypatch.setattr(pipeline.schedule, "fetch_todays_games", lambda date: pd.DataFrame())
 
     predictions_dir = str(tmp_path / "predictions")
     pipeline.run(
@@ -187,6 +192,7 @@ def test_run_continues_without_matchup_when_schedule_fetch_fails(monkeypatch, tm
         raise RuntimeError("statsapi is down")
 
     monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", raise_error)
+    monkeypatch.setattr(pipeline.schedule, "fetch_todays_games", raise_error)
 
     predictions_dir = str(tmp_path / "predictions")
     # Must not raise - a new external dependency can't be allowed to break
@@ -201,3 +207,140 @@ def test_run_continues_without_matchup_when_schedule_fetch_fails(monkeypatch, tm
 
     logged = pd.read_csv(f"{predictions_dir}/predictions.csv")
     assert set(logged["metric"]) == {"Game_Hit_Probability"}  # no Matchup_Hit_Probability logged
+    assert not os.path.exists(f"{predictions_dir}/game_predictions.csv")  # no game picks logged either
+
+
+def _minimal_outputs_with_confidence():
+    """Like _minimal_outputs, but with the confidence.csv columns
+    game_picks.compute_game_win_probabilities needs for two teams."""
+    outputs = _minimal_outputs()
+    outputs["confidence"] = pd.DataFrame([
+        {
+            "team": "NYY", "pyth_Strength": 1.1, "pyth_Confidence": 1.05,
+            "suppression_resistance": 1.0, "true_power": 1.0, "Bullpen_PAVE_PLUS": 0.9,
+        },
+        {
+            "team": "BOS", "pyth_Strength": 0.9, "pyth_Confidence": 0.95,
+            "suppression_resistance": 1.0, "true_power": 1.0, "Bullpen_PAVE_PLUS": 1.1,
+        },
+    ])
+    outputs["pave"] = pd.DataFrame([
+        {"key_mlbam": 501, "PAVE_PLUS": 0.8},  # NYY probable starter (tough)
+        {"key_mlbam": 502, "PAVE_PLUS": 1.2},  # BOS probable starter (easy)
+    ])
+    return outputs
+
+
+def test_run_logs_game_picks_when_schedule_fetch_succeeds(monkeypatch, tmp_path):
+    monkeypatch.setattr(pipeline.data, "fetch_statcast_range", lambda start, end: pd.DataFrame({
+        "game_date": pd.to_datetime([]), "batter": [], "events": [],
+    }))
+    monkeypatch.setattr(pipeline.data, "persist_raw_statcast", lambda df, raw_dir, season: df)
+    monkeypatch.setattr(pipeline, "compute_outputs", lambda df: _minimal_outputs_with_confidence())
+    monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", _no_schedule)
+
+    schedule_games_df = pd.DataFrame([{
+        "game_pk": 100, "date": pd.Timestamp("2026-06-20"), "home_team": "NYY", "away_team": "BOS",
+        "home_probable_pitcher_key_mlbam": 501, "away_probable_pitcher_key_mlbam": 502,
+        "status": "Scheduled", "home_score": None, "away_score": None,
+    }])
+    monkeypatch.setattr(pipeline.schedule, "fetch_todays_games", lambda date: schedule_games_df)
+
+    predictions_dir = str(tmp_path / "predictions")
+    pipeline.run(
+        datetime.date(2026, 6, 20),
+        raw_dir=str(tmp_path / "raw"),
+        output_dir=str(tmp_path / "out"),
+        predictions_dir=predictions_dir,
+        persist_raw=False,
+    )
+
+    logged = pd.read_csv(f"{predictions_dir}/game_predictions.csv", parse_dates=["date"])
+    assert len(logged) == 1
+    assert logged.loc[0, "game_pk"] == 100
+    assert logged.loc[0, "predicted_winner"] == "NYY"  # NYY has the better composite + faces the weaker pitching
+    assert logged.loc[0, "metric"] == "GamePick_Win_Probability"
+    assert pd.isna(logged.loc[0, "game_played"])
+
+    summary = pd.read_csv(f"{tmp_path}/out/game_picks_summary.csv")
+    assert summary.loc[0, "n_games_resolved"] == 0
+
+
+def test_run_continues_without_game_picks_when_schedule_fetch_fails(monkeypatch, tmp_path):
+    monkeypatch.setattr(pipeline.data, "fetch_statcast_range", lambda start, end: pd.DataFrame({
+        "game_date": pd.to_datetime([]), "batter": [], "events": [],
+    }))
+    monkeypatch.setattr(pipeline.data, "persist_raw_statcast", lambda df, raw_dir, season: df)
+    monkeypatch.setattr(pipeline, "compute_outputs", lambda df: _minimal_outputs_with_confidence())
+    monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", _no_schedule)
+    monkeypatch.setattr(pipeline.schedule, "fetch_todays_games", _no_schedule)
+
+    predictions_dir = str(tmp_path / "predictions")
+    # Must not raise - a new external dependency can't be allowed to break
+    # the whole daily update.
+    pipeline.run(
+        datetime.date(2026, 6, 20),
+        raw_dir=str(tmp_path / "raw"),
+        output_dir=str(tmp_path / "out"),
+        predictions_dir=predictions_dir,
+        persist_raw=False,
+    )
+
+    assert not os.path.exists(f"{predictions_dir}/game_predictions.csv")
+
+
+def test_run_resolves_game_picks_across_two_runs(monkeypatch, tmp_path):
+    """A game pick logged on day N as pending gets resolved on day N+1 once
+    schedule.fetch_game_results reports it Final, and the exported
+    game_picks_picks.csv/game_picks_summary.csv reflect the win."""
+    monkeypatch.setattr(pipeline.data, "fetch_statcast_range", lambda start, end: pd.DataFrame({
+        "game_date": pd.to_datetime([]), "batter": [], "events": [],
+    }))
+    monkeypatch.setattr(pipeline.data, "persist_raw_statcast", lambda df, raw_dir, season: df)
+    monkeypatch.setattr(pipeline, "compute_outputs", lambda df: _minimal_outputs_with_confidence())
+    monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", _no_schedule)
+
+    schedule_games_day1 = pd.DataFrame([{
+        "game_pk": 100, "date": pd.Timestamp("2026-06-19"), "home_team": "NYY", "away_team": "BOS",
+        "home_probable_pitcher_key_mlbam": 501, "away_probable_pitcher_key_mlbam": 502,
+        "status": "Scheduled", "home_score": None, "away_score": None,
+    }])
+    monkeypatch.setattr(pipeline.schedule, "fetch_todays_games", lambda date: schedule_games_day1)
+
+    predictions_dir = str(tmp_path / "predictions")
+    pipeline.run(
+        datetime.date(2026, 6, 19),
+        raw_dir=str(tmp_path / "raw"),
+        output_dir=str(tmp_path / "out"),
+        predictions_dir=predictions_dir,
+        persist_raw=False,
+    )
+
+    # Day 2: no new games today, but day 1's pick resolves - NYY (predicted
+    # winner) actually won 5-3.
+    monkeypatch.setattr(pipeline.schedule, "fetch_todays_games", lambda date: pd.DataFrame())
+
+    def fake_fetch_results(date):
+        assert date == datetime.date(2026, 6, 19)
+        return pd.DataFrame([{"game_pk": 100, "status": "Final", "home_score": 5, "away_score": 3}])
+
+    monkeypatch.setattr(pipeline.schedule, "fetch_game_results", fake_fetch_results)
+
+    pipeline.run(
+        datetime.date(2026, 6, 20),
+        raw_dir=str(tmp_path / "raw"),
+        output_dir=str(tmp_path / "out"),
+        predictions_dir=predictions_dir,
+        persist_raw=False,
+    )
+
+    logged = pd.read_csv(f"{predictions_dir}/game_predictions.csv")
+    assert logged.loc[0, "actual_winner"] == "NYY"
+    assert logged.loc[0, "game_played"] == 1
+
+    picks_export = pd.read_csv(f"{tmp_path}/out/game_picks_picks.csv")
+    assert picks_export.loc[0, "status"] == "win"
+
+    summary_export = pd.read_csv(f"{tmp_path}/out/game_picks_summary.csv")
+    assert summary_export.loc[0, "n_games_resolved"] == 1
+    assert summary_export.loc[0, "accuracy"] == 1.0

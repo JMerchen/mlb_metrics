@@ -171,6 +171,39 @@ MATCHUP_BULLPEN_AB_SHARE = 0.4
 # past 1.0 and erase real distinctions at the ceiling clip.
 MATCHUP_PAVE_PLUS_CLIP = (0.5, 1.75)
 
+# --- Automated Game Picks ---
+#
+# Predicts a winner for each of today's games from team-level metrics (not
+# hitter picks) - see game_picks.py. Unvalidated first pass, same as Matchup
+# awareness above: logged and tracked before ever being trusted.
+
+# Equal-weighted blend of the four team-level signals the user asked for by
+# name into one offensive composite rating. All four inputs are already
+# z-normalized to mean 1.0 (NORMALIZATION_Z_SCALE), so a straight weighted
+# average needs no further rescaling. suppression_resistance is deliberately
+# counted both directly and inside true_power (which already averages it
+# with offensive_edge) - the user asked for both signals by name.
+GAME_PICK_COMPOSITE_WEIGHTS = [
+    ("pyth_Strength", 0.25),
+    ("pyth_Confidence", 0.25),
+    ("suppression_resistance", 0.25),
+    ("true_power", 0.25),
+]
+
+# A game is only "picked" if the favored side's win probability clears this
+# bar - a day can surface 0 or more picks depending on how much separation
+# the model sees, not a forced pick every game. Much lower than
+# DAILY_PICK_MIN_PROBABILITY (0.80): single-game MLB win probabilities are
+# compressed near 50/50 even for real favorites, so reusing the hitter-pick
+# bar would produce picks on almost no days. First-pass default, meant to be
+# recalibrated once real data accumulates.
+GAME_PICK_MIN_PROBABILITY = 0.58
+
+# Floors each team's matchup-adjusted rating before computing
+# home_rating / (home_rating + away_rating), purely as a degenerate-input
+# guard - composites center around 1.0, so this shouldn't bind in practice.
+GAME_PICK_RATING_FLOOR = 0.05
+
 # Statcast plate-appearance outcome values that count as a "completed" event
 # (used to filter pitch-by-pitch data down to one row per at-bat outcome).
 COUNTED_EVENTS = [

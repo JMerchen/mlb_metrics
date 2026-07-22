@@ -10,13 +10,19 @@ to `docs/` as a GitHub Pages dashboard.
   weights), `helpers.py` (event classifiers), `data.py` (Statcast fetch/raw
   persistence), `hitters.py`, `pitchers.py`, `teams.py` (metric computation),
   `pipeline.py` (orchestration + CLI), `predictions.py`/`evaluation.py`/
-  `git_backtest.py` (backtesting - see below).
+  `git_backtest.py` (hitter-pick backtesting - see below), `schedule.py`
+  (MLB Stats API - probable pitchers, game schedules, final scores),
+  `matchup.py` (batter-level opponent-pitching blend), `game_picks.py`/
+  `game_predictions.py`/`game_evaluation.py` (Automated Game Picks - see
+  below).
 - `scripts/wave.py` - daily pipeline entrypoint (`python scripts/wave.py`).
 - `scripts/run_backtest.py` - backtest entrypoint (`python scripts/run_backtest.py`).
 - `data/raw/` - persisted raw Statcast pulls, one parquet file per season,
   committed daily alongside the output CSVs so history accumulates run over run.
-- `data/predictions/predictions.csv` - append-only log of every daily pick
-  (date, player, predicted probability, realized actual_hit once known).
+- `data/predictions/predictions.csv` - append-only log of every daily hitter
+  pick (date, player, predicted probability, realized actual_hit once
+  known). `data/predictions/game_predictions.csv` is the analogous log for
+  Automated Game Picks, keyed on `game_pk` instead of a player id.
 - `docs/data/` - the published `wave.csv` / `pave.csv` / `confidence.csv`
   consumed by the `docs/` dashboard, plus `backtest_summary.csv` (see below).
   `confidence.csv` includes `Bullpen_PAVE_PLUS`
@@ -110,6 +116,55 @@ explicitly out of scope for now - they post only ~2-4 hours before first
 pitch, too late for the pipeline's 8am ET run regardless of data source, and
 would need a second later run plus a decision about revising an
 already-logged morning pick.
+
+## Automated Game Picks (dashboard)
+
+A second, independent dashboard section predicts a winner for each of
+today's games (not hitters) from six team-level signals: each team's
+Pythagorean strength (`pyth_Strength`), Pythagorean confidence
+(`pyth_Confidence`), suppression resistance (`suppression_resistance`), and
+true power (`true_power`) - all from `confidence.csv` - adjusted by the
+specific pitching (probable starter's `PAVE_PLUS` blended with
+`Bullpen_PAVE_PLUS`) each team is projected to face, via the same
+clip-then-blend logic `matchup.py` uses for hitters
+(`matchup.clip_and_blend_pitching_quality`, shared by both).
+
+- A game is only "picked" if the favored side's win probability clears
+  `GAME_PICK_MIN_PROBABILITY` (config.py, default 0.58 - much lower than the
+  hitter picks' 0.80, since single-game MLB win probabilities are
+  compressed near 50/50 even for real favorites) - a day can surface 0 or
+  more picks depending on how much separation the model sees, never a
+  forced pick every game.
+- `home_win_probability = home_rating / (home_rating + away_rating)`, where
+  each team's rating is its own offensive composite (equal-weighted blend
+  of the four signals above, `GAME_PICK_COMPOSITE_WEIGHTS`) multiplied by
+  the *opposing* team's pitching-weakness multiplier. This is a simple
+  ratio, not log5 - these composites aren't calibrated win percentages, so
+  a ratio is the honestly-explainable choice rather than borrowing false
+  precision from a formula built for a different kind of input.
+- Tracked with a plain win/loss accuracy and a simple consecutive-correct
+  streak (`game_evaluation.build_game_picks_export`) - not Beat the
+  Streak's reset-on-any-miss multi-pick rule, since that's MLB's specific
+  hitter-streak game mechanic and doesn't apply to independent game-by-game
+  picks.
+
+This reads `docs/data/game_picks_picks.csv` and `game_picks_summary.csv`,
+written after every daily run from `data/predictions/game_predictions.csv`
+(a separate log from the hitter-pick `predictions.csv`, keyed on `game_pk`
+instead of a player id). Resolution uses final scores fetched via
+`schedule.fetch_game_results`, not Statcast.
+
+**Known limitation: no historical backtest.** Unlike `wave.csv` (replayed
+by `git_backtest.py` for the hitter-pick backtest), schedule/game data has
+never been persisted to this repo's git history - it's fetched live and
+used in-memory each run, same limitation already true of
+`Matchup_Hit_Probability`. Automated Game Picks can only accumulate a
+resolved dataset forward from the day it shipped; there is no way to
+retroactively evaluate the formula against past dates.
+
+This is a first-pass, unvalidated blend (see `game_picks.py`'s module
+docstring), meant to be watched and compared against reality before being
+trusted, not treated as ground truth.
 
 ## Running
 
