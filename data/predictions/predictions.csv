@@ -199,11 +199,11 @@ date,key_mlbam,name,rank,predicted_probability,metric,actual_hit,at_bats
 2026-07-20,543510,James McCann,3,0.8489130434782608,Game_Hit_Probability,,0.0
 2026-07-20,699013,Esmerlyn Valdez,4,0.8334677419354839,Game_Hit_Probability,1.0,4.0
 2026-07-20,805779,Jacob Wilson,5,0.8333886589080683,Game_Hit_Probability,1.0,5.0
-2026-07-21,811965,Joshua Kuroda-Grauer,1,0.915625,Game_Hit_Probability,,
-2026-07-21,650402,Gleyber Torres,2,0.8613636363636363,Game_Hit_Probability,,
-2026-07-21,691023,Jordan Walker,3,0.8546176975945017,Game_Hit_Probability,,
-2026-07-21,678882,Ceddanne Rafaela,4,0.8532588916459884,Game_Hit_Probability,,
-2026-07-21,543510,James McCann,5,0.8489130434782608,Game_Hit_Probability,,
+2026-07-21,811965,Joshua Kuroda-Grauer,1,0.915625,Game_Hit_Probability,,0.0
+2026-07-21,650402,Gleyber Torres,2,0.8613636363636363,Game_Hit_Probability,0.0,4.0
+2026-07-21,691023,Jordan Walker,3,0.8546176975945017,Game_Hit_Probability,1.0,4.0
+2026-07-21,678882,Ceddanne Rafaela,4,0.8532588916459884,Game_Hit_Probability,,0.0
+2026-07-21,543510,James McCann,5,0.8489130434782608,Game_Hit_Probability,,0.0
 2026-07-22,650402,Gleyber Torres,1,0.7351119946097611,Matchup_Hit_Probability,,
 2026-07-22,650402,Gleyber Torres,1,0.7769743935309974,Game_Hit_Probability,,
 2026-07-22,805779,Jacob Wilson,2,0.6102425482335719,Matchup_Hit_Probability,,

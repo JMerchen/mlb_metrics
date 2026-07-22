@@ -1,6 +1,6 @@
 date,rank,name,predicted_probability,actual_hit,status
-2026-07-21,1,Joshua Kuroda-Grauer,0.915625,,pending
-2026-07-21,2,Gleyber Torres,0.8613636363636363,,pending
+2026-07-21,1,Joshua Kuroda-Grauer,0.915625,,no_game
+2026-07-21,2,Gleyber Torres,0.8613636363636363,0.0,miss
 2026-07-20,1,Joshua Kuroda-Grauer,0.8635714285714287,1.0,hit
 2026-07-20,2,Jordan Walker,0.8541666666666667,1.0,hit
 2026-07-19,1,Ryan Jeffers,0.9014120667522464,0.0,miss
