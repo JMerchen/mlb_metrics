@@ -220,6 +220,29 @@ def build_beat_the_streak_export(
     picks = _recommended_picks(predictions, metric, max_picks, min_probability, model_version).copy()
     picks["status"] = _classify_outcome(picks)
     picks = picks[["date", "rank", "name", "predicted_probability", "actual_hit", "status"]]
+
+    # select_picks logs every top-N candidate regardless of whether it
+    # clears min_probability, so a date with logged picks but zero
+    # recommended ones is a real "no good matchup that day", not missing
+    # data - surface it explicitly as its own row rather than leaving the
+    # date silently absent, which a reader (or the dashboard) would
+    # otherwise misread as "the most recent recommendation was some earlier
+    # day."
+    filtered = _filter_model_version(_filter_metric(predictions, metric), model_version)
+    no_pick_dates = sorted(set(filtered["date"]) - set(picks["date"]))
+    if no_pick_dates:
+        no_pick_rows = pd.DataFrame(
+            {
+                "date": no_pick_dates,
+                "rank": pd.NA,
+                "name": pd.NA,
+                "predicted_probability": pd.NA,
+                "actual_hit": pd.NA,
+                "status": "no_pick",
+            }
+        )
+        picks = pd.concat([picks, no_pick_rows], ignore_index=True)
+
     picks = picks.sort_values(["date", "rank"], ascending=[False, True]).reset_index(drop=True)
 
     progression = streak_progression(predictions, metric, max_picks, min_probability, model_version)

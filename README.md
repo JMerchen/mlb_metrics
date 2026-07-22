@@ -70,7 +70,12 @@ following its real rules rather than a simplified per-day win/loss model
 - A batter is only "recommended" if `predicted_probability` clears
   `DAILY_PICK_MIN_PROBABILITY` (config.py, default 0.80) - a day can
   surface 0, 1, or up to `DAILY_PICK_MAX` (2) picks depending on how many
-  clear the bar, not a fixed count regardless of matchup quality.
+  clear the bar, not a fixed count regardless of matchup quality. A
+  zero-pick day still gets an explicit `"no_pick"` row in the export (see
+  `build_beat_the_streak_export`) rather than being silently absent - the
+  dashboard shows "No pick for `<date>`" instead of falling back to
+  whatever earlier day last had one, which would otherwise look like a
+  stale/broken pipeline.
 - A pick with an at-bat and no hit resets the streak to 0.
 - A pick with zero at-bats that day (rained out, DNP, not in the lineup)
   is neutral - it neither advances nor resets the streak.

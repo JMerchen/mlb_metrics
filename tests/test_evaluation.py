@@ -200,7 +200,13 @@ def test_recommended_picks_gated_by_threshold_can_be_zero_one_or_two():
 
     assert set(picks[picks["date"] == "2026-06-18"]["rank"]) == {1, 2}
     assert set(picks[picks["date"] == "2026-06-19"]["rank"]) == {1}
-    assert picks[picks["date"] == "2026-06-20"].empty
+    # Day C had picks logged (both rank 1 and 2), just none cleared the bar -
+    # a real "no pick that day", surfaced as its own row rather than the
+    # date being silently absent (see test below for the dedicated check).
+    day_c = picks[picks["date"] == "2026-06-20"]
+    assert len(day_c) == 1
+    assert day_c.iloc[0]["status"] == "no_pick"
+    assert pd.isna(day_c.iloc[0]["rank"])
 
     # Day C never enters the streak at all (not even as a no-op skip in the
     # progression table), and day A+B both hit -> 2 + 1 = 3.
@@ -228,6 +234,32 @@ def test_build_beat_the_streak_export_picks_table_status_and_summary():
     assert summary.loc[0, "longest_streak"] == 3
     assert summary.loc[0, "current_streak"] == 2
     assert summary.loc[0, "model_version"] == "all_time"  # unfiltered (model_version=None) default label
+
+
+def test_build_beat_the_streak_export_no_pick_day_does_not_affect_streak_or_other_days():
+    preds = pd.DataFrame(
+        [
+            _pick("2026-06-18", 1, 0.90, 3, 1),  # hit -> streak=1
+            _pick("2026-06-19", 1, 0.70, 3, 0),  # below bar -> no_pick day
+            _pick("2026-06-19", 2, 0.65, 3, 1),  # below bar -> no_pick day
+            _pick("2026-06-20", 1, 0.90, 3, 1),  # hit -> streak continues to 2
+        ]
+    )
+
+    picks, summary = evaluation.build_beat_the_streak_export(preds, max_picks=2, min_probability=0.80)
+
+    no_pick_rows = picks[picks["date"] == "2026-06-19"]
+    assert len(no_pick_rows) == 1
+    row = no_pick_rows.iloc[0]
+    assert row["status"] == "no_pick"
+    assert pd.isna(row["rank"]) and pd.isna(row["name"]) and pd.isna(row["predicted_probability"])
+    assert pd.isna(row["actual_hit"])
+
+    # The no-pick day is a true no-op for the streak - not a break, not
+    # skipped-as-pending, just absent from the progression entirely.
+    assert summary.loc[0, "n_days_resolved"] == 2
+    assert summary.loc[0, "current_streak"] == 2
+    assert summary.loc[0, "longest_streak"] == 2
 
 
 def test_build_beat_the_streak_export_model_version_filters_and_labels_summary():

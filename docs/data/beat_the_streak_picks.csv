@@ -1,4 +1,5 @@
 date,rank,name,predicted_probability,actual_hit,status
+2026-07-22,,,,,no_pick
 2026-07-21,1,Joshua Kuroda-Grauer,0.915625,,no_game
 2026-07-21,2,Gleyber Torres,0.8613636363636363,0.0,miss
 2026-07-20,1,Joshua Kuroda-Grauer,0.8635714285714287,1.0,hit
