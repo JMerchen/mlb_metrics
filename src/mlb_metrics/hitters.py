@@ -237,7 +237,7 @@ def assemble_hitters(
         [
             "key_mlbam", "name_first", "name_last", "team",
             "pa_lfull", "pa_rfull",
-            "WAVE", "probability_L", "probability_R", "probability",
+            "WAVE", "WAVE_L", "WAVE_R", "probability_L", "probability_R", "probability",
             "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
         ]
     ].fillna(0)

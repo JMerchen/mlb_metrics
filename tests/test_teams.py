@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from mlb_metrics import teams
 
@@ -31,3 +32,37 @@ def test_compute_strength_metrics_survives_chained_groupby_apply():
     nyy_current = current_strength.set_index("team").loc["NYY", "current_strength"]
     bos_current = current_strength.set_index("team").loc["BOS", "current_strength"]
     assert nyy_current > bos_current
+
+
+def test_compute_park_factors_normalizes_to_league_average():
+    data = pd.DataFrame([
+        {"game_id": 1, "home_team": "A", "post_home_score": 6, "post_away_score": 4},  # combined 10
+        {"game_id": 2, "home_team": "A", "post_home_score": 5, "post_away_score": 3},  # combined 8
+        {"game_id": 3, "home_team": "B", "post_home_score": 4, "post_away_score": 2},  # combined 6
+        {"game_id": 4, "home_team": "C", "post_home_score": 3, "post_away_score": 3},  # combined 6
+        {"game_id": 5, "home_team": "C", "post_home_score": 4, "post_away_score": 2},  # combined 6
+    ])
+
+    park_factors = teams.compute_park_factors(data).set_index("team")
+
+    # A avg=(10+8)/2=9, B avg=6, C avg=(6+6)/2=6 -> league avg=(9+6+6)/3=7.
+    assert park_factors.loc["A", "Park_Factor"] == pytest.approx(9 / 7)
+    assert park_factors.loc["B", "Park_Factor"] == pytest.approx(6 / 7)
+    assert park_factors.loc["C", "Park_Factor"] == pytest.approx(6 / 7)
+
+
+def test_compute_park_factors_uses_final_combined_score_not_every_pitch():
+    # Two rows for the same game (score climbing pitch-by-pitch, as real
+    # Statcast data does) - only the final (max) combined score should
+    # count, same "max combined score = final state" pattern used by
+    # build_team_record/data.extract_game_results, not a sum across rows.
+    data = pd.DataFrame([
+        {"game_id": 1, "home_team": "A", "post_home_score": 1, "post_away_score": 0},
+        {"game_id": 1, "home_team": "A", "post_home_score": 3, "post_away_score": 2},  # final: combined 5
+        {"game_id": 2, "home_team": "B", "post_home_score": 3, "post_away_score": 2},  # final: combined 5
+    ])
+
+    park_factors = teams.compute_park_factors(data).set_index("team")
+
+    assert park_factors.loc["A", "Park_Factor"] == pytest.approx(1.0)
+    assert park_factors.loc["B", "Park_Factor"] == pytest.approx(1.0)

@@ -30,8 +30,10 @@ def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_pitcher_events(df: pd.DataFrame) -> pd.DataFrame:
-    """Completed at-bat events keyed by pitcher, used by PAVE."""
-    return data.completed_events(df, ["game_date", "pitcher", "events"])
+    """Completed at-bat events keyed by pitcher, used by PAVE. Carries
+    p_throws (constant per pitcher) so pitchers.compute_pitcher_throws can
+    expose each pitcher's own throwing hand for matchup.py's platoon logic."""
+    return data.completed_events(df, ["game_date", "pitcher", "events", "p_throws"])
 
 
 def build_pitcher_events_with_role(data_with_game_id: pd.DataFrame, roles: pd.DataFrame) -> pd.DataFrame:

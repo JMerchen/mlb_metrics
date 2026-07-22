@@ -184,7 +184,7 @@ def build_probable_pitchers_table(schedule_df: pd.DataFrame, pave: pd.DataFrame)
     unannounced or unmatched starter still gets a row (with blank pitcher
     fields) so the day's full slate stays visible, rather than silently
     disappearing."""
-    pitcher_cols = [c for c in ("PAVE", "PAVE_PLUS", "Power_A_PLUS") if c in pave.columns]
+    pitcher_cols = [c for c in ("Throws", "PAVE", "PAVE_PLUS", "Power_A_PLUS") if c in pave.columns]
     starters = pave[["key_mlbam", "name_first", "name_last"] + pitcher_cols]
 
     table = schedule_df[["date", "team", "opponent", "is_home", "probable_pitcher_key_mlbam"]].merge(

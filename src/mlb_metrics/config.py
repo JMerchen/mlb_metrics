@@ -241,6 +241,50 @@ MATCHUP_PAVE_CLIP_MULTIPLIER = (0.5, 1.75)
 # once the season is underway.
 MATCHUP_LEAGUE_PAVE_FALLBACK = 0.245
 
+# Whether a batter faces a lefty or righty starter today changes which of
+# their platoon-split rates (WAVE_L/WAVE_R - see hitters.compute_wave) is
+# the relevant one; blending both together (the old behavior) understates a
+# real platoon-driven matchup either way. matchup.py picks WAVE_L/WAVE_R
+# based on the probable starter's own Throws (pitchers.compute_pitcher_throws)
+# and falls back to the handedness-blended WAVE when Throws is unknown
+# (unannounced starter, not found in pave.csv) - same missing-data
+# degradation pattern used throughout this module. Always applied (no
+# separate weight knob) when the data is available - see
+# MATCHUP_PARK_FACTOR_WEIGHT's docstring for the backtest that validated
+# turning it on, which validated platoon and park together.
+
+# Statcast's own venue proxy: each team's home games are treated as being
+# at one park (see teams.compute_park_factors) - Park_Factor is the
+# combined runs/game at that venue relative to the across-all-parks
+# average, clipped to this range before blending into the matchup AB rate
+# so a small-sample outlier park doesn't swing a probability further than
+# any real park effect would (MLB parks realistically span roughly this
+# range - Coors-like hitter's parks near the top, extreme pitcher's parks
+# near the bottom).
+MATCHUP_PARK_FACTOR_CLIP = (0.85, 1.15)
+
+# How much of the (clipped) park effect gets applied to the matchup AB
+# rate: effective_multiplier = 1 + MATCHUP_PARK_FACTOR_WEIGHT * (Park_Factor - 1).
+# 0.0 is a no-op (fully off); 1.0 applies the park effect in full.
+#
+# Empirically validated via a 15-date persisted-Statcast backtest (recomputes
+# wave/pave/confidence fresh per date via pipeline.compute_outputs, same
+# technique game_picks_backtest.py's persisted variant uses - platoon/park
+# columns don't exist in old git-committed snapshots, so a git-history
+# replay can't see them), comparing four variants on the full top-N
+# qualified-candidate pool (n=43-52 resolved picks - the more reliable
+# sample; the further-filtered "recommended" rank<=2 subset only had
+# n=11-18, too small to trust on its own and noisier in the opposite
+# direction on this window):
+#   baseline (neither):        58% hit rate, 0.286 Brier
+#   platoon only:               62% hit rate, 0.261 Brier
+#   park only:                  57% hit rate, 0.293 Brier (alone, roughly a wash)
+#   both (this default):        65% hit rate, 0.244 Brier - best of all four
+# Platoon and park together beat either alone or neither on the larger
+# sample, so both ship on by default; revisit (especially park alone, whose
+# solo read was weak here) once more dates accumulate.
+MATCHUP_PARK_FACTOR_WEIGHT = 1.0
+
 # --- Automated Game Picks ---
 #
 # Predicts a winner for each of today's games from team-level metrics (not

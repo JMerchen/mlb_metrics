@@ -124,6 +124,130 @@ def test_batter_with_no_game_today_is_excluded():
     assert list(result["key_mlbam"]) == [1]
 
 
+def _wave_with_platoon(rows):
+    """rows: list of (key_mlbam, team, WAVE, WAVE_L, WAVE_R)."""
+    return pd.DataFrame(
+        [{"key_mlbam": k, "team": t, "WAVE": w, "WAVE_L": wl, "WAVE_R": wr} for k, t, w, wl, wr in rows]
+    )
+
+
+def _expected_probability(batter_rate, opponent_rate, league_pave, park_multiplier=1.0):
+    from mlb_metrics import config
+
+    numerator = batter_rate * opponent_rate / league_pave
+    denominator = numerator + (1 - batter_rate) * (1 - opponent_rate) / (1 - league_pave)
+    matchup_ab_rate = (numerator / denominator) * park_multiplier
+    return 1 - (1 - matchup_ab_rate) ** config.WAVE_TRIALS_PER_GAME
+
+
+def test_platoon_uses_wave_l_against_a_lefty_starter():
+    wave = _wave_with_platoon([(1, "NYY", 0.30, 0.50, 0.20)])  # much better vs LHP than blended WAVE
+    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE": 0.27, "PAVE_PLUS": 1.0, "Throws": "L"}])
+    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.297}])
+    schedule_df = pd.DataFrame(
+        [{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999, "is_home": True}]
+    )
+
+    result = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df).set_index("key_mlbam")
+
+    expected = _expected_probability(0.50, 0.6 * 0.27 + 0.4 * 0.297, league_pave=0.27)
+    assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(expected)
+
+
+def test_platoon_uses_wave_r_against_a_righty_starter():
+    wave = _wave_with_platoon([(1, "NYY", 0.30, 0.50, 0.20)])
+    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE": 0.27, "PAVE_PLUS": 1.0, "Throws": "R"}])
+    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.297}])
+    schedule_df = pd.DataFrame(
+        [{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999, "is_home": True}]
+    )
+
+    result = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df).set_index("key_mlbam")
+
+    expected = _expected_probability(0.20, 0.6 * 0.27 + 0.4 * 0.297, league_pave=0.27)
+    assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(expected)
+
+
+def test_platoon_falls_back_to_blended_wave_when_starter_throws_unknown():
+    wave = _wave_with_platoon([(1, "NYY", 0.30, 0.50, 0.20)])
+    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE": 0.27, "PAVE_PLUS": 1.0}])  # no Throws column at all
+    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.297}])
+    schedule_df = pd.DataFrame(
+        [{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999, "is_home": True}]
+    )
+
+    result = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df).set_index("key_mlbam")
+
+    # Falls back to blended WAVE (0.30) - same number as the original
+    # (pre-platoon) exact-arithmetic test.
+    assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(0.7291739871326228)
+
+
+def test_park_factor_applies_home_teams_park_when_batter_is_home():
+    wave = _wave([(1, "NYY", 0.30)])
+    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE": 0.27, "PAVE_PLUS": 1.0}])
+    confidence = pd.DataFrame([
+        {"team": "BOS", "Bullpen_PAVE": 0.297, "Park_Factor": 1.20},  # not today's venue - irrelevant
+        {"team": "NYY", "Bullpen_PAVE": 0.27, "Park_Factor": 1.10},  # NYY is home today -> this park applies
+    ])
+    schedule_df = pd.DataFrame(
+        [{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999, "is_home": True}]
+    )
+
+    result = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df).set_index("key_mlbam")
+
+    expected = _expected_probability(0.30, 0.6 * 0.27 + 0.4 * 0.297, league_pave=0.27, park_multiplier=1.10)
+    assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(expected)
+
+
+def test_park_factor_uses_opponents_park_when_batter_is_away():
+    wave = _wave([(1, "NYY", 0.30)])
+    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE": 0.27, "PAVE_PLUS": 1.0}])
+    confidence = pd.DataFrame([
+        {"team": "BOS", "Bullpen_PAVE": 0.297, "Park_Factor": 0.90},  # BOS is home today -> this park applies
+        {"team": "NYY", "Bullpen_PAVE": 0.27, "Park_Factor": 1.20},  # NYY's own park - irrelevant, NYY is away
+    ])
+    schedule_df = pd.DataFrame(
+        [{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999, "is_home": False}]
+    )
+
+    result = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df).set_index("key_mlbam")
+
+    expected = _expected_probability(0.30, 0.6 * 0.27 + 0.4 * 0.297, league_pave=0.27, park_multiplier=0.90)
+    assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(expected)
+
+
+def test_park_factor_is_clipped_before_applying():
+    wave = _wave([(1, "NYY", 0.30)])
+    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE": 0.27, "PAVE_PLUS": 1.0}])
+    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.297, "Park_Factor": 2.0}])  # extreme outlier
+    schedule_df = pd.DataFrame(
+        [{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999, "is_home": False}]
+    )
+
+    result = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df).set_index("key_mlbam")
+
+    from mlb_metrics import config
+
+    expected = _expected_probability(
+        0.30, 0.6 * 0.27 + 0.4 * 0.297, league_pave=0.27, park_multiplier=config.MATCHUP_PARK_FACTOR_CLIP[1]
+    )
+    assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(expected)
+
+
+def test_park_factor_missing_column_is_a_no_op():
+    wave = _wave([(1, "NYY", 0.30)])
+    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE": 0.27, "PAVE_PLUS": 1.0}])
+    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.297}])  # no Park_Factor column at all
+    schedule_df = pd.DataFrame(
+        [{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999, "is_home": True}]
+    )
+
+    result = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df).set_index("key_mlbam")
+
+    assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(0.7291739871326228)
+
+
 def test_final_probability_stays_within_zero_one():
     wave = _wave([(1, "NYY", 0.99)])
     pave = pd.DataFrame([{"key_mlbam": 999, "PAVE": 0.10, "PAVE_PLUS": 0.10 / 0.27}])  # a very weak pitcher
