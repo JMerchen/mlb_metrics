@@ -193,7 +193,12 @@ def _compute_exclusion_windows(group: pd.DataFrame, windows) -> pd.DataFrame:
     """Per-game win rate over the last N games, excluding games against that
     game's specific upcoming opponent (so a strength score isn't inflated by
     a long series against one weak team)."""
+    # pandas' groupby(...).apply() excludes the grouping column from `group`
+    # itself, so it has to be restored explicitly for the two chained
+    # groupby("team") calls in compute_strength_metrics to keep working.
+    team = group.name
     group = group.copy()
+    group["team"] = team
     results = {f"rolling_{w}": [] for w in windows}
     full_history = []
 
@@ -216,7 +221,11 @@ def _compute_exclusion_windows(group: pd.DataFrame, windows) -> pd.DataFrame:
 
 def _compute_current_windows(group: pd.DataFrame, windows) -> pd.DataFrame:
     """Same as `_compute_exclusion_windows` but without excluding the upcoming opponent."""
+    # See _compute_exclusion_windows - group.name has to be captured before
+    # any copy/reassignment, since pandas excludes "team" from `group` itself.
+    team = group.name
     group = group.copy()
+    group["team"] = team
     results = {f"roll_{w}_cur": [] for w in windows}
     full_history = []
 
