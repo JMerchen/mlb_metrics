@@ -166,16 +166,21 @@ LINEUP_MIN_START_RATE = 0.6
 
 # --- Matchup awareness (Part B) ---
 #
-# Blends a batter's own hit probability with the specific pitching they're
-# projected to face today: their team's opponent's probable starter (most of
-# their at-bats) and that opponent's bullpen (the rest). Unvalidated first
-# pass - see matchup.py - meant to be logged alongside the unblended metric
-# and backtested before ever becoming the "recommended" metric.
+# Blends a batter's own AB-level hit rate (WAVE) with the specific pitching
+# they're projected to face today: their team's opponent's probable starter
+# (most of their at-bats) and that opponent's bullpen (the rest), via a log5
+# (odds-ratio) combination against the league-average PAVE - the standard
+# sabermetric technique for combining two rate stats measured against a
+# shared baseline (see matchup.py). Uses raw PAVE/Bullpen_PAVE (an actual
+# batting-average-against-scale rate), not PAVE_PLUS/Bullpen_PAVE_PLUS (a
+# league-normalized ratio) - log5 needs real rates on the same 0-1 scale as
+# WAVE, not a ratio centered on 1.0. game_picks.py's team-level model is
+# unaffected and keeps using PAVE_PLUS/clip_and_blend_pitching_quality (a
+# different, still-appropriate use for its already-normalized composites).
 
 # Assumed share of a batter's at-bats against the opposing starter vs. the
 # opposing bullpen (roughly 2-3 of a 3-5 AB game). Sums to 1.0 so the blend
-# has no systematic bias vs. Game_Hit_Probability's own average, since
-# PAVE_PLUS/Bullpen_PAVE_PLUS are both normalized to a league mean of 1.0.
+# has no systematic bias vs. the league-average PAVE it's measured against.
 MATCHUP_STARTER_AB_SHARE = 0.6
 MATCHUP_BULLPEN_AB_SHARE = 0.4
 
@@ -183,8 +188,23 @@ MATCHUP_BULLPEN_AB_SHARE = 0.4
 # just clipping the final probability) - assemble_pitchers has no upper
 # bound on individual PAVE_PLUS, so a small-sample outlier (an opener's short
 # outing, early season) could otherwise multiply a good Game_Hit_Probability
-# past 1.0 and erase real distinctions at the ceiling clip.
+# past 1.0 and erase real distinctions at the ceiling clip. Used by
+# game_picks.py's clip_and_blend_pitching_quality (team-level model).
 MATCHUP_PAVE_PLUS_CLIP = (0.5, 1.75)
+
+# Same outlier protection as MATCHUP_PAVE_PLUS_CLIP, but expressed as a
+# multiplier of that day's league-average PAVE (since raw PAVE isn't
+# pre-normalized to a mean of 1.0 the way PAVE_PLUS is) - a starter/bullpen
+# PAVE is clipped to [lo*league_pave, hi*league_pave] before blending. Used
+# by matchup.py's clip_and_blend_pitching_pave (hitter-level model).
+MATCHUP_PAVE_CLIP_MULTIPLIER = (0.5, 1.75)
+
+# Fallback league-average PAVE (roughly historical MLB batting-average-against)
+# used only when the day's `pave` table can't yield a real value (e.g. no
+# qualified pitchers yet, or a test fixture) - matchup.py's log5 blend needs
+# some league baseline to divide by and this should never bind in practice
+# once the season is underway.
+MATCHUP_LEAGUE_PAVE_FALLBACK = 0.245
 
 # --- Automated Game Picks ---
 #

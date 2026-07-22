@@ -76,29 +76,40 @@ def get_name_register() -> pd.DataFrame:
 
 
 def assign_game_ids(df: pd.DataFrame) -> pd.DataFrame:
-    """Assign a per-row `game_id` by detecting new games via a reset in at_bat_number.
+    """Assign a per-row `game_id`: a dense integer, ordered by
+    (game_date, game_pk), derived directly from Statcast's own `game_pk`
+    (MLB's real, already-unique game identifier - the same one
+    game_picks_backtest.py uses directly). Sequential integers rather than
+    raw game_pk values are kept because game_pk isn't itself
+    chronologically monotonic (confirmed empirically - it's assigned by
+    MLB's scheduling system, not in play order), and downstream code
+    (teams.py, lineup.py) relies on a higher game_id meaning a more recent
+    game (e.g. groupby(...)['game_id'].max() for "latest game",
+    sort_values(['team', 'game_id']) for chronological order).
 
-    Mirrors the original `create_id` logic, which was duplicated verbatim in
-    both the Hit_Prob and Strength sections of the monolithic script.
+    Previously this reconstructed game boundaries from scratch by detecting
+    an at_bat_number reset to 1 while walking a single global counter over
+    a (game_date, home_team, away_team, pitcher, at_bat_number)-deduped
+    table. That only produces correct results if every row belonging to one
+    real game is contiguous in the table first - nothing guarantees that:
+    persist_raw_statcast only sorts by game_date (a coarse key), and MLB
+    plays ~15 games in parallel most days, so their at-bat rows interleave
+    in whatever order Statcast/pybaseball originally delivered them.
+    Confirmed empirically to badly fragment (and occasionally conflate)
+    real games once replayed against a large multi-day dataset - e.g. one
+    real batter's games were split into 2-3 different `game_id` values on
+    93 of 96 real game dates in one sample. game_pk sidesteps this
+    entirely, since it doesn't need to be reconstructed at all.
     """
-    gam_id = (
-        df[["game_date", "home_team", "away_team", "pitcher", "at_bat_number"]]
+    game_order = (
+        df[["game_date", "game_pk"]]
         .drop_duplicates()
-        .iloc[::-1]
+        .sort_values(["game_date", "game_pk"])
+        .reset_index(drop=True)
     )
+    game_order["game_id"] = game_order.index + 1
 
-    count = 0
-    game_ids = []
-    for val in gam_id["at_bat_number"]:
-        if val == 1:
-            count += 1
-        game_ids.append(count)
-    gam_id = gam_id.copy()
-    gam_id["game_id"] = game_ids
-
-    data = df.merge(
-        gam_id, on=["game_date", "home_team", "away_team", "pitcher", "at_bat_number"]
-    )
+    data = df.merge(game_order, on=["game_date", "game_pk"])
     data["ind"] = (
         data["game_id"].astype("str")
         + data["at_bat_number"].astype("str")

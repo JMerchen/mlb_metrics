@@ -6,8 +6,9 @@ from mlb_metrics import matchup
 
 def test_clip_and_blend_pitching_quality_exact_arithmetic():
     result = matchup.clip_and_blend_pitching_quality(pd.Series([0.9]), pd.Series([1.1]))
-    # .6*.9 + .4*1.1 = .98 - same arithmetic compute_matchup_hit_probability
-    # relies on (see test_compute_matchup_hit_probability_exact_arithmetic).
+    # .6*.9 + .4*1.1 = .98 - unchanged, still used by game_picks.py's
+    # team-level model (see clip_and_blend_pitching_pave below for the
+    # raw-PAVE version compute_matchup_hit_probability uses instead).
     assert result.iloc[0] == pytest.approx(0.98)
 
 
@@ -23,55 +24,98 @@ def test_clip_and_blend_pitching_quality_missing_values_default_neutral():
     assert result.iloc[0] == pytest.approx(1.08)
 
 
+def test_clip_and_blend_pitching_pave_exact_arithmetic():
+    result = matchup.clip_and_blend_pitching_pave(pd.Series([0.27]), pd.Series([0.297]), league_pave=0.27)
+    # .6*.27 + .4*.297 = .2808 - both within the clip range, so unclipped.
+    assert result.iloc[0] == pytest.approx(0.2808)
+
+
+def test_clip_and_blend_pitching_pave_clips_before_blending():
+    # league_pave=0.27 -> clip range is (0.135, 0.4725). Raw values (1.5,
+    # 0.02) are both extreme outliers relative to that.
+    result = matchup.clip_and_blend_pitching_pave(pd.Series([1.5]), pd.Series([0.02]), league_pave=0.27)
+    # Clipped to (0.135, 0.4725) BEFORE blending: .6*.4725 + .4*.135 = .3375
+    # (blending the raw values first and clipping only the final result
+    # would give a different number - this test would catch that bug.)
+    assert result.iloc[0] == pytest.approx(0.3375)
+
+
+def test_clip_and_blend_pitching_pave_missing_values_default_to_league_pave():
+    result = matchup.clip_and_blend_pitching_pave(pd.Series([None]), pd.Series([0.297]), league_pave=0.27)
+    # starter component neutral (league_pave): .6*.27 + .4*.297 = .2808
+    assert result.iloc[0] == pytest.approx(0.2808)
+
+
 def _wave(rows):
-    """rows: list of (key_mlbam, team, game_hit_probability)."""
-    return pd.DataFrame(
-        [{"key_mlbam": k, "team": t, "Game_Hit_Probability": g} for k, t, g in rows]
-    )
+    """rows: list of (key_mlbam, team, wave)."""
+    return pd.DataFrame([{"key_mlbam": k, "team": t, "WAVE": w} for k, t, w in rows])
 
 
 def test_compute_matchup_hit_probability_exact_arithmetic():
-    wave = _wave([(1, "NYY", 0.8)])
-    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE_PLUS": 0.9}])  # opposing probable starter
-    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE_PLUS": 1.1}])
+    wave = _wave([(1, "NYY", 0.30)])
+    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE": 0.27, "PAVE_PLUS": 1.0}])  # opposing probable starter
+    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.297}])
     schedule_df = pd.DataFrame([{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999}])
 
     result = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df).set_index("key_mlbam")
 
-    # opponent_quality = .6*.9 + .4*1.1 = .98 -> .8*.98 = .784
-    assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(0.784)
+    # league_pave = 0.27/1.0 = 0.27. opponent_rate = .6*.27 + .4*.297 = .2808.
+    # matchup_ab_rate = log5(.30, .2808, .27) = .311487965... .
+    # Matchup_Hit_Probability = 1 - (1-.311487965)**3.5 = .729173987...
+    assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(0.7291739871326228)
 
 
-def test_pave_plus_is_clipped_before_blending_not_after():
-    wave = _wave([(1, "NYY", 0.3)])
-    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE_PLUS": 5.0}])  # extreme outlier
-    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE_PLUS": 0.1}])  # extreme outlier
+def test_pave_is_clipped_before_blending_not_after():
+    wave = _wave([(1, "NYY", 0.30)])
+    # Two pitchers in the pool: the probable starter (an extreme-outlier
+    # small-sample PAVE) and a second qualified pitcher near league-average,
+    # so league_pave reflects a realistic baseline the outlier gets clipped
+    # against rather than defining itself.
+    pave = pd.DataFrame([
+        {"key_mlbam": 999, "PAVE": 1.5, "PAVE_PLUS": 1.5 / 0.27},  # extreme outlier
+        {"key_mlbam": 1000, "PAVE": 0.27, "PAVE_PLUS": 1.0},  # league-average anchor
+    ])
+    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.02}])  # extreme outlier
     schedule_df = pd.DataFrame([{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999}])
 
     result = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df).set_index("key_mlbam")
 
-    # Clipped to (0.5, 1.75) BEFORE blending: .6*1.75 + .4*.5 = 1.25 -> .3*1.25 = .375
-    # (blending the raw 5.0/0.1 first and clipping only the final result
-    # would give .3*(.6*5.0+.4*.1) = .912 instead - this test would catch that bug.)
-    assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(0.375)
+    # league_pave = mean(1.5/(1.5/.27), .27/1.0) = mean(.27, .27) = .27.
+    # Clip range (0.135, 0.4725): starter (1.5) clips down to .4725, bullpen
+    # (0.02) clips up to .135. opponent_rate = .6*.4725 + .4*.135 = .3375.
+    # matchup_ab_rate = log5(.30, .3375, .27) = .371186441...
+    # Matchup_Hit_Probability = 1 - (1-.371186441)**3.5 = .802836444...
+    assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(0.802836443768993)
 
 
-def test_missing_probable_starter_uses_neutral_multiplier():
-    wave = _wave([(1, "NYY", 0.5)])
-    pave = pd.DataFrame(columns=["key_mlbam", "PAVE_PLUS"])  # no one announced yet
-    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE_PLUS": 1.2}])
+def test_missing_probable_starter_uses_league_average_neutral():
+    wave = _wave([(1, "NYY", 0.50)])
+    pave = pd.DataFrame(columns=["key_mlbam", "PAVE", "PAVE_PLUS"])  # no one announced yet
+    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.297}])
     schedule_df = pd.DataFrame([{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": None}])
 
     result = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df).set_index("key_mlbam")
 
-    # starter component neutral (1.0): .6*1.0 + .4*1.2 = 1.08 -> .5*1.08 = .54
-    assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(0.54)
+    # Empty pave -> league_pave falls back to config.MATCHUP_LEAGUE_PAVE_FALLBACK
+    # (0.245). starter component neutral (league_pave itself):
+    # opponent_rate = .6*.245 + .4*.297 = .2658.
+    # matchup_ab_rate = log5(.50, .2658, .245) = .513528...
+    # Matchup_Hit_Probability = 1 - (1-.513528...)**3.5
+    from mlb_metrics import config
+
+    league_pave = config.MATCHUP_LEAGUE_PAVE_FALLBACK
+    opponent_rate = 0.6 * league_pave + 0.4 * 0.297
+    numerator = 0.50 * opponent_rate / league_pave
+    denominator = numerator + (1 - 0.50) * (1 - opponent_rate) / (1 - league_pave)
+    matchup_ab_rate = numerator / denominator
+    expected = 1 - (1 - matchup_ab_rate) ** config.WAVE_TRIALS_PER_GAME
+    assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(expected)
 
 
 def test_batter_with_no_game_today_is_excluded():
-    wave = _wave([(1, "NYY", 0.8), (2, "SEA", 0.7)])
-    pave = pd.DataFrame(columns=["key_mlbam", "PAVE_PLUS"])
-    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE_PLUS": 1.0}])
+    wave = _wave([(1, "NYY", 0.30), (2, "SEA", 0.28)])
+    pave = pd.DataFrame(columns=["key_mlbam", "PAVE", "PAVE_PLUS"])
+    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.27}])
     # Only NYY has a game today; SEA does not appear in the schedule at all.
     schedule_df = pd.DataFrame([{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": None}])
 
@@ -80,12 +124,12 @@ def test_batter_with_no_game_today_is_excluded():
     assert list(result["key_mlbam"]) == [1]
 
 
-def test_final_probability_is_clipped_to_zero_one():
+def test_final_probability_stays_within_zero_one():
     wave = _wave([(1, "NYY", 0.99)])
-    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE_PLUS": 1.75}])
-    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE_PLUS": 1.75}])
+    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE": 0.10, "PAVE_PLUS": 0.10 / 0.27}])  # a very weak pitcher
+    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.10}])
     schedule_df = pd.DataFrame([{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999}])
 
     result = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df).set_index("key_mlbam")
 
-    assert result.loc[1, "Matchup_Hit_Probability"] == 1.0
+    assert 0.0 <= result.loc[1, "Matchup_Hit_Probability"] <= 1.0
