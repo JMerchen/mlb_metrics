@@ -236,6 +236,44 @@ def test_build_beat_the_streak_export_picks_table_status_and_summary():
     assert summary.loc[0, "model_version"] == "all_time"  # unfiltered (model_version=None) default label
 
 
+def test_recommended_picks_blends_probability_and_matchup_not_just_ghp():
+    # predicted_probability (GHP) alone is just under the bar, but
+    # `probability` and `Matchup_Hit_Probability` are both strong - the
+    # blended mean clears 0.80 even though GHP alone doesn't.
+    preds = pd.DataFrame([
+        _pick("2026-06-18", 1, 0.79, 3, 1) | {"probability": 0.85, "Matchup_Hit_Probability": 0.83},
+    ])
+
+    picks, summary = evaluation.build_beat_the_streak_export(preds, max_picks=2, min_probability=0.80)
+
+    assert set(picks["status"]) == {"hit"}  # recommended (blend = (0.79+0.85+0.83)/3 = 0.823 >= 0.80)
+
+
+def test_recommended_picks_blend_can_also_exclude_a_pick_ghp_alone_would_have_passed():
+    # GHP alone clears 0.80, but probability/Matchup_Hit_Probability are
+    # both weak - the blended mean drops below the bar.
+    preds = pd.DataFrame([
+        _pick("2026-06-18", 1, 0.90, 3, 1) | {"probability": 0.55, "Matchup_Hit_Probability": 0.50},
+    ])
+
+    picks, summary = evaluation.build_beat_the_streak_export(preds, max_picks=2, min_probability=0.80)
+
+    assert set(picks["status"]) == {"no_pick"}  # blend = (0.90+0.55+0.50)/3 = 0.65 < 0.80
+
+
+def test_recommended_picks_blend_ignores_missing_matchup_hit_probability_per_row():
+    # A day with no schedule/matchup data that day (Matchup_Hit_Probability
+    # is NaN, not 0) should blend just the two signals it has, not be
+    # dragged down by treating the missing value as a zero.
+    preds = pd.DataFrame([
+        _pick("2026-06-18", 1, 0.85, 3, 1) | {"probability": 0.81, "Matchup_Hit_Probability": None},
+    ])
+
+    picks, summary = evaluation.build_beat_the_streak_export(preds, max_picks=2, min_probability=0.80)
+
+    assert set(picks["status"]) == {"hit"}  # blend = (0.85+0.81)/2 = 0.83 >= 0.80, NaN excluded not zeroed
+
+
 def test_build_beat_the_streak_export_no_pick_day_does_not_affect_streak_or_other_days():
     preds = pd.DataFrame(
         [

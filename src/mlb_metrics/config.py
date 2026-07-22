@@ -136,13 +136,38 @@ HITTER_MIN_PROBABILITY = 0.7
 HITTER_MODEL_VERSION = "v2-matchup-qualifier"
 
 # Beat the Streak Tracker (dashboard): a batter is only "recommended" if
-# their predicted_probability clears this bar - on a day with no good
-# matchups, that's zero picks; on a strong day, up to DAILY_PICK_MAX picks.
-# 0.80 is close to the real historical rank-3/4 probability range (see
-# evaluation.py docstring for the actual accuracy at that band), so most
-# days still surface 2 picks and 0-pick days are the exception, not the rule.
+# evaluation._combined_probability (the mean of whichever of
+# predicted_probability/Game_Hit_Probability, probability, and
+# Matchup_Hit_Probability are available for that pick - see that function's
+# docstring) clears this bar - on a day with no good matchups, that's zero
+# picks; on a strong day, up to DAILY_PICK_MAX picks.
+#
+# Previously this gated on predicted_probability (Game_Hit_Probability)
+# alone at 0.80 - a single-signal bar that ignored `probability` and
+# `Matchup_Hit_Probability` entirely, and produced 0-pick days whenever GHP
+# landed just under 0.80 even with a strong matchup (e.g. a real 0.79 GHP/
+# strong-matchup day that should have surfaced a pick, didn't). Blending in
+# the other two signals is the fix, but also means the same nominal
+# threshold is no longer directly comparable to before - a mean of two or
+# three probabilities runs lower than GHP alone whenever `probability`
+# trails GHP (common - see JOINT_PROBABILITY_GATE_COLUMNS's docstring),
+# so keeping 0.80 with the new blend would have been STRICTER, not looser
+# (empirically: 3/42 zero-pick days at 0.80 in the backtest below, vs 1/42
+# under the old GHP-only gate).
+#
+# 0.77 is empirically validated via a 42-day git-history replay backtest
+# (git_backtest.reconstruct_historical_picks, resolved against persisted
+# Statcast - Matchup_Hit_Probability is NaN throughout that replay window,
+# since it's never persisted to git history, so this validates the
+# GHP+probability blend specifically): the highest threshold that still
+# achieves full day coverage (0/42 zero-pick days) while matching the best
+# resolved hit rate/Brier score plateau seen across the whole 0.70-0.77
+# range (62.5% hit rate, 0.2894 Brier, n=56 resolved picks) - thresholds
+# above 0.77 both start producing zero-pick days again AND stop improving
+# (sometimes worsening) hit rate/Brier on this sample. Revisit once more
+# live picks accumulate carrying real (non-NaN) Matchup_Hit_Probability.
 DAILY_PICK_MAX = 2
-DAILY_PICK_MIN_PROBABILITY = 0.80
+DAILY_PICK_MIN_PROBABILITY = 0.77
 
 # --- Lineup awareness ---
 #
@@ -238,7 +263,7 @@ GAME_PICK_COMPOSITE_WEIGHTS = [
 # A game is only "picked" if the favored side's win probability clears this
 # bar - a day can surface 0 or more picks depending on how much separation
 # the model sees, not a forced pick every game. Much lower than
-# DAILY_PICK_MIN_PROBABILITY (0.80): single-game MLB win probabilities are
+# DAILY_PICK_MIN_PROBABILITY (0.77): single-game MLB win probabilities are
 # compressed near 50/50 even for real favorites, so reusing the hitter-pick
 # bar would produce picks on almost no days. First-pass default, meant to be
 # recalibrated once real data accumulates.

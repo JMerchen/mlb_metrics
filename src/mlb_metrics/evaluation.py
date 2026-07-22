@@ -98,6 +98,26 @@ def _filter_model_version(predictions: pd.DataFrame, model_version: str | None) 
     return predictions[predictions["model_version"] == model_version]
 
 
+def _combined_probability(df: pd.DataFrame) -> pd.Series:
+    """A blended recommendation score from whichever of
+    predicted_probability (Game_Hit_Probability, always present),
+    probability (the WAVE-based binomial estimate), and
+    Matchup_Hit_Probability (opposing-pitcher-adjusted, only present on
+    days schedule/matchup data was available - see predictions.select_picks)
+    exist as columns - a row-wise mean, skipping any that are missing for
+    that row rather than requiring all three.
+
+    This is the same three signals select_picks already jointly requires to
+    clear HITTER_MIN_PROBABILITY at selection time (see
+    JOINT_PROBABILITY_GATE_COLUMNS) - gating "recommended" on
+    Game_Hit_Probability alone ignored the other two entirely, and produced
+    a string of zero-pick days whenever GHP landed just under the bar
+    despite `probability`/`Matchup_Hit_Probability` being strong (see
+    config.DAILY_PICK_MIN_PROBABILITY)."""
+    columns = [c for c in ("predicted_probability", "probability", "Matchup_Hit_Probability") if c in df.columns]
+    return df[columns].astype(float).mean(axis=1, skipna=True)
+
+
 def _recommended_picks(
     predictions: pd.DataFrame,
     metric: str | None,
@@ -106,13 +126,13 @@ def _recommended_picks(
     model_version: str | None = None,
 ) -> pd.DataFrame:
     """The subset of logged picks that actually count as "recommended" for
-    a given day: top-ranked, capped at `max_picks`, and only those that
-    clear `min_probability` ("a good matchup"). A day can have 0, 1, or
-    `max_picks` rows here depending on how many clear the bar - it's never
-    padded out to a fixed count."""
+    a given day: top-ranked, capped at `max_picks`, and only those whose
+    _combined_probability clears `min_probability` ("a good matchup"). A day
+    can have 0, 1, or `max_picks` rows here depending on how many clear the
+    bar - it's never padded out to a fixed count."""
     df = _filter_metric(predictions, metric)
     df = _filter_model_version(df, model_version)
-    df = df[(df["rank"] <= max_picks) & (df["predicted_probability"] >= min_probability)]
+    df = df[(df["rank"] <= max_picks) & (_combined_probability(df) >= min_probability)]
     return df
 
 

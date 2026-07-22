@@ -16,7 +16,8 @@ import pandas as pd
 from mlb_metrics import config, helpers
 
 PREDICTION_COLUMNS = [
-    "date", "key_mlbam", "name", "rank", "predicted_probability", "metric", "actual_hit", "at_bats", "model_version",
+    "date", "key_mlbam", "name", "rank", "predicted_probability", "metric",
+    "probability", "Matchup_Hit_Probability", "actual_hit", "at_bats", "model_version",
 ]
 
 # Tag applied (via the migration guards in append_predictions/resolve_predictions)
@@ -80,6 +81,15 @@ def select_picks(
     without this, a qualifier/ranking change never visibly moves the
     dashboard's stats until the (much larger) pre-change history stops
     dominating the aggregate.
+
+    `probability` and `Matchup_Hit_Probability` are logged alongside
+    `predicted_probability` (which stays Game_Hit_Probability - a real,
+    calibratable per-game rate, needed as-is for Brier/log-loss scoring) so
+    evaluation.py's Beat the Streak "recommended" gate can blend all three
+    signals instead of thresholding Game_Hit_Probability alone (see
+    evaluation._combined_probability). `Matchup_Hit_Probability` is NaN
+    whenever `hitters` doesn't carry it (no schedule/matchup data that
+    day, or a historical wave.csv-only replay - see git_backtest.py).
     """
     qualified = hitters[(hitters["PA_L"] + hitters["PA_R"]) >= min_plate_appearances].copy()
     if "avg_batting_order" in qualified.columns:
@@ -99,6 +109,9 @@ def select_picks(
     picks["name"] = picks["name_first"].fillna("").astype(str) + " " + picks["name_last"].fillna("").astype(str)
     picks["predicted_probability"] = picks[metric]
     picks["metric"] = metric
+    for optional_column in ("probability", "Matchup_Hit_Probability"):
+        if optional_column not in picks.columns:
+            picks[optional_column] = pd.NA
     picks["actual_hit"] = pd.NA
     picks["at_bats"] = pd.NA
     picks["model_version"] = model_version

@@ -43,6 +43,24 @@ def test_select_picks_applies_plate_appearance_qualifier_and_ranks():
     assert (picks["model_version"] == config.HITTER_MODEL_VERSION).all()
 
 
+def test_select_picks_logs_probability_and_defaults_matchup_hit_probability_to_na():
+    hitters = _hitters([(1, 0, 40, 0.9)])
+
+    picks = predictions.select_picks(hitters, "2026-06-20", top_n=1, min_plate_appearances=30)
+
+    assert picks.iloc[0]["probability"] == 0.9  # passed through from the hitters table
+    assert pd.isna(picks.iloc[0]["Matchup_Hit_Probability"])  # not merged into `hitters` this call
+
+
+def test_select_picks_logs_matchup_hit_probability_when_present():
+    hitters = _hitters([(1, 0, 40, 0.9)])
+    hitters["Matchup_Hit_Probability"] = 0.75
+
+    picks = predictions.select_picks(hitters, "2026-06-20", top_n=1, min_plate_appearances=30)
+
+    assert picks.iloc[0]["Matchup_Hit_Probability"] == 0.75
+
+
 def test_select_picks_model_version_is_configurable():
     hitters = _hitters([(1, 0, 40, 0.9)])
 

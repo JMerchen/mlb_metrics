@@ -67,15 +67,24 @@ The dashboard's top section simulates actually playing Beat the Streak,
 following its real rules rather than a simplified per-day win/loss model
 (see `evaluation.streak_progression()`):
 
-- A batter is only "recommended" if `predicted_probability` clears
-  `DAILY_PICK_MIN_PROBABILITY` (config.py, default 0.80) - a day can
-  surface 0, 1, or up to `DAILY_PICK_MAX` (2) picks depending on how many
-  clear the bar, not a fixed count regardless of matchup quality. A
-  zero-pick day still gets an explicit `"no_pick"` row in the export (see
-  `build_beat_the_streak_export`) rather than being silently absent - the
-  dashboard shows "No pick for `<date>`" instead of falling back to
-  whatever earlier day last had one, which would otherwise look like a
-  stale/broken pipeline.
+- A batter is only "recommended" if a blended score - the mean of whichever
+  of `predicted_probability` (Game_Hit_Probability), `probability`, and
+  `Matchup_Hit_Probability` are available for that pick (see
+  `evaluation._combined_probability`) - clears `DAILY_PICK_MIN_PROBABILITY`
+  (config.py, default 0.77). A day can surface 0, 1, or up to
+  `DAILY_PICK_MAX` (2) picks depending on how many clear the bar, not a
+  fixed count regardless of matchup quality. This used to gate on
+  Game_Hit_Probability alone at 0.80, which ignored the other two signals
+  and produced zero-pick days whenever GHP landed just under the bar even
+  with a strong matchup; blending all three (and lowering the bar to match,
+  since a mean of two-or-three probabilities runs lower than GHP alone -
+  see config.py's docstring for the backtest that picked 0.77) fixes that
+  without loosening quality, empirically validated via a 42-day
+  git-history-replay backtest. A zero-pick day still gets an explicit
+  `"no_pick"` row in the export (see `build_beat_the_streak_export`) rather
+  than being silently absent - the dashboard shows "No pick for `<date>`"
+  instead of falling back to whatever earlier day last had one, which would
+  otherwise look like a stale/broken pipeline.
 - A pick with an at-bat and no hit resets the streak to 0.
 - A pick with zero at-bats that day (rained out, DNP, not in the lineup)
   is neutral - it neither advances nor resets the streak.
@@ -284,7 +293,7 @@ accuracy (56.3% vs 54.3%) and Brier score (0.2493 vs 0.2517).
 
 - A game is only "picked" if the favored side's win probability clears
   `GAME_PICK_MIN_PROBABILITY` (config.py, default 0.58 - much lower than the
-  hitter picks' 0.80, since single-game MLB win probabilities are
+  hitter picks' 0.77, since single-game MLB win probabilities are
   compressed near 50/50 even for real favorites) - a day can surface 0 or
   more picks depending on how much separation the model sees, never a
   forced pick every game.
