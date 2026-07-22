@@ -185,27 +185,33 @@ schedule fetch fails - the same resilience pattern as the fetch itself.
 `predicted_probability`/`metric` logged still reflect `Game_Hit_Probability`
 either way, so `DAILY_PICK_MIN_PROBABILITY`'s calibration is unaffected.
 
-Validation here is necessarily partial: `WAVE`/`PAVE`/`Bullpen_PAVE` are all
-AB-level and reliably reproducible from persisted Statcast at any past
-as-of-date (unlike `Game_Hit_Probability`, see below), which made a 30-day
-backtest possible even without git-history CSVs (raw `PAVE`/`WAVE` were
-never persisted before this change). Ranking a `probability`-qualified pool
-by `Matchup_Hit_Probability` scored modestly better than `probability` alone
-(Brier 0.270 vs 0.277, hit rate 62.5% vs 61.5%, n=104) - a real but not
-statistically decisive edge at this sample size, unlike the
-probability/Game_Hit_Probability joint-threshold work above. Treat it as
-directionally validated, not proven, and watch it accumulate real results
-going forward the same way any first-pass signal here has.
+`WAVE`/`PAVE`/`Bullpen_PAVE` are all AB-level and reliably reproducible from
+persisted Statcast at any past as-of-date, which made a 30-day backtest
+possible even without git-history CSVs (raw `PAVE`/`WAVE` were never
+persisted before this change). Replaying the actual `predictions.select_picks`
+logic (the full joint qualifier, ranked by `Matchup_Approach`) against the
+"recommended" subset that actually counts toward Beat the Streak
+(rank<=2, `Game_Hit_Probability`>=0.80) raised the hit rate from 65.8%
+(n=38, no matchup) to 75.0% (n=32, with matchup) - a real, meaningful
+improvement over 29-30 days of history.
 
-That investigation also surfaced a real, pre-existing bug worth flagging
-even though it's out of scope to fix here: `data.assign_game_ids` can badly
-fragment real games (one calendar date's game split into 2-3 different
-`game_id` values) when replayed against a large multi-month reconstructed
-dataset - confirmed on ~97% of one sample batter's game dates. This is why
-the matchup backtest above deliberately avoided any `Game_Hit_Probability`-
-based qualifier rather than risk validating against corrupted numbers, and
-it's worth a dedicated look separately given how much (including the live
-daily `Game_Hit_Probability`) depends on that function.
+That backtest was only possible after fixing a real, pre-existing bug this
+investigation surfaced: `data.assign_game_ids` used to reconstruct game
+boundaries from scratch via an at_bat_number-reset counter, which silently
+assumed one real game's rows were contiguous in the table - nothing
+guaranteed that (`persist_raw_statcast` only sorts by `game_date`, and MLB
+plays ~15 games in parallel most days, so their at-bat rows interleave in
+whatever order Statcast/pybaseball delivered them). Confirmed on real data:
+one sample batter's 96 real games were fragmented into 233 different
+`game_id` values, deflating any from-scratch `Game_Hit_Probability`
+reconstruction by roughly 40%. Fixed by grouping directly on Statcast's own
+`game_pk` (MLB's real, already-unique game identifier - the same one
+`game_picks_backtest.py` already used directly) instead of reconstructing
+game identity at all; `game_id` itself stays a dense, date-ordered integer
+(not raw `game_pk`, which isn't chronologically monotonic) so downstream
+"latest game" logic (`teams.py`, `lineup.py`) is unaffected. Confirmed
+against a real historical `wave.csv` commit: reconstructed
+`Game_Hit_Probability` now matches the committed values exactly.
 
 ## Automated Game Picks (dashboard)
 

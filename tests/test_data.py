@@ -38,6 +38,76 @@ def test_load_persisted_statcast_returns_none_when_absent(tmp_path):
     assert data.load_persisted_statcast(str(tmp_path / "raw"), 2026) is None
 
 
+def _pitch(game_pk, game_date, home, away, at_bat_number, pitch_number=1):
+    return {
+        "game_pk": game_pk, "game_date": pd.Timestamp(game_date), "home_team": home, "away_team": away,
+        "at_bat_number": at_bat_number, "pitch_number": pitch_number,
+    }
+
+
+def test_assign_game_ids_groups_by_game_pk_not_reconstructed_boundaries():
+    """Two real games on the same date, same two teams (a doubleheader) -
+    game_pk already disambiguates them directly, no at_bat_number-reset
+    heuristic needed."""
+    rows = [
+        _pitch(100, "2026-06-01", "NYY", "BOS", 1),
+        _pitch(100, "2026-06-01", "NYY", "BOS", 2),
+        _pitch(101, "2026-06-01", "NYY", "BOS", 1),
+        _pitch(101, "2026-06-01", "NYY", "BOS", 2),
+    ]
+    result = data.assign_game_ids(pd.DataFrame(rows))
+
+    ids_by_pk = result.groupby("game_pk")["game_id"].nunique()
+    assert (ids_by_pk == 1).all()  # each real game gets exactly one game_id
+    assert result[result["game_pk"] == 100]["game_id"].iloc[0] != result[result["game_pk"] == 101]["game_id"].iloc[0]
+
+
+def test_assign_game_ids_is_correct_even_when_simultaneous_games_interleave_in_row_order():
+    """Regression test for a real bug: the old implementation reconstructed
+    game boundaries by walking a single global counter over the whole
+    table, which only worked if one real game's rows were contiguous.
+    persist_raw_statcast only sorts by game_date, and MLB plays many games
+    in parallel each day, so rows from different simultaneous games can be
+    interleaved in arbitrary order - confirmed empirically to badly
+    fragment/conflate real games at scale. This fixture reproduces that
+    interleaving directly: two different games' at-bat rows alternate row
+    by row, and every row must still land in the correct one of exactly two
+    game_id groups."""
+    rows = [
+        _pitch(100, "2026-06-01", "NYY", "BOS", 1),   # game A start
+        _pitch(200, "2026-06-01", "SEA", "TEX", 1),   # game B start (interleaved)
+        _pitch(100, "2026-06-01", "NYY", "BOS", 2),   # game A continues
+        _pitch(200, "2026-06-01", "SEA", "TEX", 2),   # game B continues
+        _pitch(100, "2026-06-01", "NYY", "BOS", 3),
+        _pitch(200, "2026-06-01", "SEA", "TEX", 3),
+    ]
+    result = data.assign_game_ids(pd.DataFrame(rows))
+
+    game_a_ids = result[result["game_pk"] == 100]["game_id"].unique()
+    game_b_ids = result[result["game_pk"] == 200]["game_id"].unique()
+    assert len(game_a_ids) == 1  # not fragmented across multiple game_ids
+    assert len(game_b_ids) == 1
+    assert game_a_ids[0] != game_b_ids[0]  # not conflated into the same game_id
+
+
+def test_assign_game_ids_orders_game_id_chronologically():
+    """Downstream code (teams.py, lineup.py) relies on a higher game_id
+    meaning a more recent game (e.g. groupby(...)['game_id'].max() for
+    "latest game") - game_pk itself isn't chronologically monotonic (it's
+    assigned by MLB's scheduling system, not in play order), so game_id
+    must be independently re-derived in date order, not just copied from
+    game_pk."""
+    rows = [
+        _pitch(500, "2026-06-02", "NYY", "BOS", 1),  # later date, lower game_pk
+        _pitch(100, "2026-06-01", "SEA", "TEX", 1),  # earlier date, higher game_pk
+    ]
+    result = data.assign_game_ids(pd.DataFrame(rows))
+
+    id_earlier = result[result["game_pk"] == 100]["game_id"].iloc[0]
+    id_later = result[result["game_pk"] == 500]["game_id"].iloc[0]
+    assert id_earlier < id_later
+
+
 def test_label_pitcher_roles_picks_lowest_at_bat_number_as_starter():
     # Top half = home_team pitching to away_team's batters; Bot half =
     # away_team pitching to home_team's batters (matches the convention

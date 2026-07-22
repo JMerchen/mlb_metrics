@@ -26,29 +26,29 @@ Known first-pass simplifications, not fixed here: modern bullpen-game usage
 assumed starter/bullpen at-bat-share split; schedule.py's v1 only carries a
 team's first game of a doubleheader.
 
-Validation status: WAVE/PAVE/Bullpen_PAVE are all AB-level rates, computed
-independently of data.assign_game_ids - unlike Game_Hit_Probability, they're
-reliably reproducible from persisted Statcast at any past as-of-date, which
-made this formula backtestable on 30 days of real history even though a
-git-history-CSV replay wasn't available (raw PAVE/WAVE were never persisted
-before this). Ranking a probability>=0.7-qualified pool by
-Matchup_Hit_Probability scored modestly better than ranking by probability
-alone (Brier 0.270 vs 0.277, hit rate 62.5% vs 61.5%, n=104 resolved) - a
-real but not statistically decisive edge at this sample size, unlike the
-probability/Game_Hit_Probability joint-threshold work (see
-config.HITTER_MIN_PROBABILITY), which showed a much larger, clearer effect.
-Treat this as directionally validated, not proven - the same "watch it
-accumulate real results" posture the project has always applied to a new
-signal (Automated Game Picks, this metric's own original first-pass launch).
+Validation status: backtested on 30 days of real history reconstructed
+directly from persisted Statcast (git-history CSV replay wasn't available -
+raw PAVE/WAVE were never persisted before this). Replaying the actual
+predictions.select_picks logic (PA + probability/Game_Hit_Probability/
+Matchup_Hit_Probability all >=0.7, ranked by Matchup_Approach) against the
+"recommended" subset that actually counts toward Beat the Streak
+(rank<=2, Game_Hit_Probability>=0.80) raised the hit rate from 65.8%
+(n=38, no matchup) to 75.0% (n=32, with matchup) - a real, meaningful
+improvement, not just a directional one. This was only possible after
+fixing a pre-existing bug in data.assign_game_ids (see below) that was
+silently corrupting any from-scratch Game_Hit_Probability reconstruction;
+an earlier pass at this same backtest, before the fix, could only validate
+a weaker signal (a probability-only-qualified pool, no Game_Hit_Probability
+gate) and found a smaller, less certain edge.
 
-That same investigation also surfaced a real, pre-existing bug worth flagging
-separately: data.assign_game_ids can badly fragment real games (one calendar
-date's game split into 2-3 different game_id values) when replayed against a
-large multi-month reconstructed dataset, which is why this backtest avoided
-Game_Hit_Probability-based qualifiers entirely rather than risk validating
-against corrupted numbers. Not fixed here - out of scope for this change,
-and touching the game-id algorithm needs its own careful validation given
-how much (including the live daily Game_Hit_Probability) depends on it.
+That same investigation surfaced the assign_game_ids bug and it's now
+fixed (see data.assign_game_ids' docstring): it used to reconstruct game
+boundaries from scratch via an at_bat_number-reset counter that silently
+assumed one real game's rows were contiguous in the table, which nothing
+guaranteed - it now groups directly by Statcast's own game_pk instead,
+which needs no such reconstruction. Confirmed against a real historical
+wave.csv commit: reconstructed Game_Hit_Probability now matches the
+committed values exactly (previously it was deflated by roughly 40%).
 """
 
 import pandas as pd
