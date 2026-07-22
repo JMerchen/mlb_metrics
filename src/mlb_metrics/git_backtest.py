@@ -58,6 +58,7 @@ def reconstruct_historical_picks(
     min_plate_appearances: int = config.BACKTEST_MIN_PLATE_APPEARANCES,
     metric: str = "Game_Hit_Probability",
     rank_metric: str | None = "Approach",
+    model_version: str = predictions.LEGACY_MODEL_VERSION,
 ) -> pd.DataFrame:
     """Replay every historical wave.csv commit through select_picks(),
     skipping commits whose schema predates the columns select_picks needs
@@ -66,7 +67,15 @@ def reconstruct_historical_picks(
     `rank_metric` defaults to "Approach" (Game_Hit_Probability * probability)
     rather than `metric` itself - matching the live pipeline's default (see
     pipeline.run) and empirically validated via this same replay technique
-    (see config.HITTER_MIN_PROBABILITY's docstring)."""
+    (see config.HITTER_MIN_PROBABILITY's docstring).
+
+    `model_version` defaults to predictions.LEGACY_MODEL_VERSION, not
+    config.HITTER_MODEL_VERSION - a historical replay reconstructs what old
+    logic *would have* picked using old-era wave.csv snapshots, so tagging
+    it as the current live model version would misrepresent it once both
+    kinds of rows coexist in the same predictions.csv (see
+    scripts/run_backtest.py, which appends this output directly into the
+    live log)."""
     commits = list_wave_csv_commits(repo_dir)
     required_columns = {"PA_L", "PA_R", metric, "key_mlbam", "name_first", "name_last"}
     if rank_metric:
@@ -82,7 +91,7 @@ def reconstruct_historical_picks(
             continue
         picks = predictions.select_picks(
             wave, row["date"], top_n=top_n, min_plate_appearances=min_plate_appearances,
-            metric=metric, rank_metric=rank_metric,
+            metric=metric, rank_metric=rank_metric, model_version=model_version,
         )
         all_picks.append(picks)
 

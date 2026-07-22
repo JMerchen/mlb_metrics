@@ -174,3 +174,24 @@ def fetch_game_results(date) -> pd.DataFrame:
     is Final; anything still "Scheduled"/"In Progress"/postponed is not yet
     resolvable and callers should leave it pending rather than guess."""
     return normalize_schedule_games(_fetch_raw_schedule(date), fallback_date=date)
+
+
+def build_probable_pitchers_table(schedule_df: pd.DataFrame, pave: pd.DataFrame) -> pd.DataFrame:
+    """One row per team playing today (from `schedule_df`, see
+    normalize_schedule/fetch_probable_pitchers), left-joined with that
+    team's probable starter's pitching metrics from `pave` (see
+    pitchers.assemble_pitchers). Left join, not inner - a team with an
+    unannounced or unmatched starter still gets a row (with blank pitcher
+    fields) so the day's full slate stays visible, rather than silently
+    disappearing."""
+    pitcher_cols = [c for c in ("PAVE", "PAVE_PLUS", "Power_A_PLUS") if c in pave.columns]
+    starters = pave[["key_mlbam", "name_first", "name_last"] + pitcher_cols]
+
+    table = schedule_df[["date", "team", "opponent", "is_home", "probable_pitcher_key_mlbam"]].merge(
+        starters, left_on="probable_pitcher_key_mlbam", right_on="key_mlbam", how="left"
+    )
+    table["pitcher_name"] = (
+        table["name_first"].fillna("") + " " + table["name_last"].fillna("")
+    ).str.strip()
+
+    return table[["date", "team", "opponent", "is_home", "pitcher_name"] + pitcher_cols]

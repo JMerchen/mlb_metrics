@@ -85,6 +85,27 @@ after every daily run and every backtest run - so the picks that make up the
 streak are always the ones that were actually recommended *at the time*
 (from `data/predictions/predictions.csv`), not recomputed with hindsight.
 
+### Model versioning
+
+`predictions.csv` is append-only - once a pick is logged, its
+`predicted_probability`/which player was picked is frozen forever (only the
+outcome fills in later). That means a selection-logic change (e.g. the
+qualifier/ranking work above) never visibly moves the all-time accuracy
+numbers until enough new-logic days outweigh the old ones, which can take a
+long time. Every row is tagged with `model_version`
+(`config.HITTER_MODEL_VERSION`, bumped whenever `select_picks`'s
+qualifier/ranking logic meaningfully changes; git-history-reconstructed rows
+from `git_backtest.py` are tagged `"legacy"` instead, since they don't
+reflect current live logic) - `evaluation.summarize()`/
+`build_beat_the_streak_export()` both take an optional `model_version` filter
+so a recalibration's real forward performance is directly checkable
+(`evaluation.summarize(log, model_version=config.HITTER_MODEL_VERSION)`)
+instead of being diluted by history. `docs/data/beat_the_streak_summary_by_version.csv`
+carries this same split (`all_time` plus the current version) for the
+dashboard/anyone reading the CSVs directly. Game picks use the identical
+pattern (`config.GAME_PICK_MODEL_VERSION`, `game_evaluation.build_game_picks_export`'s
+own `model_version` filter).
+
 ## Lineup awareness
 
 Backtesting found ~30% of logged top-5 picks had zero at-bats on the day
@@ -220,10 +241,22 @@ today's games (not hitters) from six team-level signals: each team's
 Pythagorean strength (`pyth_Strength`), Pythagorean confidence
 (`pyth_Confidence`), suppression resistance (`suppression_resistance`), and
 true power (`true_power`) - all from `confidence.csv` - adjusted by the
-specific pitching (probable starter's `PAVE_PLUS` blended with
-`Bullpen_PAVE_PLUS`) each team is projected to face, via the same
+specific pitching each team is projected to face, via the same
 clip-then-blend logic `matchup.py` uses for hitters
 (`matchup.clip_and_blend_pitching_quality`, shared by both).
+
+Pitching quality itself blends two complementary signals from the probable
+starter and that team's bullpen: `PAVE_PLUS` (hit-rate against) and
+`Power_A_PLUS` (total-bases-allowed rate against - a run-prevention/
+ERA-like signal computed the same recency-windowed way as PAVE, see
+`pitchers.py`; deliberately not raw ERA, which isn't computed from this
+project's own Statcast data). `PAVE_PLUS` alone treats every hit allowed
+identically, so a pitcher who mostly allows singles and one who mostly
+allows home runs could look the same despite very different run-prevention
+profiles - `config.GAME_PICK_SUSCEPTIBILITY_WEIGHT` (default 0.5, an equal
+blend) controls the split, empirically validated via a 35-day
+persisted-Statcast backtest: the 0.5/0.5 blend beat pure `PAVE_PLUS` on both
+accuracy (56.3% vs 54.3%) and Brier score (0.2493 vs 0.2517).
 
 - A game is only "picked" if the favored side's win probability clears
   `GAME_PICK_MIN_PROBABILITY` (config.py, default 0.58 - much lower than the
@@ -275,6 +308,16 @@ tracks.
 This is a first-pass, unvalidated blend (see `game_picks.py`'s module
 docstring), meant to be watched and compared against reality before being
 trusted, not treated as ground truth.
+
+## Probable Pitchers (dashboard)
+
+A small daily list of today's games with each probable starter and their
+`PAVE`/`PAVE_PLUS`/`Power_A_PLUS` (`schedule.build_probable_pitchers_table`),
+written to `docs/data/probable_pitchers.csv` alongside the matchup blend
+(same resilience as the rest of Part B - a failed/empty schedule fetch means
+no file that day, not a stale one). A team with an unannounced or
+unmatched starter still gets a row with blank pitcher fields, so the day's
+full slate stays visible rather than silently missing teams.
 
 ## Running
 

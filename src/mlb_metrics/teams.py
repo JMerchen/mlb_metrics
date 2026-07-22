@@ -347,7 +347,8 @@ def assemble_team_metrics(data: pd.DataFrame, bullpen_pave: pd.DataFrame | None 
     if bullpen_pave is not None:
         master = master.merge(bullpen_pave, on="team", how="left")
         output_columns += [
-            "Bullpen_PAVE", "Bullpen_PAVE_PLUS", "Bullpen_BAA", "Bullpen_Power_A", "Bullpen_HR_Per", "Bullpen_AtBats",
+            "Bullpen_PAVE", "Bullpen_PAVE_PLUS", "Bullpen_Power_A_PLUS",
+            "Bullpen_BAA", "Bullpen_Power_A", "Bullpen_HR_Per", "Bullpen_AtBats",
         ]
 
     master = master[output_columns]

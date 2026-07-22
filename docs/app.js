@@ -3500,8 +3500,44 @@ sorted,
 
 }
 
+async function loadProbablePitchers(){
+
+let rows = []
+
+try{
+rows = await loadCSV("./data/probable_pitchers.csv")
+}catch(e){
+console.log("no probable_pitchers.csv yet", e)
+}
+
+const el = document.getElementById("probablePitchersTable")
+
+if(!rows.length){
+el.innerHTML = "No probable pitchers yet"
+return
+}
+
+const formatted = rows.map(r=>({
+"Team": r.team,
+"Opponent": r.opponent,
+"Home/Away": r.is_home === "True" || r.is_home === "true" ? "Home" : "Away",
+"Probable Pitcher": r.pitcher_name || "TBD",
+"PAVE": r.PAVE && r.PAVE !== "" ? Number(r.PAVE).toFixed(3) : "-",
+"PAVE+": r.PAVE_PLUS && r.PAVE_PLUS !== "" ? Number(r.PAVE_PLUS).toFixed(2) : "-",
+"Power A+": r.Power_A_PLUS && r.Power_A_PLUS !== "" ? Number(r.Power_A_PLUS).toFixed(2) : "-",
+}))
+
+buildTable(
+formatted,
+"probablePitchersTable"
+)
+
+}
+
 loadAll()
 
 loadBeatTheStreak()
 
 loadGamePicks()
+
+loadProbablePitchers()

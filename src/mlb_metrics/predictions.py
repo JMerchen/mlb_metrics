@@ -15,7 +15,15 @@ import pandas as pd
 
 from mlb_metrics import config, helpers
 
-PREDICTION_COLUMNS = ["date", "key_mlbam", "name", "rank", "predicted_probability", "metric", "actual_hit", "at_bats"]
+PREDICTION_COLUMNS = [
+    "date", "key_mlbam", "name", "rank", "predicted_probability", "metric", "actual_hit", "at_bats", "model_version",
+]
+
+# Tag applied (via the migration guards in append_predictions/resolve_predictions)
+# to any row logged before the model_version column existed, or reconstructed
+# by a historical replay (see git_backtest.py) - distinguishes "we don't know
+# which logic produced this" from a real current-version live pick.
+LEGACY_MODEL_VERSION = "legacy"
 
 # The set of probability-like signals select_picks jointly gates on (each
 # must clear min_probability), whichever of them happen to be present on the
@@ -34,6 +42,7 @@ def select_picks(
     max_avg_batting_order: float = config.LINEUP_TOP_HALF_MAX_SLOT,
     min_start_rate: float = config.LINEUP_MIN_START_RATE,
     teams_playing_today: set[str] | None = None,
+    model_version: str = config.HITTER_MODEL_VERSION,
 ) -> pd.DataFrame:
     """Rank a computed hitters table (the wave.csv-equivalent output of
     hitters.assemble_hitters) by `rank_metric` (defaults to `metric`) and
@@ -64,6 +73,13 @@ def select_picks(
     to be in the set - unlike the lineup qualifiers this isn't column-gated
     (whether a team is playing today isn't a property of the hitters table
     itself); defaults to None, i.e. off.
+
+    `model_version` is stamped onto every returned row (see
+    config.HITTER_MODEL_VERSION) so evaluation.py/the dashboard can segment
+    accuracy stats by which selection logic actually produced a given pick -
+    without this, a qualifier/ranking change never visibly moves the
+    dashboard's stats until the (much larger) pre-change history stops
+    dominating the aggregate.
     """
     qualified = hitters[(hitters["PA_L"] + hitters["PA_R"]) >= min_plate_appearances].copy()
     if "avg_batting_order" in qualified.columns:
@@ -85,6 +101,7 @@ def select_picks(
     picks["metric"] = metric
     picks["actual_hit"] = pd.NA
     picks["at_bats"] = pd.NA
+    picks["model_version"] = model_version
 
     return picks[PREDICTION_COLUMNS]
 
@@ -100,6 +117,8 @@ def append_predictions(picks: pd.DataFrame, log_path: str) -> pd.DataFrame:
 
     if os.path.exists(log_path):
         existing = pd.read_csv(log_path, parse_dates=["date"])
+        if "model_version" not in existing.columns:
+            existing["model_version"] = LEGACY_MODEL_VERSION  # migrate a log written before model_version existed
         combined = pd.concat([picks, existing], ignore_index=True)
     else:
         combined = picks
@@ -131,6 +150,8 @@ def resolve_predictions(log_path: str, completed_events_by_date: pd.DataFrame) -
         return log
     if "at_bats" not in log.columns:
         log["at_bats"] = pd.NA  # migrate a log written before at_bats existed
+    if "model_version" not in log.columns:
+        log["model_version"] = LEGACY_MODEL_VERSION  # migrate a log written before model_version existed
 
     events = completed_events_by_date.copy()
     events["had_hit"] = helpers.is_hit(events["events"])

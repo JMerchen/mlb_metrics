@@ -3,7 +3,7 @@ import subprocess
 import pandas as pd
 import pytest
 
-from mlb_metrics import game_picks_backtest
+from mlb_metrics import game_picks_backtest, game_predictions
 
 
 def _statcast_game(game_pk, date, home_team, away_team, home_pitcher, away_pitcher, home_score, away_score):
@@ -62,11 +62,15 @@ def _git(args, cwd):
 
 
 def _confidence_csv(rows):
+    # Bullpen_Power_A_PLUS mirrors Bullpen_PAVE_PLUS (a reasonable synthetic
+    # stand-in) so GAME_PICK_SUSCEPTIBILITY_WEIGHT's blend doesn't dilute
+    # these fixtures' intended pitching-quality separation toward neutral.
     return pd.DataFrame(
         [
             {
                 "team": team, "pyth_Strength": s, "pyth_Confidence": c,
-                "suppression_resistance": sr, "true_power": tp, "Bullpen_PAVE_PLUS": bp,
+                "suppression_resistance": sr, "true_power": tp,
+                "Bullpen_PAVE_PLUS": bp, "Bullpen_Power_A_PLUS": bp,
             }
             for team, s, c, sr, tp, bp in rows
         ]
@@ -88,9 +92,10 @@ def _init_repo_with_confidence_history(tmp_path):
     _confidence_csv(
         [("NYY", 1.1, 1.05, 1.0, 1.0, 0.9), ("BOS", 0.9, 0.95, 1.0, 1.0, 1.1)]
     ).to_csv(confidence_path, index=False)
-    pd.DataFrame([{"key_mlbam": 101, "PAVE_PLUS": 0.8}, {"key_mlbam": 201, "PAVE_PLUS": 1.2}]).to_csv(
-        pave_path, index=False
-    )
+    pd.DataFrame([
+        {"key_mlbam": 101, "PAVE_PLUS": 0.8, "Power_A_PLUS": 0.8},
+        {"key_mlbam": 201, "PAVE_PLUS": 1.2, "Power_A_PLUS": 1.2},
+    ]).to_csv(pave_path, index=False)
     _git(["add", "docs/data/confidence.csv", "docs/data/pave.csv"], repo)
     _git(["commit", "-q", "-m", "day1", "--date=2026-06-01T12:00:00"], repo)
 
@@ -116,6 +121,9 @@ def test_reconstruct_historical_game_picks_replays_and_resolves_immediately(tmp_
     # Already resolved - a backtested pick's outcome is known at reconstruction time.
     assert row["game_played"] == 1
     assert row["actual_winner"] == "NYY"
+    # Reconstructed rows are tagged "legacy", not the current live model
+    # version - they replay old-era confidence.csv/pave.csv, not current logic.
+    assert row["model_version"] == game_predictions.LEGACY_MODEL_VERSION
 
 
 def test_reconstruct_historical_game_picks_skips_commits_missing_required_columns(tmp_path):
@@ -152,7 +160,10 @@ def test_reconstruct_historical_game_picks_days_limits_the_replay_window(tmp_pat
     _git(["config", "user.email", "test@example.com"], repo)
     _git(["config", "user.name", "Test"], repo)
 
-    pave = pd.DataFrame([{"key_mlbam": 101, "PAVE_PLUS": 0.8}, {"key_mlbam": 201, "PAVE_PLUS": 1.2}])
+    pave = pd.DataFrame([
+        {"key_mlbam": 101, "PAVE_PLUS": 0.8, "Power_A_PLUS": 0.8},
+        {"key_mlbam": 201, "PAVE_PLUS": 1.2, "Power_A_PLUS": 1.2},
+    ])
 
     # Slightly different content each day - identical content would leave
     # nothing to commit (git commit fails with no changes staged).

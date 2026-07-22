@@ -27,6 +27,7 @@ def build_game_picks_export(
     predictions: pd.DataFrame,
     metric: str = "GamePick_Win_Probability",
     min_probability: float = config.GAME_PICK_MIN_PROBABILITY,
+    model_version: str | None = None,
 ):
     """Build the two tables the dashboard's Automated Game Picks section
     reads: (picks_table, summary_row). picks_table is every picked game
@@ -39,10 +40,18 @@ def build_game_picks_export(
     current_streak/best_streak of consecutive correct picks - a plain
     counter, not Beat the Streak's reset-on-any-miss multi-pick mechanic
     (that's MLB's specific hitter-streak game rule and doesn't apply to
-    independent game-by-game win/loss picks)."""
+    independent game-by-game win/loss picks).
+
+    `model_version` (default None, i.e. every version blended together -
+    unchanged behavior) restricts to picks tagged with a specific
+    game_predictions.select_game_picks model_version (see
+    config.GAME_PICK_MODEL_VERSION) - same reasoning as
+    evaluation.summarize's own model_version filter."""
     picks = predictions[
         (predictions["metric"] == metric) & (predictions["predicted_probability"] >= min_probability)
     ].copy()
+    if model_version is not None:
+        picks = picks[picks["model_version"] == model_version] if "model_version" in picks.columns else picks.iloc[0:0]
     picks["status"] = _classify_outcome(picks)
     picks["actual_correct"] = pd.NA
     picks.loc[picks["status"] == "win", "actual_correct"] = 1.0
@@ -67,6 +76,7 @@ def build_game_picks_export(
     summary = pd.DataFrame(
         [
             {
+                "model_version": model_version if model_version is not None else "all_time",
                 "metric": metric,
                 "min_probability": min_probability,
                 "n_games_resolved": n_resolved,

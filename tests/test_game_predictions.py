@@ -1,6 +1,6 @@
 import pandas as pd
 
-from mlb_metrics import game_predictions
+from mlb_metrics import config, game_predictions
 
 
 def _win_probabilities(rows):
@@ -25,6 +25,29 @@ def test_select_game_picks_threshold_gating_and_home_favored():
     assert picks.iloc[0]["metric"] == "GamePick_Win_Probability"
     assert pd.isna(picks.iloc[0]["actual_winner"])
     assert pd.isna(picks.iloc[0]["game_played"])
+    assert picks.iloc[0]["model_version"] == config.GAME_PICK_MODEL_VERSION
+
+
+def test_append_game_predictions_migrates_a_log_written_before_model_version_existed(tmp_path):
+    log_path = str(tmp_path / "game_predictions.csv")
+    legacy_log = pd.DataFrame([{
+        "date": pd.Timestamp("2026-07-19"), "game_pk": 1, "home_team": "NYY", "away_team": "BOS",
+        "predicted_winner": "NYY", "predicted_probability": 0.65, "metric": "GamePick_Win_Probability",
+        "actual_winner": "NYY", "game_played": 1,
+    }])
+    legacy_log.to_csv(log_path, index=False)
+
+    new_pick = game_predictions.select_game_picks(
+        _win_probabilities([{"game_pk": 2, "date": pd.Timestamp("2026-07-20"), "home_team": "LAD",
+                              "away_team": "SF", "home_win_probability": 0.65}]),
+        pd.Timestamp("2026-07-20"),
+    )
+    combined = game_predictions.append_game_predictions(new_pick, log_path)
+
+    row1 = combined[combined["game_pk"] == 1].iloc[0]
+    assert row1["model_version"] == game_predictions.LEGACY_MODEL_VERSION
+    row2 = combined[combined["game_pk"] == 2].iloc[0]
+    assert row2["model_version"] == config.GAME_PICK_MODEL_VERSION
 
 
 def test_select_game_picks_away_favored():
@@ -155,3 +178,20 @@ def test_resolve_game_predictions_one_bad_date_does_not_block_others(tmp_path):
     assert pd.isna(row1["game_played"])  # left pending, no crash
     assert row2["game_played"] == 1
     assert row2["actual_winner"] == "LAD"
+
+
+def test_resolve_game_predictions_migrates_a_log_written_before_model_version_existed(tmp_path):
+    log_path = str(tmp_path / "game_predictions.csv")
+    legacy_log = pd.DataFrame([{
+        "date": pd.Timestamp("2026-07-20"), "game_pk": 1, "home_team": "NYY", "away_team": "BOS",
+        "predicted_winner": "NYY", "predicted_probability": 0.65, "metric": "GamePick_Win_Probability",
+        "actual_winner": pd.NA, "game_played": pd.NA,
+    }])
+    legacy_log.to_csv(log_path, index=False)
+
+    def fetch_results(date):
+        return pd.DataFrame([{"game_pk": 1, "status": "Final", "home_score": 5, "away_score": 3}])
+
+    resolved = game_predictions.resolve_game_predictions(log_path, fetch_results, pd.Timestamp("2026-07-21"))
+
+    assert resolved.iloc[0]["model_version"] == game_predictions.LEGACY_MODEL_VERSION

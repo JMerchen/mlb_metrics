@@ -125,6 +125,16 @@ BACKTEST_TOP_N = 5
 # reducing pick coverage (still >=1 pick on all 42 backtested days).
 HITTER_MIN_PROBABILITY = 0.7
 
+# Stamped onto every hitter pick logged (predictions.select_picks) so
+# evaluation.py/the dashboard can segment stats by which selection-logic
+# version actually produced a given row, instead of silently blending old
+# and new logic into one number - this is what let the qualifier/ranking
+# change above (and any future recalibration) actually show up in "did it
+# work" stats, rather than being diluted by history logged under old logic
+# forever. Bump this string whenever select_picks' qualifier or ranking
+# logic meaningfully changes.
+HITTER_MODEL_VERSION = "v2-matchup-qualifier"
+
 # Beat the Streak Tracker (dashboard): a batter is only "recommended" if
 # their predicted_probability clears this bar - on a day with no good
 # matchups, that's zero picks; on a strong day, up to DAILY_PICK_MAX picks.
@@ -238,6 +248,22 @@ GAME_PICK_MIN_PROBABILITY = 0.58
 # home_rating / (home_rating + away_rating), purely as a degenerate-input
 # guard - composites center around 1.0, so this shouldn't bind in practice.
 GAME_PICK_RATING_FLOOR = 0.05
+
+# How much Power_A_PLUS (total-bases-allowed rate against, a run-prevention/
+# ERA-like signal - see pitchers.py's module docstring) contributes to the
+# opposing-pitching-quality multiplier, blended against PAVE_PLUS (hit-rate
+# against): final = (1-w)*PAVE_PLUS_quality + w*Power_A_PLUS_quality.
+# Empirically validated via a 30+ day persisted-Statcast backtest (see
+# game_picks.py's module docstring): an equal 0.5/0.5 blend beat pure
+# PAVE_PLUS (w=0.0) on both accuracy (56.3% vs 54.3%) and Brier score
+# (0.2493 vs 0.2517), and beat other weights tried (0.25, 1.0 i.e.
+# Power_A_PLUS alone). Revisit once more resolved games accumulate.
+GAME_PICK_SUSCEPTIBILITY_WEIGHT = 0.5
+
+# Same purpose as HITTER_MODEL_VERSION above, for game_predictions.py -
+# bump whenever compute_game_win_probabilities'/select_game_picks' logic
+# meaningfully changes (e.g. GAME_PICK_SUSCEPTIBILITY_WEIGHT's introduction).
+GAME_PICK_MODEL_VERSION = "v1"
 
 # Statcast plate-appearance outcome values that count as a "completed" event
 # (used to filter pitch-by-pitch data down to one row per at-bat outcome).

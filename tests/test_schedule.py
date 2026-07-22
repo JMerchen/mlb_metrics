@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from mlb_metrics import schedule
 
@@ -161,3 +162,56 @@ def test_normalize_schedule_games_skips_unknown_team_ids():
     result = schedule.normalize_schedule_games(raw)
 
     assert result.empty
+
+
+def test_build_probable_pitchers_table_matches_announced_starter():
+    schedule_df = pd.DataFrame([
+        {"date": pd.Timestamp("2026-07-22"), "team": "NYY", "opponent": "BOS",
+         "is_home": True, "probable_pitcher_key_mlbam": 501},
+    ])
+    pave = pd.DataFrame([
+        {"key_mlbam": 501, "name_first": "Gerrit", "name_last": "Cole",
+         "PAVE": 0.25, "PAVE_PLUS": 0.8, "Power_A_PLUS": 0.75},
+    ])
+
+    result = schedule.build_probable_pitchers_table(schedule_df, pave)
+
+    assert len(result) == 1
+    row = result.iloc[0]
+    assert row["team"] == "NYY"
+    assert row["opponent"] == "BOS"
+    assert row["pitcher_name"] == "Gerrit Cole"
+    assert row["PAVE_PLUS"] == pytest.approx(0.8)
+    assert row["Power_A_PLUS"] == pytest.approx(0.75)
+
+
+def test_build_probable_pitchers_table_keeps_team_row_when_starter_unannounced():
+    schedule_df = pd.DataFrame([
+        {"date": pd.Timestamp("2026-07-22"), "team": "NYY", "opponent": "BOS",
+         "is_home": True, "probable_pitcher_key_mlbam": None},
+    ])
+    pave = pd.DataFrame(columns=["key_mlbam", "name_first", "name_last", "PAVE", "PAVE_PLUS", "Power_A_PLUS"])
+
+    result = schedule.build_probable_pitchers_table(schedule_df, pave)
+
+    assert len(result) == 1  # team still shows up, not silently dropped
+    assert result.iloc[0]["pitcher_name"] == ""
+    assert pd.isna(result.iloc[0]["PAVE_PLUS"])
+
+
+def test_build_probable_pitchers_table_keeps_team_row_when_starter_not_in_pave():
+    # Announced starter's key_mlbam isn't in pave.csv (e.g. a rookie call-up
+    # with no persisted pitching history yet) - same graceful degradation.
+    schedule_df = pd.DataFrame([
+        {"date": pd.Timestamp("2026-07-22"), "team": "NYY", "opponent": "BOS",
+         "is_home": True, "probable_pitcher_key_mlbam": 999},
+    ])
+    pave = pd.DataFrame([
+        {"key_mlbam": 501, "name_first": "Gerrit", "name_last": "Cole",
+         "PAVE": 0.25, "PAVE_PLUS": 0.8, "Power_A_PLUS": 0.75},
+    ])
+
+    result = schedule.build_probable_pitchers_table(schedule_df, pave)
+
+    assert len(result) == 1
+    assert result.iloc[0]["pitcher_name"] == ""

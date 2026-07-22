@@ -29,7 +29,12 @@ def _schedule_games(home_team="NYY", away_team="BOS", home_pitcher=1, away_pitch
     }])
 
 
-def test_compute_game_win_probabilities_exact_arithmetic():
+def test_compute_game_win_probabilities_exact_arithmetic(monkeypatch):
+    # Pinned to pure PAVE_PLUS (weight=0.0) regardless of the live
+    # GAME_PICK_SUSCEPTIBILITY_WEIGHT default - this test specifically
+    # exercises the PAVE_PLUS arithmetic path; the blended-weight behavior
+    # has its own dedicated tests below.
+    monkeypatch.setattr(game_picks.config, "GAME_PICK_SUSCEPTIBILITY_WEIGHT", 0.0)
     confidence = _confidence([
         {"team": "NYY", "pyth_Strength": 1.1, "pyth_Confidence": 1.05,
          "suppression_resistance": 1.0, "true_power": 1.0, "Bullpen_PAVE_PLUS": 0.9},
@@ -83,6 +88,59 @@ def test_missing_bullpen_pave_plus_column_uses_neutral_multiplier():
     ])
     pave = pd.DataFrame(columns=["key_mlbam", "PAVE_PLUS"])
     schedule_games = _schedule_games(home_pitcher=None, away_pitcher=None)
+
+    result = game_picks.compute_game_win_probabilities(confidence, pave, schedule_games)
+
+    assert result.iloc[0]["home_win_probability"] == pytest.approx(0.5)
+
+
+def test_power_a_plus_blends_into_pitching_quality_when_weight_nonzero(monkeypatch):
+    monkeypatch.setattr(game_picks.config, "GAME_PICK_SUSCEPTIBILITY_WEIGHT", 0.5)
+    confidence = _confidence([
+        {"team": "NYY", "pyth_Strength": 1.1, "pyth_Confidence": 1.05,
+         "suppression_resistance": 1.0, "true_power": 1.0,
+         "Bullpen_PAVE_PLUS": 0.9, "Bullpen_Power_A_PLUS": 0.95},
+        {"team": "BOS", "pyth_Strength": 0.9, "pyth_Confidence": 0.95,
+         "suppression_resistance": 1.0, "true_power": 1.0,
+         "Bullpen_PAVE_PLUS": 1.1, "Bullpen_Power_A_PLUS": 1.05},
+    ])
+    pave = pd.DataFrame([
+        {"key_mlbam": 1, "PAVE_PLUS": 0.8, "Power_A_PLUS": 0.85},  # NYY probable starter
+        {"key_mlbam": 2, "PAVE_PLUS": 1.2, "Power_A_PLUS": 1.15},  # BOS probable starter
+    ])
+    schedule_games = _schedule_games(home_pitcher=1, away_pitcher=2)
+
+    result = game_picks.compute_game_win_probabilities(confidence, pave, schedule_games)
+
+    # home_composite = 1.0375; away_composite = .9625 (same as the PAVE_PLUS-only test)
+    # home faces away's (BOS's) pitching:
+    #   pave_quality = .6*1.2 + .4*1.1 = 1.16
+    #   power_a_quality = .6*1.15 + .4*1.05 = 1.11
+    #   blended (weight .5) = .5*1.16 + .5*1.11 = 1.135 -> home_rating = 1.0375*1.135 = 1.1775625
+    # away faces home's (NYY's) pitching:
+    #   pave_quality = .6*0.8 + .4*0.9 = .84
+    #   power_a_quality = .6*0.85 + .4*0.95 = .89
+    #   blended = .5*.84 + .5*.89 = .865 -> away_rating = .9625*.865 = .8325625
+    expected = 1.1775625 / (1.1775625 + 0.8325625)
+    assert result.iloc[0]["home_win_probability"] == pytest.approx(expected)
+
+
+def test_missing_power_a_plus_columns_uses_neutral_multiplier_even_with_nonzero_weight(monkeypatch):
+    # confidence.csv/pave.csv snapshots from before Power_A_PLUS existed
+    # lack the columns ENTIRELY - must degrade gracefully to a neutral
+    # multiplier even when GAME_PICK_SUSCEPTIBILITY_WEIGHT is active, not crash.
+    monkeypatch.setattr(game_picks.config, "GAME_PICK_SUSCEPTIBILITY_WEIGHT", 0.5)
+    confidence = pd.DataFrame([
+        {"team": "NYY", "pyth_Strength": 1.0, "pyth_Confidence": 1.0,
+         "suppression_resistance": 1.0, "true_power": 1.0, "Bullpen_PAVE_PLUS": 1.0},
+        {"team": "BOS", "pyth_Strength": 1.0, "pyth_Confidence": 1.0,
+         "suppression_resistance": 1.0, "true_power": 1.0, "Bullpen_PAVE_PLUS": 1.0},
+    ])
+    pave = pd.DataFrame([
+        {"key_mlbam": 1, "PAVE_PLUS": 1.0},
+        {"key_mlbam": 2, "PAVE_PLUS": 1.0},
+    ])
+    schedule_games = _schedule_games(home_pitcher=1, away_pitcher=2)
 
     result = game_picks.compute_game_win_probabilities(confidence, pave, schedule_games)
 

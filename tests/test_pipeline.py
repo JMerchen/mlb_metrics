@@ -142,6 +142,15 @@ def test_run_logs_and_resolves_predictions(monkeypatch, tmp_path):
     assert summary_export.loc[0, "current_streak"] == 2
     assert summary_export.loc[0, "longest_streak"] == 2
 
+    # Every pick here was logged by this run's own select_picks() call (no
+    # legacy rows mixed in), so the current-model-version row matches the
+    # all_time one exactly.
+    by_version = pd.read_csv(f"{tmp_path}/out/beat_the_streak_summary_by_version.csv")
+    assert set(by_version["model_version"]) == {"all_time", pipeline.config.HITTER_MODEL_VERSION}
+    current_row = by_version[by_version["model_version"] == pipeline.config.HITTER_MODEL_VERSION].iloc[0]
+    assert current_row["n_days_resolved"] == 1
+    assert current_row["current_streak"] == 2
+
 
 def _minimal_outputs():
     wave = pd.DataFrame([
@@ -153,7 +162,10 @@ def _minimal_outputs():
     ])
     # PAVE/PAVE_PLUS chosen so this fixture's Matchup_Hit_Probability clears
     # HITTER_MIN_PROBABILITY (see test_run_logs_matchup_probability_when_schedule_fetch_succeeds).
-    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE": 0.25, "PAVE_PLUS": 0.9}])
+    pave = pd.DataFrame([{
+        "key_mlbam": 999, "name_first": "Probable", "name_last": "Starter",
+        "PAVE": 0.25, "PAVE_PLUS": 0.9, "Power_A_PLUS": 0.9,
+    }])
     confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.28, "Bullpen_PAVE_PLUS": 1.0}])
     return {"wave": wave, "pave": pave, "confidence": confidence}
 
@@ -171,7 +183,10 @@ def test_run_logs_matchup_probability_when_schedule_fetch_succeeds(monkeypatch, 
     monkeypatch.setattr(pipeline.data, "persist_raw_statcast", lambda df, raw_dir, season: df)
     monkeypatch.setattr(pipeline, "compute_outputs", lambda df: _minimal_outputs())
 
-    schedule_df = pd.DataFrame([{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999}])
+    schedule_df = pd.DataFrame([{
+        "date": pd.Timestamp("2026-06-20"), "team": "NYY", "opponent": "BOS",
+        "probable_pitcher_key_mlbam": 999, "is_home": True,
+    }])
     monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", lambda date: schedule_df)
     # Scoped to hitter-pick metrics only - game picks get their own tests below.
     monkeypatch.setattr(pipeline.schedule, "fetch_todays_games", lambda date: pd.DataFrame())
@@ -190,6 +205,13 @@ def test_run_logs_matchup_probability_when_schedule_fetch_succeeds(monkeypatch, 
     assert (logged["key_mlbam"] == 1).all()
     assert logged.loc[0, "predicted_probability"] == pytest.approx(0.85)  # still Game_Hit_Probability, not the matchup blend
 
+    probable_pitchers = pd.read_csv(f"{tmp_path}/out/probable_pitchers.csv")
+    assert len(probable_pitchers) == 1
+    assert probable_pitchers.loc[0, "team"] == "NYY"
+    assert probable_pitchers.loc[0, "opponent"] == "BOS"
+    assert probable_pitchers.loc[0, "pitcher_name"] == "Probable Starter"
+    assert probable_pitchers.loc[0, "PAVE_PLUS"] == pytest.approx(0.9)
+
 
 def test_run_excludes_pick_with_a_bad_matchup_even_with_strong_probability_and_ghp(monkeypatch, tmp_path):
     """A batter with strong probability/Game_Hit_Probability but a tough
@@ -206,13 +228,19 @@ def test_run_excludes_pick_with_a_bad_matchup_even_with_strong_probability_and_g
         # A dominant probable starter + bullpen (both well below league
         # PAVE) should drag this batter's Matchup_Hit_Probability under
         # HITTER_MIN_PROBABILITY despite their strong standalone numbers.
-        outputs["pave"] = pd.DataFrame([{"key_mlbam": 999, "PAVE": 0.08, "PAVE_PLUS": 0.08 / 0.25}])
+        outputs["pave"] = pd.DataFrame([{
+            "key_mlbam": 999, "name_first": "Tough", "name_last": "Opponent",
+            "PAVE": 0.08, "PAVE_PLUS": 0.08 / 0.25,
+        }])
         outputs["confidence"] = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.08, "Bullpen_PAVE_PLUS": 1.0}])
         return outputs
 
     monkeypatch.setattr(pipeline, "compute_outputs", _outputs_with_tough_opponent)
 
-    schedule_df = pd.DataFrame([{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999}])
+    schedule_df = pd.DataFrame([{
+        "date": pd.Timestamp("2026-06-20"), "team": "NYY", "opponent": "BOS",
+        "probable_pitcher_key_mlbam": 999, "is_home": True,
+    }])
     monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", lambda date: schedule_df)
     monkeypatch.setattr(pipeline.schedule, "fetch_todays_games", lambda date: pd.DataFrame())
 
@@ -256,25 +284,31 @@ def test_run_continues_without_matchup_when_schedule_fetch_fails(monkeypatch, tm
     logged = pd.read_csv(f"{predictions_dir}/predictions.csv")
     assert set(logged["metric"]) == {"Game_Hit_Probability"}  # no Matchup_Hit_Probability logged
     assert not os.path.exists(f"{predictions_dir}/game_predictions.csv")  # no game picks logged either
+    assert not os.path.exists(f"{tmp_path}/out/probable_pitchers.csv")  # no probable-pitchers list either
 
 
 def _minimal_outputs_with_confidence():
     """Like _minimal_outputs, but with the confidence.csv columns
     game_picks.compute_game_win_probabilities needs for two teams."""
     outputs = _minimal_outputs()
+    # Bullpen_Power_A_PLUS/Power_A_PLUS mirror the PAVE_PLUS-side values (a
+    # reasonable synthetic stand-in) so GAME_PICK_SUSCEPTIBILITY_WEIGHT's
+    # blend doesn't dilute this fixture's intended separation toward neutral.
     outputs["confidence"] = pd.DataFrame([
         {
             "team": "NYY", "pyth_Strength": 1.1, "pyth_Confidence": 1.05,
-            "suppression_resistance": 1.0, "true_power": 1.0, "Bullpen_PAVE_PLUS": 0.9,
+            "suppression_resistance": 1.0, "true_power": 1.0,
+            "Bullpen_PAVE_PLUS": 0.9, "Bullpen_Power_A_PLUS": 0.9,
         },
         {
             "team": "BOS", "pyth_Strength": 0.9, "pyth_Confidence": 0.95,
-            "suppression_resistance": 1.0, "true_power": 1.0, "Bullpen_PAVE_PLUS": 1.1,
+            "suppression_resistance": 1.0, "true_power": 1.0,
+            "Bullpen_PAVE_PLUS": 1.1, "Bullpen_Power_A_PLUS": 1.1,
         },
     ])
     outputs["pave"] = pd.DataFrame([
-        {"key_mlbam": 501, "PAVE_PLUS": 0.8},  # NYY probable starter (tough)
-        {"key_mlbam": 502, "PAVE_PLUS": 1.2},  # BOS probable starter (easy)
+        {"key_mlbam": 501, "PAVE_PLUS": 0.8, "Power_A_PLUS": 0.8},  # NYY probable starter (tough)
+        {"key_mlbam": 502, "PAVE_PLUS": 1.2, "Power_A_PLUS": 1.2},  # BOS probable starter (easy)
     ])
     return outputs
 
@@ -392,3 +426,9 @@ def test_run_resolves_game_picks_across_two_runs(monkeypatch, tmp_path):
     summary_export = pd.read_csv(f"{tmp_path}/out/game_picks_summary.csv")
     assert summary_export.loc[0, "n_games_resolved"] == 1
     assert summary_export.loc[0, "accuracy"] == 1.0
+
+    by_version = pd.read_csv(f"{tmp_path}/out/game_picks_summary_by_version.csv")
+    assert set(by_version["model_version"]) == {"all_time", pipeline.config.GAME_PICK_MODEL_VERSION}
+    current_row = by_version[by_version["model_version"] == pipeline.config.GAME_PICK_MODEL_VERSION].iloc[0]
+    assert current_row["n_games_resolved"] == 1
+    assert current_row["accuracy"] == 1.0
