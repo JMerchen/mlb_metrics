@@ -3,7 +3,7 @@ import subprocess
 import pandas as pd
 import pytest
 
-from mlb_metrics import game_picks_backtest, game_predictions
+from mlb_metrics import config, game_picks_backtest, game_predictions
 
 
 def _statcast_game(game_pk, date, home_team, away_team, home_pitcher, away_pitcher, home_score, away_score):
@@ -188,3 +188,99 @@ def test_reconstruct_historical_game_picks_days_limits_the_replay_window(tmp_pat
 
     assert len(picks) == 1
     assert picks.iloc[0]["game_pk"] == 556  # only the most recent day's commit replayed
+
+
+def _fake_current_outputs():
+    return {
+        "confidence": _confidence_csv(
+            [("NYY", 1.1, 1.05, 1.0, 1.0, 0.9), ("BOS", 0.9, 0.95, 1.0, 1.0, 1.1)]
+        ),
+        "pave": pd.DataFrame([
+            {"key_mlbam": 101, "PAVE_PLUS": 0.8, "Power_A_PLUS": 0.8},
+            {"key_mlbam": 201, "PAVE_PLUS": 1.2, "Power_A_PLUS": 1.2},
+        ]),
+    }
+
+
+def test_reconstruct_historical_game_picks_from_persisted_tags_current_model_version(tmp_path, monkeypatch):
+    # compute_outputs itself needs a live get_name_register() network call and
+    # full hitters/pitchers/teams assembly - stubbed out here the same way
+    # test_pipeline.py stubs it, so this test exercises only the per-date
+    # replay/resolve wiring, not the real metric computation.
+    monkeypatch.setattr(game_picks_backtest.pipeline, "compute_outputs", lambda df: _fake_current_outputs())
+
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    # Two days: the first only supplies "prior history" for the second (the
+    # first date itself has nothing before it to build a pick from, and is
+    # asserted against separately below).
+    rows = _statcast_game(554, pd.Timestamp("2026-05-31"), "NYY", "BOS", 101, 201, 2, 1) + _statcast_game(
+        555, pd.Timestamp("2026-06-01"), "NYY", "BOS", 101, 201, 5, 2
+    )
+    pd.DataFrame(rows).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    picks = game_picks_backtest.reconstruct_historical_game_picks_from_persisted(
+        raw_dir=str(raw_dir), season=2026, days=40
+    )
+
+    assert len(picks) == 1
+    row = picks.iloc[0]
+    assert row["game_pk"] == 555
+    assert row["predicted_winner"] == "NYY"  # better composite + faces BOS's weaker pitching
+    assert row["game_played"] == 1
+    assert row["actual_winner"] == "NYY"
+    # Every replayed date uses today's live logic end to end - tagged with
+    # the current model version, not "legacy" (contrast with the
+    # git-history version's test above).
+    assert row["model_version"] == config.GAME_PICK_MODEL_VERSION
+
+
+def test_reconstruct_historical_game_picks_from_persisted_skips_a_date_with_no_prior_history(tmp_path, monkeypatch):
+    # The very first calendar date with any persisted data has nothing
+    # strictly before it to build a pick from (same as pipeline.run()'s
+    # as_of_date cutoff) - it must be skipped, not crash or use an empty
+    # history as if it were real.
+    monkeypatch.setattr(game_picks_backtest.pipeline, "compute_outputs", lambda df: _fake_current_outputs())
+
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    rows = _statcast_game(555, pd.Timestamp("2026-06-01"), "NYY", "BOS", 101, 201, 5, 2) + _statcast_game(
+        556, pd.Timestamp("2026-06-02"), "NYY", "BOS", 101, 201, 3, 1
+    )
+    pd.DataFrame(rows).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    picks = game_picks_backtest.reconstruct_historical_game_picks_from_persisted(
+        raw_dir=str(raw_dir), season=2026, days=40
+    )
+
+    assert len(picks) == 1
+    assert picks.iloc[0]["game_pk"] == 556
+
+
+def test_reconstruct_historical_game_picks_from_persisted_days_limits_the_replay_window(tmp_path, monkeypatch):
+    monkeypatch.setattr(game_picks_backtest.pipeline, "compute_outputs", lambda df: _fake_current_outputs())
+
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    rows = (
+        _statcast_game(555, pd.Timestamp("2026-06-01"), "NYY", "BOS", 101, 201, 5, 2)
+        + _statcast_game(556, pd.Timestamp("2026-06-02"), "NYY", "BOS", 101, 201, 3, 1)
+        + _statcast_game(557, pd.Timestamp("2026-06-03"), "NYY", "BOS", 101, 201, 4, 0)
+    )
+    pd.DataFrame(rows).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    picks = game_picks_backtest.reconstruct_historical_game_picks_from_persisted(
+        raw_dir=str(raw_dir), season=2026, days=1
+    )
+
+    assert len(picks) == 1
+    assert picks.iloc[0]["game_pk"] == 557  # only the most recent replayable day
+
+
+def test_reconstruct_historical_game_picks_from_persisted_no_persisted_data_returns_empty(tmp_path):
+    picks = game_picks_backtest.reconstruct_historical_game_picks_from_persisted(
+        raw_dir=str(tmp_path / "nonexistent"), season=2026, days=40
+    )
+
+    assert picks.empty
+    assert list(picks.columns) == game_predictions.GAME_PREDICTION_COLUMNS
