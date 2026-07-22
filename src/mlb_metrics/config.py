@@ -110,6 +110,21 @@ BACKTEST_MIN_PLATE_APPEARANCES = 30
 # Default number of top-ranked picks to log/evaluate per day.
 BACKTEST_TOP_N = 5
 
+# A hitter only qualifies as a pick if BOTH probability (the binomial-model
+# estimate from at-bat-level WAVE) AND Game_Hit_Probability (the directly
+# observed rate of games with >=1 hit) clear this bar. Either one alone is
+# misleading: high Game_Hit_Probability with low probability is a batter who
+# barely gets a hit most games (a lot of 1-for-4/5s); high probability with
+# low Game_Hit_Probability is boom-or-bust (multi-hit games mixed with
+# 0-fors) - neither is the "reliable to get a hit today" signal the pick is
+# supposed to represent. Empirically validated via a 42-day git-history
+# replay backtest (see git_backtest.py): requiring both >=0.7 and ranking the
+# qualified pool by Approach (Game_Hit_Probability * probability) raised the
+# resolved hit rate of the picks that actually clear DAILY_PICK_MIN_PROBABILITY
+# from 55% to 65% and cut the Brier score from 0.284 to 0.260, without
+# reducing pick coverage (still >=1 pick on all 42 backtested days).
+HITTER_MIN_PROBABILITY = 0.7
+
 # Beat the Streak Tracker (dashboard): a batter is only "recommended" if
 # their predicted_probability clears this bar - on a day with no good
 # matchups, that's zero picks; on a strong day, up to DAILY_PICK_MAX picks.

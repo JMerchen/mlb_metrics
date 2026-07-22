@@ -10,13 +10,18 @@ def _git(args, cwd):
 
 
 def _wave_csv(rows):
+    # probability mirrors Game_Hit_Probability here (a reasonable synthetic
+    # stand-in) so these fixtures clear select_picks' joint
+    # HITTER_MIN_PROBABILITY gate on both columns; Approach is their real
+    # product, preserving the same relative ranking as Game_Hit_Probability
+    # alone for these single-candidate-per-day cases.
     return pd.DataFrame(
         [
             {
                 "key_mlbam": key, "name_first": f"F{key}", "name_last": f"L{key}", "team": "NYY",
                 "PA_L": 0, "PA_R": pa_r,
-                "probability_L": 0, "probability_R": 0, "probability": 0,
-                "Game_Hit_Probability": ghp, "Consistency": 0, "Approach": 0, "Expected_Bases": 0,
+                "probability_L": 0, "probability_R": 0, "probability": ghp,
+                "Game_Hit_Probability": ghp, "Consistency": 0, "Approach": ghp * ghp, "Expected_Bases": 0,
             }
             for key, pa_r, ghp in rows
         ]
@@ -90,3 +95,35 @@ def test_reconstruct_historical_picks_replays_each_commit_through_select_picks(t
     day2_pick = picks[picks["date"] == "2026-06-19"].iloc[0]
     assert day2_pick["key_mlbam"] == 3
     assert (picks["actual_hit"].isna()).all()  # reconstruction only assigns picks, never outcomes
+
+
+def test_reconstruct_historical_picks_defaults_to_ranking_by_approach(tmp_path):
+    # Player 2 has the higher Game_Hit_Probability (0.82 vs 0.80), but
+    # player 1 has the higher Approach (Game_Hit_Probability * probability:
+    # 0.76 vs 0.5904) - the default rank_metric="Approach" must pick player
+    # 1, not player 2, even though player 2 would win a plain GHP ranking.
+    repo = tmp_path / "repo"
+    data_dir = repo / "docs" / "data"
+    data_dir.mkdir(parents=True)
+    wave_path = data_dir / "wave.csv"
+
+    _git(["init", "-q"], repo)
+    _git(["config", "user.email", "test@example.com"], repo)
+    _git(["config", "user.name", "Test"], repo)
+
+    wave = pd.DataFrame([
+        {"key_mlbam": 1, "name_first": "F1", "name_last": "L1", "team": "NYY",
+         "PA_L": 0, "PA_R": 40, "probability_L": 0, "probability_R": 0, "probability": 0.95,
+         "Game_Hit_Probability": 0.80, "Consistency": 0, "Approach": 0.80 * 0.95, "Expected_Bases": 0},
+        {"key_mlbam": 2, "name_first": "F2", "name_last": "L2", "team": "NYY",
+         "PA_L": 0, "PA_R": 40, "probability_L": 0, "probability_R": 0, "probability": 0.72,
+         "Game_Hit_Probability": 0.82, "Consistency": 0, "Approach": 0.82 * 0.72, "Expected_Bases": 0},
+    ])
+    wave.to_csv(wave_path, index=False)
+    _git(["add", "docs/data/wave.csv"], repo)
+    _git(["commit", "-q", "-m", "day1", "--date=2026-06-18T12:00:00"], repo)
+
+    picks = git_backtest.reconstruct_historical_picks(repo_dir=str(repo), top_n=1, min_plate_appearances=30)
+
+    assert list(picks["key_mlbam"]) == [1]  # higher Approach (0.76 vs 0.5904)
+    assert picks.iloc[0]["predicted_probability"] == 0.80  # still reports Game_Hit_Probability
