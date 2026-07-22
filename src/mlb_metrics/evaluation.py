@@ -98,6 +98,26 @@ def _filter_model_version(predictions: pd.DataFrame, model_version: str | None) 
     return predictions[predictions["model_version"] == model_version]
 
 
+def _combined_probability(df: pd.DataFrame) -> pd.Series:
+    """A blended recommendation score from whichever of
+    predicted_probability (Game_Hit_Probability, always present),
+    probability (the WAVE-based binomial estimate), and
+    Matchup_Hit_Probability (opposing-pitcher-adjusted, only present on
+    days schedule/matchup data was available - see predictions.select_picks)
+    exist as columns - a row-wise mean, skipping any that are missing for
+    that row rather than requiring all three.
+
+    This is the same three signals select_picks already jointly requires to
+    clear HITTER_MIN_PROBABILITY at selection time (see
+    JOINT_PROBABILITY_GATE_COLUMNS) - gating "recommended" on
+    Game_Hit_Probability alone ignored the other two entirely, and produced
+    a string of zero-pick days whenever GHP landed just under the bar
+    despite `probability`/`Matchup_Hit_Probability` being strong (see
+    config.DAILY_PICK_MIN_PROBABILITY)."""
+    columns = [c for c in ("predicted_probability", "probability", "Matchup_Hit_Probability") if c in df.columns]
+    return df[columns].astype(float).mean(axis=1, skipna=True)
+
+
 def _recommended_picks(
     predictions: pd.DataFrame,
     metric: str | None,
@@ -106,13 +126,13 @@ def _recommended_picks(
     model_version: str | None = None,
 ) -> pd.DataFrame:
     """The subset of logged picks that actually count as "recommended" for
-    a given day: top-ranked, capped at `max_picks`, and only those that
-    clear `min_probability` ("a good matchup"). A day can have 0, 1, or
-    `max_picks` rows here depending on how many clear the bar - it's never
-    padded out to a fixed count."""
+    a given day: top-ranked, capped at `max_picks`, and only those whose
+    _combined_probability clears `min_probability` ("a good matchup"). A day
+    can have 0, 1, or `max_picks` rows here depending on how many clear the
+    bar - it's never padded out to a fixed count."""
     df = _filter_metric(predictions, metric)
     df = _filter_model_version(df, model_version)
-    df = df[(df["rank"] <= max_picks) & (df["predicted_probability"] >= min_probability)]
+    df = df[(df["rank"] <= max_picks) & (_combined_probability(df) >= min_probability)]
     return df
 
 
@@ -220,6 +240,29 @@ def build_beat_the_streak_export(
     picks = _recommended_picks(predictions, metric, max_picks, min_probability, model_version).copy()
     picks["status"] = _classify_outcome(picks)
     picks = picks[["date", "rank", "name", "predicted_probability", "actual_hit", "status"]]
+
+    # select_picks logs every top-N candidate regardless of whether it
+    # clears min_probability, so a date with logged picks but zero
+    # recommended ones is a real "no good matchup that day", not missing
+    # data - surface it explicitly as its own row rather than leaving the
+    # date silently absent, which a reader (or the dashboard) would
+    # otherwise misread as "the most recent recommendation was some earlier
+    # day."
+    filtered = _filter_model_version(_filter_metric(predictions, metric), model_version)
+    no_pick_dates = sorted(set(filtered["date"]) - set(picks["date"]))
+    if no_pick_dates:
+        no_pick_rows = pd.DataFrame(
+            {
+                "date": no_pick_dates,
+                "rank": pd.NA,
+                "name": pd.NA,
+                "predicted_probability": pd.NA,
+                "actual_hit": pd.NA,
+                "status": "no_pick",
+            }
+        )
+        picks = pd.concat([picks, no_pick_rows], ignore_index=True)
+
     picks = picks.sort_values(["date", "rank"], ascending=[False, True]).reset_index(drop=True)
 
     progression = streak_progression(predictions, metric, max_picks, min_probability, model_version)

@@ -3318,11 +3318,12 @@ function renderTodaysPicks(picks){
 
 const el = document.getElementById("todaysPicks")
 
-// Only days with at least one "good matchup" pick appear in `picks` at
-// all - a day with zero recommendations is simply absent, not a blank
-// row - so this naturally shows the most recent day that had a pick.
+// A day with zero recommendations still gets a "no_pick" row (see
+// evaluation.build_beat_the_streak_export), so the latest date here is
+// always the actual most recent day the pipeline ran, whether or not it
+// had a real pick.
 if(!picks.length){
-el.innerHTML = "No strong matchups recommended yet"
+el.innerHTML = "No picks tracked yet"
 return
 }
 
@@ -3332,11 +3333,11 @@ const latestDate = picks
 .slice(-1)[0]
 
 const todays = picks
-.filter(p=>p.date === latestDate)
+.filter(p=>p.date === latestDate && p.status !== "no_pick")
 .sort((a,b)=>Number(a.rank) - Number(b.rank))
 
 if(!todays.length){
-el.innerHTML = "No strong matchups today"
+el.innerHTML = `<div class="pickCard no_pick"><div class="pickName">No pick for ${latestDate}</div><div class="pickStatus">no strong matchup today</div></div>`
 return
 }
 

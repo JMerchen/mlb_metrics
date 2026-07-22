@@ -223,6 +223,14 @@ opacity:.7;
 
 }
 
+.pickCard.no_pick{
+
+border-left-color:#999;
+
+opacity:.7;
+
+}
+
 .pickCard.win{
 
 border-left-color:#4caf50;

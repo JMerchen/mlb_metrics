@@ -200,7 +200,13 @@ def test_recommended_picks_gated_by_threshold_can_be_zero_one_or_two():
 
     assert set(picks[picks["date"] == "2026-06-18"]["rank"]) == {1, 2}
     assert set(picks[picks["date"] == "2026-06-19"]["rank"]) == {1}
-    assert picks[picks["date"] == "2026-06-20"].empty
+    # Day C had picks logged (both rank 1 and 2), just none cleared the bar -
+    # a real "no pick that day", surfaced as its own row rather than the
+    # date being silently absent (see test below for the dedicated check).
+    day_c = picks[picks["date"] == "2026-06-20"]
+    assert len(day_c) == 1
+    assert day_c.iloc[0]["status"] == "no_pick"
+    assert pd.isna(day_c.iloc[0]["rank"])
 
     # Day C never enters the streak at all (not even as a no-op skip in the
     # progression table), and day A+B both hit -> 2 + 1 = 3.
@@ -228,6 +234,70 @@ def test_build_beat_the_streak_export_picks_table_status_and_summary():
     assert summary.loc[0, "longest_streak"] == 3
     assert summary.loc[0, "current_streak"] == 2
     assert summary.loc[0, "model_version"] == "all_time"  # unfiltered (model_version=None) default label
+
+
+def test_recommended_picks_blends_probability_and_matchup_not_just_ghp():
+    # predicted_probability (GHP) alone is just under the bar, but
+    # `probability` and `Matchup_Hit_Probability` are both strong - the
+    # blended mean clears 0.80 even though GHP alone doesn't.
+    preds = pd.DataFrame([
+        _pick("2026-06-18", 1, 0.79, 3, 1) | {"probability": 0.85, "Matchup_Hit_Probability": 0.83},
+    ])
+
+    picks, summary = evaluation.build_beat_the_streak_export(preds, max_picks=2, min_probability=0.80)
+
+    assert set(picks["status"]) == {"hit"}  # recommended (blend = (0.79+0.85+0.83)/3 = 0.823 >= 0.80)
+
+
+def test_recommended_picks_blend_can_also_exclude_a_pick_ghp_alone_would_have_passed():
+    # GHP alone clears 0.80, but probability/Matchup_Hit_Probability are
+    # both weak - the blended mean drops below the bar.
+    preds = pd.DataFrame([
+        _pick("2026-06-18", 1, 0.90, 3, 1) | {"probability": 0.55, "Matchup_Hit_Probability": 0.50},
+    ])
+
+    picks, summary = evaluation.build_beat_the_streak_export(preds, max_picks=2, min_probability=0.80)
+
+    assert set(picks["status"]) == {"no_pick"}  # blend = (0.90+0.55+0.50)/3 = 0.65 < 0.80
+
+
+def test_recommended_picks_blend_ignores_missing_matchup_hit_probability_per_row():
+    # A day with no schedule/matchup data that day (Matchup_Hit_Probability
+    # is NaN, not 0) should blend just the two signals it has, not be
+    # dragged down by treating the missing value as a zero.
+    preds = pd.DataFrame([
+        _pick("2026-06-18", 1, 0.85, 3, 1) | {"probability": 0.81, "Matchup_Hit_Probability": None},
+    ])
+
+    picks, summary = evaluation.build_beat_the_streak_export(preds, max_picks=2, min_probability=0.80)
+
+    assert set(picks["status"]) == {"hit"}  # blend = (0.85+0.81)/2 = 0.83 >= 0.80, NaN excluded not zeroed
+
+
+def test_build_beat_the_streak_export_no_pick_day_does_not_affect_streak_or_other_days():
+    preds = pd.DataFrame(
+        [
+            _pick("2026-06-18", 1, 0.90, 3, 1),  # hit -> streak=1
+            _pick("2026-06-19", 1, 0.70, 3, 0),  # below bar -> no_pick day
+            _pick("2026-06-19", 2, 0.65, 3, 1),  # below bar -> no_pick day
+            _pick("2026-06-20", 1, 0.90, 3, 1),  # hit -> streak continues to 2
+        ]
+    )
+
+    picks, summary = evaluation.build_beat_the_streak_export(preds, max_picks=2, min_probability=0.80)
+
+    no_pick_rows = picks[picks["date"] == "2026-06-19"]
+    assert len(no_pick_rows) == 1
+    row = no_pick_rows.iloc[0]
+    assert row["status"] == "no_pick"
+    assert pd.isna(row["rank"]) and pd.isna(row["name"]) and pd.isna(row["predicted_probability"])
+    assert pd.isna(row["actual_hit"])
+
+    # The no-pick day is a true no-op for the streak - not a break, not
+    # skipped-as-pending, just absent from the progression entirely.
+    assert summary.loc[0, "n_days_resolved"] == 2
+    assert summary.loc[0, "current_streak"] == 2
+    assert summary.loc[0, "longest_streak"] == 2
 
 
 def test_build_beat_the_streak_export_model_version_filters_and_labels_summary():

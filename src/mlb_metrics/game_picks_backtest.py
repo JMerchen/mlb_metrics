@@ -36,7 +36,7 @@ import subprocess
 
 import pandas as pd
 
-from mlb_metrics import config, data, game_picks, game_predictions, git_backtest
+from mlb_metrics import config, data, game_picks, game_predictions, git_backtest, pipeline
 
 CONFIDENCE_CSV_PATH = "docs/data/confidence.csv"
 PAVE_CSV_PATH = "docs/data/pave.csv"
@@ -133,6 +133,79 @@ def reconstruct_historical_game_picks(
             continue
 
         win_probabilities = game_picks.compute_game_win_probabilities(confidence, pave, todays_games)
+        picks = game_predictions.select_game_picks(win_probabilities, date, model_version=model_version)
+        if picks.empty:
+            continue
+
+        results = todays_games[["game_pk", "home_team", "away_team", "home_score", "away_score"]]
+        picks = picks.merge(results, on=["game_pk", "home_team", "away_team"], how="left")
+        picks["game_played"] = 1
+        picks["actual_winner"] = picks["home_team"].where(
+            picks["home_score"] > picks["away_score"], picks["away_team"]
+        )
+        all_picks.append(picks[game_predictions.GAME_PREDICTION_COLUMNS])
+
+    if not all_picks:
+        return pd.DataFrame(columns=game_predictions.GAME_PREDICTION_COLUMNS)
+    return pd.concat(all_picks, ignore_index=True)
+
+
+def reconstruct_historical_game_picks_from_persisted(
+    raw_dir: str = "data/raw",
+    season: int | None = None,
+    days: int = 20,
+    model_version: str = config.GAME_PICK_MODEL_VERSION,
+) -> pd.DataFrame:
+    """Like reconstruct_historical_game_picks, but recomputes confidence.csv/
+    pave.csv fresh from persisted Statcast (pipeline.compute_outputs) for
+    each replayed date, instead of replaying old git-committed snapshots.
+
+    This answers a different question than the git-history version. Old
+    commits' confidence.csv/pave.csv were written by whatever code was live
+    on that day, so a column added since (e.g. Power_A_PLUS) simply isn't
+    there and gets skipped over - that's the right tool for "how did the
+    model as of some past commit perform." This function instead reruns
+    pipeline.compute_outputs - the exact function pipeline.run() calls
+    every day - against each date's as-of-that-date slice of persisted
+    Statcast, so every replayed date reflects whatever signals are live in
+    the code RIGHT NOW. That's the right tool for "how does the model I'd
+    ship today perform," which is what's needed to evaluate a change before
+    waiting for it to accumulate its own live picks (append-only logs mean
+    today's already-logged picks can't be rewritten retroactively - see
+    predictions.py/game_predictions.py module docstrings).
+
+    Recomputes the full season-to-date pipeline once per replayed date, so
+    this is meaningfully slower than the git-history version - keep `days`
+    modest for interactive use.
+
+    `model_version` defaults to config.GAME_PICK_MODEL_VERSION (not
+    LEGACY_MODEL_VERSION) because every replayed date uses today's actual
+    live logic end to end - there's no "old logic" here to distinguish from."""
+    season = season or config.SEASON_START.year
+
+    persisted = data.load_persisted_statcast(raw_dir, season)
+    if persisted is None:
+        return pd.DataFrame(columns=game_predictions.GAME_PREDICTION_COLUMNS)
+    schedule_games = derive_historical_schedule_games(persisted)
+
+    dates = sorted(schedule_games["date"].unique())
+    if days:
+        dates = dates[-days:]
+
+    all_picks = []
+    for date in dates:
+        history = persisted[persisted["game_date"] < date]
+        if history.empty:
+            continue
+
+        todays_games = schedule_games[schedule_games["date"] == date]
+        if todays_games.empty:
+            continue
+
+        outputs = pipeline.compute_outputs(history)
+        win_probabilities = game_picks.compute_game_win_probabilities(
+            outputs["confidence"], outputs["pave"], todays_games
+        )
         picks = game_predictions.select_game_picks(win_probabilities, date, model_version=model_version)
         if picks.empty:
             continue

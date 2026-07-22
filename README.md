@@ -17,6 +17,9 @@ to `docs/` as a GitHub Pages dashboard.
   below).
 - `scripts/wave.py` - daily pipeline entrypoint (`python scripts/wave.py`).
 - `scripts/run_backtest.py` - backtest entrypoint (`python scripts/run_backtest.py`).
+- `scripts/evaluate_current_model.py` - read-only backtest report for the
+  currently-live hitter-pick and game-pick models (see "Model versioning"
+  below); doesn't write to `data/predictions/` or `docs/data/`.
 - `data/raw/` - persisted raw Statcast pulls, one parquet file per season,
   committed daily alongside the output CSVs so history accumulates run over run.
 - `data/predictions/predictions.csv` - append-only log of every daily hitter
@@ -64,10 +67,24 @@ The dashboard's top section simulates actually playing Beat the Streak,
 following its real rules rather than a simplified per-day win/loss model
 (see `evaluation.streak_progression()`):
 
-- A batter is only "recommended" if `predicted_probability` clears
-  `DAILY_PICK_MIN_PROBABILITY` (config.py, default 0.80) - a day can
-  surface 0, 1, or up to `DAILY_PICK_MAX` (2) picks depending on how many
-  clear the bar, not a fixed count regardless of matchup quality.
+- A batter is only "recommended" if a blended score - the mean of whichever
+  of `predicted_probability` (Game_Hit_Probability), `probability`, and
+  `Matchup_Hit_Probability` are available for that pick (see
+  `evaluation._combined_probability`) - clears `DAILY_PICK_MIN_PROBABILITY`
+  (config.py, default 0.77). A day can surface 0, 1, or up to
+  `DAILY_PICK_MAX` (2) picks depending on how many clear the bar, not a
+  fixed count regardless of matchup quality. This used to gate on
+  Game_Hit_Probability alone at 0.80, which ignored the other two signals
+  and produced zero-pick days whenever GHP landed just under the bar even
+  with a strong matchup; blending all three (and lowering the bar to match,
+  since a mean of two-or-three probabilities runs lower than GHP alone -
+  see config.py's docstring for the backtest that picked 0.77) fixes that
+  without loosening quality, empirically validated via a 42-day
+  git-history-replay backtest. A zero-pick day still gets an explicit
+  `"no_pick"` row in the export (see `build_beat_the_streak_export`) rather
+  than being silently absent - the dashboard shows "No pick for `<date>`"
+  instead of falling back to whatever earlier day last had one, which would
+  otherwise look like a stale/broken pipeline.
 - A pick with an at-bat and no hit resets the streak to 0.
 - A pick with zero at-bats that day (rained out, DNP, not in the lineup)
   is neutral - it neither advances nor resets the streak.
@@ -105,6 +122,22 @@ carries this same split (`all_time` plus the current version) for the
 dashboard/anyone reading the CSVs directly. Game picks use the identical
 pattern (`config.GAME_PICK_MODEL_VERSION`, `game_evaluation.build_game_picks_export`'s
 own `model_version` filter).
+
+Even with `model_version` tagging, a change made today still won't show up
+in *live* picks until tomorrow's run - today's picks were already logged
+before the change existed, and the append-only log correctly refuses to
+rewrite them. `scripts/evaluate_current_model.py` answers "how does the
+model I'd ship today actually perform" immediately instead of waiting:
+it backtests the currently-live hitter-pick logic
+(`git_backtest.reconstruct_historical_picks`, replaying `wave.csv` git
+history through today's `select_picks()`) and the currently-live game-pick
+logic (`game_picks_backtest.reconstruct_historical_game_picks_from_persisted`,
+which recomputes `confidence.csv`/`pave.csv` fresh from persisted Statcast
+per replayed date rather than replaying old git-committed snapshots, so a
+signal added since - e.g. `Power_A_PLUS` - isn't silently skipped over the
+way it would be replaying old commits), resolves both against real
+outcomes, and prints an accuracy/Brier-score report. It's read-only - it
+never writes to `data/predictions/` or `docs/data/`.
 
 ## Lineup awareness
 
@@ -260,7 +293,7 @@ accuracy (56.3% vs 54.3%) and Brier score (0.2493 vs 0.2517).
 
 - A game is only "picked" if the favored side's win probability clears
   `GAME_PICK_MIN_PROBABILITY` (config.py, default 0.58 - much lower than the
-  hitter picks' 0.80, since single-game MLB win probabilities are
+  hitter picks' 0.77, since single-game MLB win probabilities are
   compressed near 50/50 even for real favorites) - a day can surface 0 or
   more picks depending on how much separation the model sees, never a
   forced pick every game.
