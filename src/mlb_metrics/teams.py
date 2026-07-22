@@ -3,6 +3,11 @@ Confidence, pyth_Confidence, offensive_edge, suppression_resistance, and
 home-run dependency stats. Unlike the hitter metrics, the original script's
 rolling windows here already used `.shift(1)` to avoid same-game leakage -
 that pattern is preserved as-is.
+
+Park_Factor (compute_park_factors) is a venue-level signal, not a team-
+strength one - it's included here because a team's home venue and the team
+itself are a 1:1 mapping in this project's data (see that function's
+docstring), so the same per-team row shape fits it directly.
 """
 
 import numpy as np
@@ -138,6 +143,31 @@ def compute_offensive_edge(data: pd.DataFrame) -> pd.DataFrame:
 
     latest_game = full_bases.groupby("team", as_index=False)["game_id"].max()
     return latest_game.merge(full_bases, on=["team", "game_id"])[["team", "offensive_edge"]]
+
+
+def compute_park_factors(data: pd.DataFrame) -> pd.DataFrame:
+    """One row per team's home venue: Park_Factor - that venue's average
+    combined (both teams') final runs per game, normalized to the
+    across-all-venues average (mean 1.0, same ratio convention as
+    PAVE_PLUS/Bullpen_PAVE_PLUS). A hitter-friendly park (Coors-like) reads
+    above 1.0; a pitcher's park reads below 1.0.
+
+    Uses `home_team` as the venue identifier - Statcast's pitch-level data
+    doesn't carry a separate ballpark id, and a team's home games are all
+    at the same park for the entire season (interleague neutral-site
+    games are rare enough not to special-case here) - so this is
+    equivalent to a real per-park factor without needing a park lookup
+    table."""
+    totals = data[["game_id", "home_team", "post_home_score", "post_away_score"]].copy()
+    totals["combined_score"] = totals["post_home_score"] + totals["post_away_score"]
+    per_game = totals.groupby(["game_id", "home_team"], as_index=False)["combined_score"].max()
+
+    venue = per_game.groupby("home_team", as_index=False)["combined_score"].mean()
+    venue = venue.rename(columns={"home_team": "team", "combined_score": "runs_per_game_at_home"})
+
+    league_avg = venue["runs_per_game_at_home"].mean()
+    venue["Park_Factor"] = venue["runs_per_game_at_home"] / league_avg
+    return venue[["team", "Park_Factor"]]
 
 
 def build_team_record(data: pd.DataFrame) -> pd.DataFrame:
@@ -303,6 +333,7 @@ def assemble_team_metrics(data: pd.DataFrame, bullpen_pave: pd.DataFrame | None 
     record = build_team_record(data)
     suppression = compute_suppression_resistance(record)
     current_strength, sos = compute_strength_metrics(record)
+    park_factors = compute_park_factors(data)
 
     master = current_strength.merge(sos, on="team")
 
@@ -337,12 +368,14 @@ def assemble_team_metrics(data: pd.DataFrame, bullpen_pave: pd.DataFrame | None 
 
     master = master.drop_duplicates()
     master["true_power"] = (master["offensive_edge"] + master["suppression_resistance"]) / 2
+    master = master.merge(park_factors, on="team", how="left")
 
     output_columns = [
         "team", "current", "Strength", "pyth_Strength", "SOS", "pyth_SOS",
         "Confidence", "pyth_Confidence", "Confidence_Delta", "true_power",
         "offensive_edge", "suppression_resistance", "home_run_reliance",
         "homer_per_game", "game_homer_rate", "team_home_run_rate", "away_hr_rate",
+        "Park_Factor",
     ]
     if bullpen_pave is not None:
         master = master.merge(bullpen_pave, on="team", how="left")

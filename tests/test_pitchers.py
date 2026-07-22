@@ -80,6 +80,44 @@ def test_assemble_pitchers_normalizes_pave_plus_to_qualified_mean():
     assert result.loc[2, "Power_A_PLUS"] == pytest.approx(1.0 / 0.669675, rel=1e-3)
 
 
+def test_compute_pitcher_throws_one_row_per_pitcher():
+    pdf = pd.DataFrame([
+        {"pitcher": 1, "game_date": pd.Timestamp("2026-06-01"), "events": "single", "p_throws": "L"},
+        {"pitcher": 1, "game_date": pd.Timestamp("2026-06-02"), "events": "field_out", "p_throws": "L"},
+        {"pitcher": 2, "game_date": pd.Timestamp("2026-06-01"), "events": "strikeout", "p_throws": "R"},
+    ])
+
+    throws = pitchers.compute_pitcher_throws(pdf).set_index("key_mlbam")
+
+    assert throws.loc[1, "Throws"] == "L"
+    assert throws.loc[2, "Throws"] == "R"
+
+
+def test_compute_pitcher_throws_missing_column_returns_empty_not_a_crash():
+    pdf = pd.DataFrame([{"pitcher": 1, "game_date": pd.Timestamp("2026-06-01"), "events": "single"}])
+
+    throws = pitchers.compute_pitcher_throws(pdf)
+
+    assert throws.empty
+    assert list(throws.columns) == ["key_mlbam", "Throws"]
+
+
+def test_assemble_pitchers_carries_throws_and_degrades_gracefully_without_it():
+    rows = _events(1, [("2026-06-18", "single")])
+    pdf = pd.DataFrame(rows)
+    pdf["p_throws"] = "L"
+    names = pd.DataFrame([{"key_mlbam": 1, "name_first": "Ace", "name_last": "One"}])
+    latest_pitcher_team = pd.DataFrame([{"key_mlbam": 1, "team": "NYY"}])
+
+    with_throws = pitchers.assemble_pitchers(pdf, names, latest_pitcher_team).set_index("key_mlbam")
+    assert with_throws.loc[1, "Throws"] == "L"
+
+    without_throws = pitchers.assemble_pitchers(
+        pdf.drop(columns=["p_throws"]), names, latest_pitcher_team
+    ).set_index("key_mlbam")
+    assert pd.isna(without_throws.loc[1, "Throws"])
+
+
 def _bullpen_row(team, pitcher, date, events, is_starter):
     return {
         "team": team,

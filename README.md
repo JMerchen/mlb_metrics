@@ -267,6 +267,44 @@ game identity at all; `game_id` itself stays a dense, date-ordered integer
 against a real historical `wave.csv` commit: reconstructed
 `Game_Hit_Probability` now matches the committed values exactly.
 
+### Platoon and park awareness
+
+Two further adjustments to `Matchup_Hit_Probability`, on top of the base
+batter-vs-starter blend above:
+
+- **Platoon.** A batter's `WAVE` used to be a single hand-blended rate
+  regardless of whether today's probable starter throws left- or
+  right-handed - a real platoon split (common) got averaged away.
+  `pitchers.compute_pitcher_throws` exposes each pitcher's own throwing
+  hand (`Throws` in `pave.csv`, constant per pitcher), and
+  `matchup._platoon_wave` now picks the batter's `WAVE_L`/`WAVE_R` (now
+  also in `wave.csv`) to match, falling back to the blended `WAVE` when
+  `Throws` is unknown (unannounced starter) or absent (old snapshots).
+- **Park.** `teams.compute_park_factors` computes `Park_Factor` per team's
+  home venue (each team's home games are treated as one park, since
+  Statcast's pitch-level data doesn't carry a separate ballpark id) -
+  combined runs/game at that venue relative to the across-all-parks
+  average, the same PAVE_PLUS-style ratio convention (mean 1.0) used
+  elsewhere. `matchup.py` looks up the actual venue for today's game (the
+  home team, via `schedule_df`'s `is_home` - a road batter's *own* park is
+  irrelevant, only the venue they're actually playing in matters) and
+  scales the matchup AB rate by it, clipped to `MATCHUP_PARK_FACTOR_CLIP`
+  and dialed by `MATCHUP_PARK_FACTOR_WEIGHT`.
+
+Both were validated together via a 15-date persisted-Statcast backtest
+(recomputing `wave.csv`/`pave.csv`/`confidence.csv` fresh per date, the
+same technique `game_picks_backtest.py`'s persisted variant uses - neither
+signal exists in old git-committed snapshots, so a git-history replay
+can't see them): on the full qualified-candidate pool (n=43-52 resolved
+picks per variant), platoon and park together raised the hit rate from
+58% (neither) to 65% and cut the Brier score from 0.286 to 0.244 - the
+best of every combination tried (platoon alone: 62%/0.261; park alone:
+57%/0.293, roughly a wash by itself). See
+`config.MATCHUP_PARK_FACTOR_WEIGHT`'s docstring for the full numbers,
+including the smaller `rank<=2` "recommended" subset (n=11-18 - too small
+to trust on its own, and noisier in the opposite direction on this
+particular window). Revisit once more dates accumulate.
+
 ## Automated Game Picks (dashboard)
 
 A second, independent dashboard section predicts a winner for each of
@@ -344,8 +382,9 @@ trusted, not treated as ground truth.
 
 ## Probable Pitchers (dashboard)
 
-A small daily list of today's games with each probable starter and their
-`PAVE`/`PAVE_PLUS`/`Power_A_PLUS` (`schedule.build_probable_pitchers_table`),
+A small daily list of today's games with each probable starter, their
+throwing hand (`Throws`), and `PAVE`/`PAVE_PLUS`/`Power_A_PLUS`
+(`schedule.build_probable_pitchers_table`),
 written to `docs/data/probable_pitchers.csv` alongside the matchup blend
 (same resilience as the rest of Part B - a failed/empty schedule fetch means
 no file that day, not a stale one). A team with an unannounced or

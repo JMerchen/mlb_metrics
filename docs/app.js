@@ -955,7 +955,9 @@ const park = [
 
 "team_home_run_rate",
 
-"away_hr_rate"
+"away_hr_rate",
+
+"Park_Factor"
 
 ]
 
@@ -3523,6 +3525,7 @@ const formatted = rows.map(r=>({
 "Opponent": r.opponent,
 "Home/Away": r.is_home === "True" || r.is_home === "true" ? "Home" : "Away",
 "Probable Pitcher": r.pitcher_name || "TBD",
+"Throws": r.Throws || "-",
 "PAVE": r.PAVE && r.PAVE !== "" ? Number(r.PAVE).toFixed(3) : "-",
 "PAVE+": r.PAVE_PLUS && r.PAVE_PLUS !== "" ? Number(r.PAVE_PLUS).toFixed(2) : "-",
 "Power A+": r.Power_A_PLUS && r.Power_A_PLUS !== "" ? Number(r.Power_A_PLUS).toFixed(2) : "-",

@@ -26,6 +26,14 @@ Known first-pass simplifications, not fixed here: modern bullpen-game usage
 assumed starter/bullpen at-bat-share split; schedule.py's v1 only carries a
 team's first game of a doubleheader.
 
+Two further adjustments beyond the base batter-vs-starter blend: platoon
+(uses the batter's WAVE_L/WAVE_R against the probable starter's actual
+throwing hand instead of a hand-blended overall WAVE - see _platoon_wave)
+and park (scales the AB rate by the game's actual venue's Park_Factor - see
+_park_factor_multiplier and teams.compute_park_factors). Both were
+empirically validated together via backtest before shipping on by default -
+see config.MATCHUP_PARK_FACTOR_WEIGHT's docstring for the numbers.
+
 Validation status: backtested on 30 days of real history reconstructed
 directly from persisted Statcast (git-history CSV replay wasn't available -
 raw PAVE/WAVE were never persisted before this). Replaying the actual
@@ -51,6 +59,7 @@ wave.csv commit: reconstructed Game_Hit_Probability now matches the
 committed values exactly (previously it was deflated by roughly 40%).
 """
 
+import numpy as np
 import pandas as pd
 
 from mlb_metrics import config
@@ -115,6 +124,34 @@ def _league_pave(pave: pd.DataFrame) -> float:
     return league_pave if pd.notna(league_pave) else config.MATCHUP_LEAGUE_PAVE_FALLBACK
 
 
+def _platoon_wave(matchup: pd.DataFrame) -> pd.Series:
+    """Picks WAVE_L/WAVE_R based on the probable starter's own Throws
+    (pitchers.compute_pitcher_throws) instead of the batter's handedness-
+    blended overall WAVE - facing a lefty and a righty aren't the same
+    matchup for a batter with any real platoon split. Falls back to WAVE
+    when Throws is unknown (unannounced starter, not found in `pave`) or
+    when WAVE_L/WAVE_R/Throws aren't present at all (old wave.csv/pave.csv
+    snapshots predating this - see git_backtest.py, which replays those
+    directly)."""
+    if not {"WAVE_L", "WAVE_R", "starter_throws"}.issubset(matchup.columns):
+        return matchup["WAVE"]
+    platoon = np.where(
+        matchup["starter_throws"] == "L", matchup["WAVE_L"],
+        np.where(matchup["starter_throws"] == "R", matchup["WAVE_R"], matchup["WAVE"]),
+    )
+    return pd.Series(platoon, index=matchup.index)
+
+
+def _park_factor_multiplier(park_factor: pd.Series) -> pd.Series:
+    """1.0 (no-op) when Park_Factor is missing (old confidence.csv
+    snapshots, or a test fixture - see teams.compute_park_factors);
+    otherwise the clipped park effect scaled by
+    config.MATCHUP_PARK_FACTOR_WEIGHT (0 = fully off, 1 = full effect)."""
+    lo, hi = config.MATCHUP_PARK_FACTOR_CLIP
+    clipped = park_factor.fillna(1.0).clip(lo, hi)
+    return 1 + config.MATCHUP_PARK_FACTOR_WEIGHT * (clipped - 1)
+
+
 def compute_matchup_hit_probability(
     wave: pd.DataFrame,
     pave: pd.DataFrame,
@@ -126,23 +163,44 @@ def compute_matchup_hit_probability(
     today has no matchup and is left out entirely, not given a neutral
     value). A probable starter not yet announced, or not found in `pave`,
     contributes a neutral (league-average) matchup rather than dropping the
-    batter."""
-    matchup = wave[["key_mlbam", "team", "WAVE"]].merge(
-        schedule_df[["team", "opponent", "probable_pitcher_key_mlbam"]], on="team", how="inner"
-    )
+    batter.
+
+    Two adjustments beyond the base batter-vs-pitcher log5 blend:
+    - Platoon: uses the batter's WAVE_L/WAVE_R against the probable
+      starter's actual throwing hand (see _platoon_wave) instead of their
+      hand-blended overall WAVE.
+    - Park: scales the matchup AB rate by the game's actual venue's
+      Park_Factor (see teams.compute_park_factors) - the home team's park,
+      looked up via `schedule_df`'s `is_home`, since neither side's own
+      Park_Factor is relevant when they're the road team today.
+    """
+    wave_columns = [c for c in ("key_mlbam", "team", "WAVE", "WAVE_L", "WAVE_R") if c in wave.columns]
+    schedule_columns = [
+        c for c in ("team", "opponent", "probable_pitcher_key_mlbam", "is_home") if c in schedule_df.columns
+    ]
+    matchup = wave[wave_columns].merge(schedule_df[schedule_columns], on="team", how="inner")
 
     league_pave = _league_pave(pave)
 
-    starter_pave = pave[["key_mlbam", "PAVE"]].rename(
-        columns={"key_mlbam": "probable_pitcher_key_mlbam", "PAVE": "starter_pave"}
+    pave_columns = [c for c in ("key_mlbam", "PAVE", "Throws") if c in pave.columns]
+    starter_pave = pave[pave_columns].rename(
+        columns={"key_mlbam": "probable_pitcher_key_mlbam", "PAVE": "starter_pave", "Throws": "starter_throws"}
     )
     matchup = matchup.merge(starter_pave, on="probable_pitcher_key_mlbam", how="left")
 
     bullpen_pave = confidence[["team", "Bullpen_PAVE"]].rename(columns={"team": "opponent"})
     matchup = matchup.merge(bullpen_pave, on="opponent", how="left")
 
+    if "Park_Factor" in confidence.columns and "is_home" in matchup.columns:
+        matchup["venue_team"] = matchup["team"].where(matchup["is_home"], matchup["opponent"])
+        park_factor = confidence[["team", "Park_Factor"]].rename(columns={"team": "venue_team"})
+        matchup = matchup.merge(park_factor, on="venue_team", how="left")
+    else:
+        matchup["Park_Factor"] = pd.NA
+
     opponent_rate = clip_and_blend_pitching_pave(matchup["starter_pave"], matchup["Bullpen_PAVE"], league_pave)
-    matchup_ab_rate = _log5(matchup["WAVE"], opponent_rate, league_pave)
+    batter_rate = _platoon_wave(matchup)
+    matchup_ab_rate = _log5(batter_rate, opponent_rate, league_pave) * _park_factor_multiplier(matchup["Park_Factor"])
     matchup["Matchup_Hit_Probability"] = (
         1 - (1 - matchup_ab_rate) ** config.WAVE_TRIALS_PER_GAME
     ).clip(0, 1)

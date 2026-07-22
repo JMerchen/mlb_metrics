@@ -22,6 +22,12 @@ data), Power_A_PLUS normalizes the already-blended `power_a` (total bases
 allowed per plate appearance, blended across the same config.PAVE_WINDOWS
 recency windows as PAVE) the same way PAVE_PLUS normalizes PAVE - "who is
 currently susceptible to allowing damage," not just hits.
+
+`Throws` (compute_pitcher_throws) exposes each pitcher's own throwing hand -
+used by matchup.py to select a batter's platoon-specific hit rate
+(WAVE_L/WAVE_R, see hitters.py) against today's actual probable starter,
+instead of a hand-blended overall rate that treats facing a lefty and a
+righty as interchangeable.
 """
 
 import pandas as pd
@@ -103,6 +109,23 @@ def compute_pave(pdf: pd.DataFrame) -> pd.DataFrame:
     return _blend_pave(pdf, "pitcher").rename(columns={"pitcher": "key_mlbam"})
 
 
+def compute_pitcher_throws(pdf: pd.DataFrame) -> pd.DataFrame:
+    """One row per pitcher: [key_mlbam, Throws] ("L"/"R") - the pitcher's
+    own throwing hand (Statcast's p_throws, constant for a given pitcher
+    all season, unlike a batter's opponent-hand splits). Used by matchup.py
+    to pick a batter's platoon-specific rate (WAVE_L/WAVE_R) against
+    today's actual probable starter instead of a handedness-blended
+    overall rate.
+
+    Empty (with the right columns, not a crash) when `pdf` doesn't carry
+    p_throws - older callers/test fixtures predating this column - so a
+    merge onto it just leaves every Throws null rather than failing."""
+    if "p_throws" not in pdf.columns:
+        return pd.DataFrame(columns=["key_mlbam", "Throws"])
+    throws = pdf[["pitcher", "p_throws"]].dropna().drop_duplicates(subset="pitcher", keep="last")
+    return throws.rename(columns={"pitcher": "key_mlbam", "p_throws": "Throws"})
+
+
 def compute_bullpen_pave(pdf_with_role: pd.DataFrame) -> pd.DataFrame:
     """Team-level PAVE computed only from relief appearances (`is_starter`
     False), so hitters can be evaluated against the bullpen they're likely
@@ -141,8 +164,15 @@ def compute_bullpen_pave(pdf_with_role: pd.DataFrame) -> pd.DataFrame:
 
 
 def assemble_pitchers(pdf: pd.DataFrame, names: pd.DataFrame, latest_pitcher_team: pd.DataFrame) -> pd.DataFrame:
-    """Build the final pitcher output table (equivalent to the original script's `pave` dataframe)."""
+    """Build the final pitcher output table (equivalent to the original script's `pave` dataframe).
+
+    `pdf` must carry a `p_throws` column (see pipeline.build_pitcher_events)
+    for the `Throws` column below - a missing p_throws (old callers/test
+    fixtures predating this) degrades to Throws=NaN for every pitcher via
+    compute_pitcher_throws's dropna, not a crash.
+    """
     pave = compute_pave(pdf)
+    throws = compute_pitcher_throws(pdf)
 
     qualified_threshold = pave["at_bats"].max() * config.PAVE_QUALIFIED_AB_FRACTION
     qualified = pave["at_bats"] > qualified_threshold
@@ -158,10 +188,11 @@ def assemble_pitchers(pdf: pd.DataFrame, names: pd.DataFrame, latest_pitcher_tea
 
     pave = pave.merge(names, on="key_mlbam", how="left")
     pave = pave.merge(latest_pitcher_team, on="key_mlbam", how="left")
+    pave = pave.merge(throws, on="key_mlbam", how="left")
 
     pave = pave[
         [
-            "key_mlbam", "name_first", "name_last", "team", "at_bats",
+            "key_mlbam", "name_first", "name_last", "team", "at_bats", "Throws",
             "PAVE", "PAVE_PLUS", "Power_A_PLUS",
             "Expected_Hits", "Expected_Bases", "Expected_HRs",
         ]
