@@ -18,7 +18,10 @@ import os
 
 import pandas as pd
 
-from mlb_metrics import config, data, evaluation, hitters, lineup, matchup, pitchers, predictions, schedule, teams
+from mlb_metrics import (
+    config, data, evaluation, game_evaluation, game_picks, game_predictions,
+    hitters, lineup, matchup, pitchers, predictions, schedule, teams,
+)
 
 
 def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
@@ -84,6 +87,20 @@ def write_beat_the_streak_export(predictions_log_path: str, output_dir: str) -> 
     summary.to_csv(os.path.join(output_dir, "beat_the_streak_summary.csv"), index=False)
 
 
+def write_game_picks_export(game_predictions_log_path: str, output_dir: str) -> None:
+    """Read the full game-predictions log and (re)write the two CSVs the
+    dashboard's Automated Game Picks section reads: each picked game with a
+    win/loss/not_played/pending status, and an accuracy/streak summary (see
+    game_evaluation.build_game_picks_export). No-op if nothing's logged yet."""
+    if not os.path.exists(game_predictions_log_path):
+        return
+    log = pd.read_csv(game_predictions_log_path, parse_dates=["date"])
+    picks, summary = game_evaluation.build_game_picks_export(log)
+    os.makedirs(output_dir, exist_ok=True)
+    picks.to_csv(os.path.join(output_dir, "game_picks_picks.csv"), index=False)
+    summary.to_csv(os.path.join(output_dir, "game_picks_summary.csv"), index=False)
+
+
 def run(
     as_of_date: datetime.date,
     raw_dir: str = "data/raw",
@@ -114,11 +131,18 @@ def run(
 
     if log_predictions:
         predictions_log_path = os.path.join(predictions_dir, "predictions.csv")
+        game_predictions_log_path = os.path.join(predictions_dir, "game_predictions.csv")
+
         # `df` already covers every completed game strictly before as_of_date,
         # i.e. exactly what's needed to resolve any pick logged on an earlier
         # run whose target date has since happened.
         completed = data.completed_events(df, ["game_date", "batter", "events"])
         predictions.resolve_predictions(predictions_log_path, completed)
+        # Resolving game picks needs final scores, not Statcast (see
+        # schedule.fetch_game_results) - this call is internally resilient
+        # per-date (see game_predictions.resolve_game_predictions), so it
+        # doesn't need its own try/except here.
+        game_predictions.resolve_game_predictions(game_predictions_log_path, schedule.fetch_game_results, as_of_date)
 
         # A new external dependency (statsapi) must not be able to break the
         # whole daily update - on failure, fall back to no schedule
@@ -129,6 +153,17 @@ def run(
         except Exception as exc:
             print(f"WARNING: failed to fetch today's schedule/probable pitchers ({exc}); "
                   f"skipping Matchup_Hit_Probability and the teams-playing-today qualifier for this run.")
+
+        # Same resilience for the game-per-row shape Automated Game Picks
+        # needs (see schedule.normalize_schedule_games) - a separate call
+        # since it deliberately doesn't dedupe doubleheaders the way
+        # schedule_df above does, so it can't be derived from schedule_df.
+        schedule_games_df = None
+        try:
+            schedule_games_df = schedule.fetch_todays_games(as_of_date)
+        except Exception as exc:
+            print(f"WARNING: failed to fetch today's game schedule ({exc}); "
+                  f"skipping Automated Game Picks for this run.")
 
         # None (fetch failed) means "unknown, don't filter"; an empty set
         # (fetch succeeded, zero games today) correctly excludes every pick.
@@ -150,6 +185,15 @@ def run(
             predictions.append_predictions(matchup_picks, predictions_log_path)
 
         write_beat_the_streak_export(predictions_log_path, output_dir)
+
+        if schedule_games_df is not None and not schedule_games_df.empty:
+            win_probabilities = game_picks.compute_game_win_probabilities(
+                outputs["confidence"], outputs["pave"], schedule_games_df
+            )
+            todays_game_picks = game_predictions.select_game_picks(win_probabilities, as_of_date)
+            game_predictions.append_game_predictions(todays_game_picks, game_predictions_log_path)
+
+        write_game_picks_export(game_predictions_log_path, output_dir)
 
     return outputs
 

@@ -223,6 +223,26 @@ opacity:.7;
 
 }
 
+.pickCard.win{
+
+border-left-color:#4caf50;
+
+}
+
+.pickCard.loss{
+
+border-left-color:#e53935;
+
+}
+
+.pickCard.not_played{
+
+border-left-color:#5c7cfa;
+
+opacity:.7;
+
+}
+
 .pickName{
 
 font-size:16px;

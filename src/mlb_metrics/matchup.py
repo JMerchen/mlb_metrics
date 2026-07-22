@@ -20,6 +20,23 @@ import pandas as pd
 from mlb_metrics import config
 
 
+def clip_and_blend_pitching_quality(starter_pave_plus: pd.Series, bullpen_pave_plus: pd.Series) -> pd.Series:
+    """A single opposing-pitching-quality multiplier from a probable
+    starter's PAVE_PLUS and their team's Bullpen_PAVE_PLUS, weighted by
+    assumed at-bat share (config.MATCHUP_STARTER_AB_SHARE/BULLPEN_AB_SHARE).
+    Missing values (unannounced starter, not found in pave.csv) default to a
+    neutral 1.0. Both inputs are clipped to config.MATCHUP_PAVE_PLUS_CLIP
+    BEFORE blending, not just clipping the final result - a small-sample
+    outlier PAVE_PLUS would otherwise corrupt the blend (see config.py).
+    Shared by compute_matchup_hit_probability (batter-level) and
+    game_picks.compute_game_win_probabilities (team-level) - same physical
+    reasoning applies at both levels."""
+    lo, hi = config.MATCHUP_PAVE_PLUS_CLIP
+    starter = starter_pave_plus.fillna(1.0).clip(lo, hi)
+    bullpen = bullpen_pave_plus.fillna(1.0).clip(lo, hi)
+    return config.MATCHUP_STARTER_AB_SHARE * starter + config.MATCHUP_BULLPEN_AB_SHARE * bullpen
+
+
 def compute_matchup_hit_probability(
     wave: pd.DataFrame,
     pave: pd.DataFrame,
@@ -31,8 +48,6 @@ def compute_matchup_hit_probability(
     today has no matchup and is left out entirely, not given a neutral
     value). A probable starter not yet announced, or not found in `pave`,
     contributes a neutral 1.0 rather than dropping the batter."""
-    lo, hi = config.MATCHUP_PAVE_PLUS_CLIP
-
     matchup = wave[["key_mlbam", "team", "Game_Hit_Probability"]].merge(
         schedule_df[["team", "opponent", "probable_pitcher_key_mlbam"]], on="team", how="inner"
     )
@@ -45,15 +60,7 @@ def compute_matchup_hit_probability(
     bullpen_pave = confidence[["team", "Bullpen_PAVE_PLUS"]].rename(columns={"team": "opponent"})
     matchup = matchup.merge(bullpen_pave, on="opponent", how="left")
 
-    # Clip BEFORE blending, not just the final probability - a small-sample
-    # outlier PAVE_PLUS would otherwise corrupt the blend (see config.py).
-    matchup["starter_pave_plus"] = matchup["starter_pave_plus"].fillna(1.0).clip(lo, hi)
-    matchup["Bullpen_PAVE_PLUS"] = matchup["Bullpen_PAVE_PLUS"].fillna(1.0).clip(lo, hi)
-
-    opponent_quality = (
-        config.MATCHUP_STARTER_AB_SHARE * matchup["starter_pave_plus"]
-        + config.MATCHUP_BULLPEN_AB_SHARE * matchup["Bullpen_PAVE_PLUS"]
-    )
+    opponent_quality = clip_and_blend_pitching_quality(matchup["starter_pave_plus"], matchup["Bullpen_PAVE_PLUS"])
     matchup["Matchup_Hit_Probability"] = (matchup["Game_Hit_Probability"] * opponent_quality).clip(0, 1)
 
     return matchup[["key_mlbam", "Matchup_Hit_Probability"]]

@@ -4,6 +4,25 @@ import pytest
 from mlb_metrics import matchup
 
 
+def test_clip_and_blend_pitching_quality_exact_arithmetic():
+    result = matchup.clip_and_blend_pitching_quality(pd.Series([0.9]), pd.Series([1.1]))
+    # .6*.9 + .4*1.1 = .98 - same arithmetic compute_matchup_hit_probability
+    # relies on (see test_compute_matchup_hit_probability_exact_arithmetic).
+    assert result.iloc[0] == pytest.approx(0.98)
+
+
+def test_clip_and_blend_pitching_quality_clips_before_blending():
+    result = matchup.clip_and_blend_pitching_quality(pd.Series([5.0]), pd.Series([0.1]))
+    # Clipped to (0.5, 1.75) BEFORE blending: .6*1.75 + .4*.5 = 1.25.
+    assert result.iloc[0] == pytest.approx(1.25)
+
+
+def test_clip_and_blend_pitching_quality_missing_values_default_neutral():
+    result = matchup.clip_and_blend_pitching_quality(pd.Series([None]), pd.Series([1.2]))
+    # starter component neutral (1.0): .6*1.0 + .4*1.2 = 1.08
+    assert result.iloc[0] == pytest.approx(1.08)
+
+
 def _wave(rows):
     """rows: list of (key_mlbam, team, game_hit_probability)."""
     return pd.DataFrame(

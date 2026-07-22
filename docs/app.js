@@ -3382,6 +3382,126 @@ sorted,
 
 }
 
+async function loadGamePicks(){
+
+let summary = []
+let picks = []
+
+try{
+summary = await loadCSV("./data/game_picks_summary.csv")
+}catch(e){
+console.log("no game_picks_summary.csv yet", e)
+}
+
+try{
+picks = await loadCSV("./data/game_picks_picks.csv")
+}catch(e){
+console.log("no game_picks_picks.csv yet", e)
+}
+
+renderGamePickStats(summary)
+renderTodaysGamePicks(picks)
+renderGamePickHistory(picks)
+
+}
+
+function renderGamePickStats(summary){
+
+const el = document.getElementById("gamePickStats")
+
+if(!summary.length){
+el.innerHTML = "No picks tracked yet"
+return
+}
+
+const s = summary[0]
+
+const accuracy =
+s.accuracy && s.accuracy !== ""
+? (Number(s.accuracy) * 100).toFixed(1) + "%"
+: "-"
+
+const stat = (value, label) =>
+`<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div></div>`
+
+el.innerHTML =
+stat(s.current_streak || 0, "Current Streak") +
+stat(s.best_streak || 0, "Best Streak") +
+stat(accuracy, "Accuracy") +
+stat(s.n_games_resolved || 0, "Games Tracked")
+
+}
+
+function renderTodaysGamePicks(picks){
+
+const el = document.getElementById("todaysGamePicks")
+
+// Only days with at least one game clearing GAME_PICK_MIN_PROBABILITY
+// appear in `picks` at all - a day with zero picks is simply absent, not
+// a blank row - so this naturally shows the most recent day that had one.
+if(!picks.length){
+el.innerHTML = "No confident picks recommended yet"
+return
+}
+
+const latestDate = picks
+.map(p=>p.date)
+.sort()
+.slice(-1)[0]
+
+const todays = picks
+.filter(p=>p.date === latestDate)
+.sort((a,b)=>Number(b.predicted_probability) - Number(a.predicted_probability))
+
+if(!todays.length){
+el.innerHTML = "No confident picks today"
+return
+}
+
+const statusLabels = {
+win: "win",
+loss: "loss",
+not_played: "not played",
+pending: "pending",
+}
+
+el.innerHTML = todays
+.map(p=>{
+
+const prob =
+p.predicted_probability && p.predicted_probability !== ""
+? (Number(p.predicted_probability) * 100).toFixed(1) + "% predicted"
+: ""
+
+return `
+<div class="pickCard ${p.status}">
+<div class="pickName">${p.predicted_winner} (${p.away_team} @ ${p.home_team})</div>
+<div class="pickProb">${prob}</div>
+<div class="pickStatus">${statusLabels[p.status] || p.status}</div>
+</div>
+`
+
+})
+.join("")
+
+}
+
+function renderGamePickHistory(picks){
+
+const sorted = picks
+.slice()
+.sort((a,b)=>b.date.localeCompare(a.date) || Number(b.predicted_probability) - Number(a.predicted_probability))
+
+buildTable(
+sorted,
+"gamePickHistoryTable",
+100
+)
+
+}
+
 loadAll()
 
 loadBeatTheStreak()
+
+loadGamePicks()
