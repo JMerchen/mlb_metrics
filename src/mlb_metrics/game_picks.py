@@ -54,7 +54,16 @@ def compute_game_win_probabilities(
     degenerate-input guard.
     """
     composite = _team_composite(confidence)
-    bullpen = confidence[["team", "Bullpen_PAVE_PLUS"]]
+    # Bullpen_PAVE_PLUS was added to confidence.csv partway through this
+    # project's history (see matchup.py) - older snapshots (e.g. replayed
+    # via game_picks_backtest.py) lack the column entirely, not just have
+    # missing values in it, so it can't be selected directly. A missing
+    # column degrades to the same neutral-per-row handling
+    # clip_and_blend_pitching_quality already does for a missing value.
+    if "Bullpen_PAVE_PLUS" in confidence.columns:
+        bullpen = confidence[["team", "Bullpen_PAVE_PLUS"]]
+    else:
+        bullpen = pd.DataFrame({"team": confidence["team"], "Bullpen_PAVE_PLUS": pd.NA})
     starter_pave = pave[["key_mlbam", "PAVE_PLUS"]].rename(columns={"PAVE_PLUS": "starter_pave_plus"})
 
     games = schedule_games_df.merge(

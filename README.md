@@ -154,13 +154,27 @@ written after every daily run from `data/predictions/game_predictions.csv`
 instead of a player id). Resolution uses final scores fetched via
 `schedule.fetch_game_results`, not Statcast.
 
-**Known limitation: no historical backtest.** Unlike `wave.csv` (replayed
-by `git_backtest.py` for the hitter-pick backtest), schedule/game data has
-never been persisted to this repo's git history - it's fetched live and
-used in-memory each run, same limitation already true of
-`Matchup_Hit_Probability`. Automated Game Picks can only accumulate a
-resolved dataset forward from the day it shipped; there is no way to
-retroactively evaluate the formula against past dates.
+**Historical backtest** (`scripts/run_game_picks_backtest.py`,
+`game_picks_backtest.py`): unlike probable-pitcher/live-schedule data
+(never persisted - see `Matchup_Hit_Probability`'s equivalent limitation
+above), schedule/game *outcomes* are already fully reconstructable from
+data this project already has: `confidence.csv`/`pave.csv` have been
+committed daily (same commit as `wave.csv`) since the project started, in
+exactly the as-of-that-date snapshot shape the model needs, and Statcast
+itself already contains each game's real `game_pk`, actual starting
+pitchers, and actual final score - no separate schedule-API history
+needed. This replays the last N days (default 40) of `confidence.csv`/
+`pave.csv` git history through `game_picks.compute_game_win_probabilities`,
+using the *actual* starter in place of the announced "probable" one (a
+reasonable stand-in in hindsight - the two agree the vast majority of the
+time) and resolves every pick immediately against the real final score,
+since a backtested pick's outcome is already known at reconstruction time
+(no pending state, unlike a live pick). Writes into the same
+`data/predictions/game_predictions.csv` log and
+`docs/data/game_picks_picks.csv`/`game_picks_summary.csv` exports used by
+the live daily system, exactly like `git_backtest.py` does for hitter
+picks - so the dashboard shows one continuous history, not two separate
+tracks.
 
 This is a first-pass, unvalidated blend (see `game_picks.py`'s module
 docstring), meant to be watched and compared against reality before being
