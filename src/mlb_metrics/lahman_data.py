@@ -1,8 +1,20 @@
-"""Historical player data from Lahman's Baseball Database, via pybaseball's
-built-in `lahman` submodule (the Chadwick Bureau's baseballdatabank
-mirror, covering 1871 through that mirror's last completed season - never
-the current in-progress season). Used by age_curve.py to build KNN
-comparables for the Age Curves page.
+"""Historical player data from Lahman's Baseball Database, via the `lahman`
+PyPI package (a Chadwick Bureau baseballdatabank mirror bundled directly
+into the installed wheel, covering 1871 through that mirror's last
+completed season - never the current in-progress season). Used by
+age_curve.py to build KNN comparables for the Age Curves page.
+
+Deliberately NOT pybaseball's own built-in `lahman` submodule
+(`pybaseball.lahman`), despite pybaseball already being a dependency here:
+that submodule downloads a zip from
+`https://github.com/chadwickbureau/baseballdatabank/archive/master.zip` at
+call time, and that download has started failing (`zipfile.BadZipFile`) -
+confirmed reproducing in real GitHub Actions CI with full internet access,
+not just a sandboxed/network-restricted environment, so it's an upstream
+break, not a local network issue. The `lahman` package has an identical
+`people()`/`batting()`/`pitching()` API (see fetch_people/fetch_batting/
+fetch_pitching below) and needs no runtime network fetch at all, since the
+CSVs ship inside the package itself - removing this failure mode entirely.
 
 This data is historical and mostly static (it updates roughly once a
 season, when a completed season is added to the mirror), unlike this
@@ -12,7 +24,11 @@ persisted by its own separate, occasionally-run script
 data.py's persist_raw_statcast/load_persisted_statcast shape (parquet
 under data/raw/, load-if-exists) but as a whole-table overwrite each
 refresh - Lahman doesn't stream incrementally per-event the way Statcast
-does, so there's nothing to merge/dedupe against.
+does, so there's nothing to merge/dedupe against. Note the "once a
+season" refresh cadence now depends on the `lahman` PyPI package itself
+getting a new release with that season's data bundled in, not just on
+running fetch_lahman.py again - a real (if minor) trade-off for no longer
+depending on a fetch that can silently break upstream.
 
 Bridging this project's own player identity (`key_mlbam`, from Statcast)
 to Lahman's own `playerID` needs a two-hop crosswalk: chadwick_register()
@@ -27,19 +43,19 @@ import pandas as pd
 
 
 def fetch_people() -> pd.DataFrame:
-    from pybaseball import lahman
+    import lahman
 
     return lahman.people()
 
 
 def fetch_batting() -> pd.DataFrame:
-    from pybaseball import lahman
+    import lahman
 
     return lahman.batting()
 
 
 def fetch_pitching() -> pd.DataFrame:
-    from pybaseball import lahman
+    import lahman
 
     return lahman.pitching()
 

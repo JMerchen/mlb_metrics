@@ -1,5 +1,7 @@
 """Fetch and persist Lahman's Baseball Database (People/Batting/Pitching,
-via pybaseball's built-in `lahman` submodule) to data/raw/lahman/*.parquet.
+via the `lahman` PyPI package - see lahman_data.py's module docstring for
+why not pybaseball's own built-in `lahman` submodule) to
+data/raw/lahman/*.parquet.
 
 Unlike the daily Statcast pull, this data is historical and mostly static -
 it only updates roughly once a season, when a completed season is added to
