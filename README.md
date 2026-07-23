@@ -464,9 +464,10 @@ ballparks is a real limitation of this first pass.
 `scripts/fetch_lahman.py` (persists `people`/`batting`/`pitching` to
 `data/raw/lahman/*.parquet`) and `scripts/build_age_curves.py` (writes
 `docs/data/age_curve_projections.csv`/`age_curve_comparables.csv`/
-`age_curve_league.csv`) run on their own **occasional cadence** (e.g. once
-a season / weekly) - deliberately *not* part of `daily_update.yml`, since
-historical comparables don't move day to day. `scripts/backtest_age_curve.py`
+`age_curve_league.csv`) run on their own **occasional cadence** (weekly, via
+`.github/workflows/age_curves_update.yml` - also manually triggerable) -
+deliberately a separate workflow from `daily_update.yml`, since historical
+comparables don't move day to day. `scripts/backtest_age_curve.py`
 validates the projection method itself against a sample of real past
 player-seasons (each with a known real next season to check against),
 using only comparable data available at or before that test season's own
