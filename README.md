@@ -459,6 +459,23 @@ using only comparable data available at or before that test season's own
 year - the same no-lookahead discipline as `git_backtest.py`/
 `game_picks_backtest.py` elsewhere in this project.
 
+**Validated against real data**: 500 sampled real player-seasons from
+2010-2019 (out of 29,692 qualified historical hitter-seasons, 1871-present).
+Every metric beat the naive "always guess the sample mean" baseline, with a
+real positive correlation between projected and actual next-season value -
+strongest for the power/contact-combination metrics:
+
+| metric | MAE | naive baseline MAE | correlation | n scored |
+|---|---|---|---|---|
+| AVG | 0.0246 | 0.0254 | 0.348 | 355/500 |
+| OBP | 0.0274 | 0.0284 | 0.430 | 355/500 |
+| SLG | 0.0535 | 0.0582 | 0.474 | 355/500 |
+| OPS | 0.0752 | 0.0789 | 0.445 | 355/500 |
+
+(See `config.py`'s `AGE_CURVE_AGE_WINDOW` docstring for the full
+methodology note - the 145/500 unscored seasons had no comparable with a
+resolvable next season and are reported, not hidden.)
+
 ## Running
 
 ```
