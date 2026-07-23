@@ -1,34 +1,38 @@
-"""Historical player data from Lahman's Baseball Database, via the `lahman`
-PyPI package (a Chadwick Bureau baseballdatabank mirror bundled directly
-into the installed wheel, covering 1871 through that mirror's last
-completed season - never the current in-progress season). Used by
-age_curve.py to build KNN comparables for the Age Curves page.
+"""Historical player data from Lahman's Baseball Database, read from CSVs
+committed under `Lahman_Raw/` at the repo root (People.csv/Batting.csv/
+Pitching.csv, sourced from SABR's box.com mirror of the database) - a
+manually-refreshed source of truth, not a live fetch. Used by age_curve.py
+to build KNN comparables for the Age Curves page.
 
-Deliberately NOT pybaseball's own built-in `lahman` submodule
-(`pybaseball.lahman`), despite pybaseball already being a dependency here:
-that submodule downloads a zip from
-`https://github.com/chadwickbureau/baseballdatabank/archive/master.zip` at
-call time, and that download has started failing (`zipfile.BadZipFile`) -
-confirmed reproducing in real GitHub Actions CI with full internet access,
-not just a sandboxed/network-restricted environment, so it's an upstream
-break, not a local network issue. The `lahman` package has an identical
-`people()`/`batting()`/`pitching()` API (see fetch_people/fetch_batting/
-fetch_pitching below) and needs no runtime network fetch at all, since the
-CSVs ship inside the package itself - removing this failure mode entirely.
+Two automated fetch paths were tried first and both failed:
+- pybaseball's own built-in `lahman` submodule (`pybaseball.lahman`)
+  downloads a zip from
+  `https://github.com/chadwickbureau/baseballdatabank/archive/master.zip`
+  at call time, and that download started failing (`zipfile.BadZipFile`) -
+  confirmed reproducing in real GitHub Actions CI with full internet
+  access, so it's an upstream break, not a local network issue.
+- The `lahman` PyPI package (no runtime fetch needed, data bundled in the
+  wheel) turned out to be a single abandoned release from 2022 with data
+  frozen at the 2020 season - stale by half a decade.
 
-This data is historical and mostly static (it updates roughly once a
-season, when a completed season is added to the mirror), unlike this
-project's own Statcast data which grows daily - so it's fetched and
-persisted by its own separate, occasionally-run script
-(scripts/fetch_lahman.py), never the daily pipeline. Persistence mirrors
-data.py's persist_raw_statcast/load_persisted_statcast shape (parquet
-under data/raw/, load-if-exists) but as a whole-table overwrite each
-refresh - Lahman doesn't stream incrementally per-event the way Statcast
-does, so there's nothing to merge/dedupe against. Note the "once a
-season" refresh cadence now depends on the `lahman` PyPI package itself
-getting a new release with that season's data bundled in, not just on
-running fetch_lahman.py again - a real (if minor) trade-off for no longer
-depending on a fetch that can silently break upstream.
+`Lahman_Raw/` sidesteps both: the CSVs are downloaded by hand from SABR's
+mirror (https://sabr.app.box.com - Lahman's database is now hosted there)
+and committed directly, alongside a `Lahman_Raw/Readme.md` documenting how
+to refresh them. This data is historical and mostly static (it updates
+roughly once a season, when a completed season is added), unlike this
+project's own Statcast data which grows daily - so like the two fetch
+paths before it, it's converted to data/raw/lahman/*.parquet by its own
+separate, occasionally-run script (scripts/fetch_lahman.py), never the
+daily pipeline. Persistence mirrors data.py's persist_raw_statcast/
+load_persisted_statcast shape (parquet under data/raw/, load-if-exists)
+but as a whole-table overwrite each refresh - Lahman doesn't stream
+incrementally per-event the way Statcast does, so there's nothing to
+merge/dedupe against.
+
+`Lahman_Raw/People.csv` carries an extra leading `ID` column (a row
+number, not `playerID`) that SABR's export includes and Lahman's own
+distribution doesn't - harmless, just unused, since every read here
+selects columns by name.
 
 Bridging this project's own player identity (`key_mlbam`, from Statcast)
 to Lahman's own `playerID` needs a two-hop crosswalk: chadwick_register()
@@ -42,22 +46,16 @@ import os
 import pandas as pd
 
 
-def fetch_people() -> pd.DataFrame:
-    import lahman
-
-    return lahman.people()
+def fetch_people(lahman_raw_dir: str = "Lahman_Raw") -> pd.DataFrame:
+    return pd.read_csv(os.path.join(lahman_raw_dir, "People.csv"))
 
 
-def fetch_batting() -> pd.DataFrame:
-    import lahman
-
-    return lahman.batting()
+def fetch_batting(lahman_raw_dir: str = "Lahman_Raw") -> pd.DataFrame:
+    return pd.read_csv(os.path.join(lahman_raw_dir, "Batting.csv"))
 
 
-def fetch_pitching() -> pd.DataFrame:
-    import lahman
-
-    return lahman.pitching()
+def fetch_pitching(lahman_raw_dir: str = "Lahman_Raw") -> pd.DataFrame:
+    return pd.read_csv(os.path.join(lahman_raw_dir, "Pitching.csv"))
 
 
 def lahman_table_path(raw_dir: str, name: str) -> str:

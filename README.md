@@ -403,14 +403,22 @@ historical players at the same age, plus a projection for next season
 built from what those historical comparables actually did the following
 year.
 
-Uses [Lahman's Baseball Database](https://github.com/chadwickbureau/baseballdatabank)
-(1871-present), fetched via the `lahman` PyPI package (`lahman_data.py`) -
-not pybaseball's own built-in `lahman` submodule, whose runtime zip
-download from the baseballdatabank repo started failing; the PyPI package
-bundles the CSVs directly in the installed wheel, no network fetch needed -
-a different data source than the rest of this project
-(Statcast), needed because Lahman's historical seasons have no
-Statcast-derived signal (WAVE/PAVE) to compare against. A current player is
+Uses Lahman's Baseball Database (1871-2025), read from CSVs committed
+under `Lahman_Raw/` at the repo root (`lahman_data.py`) - downloaded by
+hand from [SABR's mirror](https://sabr.app.box.com/s/y1prhc795jk8zvmelfd3jq7tl389y6cd)
+and refreshed manually, roughly once a season (see `Lahman_Raw/Readme.md`
+for the refresh steps). Two automated alternatives were tried first and
+both failed: pybaseball's own built-in `lahman` submodule downloads a zip
+from the baseballdatabank GitHub repo at call time, and that download
+started failing (`zipfile.BadZipFile`, reproduced in real CI with full
+internet access - an upstream break, not a local network issue); the
+`lahman` PyPI package needs no network fetch but turned out to be a single
+abandoned release from 2022 with data frozen at the 2020 season. A
+manually-refreshed, committed CSV sidesteps both failure modes.
+
+A different data source than the rest of this project (Statcast), needed
+because Lahman's historical seasons have no Statcast-derived signal
+(WAVE/PAVE) to compare against. A current player is
 put on the same stat basis - season `AVG`/`OBP`/`SLG`/`OPS` for hitters,
 `K9`/`BB9`/`HR9`/`FIP` for pitchers (`traditional_stats.py`, reusing
 `helpers.py`'s event classifiers, not recency-windowed like WAVE) - so
@@ -464,7 +472,7 @@ adjustment** - comparing raw rates across very different offensive eras
 (e.g. the high-offense late 1990s vs. a lower-average modern era) or
 ballparks is a real limitation of this first pass.
 
-`scripts/fetch_lahman.py` (persists `people`/`batting`/`pitching` to
+`scripts/fetch_lahman.py` (converts `Lahman_Raw/*.csv` to
 `data/raw/lahman/*.parquet`) and `scripts/build_age_curves.py` (writes
 `docs/data/age_curve_projections.csv`/`age_curve_comparables.csv`/
 `age_curve_league.csv`) run on their own **occasional cadence** (weekly, via
@@ -478,18 +486,18 @@ year - the same no-lookahead discipline as `git_backtest.py`/
 `game_picks_backtest.py` elsewhere in this project.
 
 **Validated against real data**: 500 sampled real player-seasons from
-2010-2019 (out of 29,692 qualified historical hitter-seasons / 25,073
-qualified historical pitcher-seasons, 1871-present). Every hitter metric
+2010-2019 (out of 32,158 qualified historical hitter-seasons / 28,127
+qualified historical pitcher-seasons, 1871-2025). Every hitter metric
 beat the naive "always guess the sample mean" baseline, with a real
 positive correlation between projected and actual next-season value -
 strongest for the power/contact-combination metrics:
 
 | metric | MAE | naive baseline MAE | correlation | n scored |
 |---|---|---|---|---|
-| AVG | 0.0246 | 0.0254 | 0.348 | 355/500 |
-| OBP | 0.0274 | 0.0284 | 0.430 | 355/500 |
-| SLG | 0.0535 | 0.0582 | 0.474 | 355/500 |
-| OPS | 0.0752 | 0.0789 | 0.445 | 355/500 |
+| AVG | 0.0245 | 0.0254 | 0.352 | 355/500 |
+| OBP | 0.0274 | 0.0284 | 0.429 | 355/500 |
+| SLG | 0.0533 | 0.0582 | 0.473 | 355/500 |
+| OPS | 0.0756 | 0.0789 | 0.446 | 355/500 |
 
 (See `config.py`'s `AGE_CURVE_AGE_WINDOW` docstring for the full
 methodology note - the 145/500 unscored seasons had no comparable with a
@@ -507,10 +515,10 @@ page as a weak signal, not a strong one:
 
 | metric | MAE | naive baseline MAE | correlation | n scored |
 |---|---|---|---|---|
-| K9 | 1.1482 | 1.5878 | 0.745 | 296/500 |
-| BB9 | 0.6309 | 0.7776 | 0.615 | 296/500 |
-| HR9 | 0.3293 | 0.3264 | 0.320 | 296/500 |
-| FIP | 0.5880 | 0.6606 | 0.442 | 296/500 |
+| K9 | 1.1476 | 1.5878 | 0.746 | 296/500 |
+| BB9 | 0.6277 | 0.7776 | 0.616 | 296/500 |
+| HR9 | 0.3312 | 0.3264 | 0.321 | 296/500 |
+| FIP | 0.5907 | 0.6606 | 0.440 | 296/500 |
 
 ## Running
 

@@ -3,4 +3,3 @@ numpy
 pybaseball
 pyarrow
 MLB-StatsAPI
-lahman
