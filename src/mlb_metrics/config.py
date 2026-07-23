@@ -336,25 +336,52 @@ GAME_PICK_MODEL_VERSION = "v1"
 
 # --- Age Curves (exploratory, separate page - not part of the daily pick pipeline) ---
 #
-# Given a current hitter's age and season stat line (traditional_stats.py,
+# Given a current player's age and season stat line (traditional_stats.py,
 # not WAVE/PAVE - Lahman's historical seasons have no Statcast-derived
-# signal to compare against), finds the K nearest historical hitter-seasons
-# at the same age (age_curve.py) and projects next season from what those
-# comparables actually did next. v1 scope: hitters only, no era/park
-# adjustment - see age_curve.py's module docstring.
+# signal to compare against), finds the K nearest historical same-position
+# seasons at the same age (age_curve.py) and projects next season from what
+# those comparables actually did next. No era/park adjustment - see
+# age_curve.py's module docstring.
 
 # A separate curve/projection/comparable-list per metric, not one blended
-# number - AVG/OBP/SLG age differently (power typically peaks earlier and
-# declines faster than plate discipline; contact rate tends to be more
-# stable), so a single composite would hide that. Same "metric" convention
-# already used by predictions.csv/game_predictions.csv elsewhere in this
-# project (a metric name plus generic value columns).
-AGE_CURVE_METRICS = ["AVG", "OBP", "SLG", "OPS"]
+# number - e.g. power (SLG) typically peaks earlier and declines faster
+# than plate discipline (OBP), contact rate (AVG) tends to be more stable -
+# so a single composite would hide that. Same "metric" convention already
+# used by predictions.csv/game_predictions.csv elsewhere in this project (a
+# metric name plus generic value columns).
+AGE_CURVE_HITTER_METRICS = ["AVG", "OBP", "SLG", "OPS"]
 
-# Minimum at-bats for a season (current or historical) to be eligible at
-# all - a tiny-sample season can otherwise show an OPS of 0 or 3.000+ on
-# pure noise, same reasoning as BACKTEST_MIN_PLATE_APPEARANCES above.
+# Deliberately no ERA - same reasoning as pitchers.py's Power_A_PLUS (ties
+# to sequencing/defense/inherited runners, not just the pitcher's own
+# stuff). K9/BB9/HR9 are the three "own stuff" component rates (mirroring
+# AVG/OBP/SLG's role on the hitter side); FIP is the composite of those
+# same three components into one number (mirroring OPS), deliberately
+# defense-independent by construction - the exact ERA-scale gap this
+# project has avoided elsewhere for the live pick models, but appropriate
+# here since this page is explicitly about historical career-arc
+# comparison, not a prediction signal feeding a pick.
+AGE_CURVE_PITCHER_METRICS = ["K9", "BB9", "HR9", "FIP"]
+
+# FIP = (13*HR + 3*(BB+HBP) - 2*K) / IP + this constant. The constant is a
+# pure additive shift (traditionally computed per-season so lgFIP==lgERA)
+# that puts FIP on the same familiar ~3-4 scale as ERA - it does NOT affect
+# comparable-search distances or projections at all (both are computed as
+# differences, and an additive constant cancels out of any difference). A
+# single fixed value is used here instead of a real per-season constant
+# (which would need runs-allowed/ERA data this project deliberately doesn't
+# use) - purely cosmetic, not a modeling simplification.
+AGE_CURVE_FIP_CONSTANT = 3.10
+
+# Minimum at-bats for a hitter season (current or historical) to be
+# eligible at all - a tiny-sample season can otherwise show an OPS of 0 or
+# 3.000+ on pure noise, same reasoning as BACKTEST_MIN_PLATE_APPEARANCES above.
 AGE_CURVE_MIN_AB = 200
+
+# Minimum innings pitched for a pitcher season to be eligible - same
+# small-sample-noise reasoning as AGE_CURVE_MIN_AB. Modest (a swingman/
+# spot-starter's workload, not a qualified-ERA-title threshold), since this
+# is an exploratory comparison tool, not a selection gate.
+AGE_CURVE_MIN_IP = 50
 
 # How many nearest same-age comparables (by whichever metric is in use) to
 # use per projection.
@@ -383,6 +410,21 @@ AGE_CURVE_AGE_WINDOW = 1
 # being harder to project from a same-age same-value comparable pool alone
 # than power is. Re-run this backtest (and update these numbers) after any
 # change to AGE_CURVE_K_NEIGHBORS/AGE_CURVE_AGE_WINDOW/AGE_CURVE_MIN_AB.
+
+# Same methodology, pitcher metrics: 500 real sampled pitcher-seasons from
+# 2010-2019 (25,073 qualified historical pitcher-seasons total):
+#   K9:  MAE 1.1482 vs. 1.5878 baseline, correlation 0.745 (n=296 scored)
+#   BB9: MAE 0.6309 vs. 0.7776 baseline, correlation 0.615 (n=296 scored)
+#   HR9: MAE 0.3293 vs. 0.3264 baseline, correlation 0.320 (n=296 scored)
+#   FIP: MAE 0.5880 vs. 0.6606 baseline, correlation 0.442 (n=296 scored)
+# K9/BB9/FIP all clearly beat their naive baselines. HR9 is reported
+# honestly as a wash, not hidden or rounded away: its MAE is essentially
+# tied with (very slightly worse than) just guessing the sample mean,
+# despite a real positive correlation - year-to-year home-run rate is
+# notoriously volatile (batted-ball luck, park effects, defense) even
+# though it correlates with itself somewhat. Treat HR9 projections as a
+# weak signal. Re-run this backtest (and update these numbers) after any
+# change to AGE_CURVE_K_NEIGHBORS/AGE_CURVE_AGE_WINDOW/AGE_CURVE_MIN_IP.
 
 # Statcast plate-appearance outcome values that count as a "completed" event
 # (used to filter pitch-by-pitch data down to one row per at-bat outcome).

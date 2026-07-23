@@ -13,7 +13,7 @@ def _stint(player, year, stint, ab, h, doubles, triples, hr, bb, hbp, sf):
     }
 
 
-def test_build_historical_seasons_aggregates_stints_and_computes_every_metric():
+def test_build_historical_hitter_seasons_aggregates_stints_and_computes_every_metric():
     # Player p1, year 2000: two stints (a mid-season trade).
     batting = pd.DataFrame([
         _stint("p1", 2000, 1, ab=200, h=60, doubles=10, triples=2, hr=5, bb=20, hbp=2, sf=3),
@@ -21,7 +21,7 @@ def test_build_historical_seasons_aggregates_stints_and_computes_every_metric():
     ])
     people = pd.DataFrame([{"playerID": "p1", "birthYear": 1975, "birthMonth": 1, "birthDay": 1}])
 
-    result = age_curve.build_historical_seasons(batting, people, min_at_bats=0).set_index("playerID")
+    result = age_curve.build_historical_hitter_seasons(batting, people, min_at_bats=0).set_index("playerID")
 
     # Summed across stints: AB=300, H=90, 2B=15, 3B=2, HR=8, BB=30, HBP=3, SF=4.
     tb = 90 + 15 + 2 * 2 + 3 * 8
@@ -36,7 +36,7 @@ def test_build_historical_seasons_aggregates_stints_and_computes_every_metric():
     assert result.loc["p1", "age"] == 25  # born 1975-01-01, as of 2000-06-30
 
 
-def test_build_historical_seasons_filters_by_min_at_bats():
+def test_build_historical_hitter_seasons_filters_by_min_at_bats():
     batting = pd.DataFrame([
         _stint("p1", 2000, 1, ab=500, h=150, doubles=0, triples=0, hr=0, bb=0, hbp=0, sf=0),
         _stint("p2", 2000, 1, ab=10, h=5, doubles=0, triples=0, hr=0, bb=0, hbp=0, sf=0),
@@ -46,9 +46,67 @@ def test_build_historical_seasons_filters_by_min_at_bats():
         {"playerID": "p2", "birthYear": 1975, "birthMonth": 1, "birthDay": 1},
     ])
 
-    result = age_curve.build_historical_seasons(batting, people, min_at_bats=200)
+    result = age_curve.build_historical_hitter_seasons(batting, people, min_at_bats=200)
 
     assert set(result["playerID"]) == {"p1"}
+
+
+def _pitcher_stint(player, year, stint, ipouts, so, bb, hbp, hr):
+    return {
+        "playerID": player, "yearID": year, "stint": stint, "IPouts": ipouts,
+        "SO": so, "BB": bb, "HBP": hbp, "HR": hr,
+    }
+
+
+def test_build_historical_pitcher_seasons_aggregates_stints_and_computes_every_metric():
+    # Player p1, year 2000: two stints (a mid-season trade).
+    pitching = pd.DataFrame([
+        _pitcher_stint("p1", 2000, 1, ipouts=200, so=60, bb=20, hbp=2, hr=5),
+        _pitcher_stint("p1", 2000, 2, ipouts=100, so=30, bb=10, hbp=1, hr=3),
+    ])
+    people = pd.DataFrame([{"playerID": "p1", "birthYear": 1975, "birthMonth": 1, "birthDay": 1}])
+
+    result = age_curve.build_historical_pitcher_seasons(pitching, people, min_ip=0).set_index("playerID")
+
+    # Summed across stints: IPouts=300 (IP=100), SO=90, BB=30, HBP=3, HR=8.
+    expected_ip = 300 / 3
+    expected_k9 = 90 * 9 / expected_ip
+    expected_bb9 = 30 * 9 / expected_ip
+    expected_hr9 = 8 * 9 / expected_ip
+    expected_fip = (13 * 8 + 3 * (30 + 3) - 2 * 90) / expected_ip + 3.10
+    assert result.loc["p1", "IP"] == pytest.approx(expected_ip)
+    assert result.loc["p1", "K9"] == pytest.approx(expected_k9)
+    assert result.loc["p1", "BB9"] == pytest.approx(expected_bb9)
+    assert result.loc["p1", "HR9"] == pytest.approx(expected_hr9)
+    assert result.loc["p1", "FIP"] == pytest.approx(expected_fip)
+    assert result.loc["p1", "age"] == 25  # born 1975-01-01, as of 2000-06-30
+
+
+def test_build_historical_pitcher_seasons_filters_by_min_ip():
+    pitching = pd.DataFrame([
+        _pitcher_stint("p1", 2000, 1, ipouts=450, so=150, bb=50, hbp=5, hr=10),  # IP=150
+        _pitcher_stint("p2", 2000, 1, ipouts=30, so=10, bb=5, hbp=0, hr=1),  # IP=10
+    ])
+    people = pd.DataFrame([
+        {"playerID": "p1", "birthYear": 1975, "birthMonth": 1, "birthDay": 1},
+        {"playerID": "p2", "birthYear": 1975, "birthMonth": 1, "birthDay": 1},
+    ])
+
+    result = age_curve.build_historical_pitcher_seasons(pitching, people, min_ip=50)
+
+    assert set(result["playerID"]) == {"p1"}
+
+
+def test_build_historical_pitcher_seasons_missing_hbp_treated_as_zero():
+    pitching = pd.DataFrame([
+        {"playerID": "p1", "yearID": 1900, "stint": 1, "IPouts": 300, "SO": 90, "BB": 30, "HR": 8}
+    ])  # no HBP column at all, matching Lahman's earliest seasons
+    people = pd.DataFrame([{"playerID": "p1", "birthYear": 1875, "birthMonth": 1, "birthDay": 1}])
+
+    result = age_curve.build_historical_pitcher_seasons(pitching, people, min_ip=0).set_index("playerID")
+
+    expected_fip = (13 * 8 + 3 * (30 + 0) - 2 * 90) / 100 + 3.10
+    assert result.loc["p1", "FIP"] == pytest.approx(expected_fip)
 
 
 def _season(player, year, age, avg, obp, slg, ab=400):

@@ -13,16 +13,20 @@ next season (retired, hurt, released) are excluded and that excluded
 fraction is reported explicitly - survivorship bias made visible, not
 hidden.
 
-`metric` is one of config.AGE_CURVE_METRICS ("AVG", "OBP", "SLG", "OPS") -
+`metric` is one of config.AGE_CURVE_HITTER_METRICS ("AVG", "OBP", "SLG",
+"OPS") or config.AGE_CURVE_PITCHER_METRICS ("K9", "BB9", "HR9", "FIP") -
 every function here takes it explicitly and produces a SEPARATE curve/
-projection/comparable-list per metric, rather than one blended OPS number.
+projection/comparable-list per metric, rather than one blended number.
 Different metrics age differently (power/SLG typically peaks earlier and
 declines faster than plate discipline/OBP; contact rate/AVG tends to be
 more stable) - collapsing them into one composite number would hide that.
 This follows the same "metric" convention already used elsewhere in this
 project (predictions.csv/game_predictions.csv: a metric name column plus
 generic value columns, not one column per metric) rather than inventing a
-new shape.
+new shape. Pitcher metrics deliberately exclude ERA (see
+config.AGE_CURVE_PITCHER_METRICS's docstring for why) in favor of
+defense-independent component/composite rates, the same philosophy as
+pitchers.py's Power_A_PLUS.
 
 No ML library is used (no scikit-learn dependency exists in this project -
 see requirements.txt): K-nearest-neighbors on a single dimension is a
@@ -30,12 +34,12 @@ straightforward sort, matching this project's established pattern of
 hand-implementing its own statistics (log5, z-scoring) rather than pulling
 in a library for one call.
 
-v1 scope, deliberately not overbuilt: hitters only, one metric's value at a
-time for the similarity search (not a joint multi-metric distance), no
-era/park adjustment (comparing raw rates across different offensive eras/
-ballparks - e.g. the high-offense late-1990s vs. a modern low-average era,
-or Coors Field vs. a pitcher's park - is a known simplification, not fixed
-here). Expandable later, not designed for that up front.
+v1 scope, deliberately not overbuilt: one metric's value at a time for the
+similarity search (not a joint multi-metric distance), no era/park
+adjustment (comparing raw rates across different offensive eras/ballparks -
+e.g. the high-offense late-1990s vs. a modern low-average era, or Coors
+Field vs. a pitcher's park - is a known simplification, not fixed here).
+Expandable later, not designed for that up front.
 """
 
 import pandas as pd
@@ -43,7 +47,7 @@ import pandas as pd
 from mlb_metrics import config, lahman_data
 
 
-def build_historical_seasons(batting: pd.DataFrame, people: pd.DataFrame, min_at_bats: int = config.AGE_CURVE_MIN_AB) -> pd.DataFrame:
+def build_historical_hitter_seasons(batting: pd.DataFrame, people: pd.DataFrame, min_at_bats: int = config.AGE_CURVE_MIN_AB) -> pd.DataFrame:
     """One row per qualified (playerID, yearID) historical season:
     [playerID, yearID, age, AB, AVG, OBP, SLG, OPS] - every metric computed
     once here, so callers pick which one to use via a `metric` parameter
@@ -80,6 +84,41 @@ def build_historical_seasons(batting: pd.DataFrame, people: pd.DataFrame, min_at
     return aged[["playerID", "yearID", "age", "AB", "AVG", "OBP", "SLG", "OPS"]]
 
 
+def build_historical_pitcher_seasons(
+    pitching: pd.DataFrame, people: pd.DataFrame, min_ip: float = config.AGE_CURVE_MIN_IP
+) -> pd.DataFrame:
+    """One row per qualified (playerID, yearID) historical season:
+    [playerID, yearID, age, IP, K9, BB9, HR9, FIP] - the pitcher-side
+    counterpart to build_historical_hitter_seasons, same rationale (Lahman's
+    Pitching table also has one row per team-stint, summed here first;
+    unqualified (min_ip) seasons are dropped for the same small-sample
+    reason). HBP is missing (NaN) in Lahman's earliest seasons - filled
+    with 0, the same simplification traditional_stats.py's live-data
+    version doesn't need (Statcast always has HBP)."""
+    counting_cols = ["IPouts", "SO", "BB", "HBP", "HR"]
+    pitching = pitching.copy()
+    for col in counting_cols:
+        if col not in pitching.columns:
+            pitching[col] = 0
+        pitching[col] = pitching[col].fillna(0)
+
+    season = pitching.groupby(["playerID", "yearID"], as_index=False)[counting_cols].sum()
+    season["IP"] = season["IPouts"] / 3
+    season = season[season["IP"] >= min_ip]
+
+    ip_safe = season["IP"].replace(0, pd.NA)
+    season["K9"] = (season["SO"] * 9 / ip_safe).fillna(0)
+    season["BB9"] = (season["BB"] * 9 / ip_safe).fillna(0)
+    season["HR9"] = (season["HR"] * 9 / ip_safe).fillna(0)
+    season["FIP"] = (
+        (13 * season["HR"] + 3 * (season["BB"] + season["HBP"]) - 2 * season["SO"]) / ip_safe
+        + config.AGE_CURVE_FIP_CONSTANT
+    ).fillna(0)
+
+    aged = lahman_data.attach_age(season, people)
+    return aged[["playerID", "yearID", "age", "IP", "K9", "BB9", "HR9", "FIP"]]
+
+
 def find_comparables(
     current_age: int,
     current_value: float,
@@ -89,7 +128,8 @@ def find_comparables(
     age_window: int = config.AGE_CURVE_AGE_WINDOW,
 ) -> pd.DataFrame:
     """The `k` historical seasons (from `historical_seasons` - see
-    build_historical_seasons) within `age_window` years of `current_age`,
+    build_historical_hitter_seasons/build_historical_pitcher_seasons) within
+    `age_window` years of `current_age`,
     ranked by absolute distance on `metric`, nearest first. Ties are
     broken by whichever row appears first in `historical_seasons` (a
     stable sort), not randomly."""

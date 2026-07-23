@@ -398,54 +398,68 @@ full slate stays visible rather than silently missing teams.
 ## Age Curves (`docs/age-curves.html`, exploratory - separate page)
 
 A standalone page, entirely separate from the daily pick pipeline: pick a
-current hitter and see how their season stat line compares to historical
-players at the same age, plus a projection for next season built from
-what those historical comparables actually did the following year.
+current hitter or pitcher and see how their season stat line compares to
+historical players at the same age, plus a projection for next season
+built from what those historical comparables actually did the following
+year.
 
 Uses [Lahman's Baseball Database](https://github.com/chadwickbureau/baseballdatabank)
 (1871-present), fetched via pybaseball's built-in `lahman` submodule
 (`lahman_data.py`) - a different data source than the rest of this project
 (Statcast), needed because Lahman's historical seasons have no
 Statcast-derived signal (WAVE/PAVE) to compare against. A current player is
-put on the same stat basis - season `AVG`/`OBP`/`SLG`/`OPS`
-(`traditional_stats.py`, reusing `helpers.py`'s event classifiers, not
-recency-windowed like WAVE) - so they're comparable to a single historical
-season. `key_mlbam` (this project's own identity) bridges to Lahman's
-`playerID` via a two-hop crosswalk: `chadwick_register()`'s `key_bbref`
-column matches Lahman People's `bbrefID` (`lahman_data.build_crosswalk`).
+put on the same stat basis - season `AVG`/`OBP`/`SLG`/`OPS` for hitters,
+`K9`/`BB9`/`HR9`/`FIP` for pitchers (`traditional_stats.py`, reusing
+`helpers.py`'s event classifiers, not recency-windowed like WAVE) - so
+they're comparable to a single historical season. `key_mlbam` (this
+project's own identity) bridges to Lahman's `playerID` via a two-hop
+crosswalk: `chadwick_register()`'s `key_bbref` column matches Lahman
+People's `bbrefID` (`lahman_data.build_crosswalk`).
+
+Pitcher metrics deliberately **exclude ERA**: this project already avoids
+ERA for its live pick models (`Power_A_PLUS` - ERA is too dependent on
+defense/sequencing/inherited runners to isolate a pitcher's own
+performance) and applies the same reasoning here. `K9`/`BB9`/`HR9` are the
+three defense-independent "own stuff" component rates (mirroring
+`AVG`/`OBP`/`SLG`'s role on the hitter side); `FIP` combines those same
+three components into one number (mirroring `OPS`), using a fixed
+constant (`config.AGE_CURVE_FIP_CONSTANT = 3.10`, a pure additive shift
+that doesn't affect comparable-search distances or projections) rather
+than a real per-season constant, which would need ERA/runs data.
 
 The page computes a **separate curve/projection per metric**
-(`config.AGE_CURVE_METRICS`: `AVG`, `OBP`, `SLG`, `OPS` - selectable on the
-page) rather than one blended number - power (`SLG`) typically peaks
-earlier and declines faster than plate discipline (`OBP`), while contact
-rate (`AVG`) tends to be more stable, so collapsing them into one composite
-would hide that. A player's "closest historical comparables" can therefore
-be a genuinely different set of players depending on which metric is
-selected (e.g. their power comps vs. their contact comps).
+(`config.AGE_CURVE_HITTER_METRICS`: `AVG`, `OBP`, `SLG`, `OPS`;
+`config.AGE_CURVE_PITCHER_METRICS`: `K9`, `BB9`, `HR9`, `FIP` - all
+selectable on the page) rather than one blended number - power (`SLG`)
+typically peaks earlier and declines faster than plate discipline (`OBP`),
+while contact rate (`AVG`) tends to be more stable, and pitching
+components age differently from each other too, so collapsing them into
+one composite would hide that. A player's "closest historical comparables"
+can therefore be a genuinely different set of players depending on which
+metric is selected (e.g. their power comps vs. their contact comps).
 
 `age_curve.py`'s method (v1, deliberately simple - see its module
 docstring), run independently for each metric: find the
-`AGE_CURVE_K_NEIGHBORS` (25) historical hitter-seasons within
+`AGE_CURVE_K_NEIGHBORS` (25) historical same-position seasons within
 `AGE_CURVE_AGE_WINDOW` (1) year of the current player's age with the
 closest value on that metric (a hand-implemented nearest-neighbor sort -
 no scikit-learn dependency, matching this project's pattern of
 implementing its own stats rather than pulling in an ML library for one
 call), then look at what those comparables actually did on that same
 metric the *following* season. Comparables with no next season on record
-(retired, hurt, released, or fell below `AGE_CURVE_MIN_AB`) are excluded
-from the projection and that excluded fraction is reported alongside it -
-survivorship bias made visible, not hidden. The projection is a range
-(mean plus 25th/75th percentile), not a false-precision single number.
+(retired, hurt, released, or fell below `AGE_CURVE_MIN_AB`/`AGE_CURVE_MIN_IP`)
+are excluded from the projection and that excluded fraction is reported
+alongside it - survivorship bias made visible, not hidden. The projection
+is a range (mean plus 25th/75th percentile), not a false-precision single
+number.
 
-Known v1 simplifications (documented, not silently ignored): **hitters
-only** (pitchers need a different stat basis and aging pattern - a clean
-future phase, not a half-finished launch); each metric's comparable search
-is **independent** (ranked by that one stat alone, not a joint multi-metric
-similarity - a future "one holistic comparable set, several metric views"
-mode is a possible follow-up); **no era/park adjustment** - comparing raw
-rates across very different offensive eras (e.g. the high-offense late
-1990s vs. a lower-average modern era) or ballparks is a real limitation of
-this first pass.
+Known v1 simplifications (documented, not silently ignored): each metric's
+comparable search is **independent** (ranked by that one stat alone, not a
+joint multi-metric similarity - a future "one holistic comparable set,
+several metric views" mode is a possible follow-up); **no era/park
+adjustment** - comparing raw rates across very different offensive eras
+(e.g. the high-offense late 1990s vs. a lower-average modern era) or
+ballparks is a real limitation of this first pass.
 
 `scripts/fetch_lahman.py` (persists `people`/`batting`/`pitching` to
 `data/raw/lahman/*.parquet`) and `scripts/build_age_curves.py` (writes
@@ -460,9 +474,10 @@ year - the same no-lookahead discipline as `git_backtest.py`/
 `game_picks_backtest.py` elsewhere in this project.
 
 **Validated against real data**: 500 sampled real player-seasons from
-2010-2019 (out of 29,692 qualified historical hitter-seasons, 1871-present).
-Every metric beat the naive "always guess the sample mean" baseline, with a
-real positive correlation between projected and actual next-season value -
+2010-2019 (out of 29,692 qualified historical hitter-seasons / 25,073
+qualified historical pitcher-seasons, 1871-present). Every hitter metric
+beat the naive "always guess the sample mean" baseline, with a real
+positive correlation between projected and actual next-season value -
 strongest for the power/contact-combination metrics:
 
 | metric | MAE | naive baseline MAE | correlation | n scored |
@@ -475,6 +490,23 @@ strongest for the power/contact-combination metrics:
 (See `config.py`'s `AGE_CURVE_AGE_WINDOW` docstring for the full
 methodology note - the 145/500 unscored seasons had no comparable with a
 resolvable next season and are reported, not hidden.)
+
+Pitcher metrics, same methodology: `K9` shows a strong signal (the
+strongest of any Age Curves metric, hitter or pitcher - strikeout rate is
+largely an "own stuff" skill that persists year to year); `BB9` and `FIP`
+both clearly beat their baselines; `HR9` is reported honestly as a wash -
+it correlates with next-season `HR9` (year-to-year home-run rate is
+notoriously volatile, driven by batted-ball luck/park effects/defense as
+much as pitcher skill) but its MAE is statistically indistinguishable
+from just guessing the sample mean, so treat `HR9` projections on this
+page as a weak signal, not a strong one:
+
+| metric | MAE | naive baseline MAE | correlation | n scored |
+|---|---|---|---|---|
+| K9 | 1.1482 | 1.5878 | 0.745 | 296/500 |
+| BB9 | 0.6309 | 0.7776 | 0.615 | 296/500 |
+| HR9 | 0.3293 | 0.3264 | 0.320 | 296/500 |
+| FIP | 0.5880 | 0.6606 | 0.442 | 296/500 |
 
 ## Running
 

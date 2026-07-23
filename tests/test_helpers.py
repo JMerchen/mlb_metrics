@@ -10,6 +10,14 @@ EVENTS = pd.Series(
     ]
 )
 
+OUTS_EVENTS = pd.Series(
+    [
+        "field_out", "force_out", "strikeout", "fielders_choice_out",
+        "grounded_into_double_play", "double_play", "strikeout_double_play",
+        "fielders_choice", "field_error", "single", "walk",
+    ]
+)
+
 
 def test_is_hit():
     assert helpers.is_hit(EVENTS).tolist() == [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0]
@@ -33,3 +41,19 @@ def test_is_on_base():
 
 def test_is_official_at_bat():
     assert helpers.is_official_at_bat(EVENTS).tolist() == [1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1]
+
+
+def test_is_strikeout():
+    assert helpers.is_strikeout(EVENTS).tolist() == [0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0]
+
+
+def test_is_walk():
+    assert helpers.is_walk(EVENTS).tolist() == [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0]
+
+
+def test_is_hit_by_pitch():
+    assert helpers.is_hit_by_pitch(EVENTS).tolist() == [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]
+
+
+def test_outs_recorded():
+    assert helpers.outs_recorded(OUTS_EVENTS).tolist() == [1, 1, 1, 1, 2, 2, 2, 0, 0, 0, 0]

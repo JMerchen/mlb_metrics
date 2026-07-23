@@ -3,11 +3,11 @@
 // rather than shared, since docs/ has no build step/shared-utils file to
 // import from (see app.js's own docstring-equivalent comments).
 //
-// A separate curve/projection per metric (AVG/OBP/SLG/OPS) - not one
-// blended OPS number - since power, plate discipline, and contact rate
-// age differently (see age_curve.py's module docstring). The metric
-// selector re-renders whichever player is currently selected without
-// re-searching.
+// A separate curve/projection per metric (hitters: AVG/OBP/SLG/OPS;
+// pitchers: K9/BB9/HR9/FIP) - not one blended number - since power, plate
+// discipline, contact rate, and pitching components all age differently
+// (see age_curve.py's module docstring). The metric selector re-renders
+// whichever player is currently selected without re-searching.
 
 async function loadCSV(path){
 const response = await fetch(`${path}?t=${Date.now()}`, {cache:"no-store"})

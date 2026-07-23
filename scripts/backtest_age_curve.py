@@ -3,9 +3,9 @@ for a sample of past player-seasons with a known real next season, project
 that next season using only comparable data available at or before that
 test season's own year (see age_curve.backtest_projection_accuracy), and
 report how close the projection came to what actually happened - one
-report per metric in config.AGE_CURVE_METRICS (AVG/OBP/SLG/OPS), since
-each is its own independent curve/comparable-search (see age_curve.py's
-module docstring).
+report per metric in config.AGE_CURVE_HITTER_METRICS (AVG/OBP/SLG/OPS) and
+config.AGE_CURVE_PITCHER_METRICS (K9/BB9/HR9/FIP), since each is its own
+independent curve/comparable-search (see age_curve.py's module docstring).
 
 This is exploratory validation for a for-fun/insight page, not a live
 prediction model - the bar is "does this produce plausible, better-than-
@@ -13,13 +13,14 @@ guessing projections," reported honestly either way (see this project's
 established pattern: config.py's MATCHUP_PARK_FACTOR_WEIGHT/
 GAME_PICK_SUSCEPTIBILITY_WEIGHT docstrings).
 
-Needs data/raw/lahman/{people,batting}.parquet - run scripts/fetch_lahman.py
-first.
+Needs data/raw/lahman/{people,batting,pitching}.parquet - run
+scripts/fetch_lahman.py first.
 
 Usage:
     python scripts/backtest_age_curve.py
     python scripts/backtest_age_curve.py --test-year-start 2010 --test-year-end 2019
     python scripts/backtest_age_curve.py --metric OPS
+    python scripts/backtest_age_curve.py --metric FIP
 """
 
 import argparse
@@ -63,26 +64,38 @@ def main():
     parser.add_argument("--k", type=int, default=config.AGE_CURVE_K_NEIGHBORS)
     parser.add_argument("--age-window", type=int, default=config.AGE_CURVE_AGE_WINDOW)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--metric", choices=config.AGE_CURVE_METRICS, help="Only backtest this one metric (default: all of them).")
+    parser.add_argument(
+        "--metric",
+        choices=config.AGE_CURVE_HITTER_METRICS + config.AGE_CURVE_PITCHER_METRICS,
+        help="Only backtest this one metric (default: all of them).",
+    )
     args = parser.parse_args()
 
     people = lahman_data.load_persisted_lahman_table(args.raw_dir, "people")
     batting = lahman_data.load_persisted_lahman_table(args.raw_dir, "batting")
-    if people is None or batting is None:
+    pitching = lahman_data.load_persisted_lahman_table(args.raw_dir, "pitching")
+    if people is None or batting is None or pitching is None:
         print(f"No persisted Lahman data in {args.raw_dir}/lahman/ - run scripts/fetch_lahman.py first.")
         return
 
-    historical_seasons = age_curve.build_historical_seasons(batting, people)
-    print(f"{len(historical_seasons)} qualified historical hitter-seasons (AB >= {config.AGE_CURVE_MIN_AB}).")
+    historical_hitter_seasons = age_curve.build_historical_hitter_seasons(batting, people)
+    historical_pitcher_seasons = age_curve.build_historical_pitcher_seasons(pitching, people)
+    print(f"{len(historical_hitter_seasons)} qualified historical hitter-seasons (AB >= {config.AGE_CURVE_MIN_AB}).")
+    print(f"{len(historical_pitcher_seasons)} qualified historical pitcher-seasons (IP >= {config.AGE_CURVE_MIN_IP}).")
 
-    in_range = historical_seasons[
-        (historical_seasons["yearID"] >= args.test_year_start) & (historical_seasons["yearID"] <= args.test_year_end)
-    ]
-    test_seasons = in_range.sample(n=min(args.sample_size, len(in_range)), random_state=args.seed)
-    print(f"Backtesting against {len(test_seasons)} sampled seasons from {args.test_year_start}-{args.test_year_end}...")
-
-    metrics = [args.metric] if args.metric else config.AGE_CURVE_METRICS
+    metrics = [args.metric] if args.metric else config.AGE_CURVE_HITTER_METRICS + config.AGE_CURVE_PITCHER_METRICS
     for metric in metrics:
+        is_pitcher_metric = metric in config.AGE_CURVE_PITCHER_METRICS
+        historical_seasons = historical_pitcher_seasons if is_pitcher_metric else historical_hitter_seasons
+
+        in_range = historical_seasons[
+            (historical_seasons["yearID"] >= args.test_year_start) & (historical_seasons["yearID"] <= args.test_year_end)
+        ]
+        test_seasons = in_range.sample(n=min(args.sample_size, len(in_range)), random_state=args.seed)
+        print(
+            f"\nBacktesting {metric} against {len(test_seasons)} sampled "
+            f"{'pitcher' if is_pitcher_metric else 'hitter'}-seasons from {args.test_year_start}-{args.test_year_end}..."
+        )
         run_one_metric(historical_seasons, test_seasons, metric, args.k, args.age_window, args.sample_size)
 
 
