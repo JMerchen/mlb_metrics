@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8">
+
+<title>MLB Metrics - Age Curves</title>
+
+<link
+rel="stylesheet"
+href="./style.css">
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>
+Age Curves
+</h1>
+
+<p style="opacity:.75">
+<a href="./index.html">&larr; Back to MLB Metrics</a>
+</p>
+
+<p style="opacity:.75; max-width:700px;">
+Pick a current hitter or pitcher and a stat, and see how their season
+compares to historical players at the same age, and what a next season
+might look like based on what those comparable players actually did.
+Each metric gets its own comparable search - power, plate discipline,
+contact rate, and pitching components all age differently, so a single
+blended number would hide that. Pitcher metrics (K9/BB9/HR9/FIP)
+deliberately exclude ERA - see README for why. Exploratory, not a live
+prediction - built from
+<a href="https://github.com/chadwickbureau/baseballdatabank" style="color:inherit">Lahman's Baseball Database</a>
+(1871-present), not this project's own Statcast-based models. No era/park
+adjustment - see README for details and known limitations.
+</p>
+
+<select id="metricSelect" onchange="onMetricChange()">
+<option value="OPS">OPS (hitter)</option>
+<option value="AVG">AVG (hitter)</option>
+<option value="OBP">OBP (hitter)</option>
+<option value="SLG">SLG (hitter)</option>
+<option value="K9">K9 (pitcher)</option>
+<option value="BB9">BB9 (pitcher)</option>
+<option value="HR9">HR9 (pitcher)</option>
+<option value="FIP">FIP (pitcher)</option>
+</select>
+
+<input
+id="playerSearch"
+placeholder="Search player">
+
+<button onclick="searchPlayer()">
+Search
+</button>
+
+<div id="playerChoices">
+</div>
+
+<br>
+
+<div id="playerResult">
+</div>
+
+<div style="max-width:900px; margin-top:20px;">
+<canvas id="ageCurveChart" height="120"></canvas>
+</div>
+
+<h3>
+Comparable Players
+</h3>
+
+<div class="scrollbox" id="comparablesTable">
+</div>
+
+<br>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+<script src="./age-curves.js"></script>
+
+</body>
+
+</html>
