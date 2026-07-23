@@ -34,6 +34,7 @@ el.innerHTML = html
 let projections = []
 let comparablesAll = []
 let leagueCurve = []
+let playerHistory = []
 let matches = []
 let selectedKeyMlbam = null
 let selectedMetric = "OPS"
@@ -69,6 +70,12 @@ try{
 leagueCurve = await loadCSV("./data/age_curve_league.csv")
 }catch(e){
 console.log("no age_curve_league.csv yet", e)
+}
+
+try{
+playerHistory = await loadCSV("./data/age_curve_player_history.csv")
+}catch(e){
+console.log("no age_curve_player_history.csv yet", e)
 }
 
 if(!projections.length){
@@ -176,11 +183,18 @@ const ages = curveRows.map(r=>Number(r.age)).sort((a, b)=>a - b)
 const valueByAge = {}
 curveRows.forEach(r=>{ valueByAge[Number(r.age)] = Number(r.value) })
 
-const playerSeries = ages.map(a=>{
-if(a === Number(p.age)){ return Number(p.value) }
-if(a === Number(p.age) + 1){ return Number(p.projected_value_mean) }
-return null
-})
+// The player's own real values: their Lahman-tracked past seasons (if
+// they have any - a rookie who debuted after Lahman's last completed
+// season won't) plus their current season - a genuine multi-point
+// trajectory, not just "now." See age_curve_player_history.csv.
+const ownHistory = {}
+playerHistory
+.filter(r=>String(r.key_mlbam) === String(p.key_mlbam) && r.metric === metric)
+.forEach(r=>{ ownHistory[Number(r.age)] = Number(r.value) })
+ownHistory[Number(p.age)] = Number(p.value)
+
+const actualSeries = ages.map(a=>ownHistory.hasOwnProperty(a) ? ownHistory[a] : null)
+const projectedSeries = ages.map(a=>a === Number(p.age) + 1 ? Number(p.projected_value_mean) : null)
 
 if(chart){ chart.destroy() }
 
@@ -197,12 +211,21 @@ pointRadius: 0,
 spanGaps: true,
 },
 {
-label: p.name,
-data: playerSeries,
+label: `${p.name} (actual)`,
+data: actualSeries,
 borderColor: "#4caf50",
 backgroundColor: "#4caf50",
-pointRadius: 6,
-spanGaps: false,
+pointRadius: 5,
+spanGaps: true,
+},
+{
+label: `${p.name} (projected next season)`,
+data: projectedSeries,
+borderColor: "#f0a020",
+backgroundColor: "#f0a020",
+pointRadius: 7,
+pointStyle: "triangle",
+showLine: false,
 },
 ],
 },

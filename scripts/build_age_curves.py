@@ -1,7 +1,9 @@
 """Build the Age Curves page's data (docs/data/age_curve_projections.csv,
-docs/data/age_curve_comparables.csv, docs/data/age_curve_league.csv) from
-this project's own persisted Statcast (current-season traditional stats)
-and persisted Lahman data (historical comparables) - see age_curve.py's
+docs/data/age_curve_comparables.csv, docs/data/age_curve_league.csv,
+docs/data/age_curve_player_history.csv) from this project's own persisted
+Statcast (current-season traditional stats) and persisted Lahman data
+(historical comparables, and - for players who already have Lahman
+history - each player's own real past seasons) - see age_curve.py's
 module docstring for the method.
 
 Writes one row per (player, metric) - a separate curve/projection for each
@@ -29,8 +31,8 @@ import pandas as pd
 
 from mlb_metrics import age_curve, config, data, lahman_data, pipeline, traditional_stats
 
-CURRENT_HITTER_COLUMNS = ["key_mlbam", "name_first", "name_last", "age", "AB", "AVG", "OBP", "SLG", "OPS"]
-CURRENT_PITCHER_COLUMNS = ["key_mlbam", "name_first", "name_last", "age", "IP", "K9", "BB9", "HR9", "FIP"]
+CURRENT_HITTER_COLUMNS = ["key_mlbam", "playerID", "name_first", "name_last", "age", "AB", "AVG", "OBP", "SLG", "OPS"]
+CURRENT_PITCHER_COLUMNS = ["key_mlbam", "playerID", "name_first", "name_last", "age", "IP", "K9", "BB9", "HR9", "FIP"]
 
 
 def build_current_player_pool(raw_dir: str, season: int, min_at_bats: int = config.AGE_CURVE_MIN_AB) -> pd.DataFrame:
@@ -118,6 +120,34 @@ def describe_comparables(
     return described[["key_mlbam", "metric", "name", "yearID", "age", "value", "next_value"]]
 
 
+def build_player_history_export(
+    current_players: pd.DataFrame, historical_seasons: pd.DataFrame, metrics: list[str]
+) -> pd.DataFrame:
+    """[key_mlbam, metric, age, value] - one row per (player, metric, age)
+    from that player's OWN real Lahman-tracked past seasons (their actual
+    career arc, not a comparable's), so the Age Curves page can plot a real
+    multi-point trajectory instead of just their current season and a
+    single projected point. A player with no Lahman history at all (a
+    rookie who debuted after Lahman's last completed season) simply gets
+    no rows here - the page falls back to the current+projected points
+    only for them."""
+    columns = ["key_mlbam", "metric", "age", "value"]
+    if current_players.empty:
+        return pd.DataFrame(columns=columns)
+
+    own_seasons = historical_seasons.merge(
+        current_players[["key_mlbam", "playerID"]].drop_duplicates(), on="playerID", how="inner"
+    )
+    if own_seasons.empty:
+        return pd.DataFrame(columns=columns)
+
+    frames = [
+        own_seasons[["key_mlbam", "age", metric]].rename(columns={metric: "value"}).assign(metric=metric)
+        for metric in metrics
+    ]
+    return pd.concat(frames, ignore_index=True)[columns]
+
+
 def build_projections_for_group(
     current_players: pd.DataFrame, historical_seasons: pd.DataFrame, metrics: list[str], people: pd.DataFrame
 ) -> tuple[list[dict], list[pd.DataFrame], list[pd.DataFrame]]:
@@ -183,6 +213,12 @@ def main():
     comparable_frames = hitter_comparables + pitcher_comparables
     league_frames = hitter_league + pitcher_league
 
+    hitter_history = build_player_history_export(current_hitters, historical_hitter_seasons, config.AGE_CURVE_HITTER_METRICS)
+    pitcher_history = build_player_history_export(
+        current_pitchers, historical_pitcher_seasons, config.AGE_CURVE_PITCHER_METRICS
+    )
+    player_history = pd.concat([hitter_history, pitcher_history], ignore_index=True)
+
     projections = pd.DataFrame(
         rows,
         columns=[
@@ -201,12 +237,15 @@ def main():
     projections.to_csv(os.path.join(args.output_dir, "age_curve_projections.csv"), index=False)
     comparables_export.to_csv(os.path.join(args.output_dir, "age_curve_comparables.csv"), index=False)
     league_curve.to_csv(os.path.join(args.output_dir, "age_curve_league.csv"), index=False)
+    player_history.to_csv(os.path.join(args.output_dir, "age_curve_player_history.csv"), index=False)
     n_metrics = len(config.AGE_CURVE_HITTER_METRICS) + len(config.AGE_CURVE_PITCHER_METRICS)
     print(
         f"Wrote age_curve_projections.csv ({len(projections)} rows, {len(current_hitters)} hitters x "
         f"{len(config.AGE_CURVE_HITTER_METRICS)} metrics + {len(current_pitchers)} pitchers x "
         f"{len(config.AGE_CURVE_PITCHER_METRICS)} metrics = {n_metrics} metric-groups), "
-        f"age_curve_comparables.csv ({len(comparables_export)} rows), and age_curve_league.csv ({len(league_curve)} rows)."
+        f"age_curve_comparables.csv ({len(comparables_export)} rows), age_curve_league.csv ({len(league_curve)} rows), "
+        f"and age_curve_player_history.csv ({len(player_history)} rows, real own-career seasons for players already "
+        f"in Lahman)."
     )
 
 
