@@ -336,20 +336,28 @@ GAME_PICK_MODEL_VERSION = "v1"
 
 # --- Age Curves (exploratory, separate page - not part of the daily pick pipeline) ---
 #
-# Given a current hitter's age and season OPS (traditional_stats.py, not
-# WAVE/PAVE - Lahman's historical seasons have no Statcast-derived signal
-# to compare against), finds the K nearest historical hitter-seasons at
-# the same age by OPS (age_curve.py) and projects next season from what
-# those comparables actually did next. v1 scope: hitters only, single
-# similarity dimension (OPS), no era/park adjustment - see age_curve.py's
-# module docstring.
+# Given a current hitter's age and season stat line (traditional_stats.py,
+# not WAVE/PAVE - Lahman's historical seasons have no Statcast-derived
+# signal to compare against), finds the K nearest historical hitter-seasons
+# at the same age (age_curve.py) and projects next season from what those
+# comparables actually did next. v1 scope: hitters only, no era/park
+# adjustment - see age_curve.py's module docstring.
+
+# A separate curve/projection/comparable-list per metric, not one blended
+# number - AVG/OBP/SLG age differently (power typically peaks earlier and
+# declines faster than plate discipline; contact rate tends to be more
+# stable), so a single composite would hide that. Same "metric" convention
+# already used by predictions.csv/game_predictions.csv elsewhere in this
+# project (a metric name plus generic value columns).
+AGE_CURVE_METRICS = ["AVG", "OBP", "SLG", "OPS"]
 
 # Minimum at-bats for a season (current or historical) to be eligible at
 # all - a tiny-sample season can otherwise show an OPS of 0 or 3.000+ on
 # pure noise, same reasoning as BACKTEST_MIN_PLATE_APPEARANCES above.
 AGE_CURVE_MIN_AB = 200
 
-# How many nearest-by-OPS same-age comparables to use per projection.
+# How many nearest same-age comparables (by whichever metric is in use) to
+# use per projection.
 AGE_CURVE_K_NEIGHBORS = 25
 
 # Comparables are drawn from ages within this many years of the current

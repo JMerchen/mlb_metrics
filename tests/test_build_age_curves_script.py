@@ -60,6 +60,9 @@ def test_build_current_player_pool_threads_crosswalk_and_age(tmp_path, monkeypat
     assert row["key_mlbam"] == 1
     assert row["name_first"] == "Test"
     assert row["age"] == 30  # born 1996-01-01, as of 2026-06-30
+    assert row["AVG"] > 0
+    assert row["OBP"] > 0
+    assert row["SLG"] > 0
     assert row["OPS"] > 0
 
 
@@ -83,7 +86,7 @@ def test_build_current_player_pool_excludes_players_below_min_at_bats(tmp_path, 
     assert pool.empty
 
 
-def test_describe_comparables_joins_name_and_next_season(tmp_path):
+def test_describe_comparables_joins_name_and_next_season():
     module = _load_build_age_curves_module()
 
     comparables = pd.DataFrame([{"playerID": "p1", "yearID": 2000, "age": 27, "AB": 400, "OPS": 0.750}])
@@ -92,25 +95,27 @@ def test_describe_comparables_joins_name_and_next_season(tmp_path):
     ])
     people = pd.DataFrame([{"playerID": "p1", "nameFirst": "Test", "nameLast": "Player"}])
 
-    result = module.describe_comparables(999, comparables, historical_seasons, people)
+    result = module.describe_comparables(999, "OPS", comparables, historical_seasons, people)
 
     assert len(result) == 1
     row = result.iloc[0]
     assert row["key_mlbam"] == 999
+    assert row["metric"] == "OPS"
     assert row["name"] == "Test Player"
-    assert row["next_OPS"] == pytest.approx(0.800)
+    assert row["value"] == pytest.approx(0.750)
+    assert row["next_value"] == pytest.approx(0.800)
 
 
-def test_describe_comparables_null_next_ops_when_no_next_season(tmp_path):
+def test_describe_comparables_null_next_value_when_no_next_season():
     module = _load_build_age_curves_module()
 
     comparables = pd.DataFrame([{"playerID": "p1", "yearID": 2000, "age": 27, "AB": 400, "OPS": 0.750}])
     historical_seasons = pd.DataFrame(columns=["playerID", "yearID", "age", "AB", "OPS"])
     people = pd.DataFrame([{"playerID": "p1", "nameFirst": "Test", "nameLast": "Player"}])
 
-    result = module.describe_comparables(999, comparables, historical_seasons, people)
+    result = module.describe_comparables(999, "OPS", comparables, historical_seasons, people)
 
-    assert pd.isna(result.iloc[0]["next_OPS"])
+    assert pd.isna(result.iloc[0]["next_value"])
 
 
 def test_build_current_player_pool_excludes_players_with_no_lahman_match(tmp_path, monkeypatch):

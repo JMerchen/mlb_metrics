@@ -27,15 +27,23 @@ Age Curves
 </p>
 
 <p style="opacity:.75; max-width:700px;">
-Pick a current hitter and see how their season OPS compares to historical
-players at the same age, and what a next season might look like based on
-what those comparable players actually did. Exploratory, not a live
-prediction - built from
+Pick a current hitter and a stat, and see how their season compares to
+historical players at the same age, and what a next season might look
+like based on what those comparable players actually did. AVG/OBP/SLG/OPS
+each get their own comparable search - power, plate discipline, and
+contact rate age differently, so a single blended number would hide that.
+Exploratory, not a live prediction - built from
 <a href="https://github.com/chadwickbureau/baseballdatabank" style="color:inherit">Lahman's Baseball Database</a>
 (1871-present), not this project's own Statcast-based models. Hitters only;
-compares raw OPS with no era/park adjustment - see README for details and
-known limitations.
+no era/park adjustment - see README for details and known limitations.
 </p>
+
+<select id="metricSelect" onchange="onMetricChange()">
+<option value="OPS">OPS</option>
+<option value="AVG">AVG</option>
+<option value="OBP">OBP</option>
+<option value="SLG">SLG</option>
+</select>
 
 <input
 id="playerSearch"

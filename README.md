@@ -414,26 +414,38 @@ season. `key_mlbam` (this project's own identity) bridges to Lahman's
 `playerID` via a two-hop crosswalk: `chadwick_register()`'s `key_bbref`
 column matches Lahman People's `bbrefID` (`lahman_data.build_crosswalk`).
 
+The page computes a **separate curve/projection per metric**
+(`config.AGE_CURVE_METRICS`: `AVG`, `OBP`, `SLG`, `OPS` - selectable on the
+page) rather than one blended number - power (`SLG`) typically peaks
+earlier and declines faster than plate discipline (`OBP`), while contact
+rate (`AVG`) tends to be more stable, so collapsing them into one composite
+would hide that. A player's "closest historical comparables" can therefore
+be a genuinely different set of players depending on which metric is
+selected (e.g. their power comps vs. their contact comps).
+
 `age_curve.py`'s method (v1, deliberately simple - see its module
-docstring): find the `AGE_CURVE_K_NEIGHBORS` (25) historical hitter-seasons
-within `AGE_CURVE_AGE_WINDOW` (1) year of the current player's age with the
-closest `OPS` (a hand-implemented nearest-neighbor sort - no scikit-learn
-dependency, matching this project's pattern of implementing its own stats
-rather than pulling in an ML library for one call), then look at what those
-comparables actually did the *following* season. Comparables with no next
-season on record (retired, hurt, released, or fell below
-`AGE_CURVE_MIN_AB`) are excluded from the projection and that excluded
-fraction is reported alongside it - survivorship bias made visible, not
-hidden. The projection is a range (mean plus 25th/75th percentile), not a
-false-precision single number.
+docstring), run independently for each metric: find the
+`AGE_CURVE_K_NEIGHBORS` (25) historical hitter-seasons within
+`AGE_CURVE_AGE_WINDOW` (1) year of the current player's age with the
+closest value on that metric (a hand-implemented nearest-neighbor sort -
+no scikit-learn dependency, matching this project's pattern of
+implementing its own stats rather than pulling in an ML library for one
+call), then look at what those comparables actually did on that same
+metric the *following* season. Comparables with no next season on record
+(retired, hurt, released, or fell below `AGE_CURVE_MIN_AB`) are excluded
+from the projection and that excluded fraction is reported alongside it -
+survivorship bias made visible, not hidden. The projection is a range
+(mean plus 25th/75th percentile), not a false-precision single number.
 
 Known v1 simplifications (documented, not silently ignored): **hitters
 only** (pitchers need a different stat basis and aging pattern - a clean
-future phase, not a half-finished launch); a **single similarity
-dimension** (`OPS`); **no era/park adjustment** - comparing raw `OPS`
-across very different offensive eras (e.g. the high-offense late 1990s vs.
-a lower-average modern era) or ballparks is a real limitation of this
-first pass.
+future phase, not a half-finished launch); each metric's comparable search
+is **independent** (ranked by that one stat alone, not a joint multi-metric
+similarity - a future "one holistic comparable set, several metric views"
+mode is a possible follow-up); **no era/park adjustment** - comparing raw
+rates across very different offensive eras (e.g. the high-offense late
+1990s vs. a lower-average modern era) or ballparks is a real limitation of
+this first pass.
 
 `scripts/fetch_lahman.py` (persists `people`/`batting`/`pitching` to
 `data/raw/lahman/*.parquet`) and `scripts/build_age_curves.py` (writes
