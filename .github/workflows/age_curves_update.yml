@@ -35,7 +35,7 @@ jobs:
           mkdir -p docs/data
           mkdir -p data/raw/lahman
 
-      - name: Refresh Lahman data
+      - name: Convert Lahman_Raw CSVs to parquet
         run: |
           python scripts/fetch_lahman.py
 

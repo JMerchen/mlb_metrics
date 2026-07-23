@@ -393,16 +393,17 @@ AGE_CURVE_K_NEIGHBORS = 25
 AGE_CURVE_AGE_WINDOW = 1
 
 # Empirically validated (scripts/backtest_age_curve.py) against 500 real
-# sampled player-seasons from 2010-2019 (29,692 qualified historical
-# hitter-seasons total, 1871-present, from Lahman's actual database - not
-# synthetic data), using only comparable data available at or before each
-# test season's own year (no lookahead). Every metric beat the naive
-# "always guess the sample's mean" baseline, with a real (not noise-level)
-# positive correlation between projected and actual next-season value:
-#   AVG: MAE 0.0246 vs. 0.0254 baseline, correlation 0.348 (n=355 scored)
-#   OBP: MAE 0.0274 vs. 0.0284 baseline, correlation 0.430 (n=355 scored)
-#   SLG: MAE 0.0535 vs. 0.0582 baseline, correlation 0.474 (n=355 scored)
-#   OPS: MAE 0.0752 vs. 0.0789 baseline, correlation 0.445 (n=355 scored)
+# sampled player-seasons from 2010-2019 (32,158 qualified historical
+# hitter-seasons total, 1871-2025, from Lahman's actual database via
+# Lahman_Raw/ - not synthetic data), using only comparable data available
+# at or before each test season's own year (no lookahead). Every metric
+# beat the naive "always guess the sample's mean" baseline, with a real
+# (not noise-level) positive correlation between projected and actual
+# next-season value:
+#   AVG: MAE 0.0245 vs. 0.0254 baseline, correlation 0.352 (n=355 scored)
+#   OBP: MAE 0.0274 vs. 0.0284 baseline, correlation 0.429 (n=355 scored)
+#   SLG: MAE 0.0533 vs. 0.0582 baseline, correlation 0.473 (n=355 scored)
+#   OPS: MAE 0.0756 vs. 0.0789 baseline, correlation 0.446 (n=355 scored)
 # The remaining 145/500 sampled seasons had no comparable with a resolvable
 # next season and couldn't be scored (see project_next_season's docstring -
 # reported, not hidden). SLG/OPS show the strongest signal; AVG/OBP beat
@@ -412,11 +413,11 @@ AGE_CURVE_AGE_WINDOW = 1
 # change to AGE_CURVE_K_NEIGHBORS/AGE_CURVE_AGE_WINDOW/AGE_CURVE_MIN_AB.
 
 # Same methodology, pitcher metrics: 500 real sampled pitcher-seasons from
-# 2010-2019 (25,073 qualified historical pitcher-seasons total):
-#   K9:  MAE 1.1482 vs. 1.5878 baseline, correlation 0.745 (n=296 scored)
-#   BB9: MAE 0.6309 vs. 0.7776 baseline, correlation 0.615 (n=296 scored)
-#   HR9: MAE 0.3293 vs. 0.3264 baseline, correlation 0.320 (n=296 scored)
-#   FIP: MAE 0.5880 vs. 0.6606 baseline, correlation 0.442 (n=296 scored)
+# 2010-2019 (28,127 qualified historical pitcher-seasons total, 1871-2025):
+#   K9:  MAE 1.1476 vs. 1.5878 baseline, correlation 0.746 (n=296 scored)
+#   BB9: MAE 0.6277 vs. 0.7776 baseline, correlation 0.616 (n=296 scored)
+#   HR9: MAE 0.3312 vs. 0.3264 baseline, correlation 0.321 (n=296 scored)
+#   FIP: MAE 0.5907 vs. 0.6606 baseline, correlation 0.440 (n=296 scored)
 # K9/BB9/FIP all clearly beat their naive baselines. HR9 is reported
 # honestly as a wash, not hidden or rounded away: its MAE is essentially
 # tied with (very slightly worse than) just guessing the sample mean,
