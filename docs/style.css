@@ -217,6 +217,22 @@ font-weight:bold;
 
 }
 
+a.tabButton{
+
+text-decoration:none;
+
+display:inline-block;
+
+}
+
+.pageTabs .tabButton{
+
+font-size:17px;
+
+padding:10px 22px;
+
+}
+
 hr{
 
 margin:30px 0;
