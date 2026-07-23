@@ -36,10 +36,19 @@ let comparablesAll = []
 let leagueCurve = []
 let matches = []
 let selectedKeyMlbam = null
+let selectedMetric = "OPS"
 let chart = null
 
 function currentMetric(){
-return document.getElementById("metricSelect").value
+return selectedMetric
+}
+
+function selectMetric(metric){
+selectedMetric = metric
+document.querySelectorAll(".tabButton").forEach(btn=>{
+btn.classList.toggle("active", btn.dataset.metric === metric)
+})
+onMetricChange()
 }
 
 async function loadAll(){

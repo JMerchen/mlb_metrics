@@ -40,16 +40,18 @@ prediction - built from
 adjustment - see README for details and known limitations.
 </p>
 
-<select id="metricSelect" onchange="onMetricChange()">
-<option value="OPS">OPS (hitter)</option>
-<option value="AVG">AVG (hitter)</option>
-<option value="OBP">OBP (hitter)</option>
-<option value="SLG">SLG (hitter)</option>
-<option value="K9">K9 (pitcher)</option>
-<option value="BB9">BB9 (pitcher)</option>
-<option value="HR9">HR9 (pitcher)</option>
-<option value="FIP">FIP (pitcher)</option>
-</select>
+<div class="tabGroup" id="metricTabs">
+<span class="tabGroupLabel">Hitter:</span>
+<button class="tabButton active" data-metric="OPS" onclick="selectMetric('OPS')">OPS</button>
+<button class="tabButton" data-metric="AVG" onclick="selectMetric('AVG')">AVG</button>
+<button class="tabButton" data-metric="OBP" onclick="selectMetric('OBP')">OBP</button>
+<button class="tabButton" data-metric="SLG" onclick="selectMetric('SLG')">SLG</button>
+<span class="tabGroupLabel">Pitcher:</span>
+<button class="tabButton" data-metric="K9" onclick="selectMetric('K9')">K9</button>
+<button class="tabButton" data-metric="BB9" onclick="selectMetric('BB9')">BB9</button>
+<button class="tabButton" data-metric="HR9" onclick="selectMetric('HR9')">HR9</button>
+<button class="tabButton" data-metric="FIP" onclick="selectMetric('FIP')">FIP</button>
+</div>
 
 <input
 id="playerSearch"
