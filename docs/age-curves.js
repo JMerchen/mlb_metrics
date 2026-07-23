@@ -224,4 +224,8 @@ buildTable(rows, "comparablesTable")
 
 }
 
+document.getElementById("playerSearch").addEventListener("keydown", function(e){
+if(e.key === "Enter"){ searchPlayer() }
+})
+
 loadAll()
