@@ -334,6 +334,29 @@ GAME_PICK_SUSCEPTIBILITY_WEIGHT = 0.5
 # meaningfully changes (e.g. GAME_PICK_SUSCEPTIBILITY_WEIGHT's introduction).
 GAME_PICK_MODEL_VERSION = "v1"
 
+# --- Age Curves (exploratory, separate page - not part of the daily pick pipeline) ---
+#
+# Given a current hitter's age and season OPS (traditional_stats.py, not
+# WAVE/PAVE - Lahman's historical seasons have no Statcast-derived signal
+# to compare against), finds the K nearest historical hitter-seasons at
+# the same age by OPS (age_curve.py) and projects next season from what
+# those comparables actually did next. v1 scope: hitters only, single
+# similarity dimension (OPS), no era/park adjustment - see age_curve.py's
+# module docstring.
+
+# Minimum at-bats for a season (current or historical) to be eligible at
+# all - a tiny-sample season can otherwise show an OPS of 0 or 3.000+ on
+# pure noise, same reasoning as BACKTEST_MIN_PLATE_APPEARANCES above.
+AGE_CURVE_MIN_AB = 200
+
+# How many nearest-by-OPS same-age comparables to use per projection.
+AGE_CURVE_K_NEIGHBORS = 25
+
+# Comparables are drawn from ages within this many years of the current
+# player's age (0 = exact age match only). A small window trades strict
+# age-comparability for a larger, less noisy comparable pool.
+AGE_CURVE_AGE_WINDOW = 1
+
 # Statcast plate-appearance outcome values that count as a "completed" event
 # (used to filter pitch-by-pitch data down to one row per at-bat outcome).
 COUNTED_EVENTS = [

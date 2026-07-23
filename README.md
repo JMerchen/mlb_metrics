@@ -20,6 +20,10 @@ to `docs/` as a GitHub Pages dashboard.
 - `scripts/evaluate_current_model.py` - read-only backtest report for the
   currently-live hitter-pick and game-pick models (see "Model versioning"
   below); doesn't write to `data/predictions/` or `docs/data/`.
+- `scripts/fetch_lahman.py` / `scripts/build_age_curves.py` /
+  `scripts/backtest_age_curve.py` - the Age Curves page's data pipeline
+  (see "Age Curves" below); occasional-cadence, not part of the daily
+  pipeline.
 - `data/raw/` - persisted raw Statcast pulls, one parquet file per season,
   committed daily alongside the output CSVs so history accumulates run over run.
 - `data/predictions/predictions.csv` - append-only log of every daily hitter
@@ -390,6 +394,58 @@ written to `docs/data/probable_pitchers.csv` alongside the matchup blend
 no file that day, not a stale one). A team with an unannounced or
 unmatched starter still gets a row with blank pitcher fields, so the day's
 full slate stays visible rather than silently missing teams.
+
+## Age Curves (`docs/age-curves.html`, exploratory - separate page)
+
+A standalone page, entirely separate from the daily pick pipeline: pick a
+current hitter and see how their season stat line compares to historical
+players at the same age, plus a projection for next season built from
+what those historical comparables actually did the following year.
+
+Uses [Lahman's Baseball Database](https://github.com/chadwickbureau/baseballdatabank)
+(1871-present), fetched via pybaseball's built-in `lahman` submodule
+(`lahman_data.py`) - a different data source than the rest of this project
+(Statcast), needed because Lahman's historical seasons have no
+Statcast-derived signal (WAVE/PAVE) to compare against. A current player is
+put on the same stat basis - season `AVG`/`OBP`/`SLG`/`OPS`
+(`traditional_stats.py`, reusing `helpers.py`'s event classifiers, not
+recency-windowed like WAVE) - so they're comparable to a single historical
+season. `key_mlbam` (this project's own identity) bridges to Lahman's
+`playerID` via a two-hop crosswalk: `chadwick_register()`'s `key_bbref`
+column matches Lahman People's `bbrefID` (`lahman_data.build_crosswalk`).
+
+`age_curve.py`'s method (v1, deliberately simple - see its module
+docstring): find the `AGE_CURVE_K_NEIGHBORS` (25) historical hitter-seasons
+within `AGE_CURVE_AGE_WINDOW` (1) year of the current player's age with the
+closest `OPS` (a hand-implemented nearest-neighbor sort - no scikit-learn
+dependency, matching this project's pattern of implementing its own stats
+rather than pulling in an ML library for one call), then look at what those
+comparables actually did the *following* season. Comparables with no next
+season on record (retired, hurt, released, or fell below
+`AGE_CURVE_MIN_AB`) are excluded from the projection and that excluded
+fraction is reported alongside it - survivorship bias made visible, not
+hidden. The projection is a range (mean plus 25th/75th percentile), not a
+false-precision single number.
+
+Known v1 simplifications (documented, not silently ignored): **hitters
+only** (pitchers need a different stat basis and aging pattern - a clean
+future phase, not a half-finished launch); a **single similarity
+dimension** (`OPS`); **no era/park adjustment** - comparing raw `OPS`
+across very different offensive eras (e.g. the high-offense late 1990s vs.
+a lower-average modern era) or ballparks is a real limitation of this
+first pass.
+
+`scripts/fetch_lahman.py` (persists `people`/`batting`/`pitching` to
+`data/raw/lahman/*.parquet`) and `scripts/build_age_curves.py` (writes
+`docs/data/age_curve_projections.csv`/`age_curve_comparables.csv`/
+`age_curve_league.csv`) run on their own **occasional cadence** (e.g. once
+a season / weekly) - deliberately *not* part of `daily_update.yml`, since
+historical comparables don't move day to day. `scripts/backtest_age_curve.py`
+validates the projection method itself against a sample of real past
+player-seasons (each with a known real next season to check against),
+using only comparable data available at or before that test season's own
+year - the same no-lookahead discipline as `git_backtest.py`/
+`game_picks_backtest.py` elsewhere in this project.
 
 ## Running
 
