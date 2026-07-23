@@ -464,6 +464,18 @@ alongside it - survivorship bias made visible, not hidden. The projection
 is a range (mean plus 25th/75th percentile), not a false-precision single
 number.
 
+The chart plots the player's own **real trajectory**, not just their
+current season: for a player who already has Lahman-tracked history
+(anyone who debuted before Lahman's most recent completed season), every
+one of their own past ages on record is plotted as an actual point,
+connected into a real multi-year line, with their current season and a
+distinctly-marked projected next-season point at the end
+(`age_curve_player_history.csv`, built by matching each current player's
+own crosswalked Lahman `playerID` back into their own historical rows -
+their real career arc, not a comparable's). A player with no Lahman
+history yet (a very recent debut) only has their current + projected
+points, same as before.
+
 Known v1 simplifications (documented, not silently ignored): each metric's
 comparable search is **independent** (ranked by that one stat alone, not a
 joint multi-metric similarity - a future "one holistic comparable set,
@@ -475,7 +487,8 @@ ballparks is a real limitation of this first pass.
 `scripts/fetch_lahman.py` (converts `Lahman_Raw/*.csv` to
 `data/raw/lahman/*.parquet`) and `scripts/build_age_curves.py` (writes
 `docs/data/age_curve_projections.csv`/`age_curve_comparables.csv`/
-`age_curve_league.csv`) run on their own **occasional cadence** (weekly, via
+`age_curve_league.csv`/`age_curve_player_history.csv`) run on their own
+**occasional cadence** (weekly, via
 `.github/workflows/age_curves_update.yml` - also manually triggerable) -
 deliberately a separate workflow from `daily_update.yml`, since historical
 comparables don't move day to day. `scripts/backtest_age_curve.py`

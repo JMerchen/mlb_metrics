@@ -137,3 +137,49 @@ def test_build_current_player_pool_excludes_players_with_no_lahman_match(tmp_pat
     pool = module.build_current_player_pool(str(raw_dir), season=2026, min_at_bats=5)
 
     assert pool.empty
+
+
+def test_build_player_history_export_returns_own_career_seasons_per_metric():
+    module = _load_build_age_curves_module()
+
+    current_players = pd.DataFrame([{"key_mlbam": 1, "playerID": "p1"}])
+    historical_seasons = pd.DataFrame([
+        {"playerID": "p1", "yearID": 2018, "age": 24, "AVG": 0.250, "OPS": 0.700},
+        {"playerID": "p1", "yearID": 2019, "age": 25, "AVG": 0.270, "OPS": 0.750},
+        {"playerID": "p2", "yearID": 2018, "age": 24, "AVG": 0.300, "OPS": 0.800},  # a different player, excluded
+    ])
+
+    result = module.build_player_history_export(current_players, historical_seasons, ["AVG", "OPS"])
+
+    assert set(result["key_mlbam"]) == {1}
+    avg_rows = result[result["metric"] == "AVG"].sort_values("age")
+    assert avg_rows["age"].tolist() == [24, 25]
+    assert avg_rows["value"].tolist() == pytest.approx([0.250, 0.270])
+    ops_rows = result[result["metric"] == "OPS"].sort_values("age")
+    assert ops_rows["value"].tolist() == pytest.approx([0.700, 0.750])
+
+
+def test_build_player_history_export_empty_when_no_current_players():
+    module = _load_build_age_curves_module()
+
+    result = module.build_player_history_export(
+        pd.DataFrame(columns=["key_mlbam", "playerID"]),
+        pd.DataFrame(columns=["playerID", "yearID", "age", "AVG"]),
+        ["AVG"],
+    )
+
+    assert result.empty
+    assert list(result.columns) == ["key_mlbam", "metric", "age", "value"]
+
+
+def test_build_player_history_export_empty_when_player_has_no_lahman_history():
+    module = _load_build_age_curves_module()
+
+    current_players = pd.DataFrame([{"key_mlbam": 1, "playerID": "rookie01"}])
+    historical_seasons = pd.DataFrame([
+        {"playerID": "someone_else", "yearID": 2018, "age": 24, "AVG": 0.300},
+    ])
+
+    result = module.build_player_history_export(current_players, historical_seasons, ["AVG"])
+
+    assert result.empty

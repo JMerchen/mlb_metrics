@@ -48,7 +48,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add docs/data/age_curve_projections.csv docs/data/age_curve_comparables.csv docs/data/age_curve_league.csv data/raw/lahman/
+          git add docs/data/age_curve_projections.csv docs/data/age_curve_comparables.csv docs/data/age_curve_league.csv docs/data/age_curve_player_history.csv data/raw/lahman/
 
           git commit -m "Age Curves data update" || echo "No changes"
 
