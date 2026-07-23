@@ -404,8 +404,11 @@ built from what those historical comparables actually did the following
 year.
 
 Uses [Lahman's Baseball Database](https://github.com/chadwickbureau/baseballdatabank)
-(1871-present), fetched via pybaseball's built-in `lahman` submodule
-(`lahman_data.py`) - a different data source than the rest of this project
+(1871-present), fetched via the `lahman` PyPI package (`lahman_data.py`) -
+not pybaseball's own built-in `lahman` submodule, whose runtime zip
+download from the baseballdatabank repo started failing; the PyPI package
+bundles the CSVs directly in the installed wheel, no network fetch needed -
+a different data source than the rest of this project
 (Statcast), needed because Lahman's historical seasons have no
 Statcast-derived signal (WAVE/PAVE) to compare against. A current player is
 put on the same stat basis - season `AVG`/`OBP`/`SLG`/`OPS` for hitters,
