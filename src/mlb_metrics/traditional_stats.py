@@ -79,7 +79,7 @@ def compute_traditional_pitching_stats(pdf: pd.DataFrame, min_ip: float = 0) -> 
     agg["BB9"] = (agg["BB"] * 9 / ip_safe).fillna(0)
     agg["HR9"] = (agg["HR"] * 9 / ip_safe).fillna(0)
     agg["FIP"] = (
-        (13 * agg["HR"] + 3 * (agg["BB"] + agg["HBP"]) - 2 * agg["SO"]) / ip_safe + config.AGE_CURVE_FIP_CONSTANT
+        (13 * agg["HR"] + 3 * (agg["BB"] + agg["HBP"]) - 2 * agg["SO"]) / ip_safe + config.FIP_CONSTANT
     ).fillna(0)
 
     return agg.rename(columns={"pitcher": "key_mlbam"})[["key_mlbam", "IP", "K9", "BB9", "HR9", "FIP"]]

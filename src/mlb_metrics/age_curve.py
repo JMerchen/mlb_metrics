@@ -112,7 +112,7 @@ def build_historical_pitcher_seasons(
     season["HR9"] = (season["HR"] * 9 / ip_safe).fillna(0)
     season["FIP"] = (
         (13 * season["HR"] + 3 * (season["BB"] + season["HBP"]) - 2 * season["SO"]) / ip_safe
-        + config.AGE_CURVE_FIP_CONSTANT
+        + config.FIP_CONSTANT
     ).fillna(0)
 
     aged = lahman_data.attach_age(season, people)

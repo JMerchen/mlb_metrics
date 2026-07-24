@@ -364,13 +364,17 @@ AGE_CURVE_PITCHER_METRICS = ["K9", "BB9", "HR9", "FIP"]
 
 # FIP = (13*HR + 3*(BB+HBP) - 2*K) / IP + this constant. The constant is a
 # pure additive shift (traditionally computed per-season so lgFIP==lgERA)
-# that puts FIP on the same familiar ~3-4 scale as ERA - it does NOT affect
-# comparable-search distances or projections at all (both are computed as
-# differences, and an additive constant cancels out of any difference). A
+# that puts FIP on the same familiar ~3-4 scale as ERA. For age_curve.py it
+# does NOT affect comparable-search distances or projections at all (both
+# are computed as differences, and an additive constant cancels out of any
+# difference) - purely cosmetic there, not a modeling simplification. A
 # single fixed value is used here instead of a real per-season constant
 # (which would need runs-allowed/ERA data this project deliberately doesn't
-# use) - purely cosmetic, not a modeling simplification.
-AGE_CURVE_FIP_CONSTANT = 3.10
+# use elsewhere). Also reused by dfs.py's Expected_ER estimate (see its
+# docstring) - shared across both consumers rather than duplicated, since
+# it's the same constant either way. Not "AGE_CURVE_*"-prefixed despite
+# originating there, since it's no longer Age-Curves-only.
+FIP_CONSTANT = 3.10
 
 # Minimum at-bats for a hitter season (current or historical) to be
 # eligible at all - a tiny-sample season can otherwise show an OPS of 0 or
@@ -426,6 +430,148 @@ AGE_CURVE_AGE_WINDOW = 1
 # though it correlates with itself somewhat. Treat HR9 projections as a
 # weak signal. Re-run this backtest (and update these numbers) after any
 # change to AGE_CURVE_K_NEIGHBORS/AGE_CURVE_AGE_WINDOW/AGE_CURVE_MIN_IP.
+
+# --- DFS Player Rankings (docs/dfs.html, dfs.py) ---
+#
+# Estimated DraftKings Classic MLB fantasy points for today's hitters and
+# probable starters - a ranked list of good plays, NOT a salary-cap lineup
+# optimizer (no salary data is ingested anywhere in this project). See
+# dfs.py's module docstring for the full methodology and v1 limitations.
+
+# DraftKings Classic MLB scoring, confirmed live (not from memory) via
+# https://dknetwork.draftkings.com/2020/05/29/beginner-mlb-dfs-scoring/ and
+# https://www.draftkings.com/help/rules/2/59 - hitters.
+DFS_DK_HITTER_SINGLE_POINTS = 3
+DFS_DK_HITTER_DOUBLE_POINTS = 5
+DFS_DK_HITTER_TRIPLE_POINTS = 8
+DFS_DK_HITTER_HR_POINTS = 10
+# Not used by the v1 projection (no walk-rate/lineup-run-context/steal
+# signal exists in this project yet - see dfs.py's module docstring) - kept
+# only so dfs_backtest.py can report the FULL real DK score for a
+# historical day alongside the modeled (hit-only) subset, honestly, instead
+# of silently comparing against a partial actual.
+DFS_DK_HITTER_RUN_POINTS = 2
+DFS_DK_HITTER_RBI_POINTS = 2
+DFS_DK_HITTER_BB_POINTS = 2
+DFS_DK_HITTER_HBP_POINTS = 2
+DFS_DK_HITTER_SB_POINTS = 5
+# DraftKings removed the caught-stealing penalty from its current ruleset
+# (confirmed live via web search, July 2026) - 0, not a negative value.
+DFS_DK_HITTER_CS_POINTS = 0
+
+# DraftKings Classic MLB scoring - pitchers. Same sources as above.
+DFS_DK_PITCHER_IP_POINTS = 2.25  # per inning (0.75 per out)
+DFS_DK_PITCHER_K_POINTS = 2
+DFS_DK_PITCHER_BB_POINTS = -0.6
+DFS_DK_PITCHER_H_POINTS = -0.6
+DFS_DK_PITCHER_HBP_POINTS = -0.6
+DFS_DK_PITCHER_ER_POINTS = -2
+# Out of scope for v1 (see dfs.py's module docstring: Win needs a
+# win-probability estimate this project doesn't build; CG/CGSO/no-hitter
+# are rare discrete events with no signal here) - kept, unused, purely as a
+# visible reminder of what real DK pitcher scoring includes that this
+# ranking does NOT model, so a reader doesn't mistake DK_Points_Pitcher for
+# the full real score.
+DFS_DK_PITCHER_WIN_POINTS = 4
+DFS_DK_PITCHER_CG_POINTS = 2.5
+DFS_DK_PITCHER_CGSO_POINTS = 2.5
+DFS_DK_PITCHER_NO_HITTER_POINTS = 5
+
+# DK's hitter scoring is non-linear in total bases (a double isn't 2x a
+# single's value: 5 != 2*3), but this project only computes a linear
+# Expected_Bases signal (hitters.compute_wtb) - no per-player 1B/2B/3B/HR
+# rate breakdown exists. This is a single calibrated "DK points per
+# expected total base" approximating that non-linear scoring: computed
+# from REAL MLB-wide hit-type shares, Lahman batting 2015-2025 (not a
+# guessed league average) -
+#   singles 272,744 / doubles 84,058 / triples 7,831 / HR 59,419 of
+#   424,052 total hits -> shares 64.32% / 19.82% / 1.85% / 14.01%
+#   TB/hit  = .6432*1 + .1982*2 + .0185*3 + .1401*4 = 1.6555
+#   pts/hit = .6432*3 + .1982*5 + .0185*8 + .1401*10 = 4.4696
+#   pts/TB  = 4.4696 / 1.6555 = 2.6998
+DFS_DK_POINTS_PER_TOTAL_BASE = 2.6998
+
+# Ratio of Matchup_Hit_Probability to the batter's own blended
+# Game_Hit_Probability, used to scale Expected_Bases for today's specific
+# matchup (see dfs.compute_matchup_adjustment). Game_Hit_Probability is
+# floored at this value before dividing, so a batter with almost no
+# recorded games doesn't blow the ratio up arbitrarily large on noise.
+DFS_MATCHUP_RATIO_MIN_DENOM = 0.05
+
+# Same outlier protection as MATCHUP_PAVE_PLUS_CLIP, reused for
+# consistency: a 2x swing either direction off a real matchup edge is
+# already large; wider than that is almost certainly small-sample noise,
+# not real signal. Unvalidated at this exact value - revisit once
+# scripts/backtest_dfs_rankings.py has real numbers.
+DFS_MATCHUP_RATIO_CLIP = (0.5, 1.75)
+
+# pitcher_form.compute_pitcher_dfs_form's window scheme - deliberately a
+# SEPARATE constant from PAVE_WINDOWS (not reused), even though it starts
+# from the same weighting, so tuning one never silently perturbs the other
+# (PAVE_WINDOWS also feeds matchup.py's log5 blend and game_picks.py, both
+# already backtested against the current weights). Windows are wider than
+# PAVE_WINDOWS's: PAVE blends AT-BAT-level data (hundreds of rows/window
+# even in a short window); this blends START-level data (~1 start per 5
+# days for a rotation pitcher), so PAVE's 15-day window would leave as few
+# as 2-3 real starts in the tightest bucket. First-pass, unvalidated -
+# revisit once the backtest script has real MAE/correlation numbers across
+# alternative weightings.
+DFS_PITCHER_WINDOWS = [
+    (None, 0.30),
+    (60, 0.25),
+    (30, 0.25),
+    (15, 0.20),
+]
+
+# A pitcher needs at least this many recorded starts (pitcher_form's
+# unweighted full-season `starts` count) to be ranked at all - a 1-2 start
+# sample is enough for HR9 especially to be pure small-sample noise (one
+# blowup start can swing it to an absurd extreme). Modest, not a
+# qualified-ERA-title bar - a rookie's second MLB start should still
+# surface, same reasoning as AGE_CURVE_MIN_IP being deliberately modest.
+DFS_PITCHER_MIN_STARTS = 3
+
+# Sabermetric rule of thumb translating Expected_IP into an estimated
+# batters-faced count, used only to scale PAVE (an AB-level rate) into
+# Expected_H_Allowed = PAVE * Expected_IP * this constant, since neither
+# PAVE nor pitcher_form.py carries a real per-appearance batters-faced
+# count. Computed from this project's OWN persisted 2026 Statcast (not a
+# guessed league average): 113,334 real completed at-bat events over
+# 78,432 real outs recorded (26,144 IP) = 4.335 batters faced per inning.
+DFS_BATTERS_FACED_PER_INNING = 4.335
+
+# Empirically validated (scripts/backtest_dfs_rankings.py) against 15 real
+# game dates in July 2026, recomputed fresh from persisted Statcast with no
+# lookahead (the same discipline as game_picks_backtest.py/
+# backtest_age_curve.py) - see dfs_backtest.py's module docstring for
+# exactly what "actual" means and its honesty limits.
+#
+# Hitters (DK_Points_Hitter, hit-type scoring only): MAE 3.7719 vs. 3.7496
+# naive-baseline MAE, correlation -0.004 (n=4,156 scored). This is
+# reported honestly as NOT a working signal for single-game DFS
+# hit-scoring, not hidden or rounded away - the projection is
+# indistinguishable from noise at the single-game level. The single
+# highest-risk design choice here (see dfs.py's module docstring) is
+# compute_matchup_adjustment's ratio, derived from hit-PROBABILITY signals
+# but applied to a TOTAL-BASES signal - this backtest is exactly the check
+# that heuristic needed, and it does not hold up. Do not treat
+# DK_Points_Hitter as validated; a real revision (dropping the ratio
+# entirely and backtesting raw Expected_Bases, or a different adjustment
+# approach) is a needed follow-up, not a nice-to-have.
+#
+# Pitchers: a real, if modest, positive signal - better than hitters, but
+# still weak on some components:
+#   Expected_IP:         MAE 1.0257 vs. 1.0332 baseline, correlation 0.351 (n=360)
+#   Expected_K:           MAE 1.8971 vs. 1.9922 baseline, correlation 0.393 (n=360)
+#   Expected_BB:           MAE 1.0570 vs. 1.0380 baseline, correlation 0.182 (n=360) - weak
+#   Expected_H_Allowed:     MAE 2.6545 vs. 1.7860 baseline, correlation 0.223 (n=360) - MAE
+#     actually WORSE than the naive baseline despite positive correlation,
+#     suggesting DFS_BATTERS_FACED_PER_INNING/PAVE scaling is systematically
+#     off, not just noisy - a second flagged follow-up.
+#   DK_Points_Pitcher (combined): MAE 6.9409 vs. 7.1970 baseline,
+#     correlation 0.306 (n=360) - IP/K carry the real signal here.
+# Re-run this backtest (and update these numbers) after any change to
+# DFS_PITCHER_WINDOWS/DFS_BATTERS_FACED_PER_INNING/DFS_MATCHUP_RATIO_CLIP.
 
 # Statcast plate-appearance outcome values that count as a "completed" event
 # (used to filter pitch-by-pitch data down to one row per at-bat outcome).

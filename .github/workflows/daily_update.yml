@@ -40,6 +40,10 @@ jobs:
         run: |
           python scripts/wave.py
 
+      - name: Build DFS rankings
+        run: |
+          python scripts/build_dfs_rankings.py
+
       - name: Commit updates
         run: |
           git config user.name "github-actions"
