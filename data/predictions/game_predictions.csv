@@ -76,5 +76,7 @@ date,game_pk,home_team,away_team,predicted_winner,predicted_probability,metric,a
 2026-07-22,824735,BOS,BAL,BOS,0.5879717700967578,GamePick_Win_Probability,BOS,1.0,legacy
 2026-07-22,824896,ATL,SD,ATL,0.612436853909904,GamePick_Win_Probability,ATL,1.0,legacy
 2026-07-22,825055,AZ,ATH,AZ,0.6047345511104647,GamePick_Win_Probability,AZ,1.0,legacy
-2026-07-23,822785,TOR,TB,TB,0.594403786012081,GamePick_Win_Probability,,,v1
-2026-07-23,824247,DET,KC,DET,0.5802620103472967,GamePick_Win_Probability,,,v1
+2026-07-23,822785,TOR,TB,TB,0.594403786012081,GamePick_Win_Probability,TOR,1.0,v1
+2026-07-23,824247,DET,KC,DET,0.5802620103472967,GamePick_Win_Probability,DET,1.0,v1
+2026-07-24,823196,SF,LAA,SF,0.5925690996153259,GamePick_Win_Probability,,,v1
+2026-07-24,823759,MIL,COL,MIL,0.5848133889340674,GamePick_Win_Probability,,,v1
