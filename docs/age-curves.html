@@ -42,6 +42,16 @@ prediction - built from
 adjustment - see README for details and known limitations.
 </p>
 
+<p style="opacity:.75; max-width:700px; border-left:3px solid #4a90d9; padding-left:10px;">
+<strong>Update:</strong> HR9's single-dimension comparable search used to
+be reported as a wash (its projection error was statistically
+indistinguishable from just guessing the average). A multi-dimensional
+regression trained on age/IP/K9/BB9/HR9/FIP together has since beaten both
+that baseline and the original comparable search on a real held-out
+sample, and now powers HR9's projection specifically - every other metric
+here is unchanged. See README for the full numbers.
+</p>
+
 <div class="tabGroup" id="metricTabs">
 <span class="tabGroupLabel">Hitter:</span>
 <button class="tabButton active" data-metric="OPS" onclick="selectMetric('OPS')">OPS</button>

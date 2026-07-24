@@ -43,13 +43,18 @@ are NOT included. See README for the full methodology, known
 limitations, and backtest numbers.
 </p>
 
-<p style="opacity:.75; max-width:700px; border-left:3px solid #e53935; padding-left:10px;">
+<p style="opacity:.75; max-width:700px; border-left:3px solid #4a90d9; padding-left:10px;">
 <strong>Backtested against real outcomes, reported honestly:</strong> the
-hitter ranking's real correlation with actual next-game results is
-essentially zero (-0.004) - treat it as unvalidated, not a reliable
-signal yet. Pitcher rankings show a real, if modest, positive signal
-(correlation ~0.31 combined, mainly from innings/strikeouts). See README
-for the full numbers.
+original heuristic hitter ranking had essentially zero real correlation
+with actual next-game results (-0.004). A gradient-boosting model trained
+on the same underlying matchup ingredients (not the flawed heuristic
+formula) has since replaced it and now shows a real, if still modest,
+positive signal (correlation 0.145). Pitcher hits-allowed and walks
+projections were similarly upgraded via a validated regression model.
+None of these are strong signals yet - treat them as directionally useful,
+not high-confidence - but each one now beats both a naive guess and its
+own prior heuristic on real held-out data. See README for the full
+numbers and methodology.
 </p>
 
 <div class="tabGroup" id="positionTabs">

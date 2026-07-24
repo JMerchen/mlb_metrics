@@ -82,6 +82,13 @@ def build_hitter_features(
     schedule_columns = [c for c in ("team", "opponent", "probable_pitcher_key_mlbam", "is_home") if c in schedule_df.columns]
     df = wave.merge(schedule_df[schedule_columns], on="team", how="inner")
 
+    # Falls back to the hand-blended overall WAVE when WAVE_L/WAVE_R aren't
+    # present at all - an old wave.csv snapshot predating platoon-awareness,
+    # same known scenario matchup.py's _platoon_wave already guards against.
+    for column in ("WAVE_L", "WAVE_R"):
+        if column not in df.columns:
+            df[column] = df["WAVE"]
+
     pave_columns = [c for c in ("key_mlbam", "PAVE") if c in pave.columns]
     starter = pave[pave_columns].rename(columns={"key_mlbam": "probable_pitcher_key_mlbam", "PAVE": "starter_PAVE"})
     df = df.merge(starter, on="probable_pitcher_key_mlbam", how="left")

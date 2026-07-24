@@ -40,6 +40,26 @@ def test_build_hitter_features_joins_matchup_ingredients():
     assert list(result.reset_index().columns) == ["key_mlbam"] + dfs_ml.HITTER_FEATURE_COLUMNS
 
 
+def test_build_hitter_features_falls_back_to_wave_when_wave_l_r_missing():
+    # Regression test: an old wave.csv snapshot predating platoon-awareness
+    # has no WAVE_L/WAVE_R columns at all - build_hitter_features must fall
+    # back to WAVE rather than KeyError, same as matchup.py's _platoon_wave.
+    wave = pd.DataFrame([{
+        "key_mlbam": 1, "team": "BOS", "WAVE": 0.28, "PA_L": 20, "PA_R": 40,
+        "probability": 0.65, "Game_Hit_Probability": 0.70, "Consistency": 0.05,
+        "Approach": 0.45, "Expected_Bases": 1.5,
+    }])
+    pave = pd.DataFrame([{"key_mlbam": 99, "PAVE": 0.24}])
+    confidence = pd.DataFrame([{"team": "NYY", "Bullpen_PAVE": 0.26, "Park_Factor": 0.95}])
+    schedule_df = pd.DataFrame([{"team": "BOS", "opponent": "NYY", "is_home": False, "probable_pitcher_key_mlbam": 99}])
+    matchup_probability = pd.DataFrame([{"key_mlbam": 1, "Matchup_Hit_Probability": 0.72}])
+
+    result = dfs_ml.build_hitter_features(wave, pave, confidence, schedule_df, matchup_probability).set_index("key_mlbam")
+
+    assert result.loc[1, "WAVE_L"] == pytest.approx(0.28)
+    assert result.loc[1, "WAVE_R"] == pytest.approx(0.28)
+
+
 def test_build_hitter_features_excludes_batter_with_no_resolvable_matchup():
     wave = pd.DataFrame([_wave_row(1, "BOS")])
     pave = pd.DataFrame([{"key_mlbam": 99, "PAVE": 0.24}])

@@ -7,13 +7,24 @@ multi-dimensional regression instead - age, IP, K9, BB9, HR9, FIP all at
 once - to see whether a model can actually do better than "look at
 similar pitchers' HR9 alone."
 
-Honest expectation, stated up front (not just after the fact): single-
-season HR9 is substantially driven by batted-ball luck, park, and defense,
-none of which any model built purely from a pitcher's own aggregate rate
-stats can see - this is plausibly the least fixable of this project's four
-flagged weak signals in ANY reasonable model, not just under-modeled by
-KNN specifically. This module exists to make a real, honestly-reported
-attempt, not to promise a fix.
+Honest expectation, stated up front before this was ever run (not just
+after the fact): single-season HR9 is substantially driven by batted-ball
+luck, park, and defense, none of which any model built purely from a
+pitcher's own aggregate rate stats can see - this was flagged as plausibly
+the least fixable of this project's four flagged weak signals in ANY
+reasonable model, not just under-modeled by KNN specifically.
+
+**Result (scripts/train_age_curve_hr9_model.py, config.py's Age Curves
+section has the full numbers): it worked, if modestly.** A
+gradient-boosting model trained on all six features together beat both
+the naive baseline AND the single-dimension KNN search on a real 500-
+season held-out sample (correlation 0.359 vs. KNN's 0.321; MAE 0.3190 vs.
+KNN's 0.3312). The honest caveat above was worth stating and turned out
+to be too pessimistic here - HR9 has SOME real multi-dimensional signal
+(age/IP/K9/BB9/FIP jointly, not HR9's own value alone) that a single-
+dimension nearest-neighbor search was leaving on the table. It's now the
+live projection source for HR9 specifically (build_age_curves.py); every
+other Age Curves metric is untouched.
 
 Deliberately does NOT add multi-year lag/trend features (e.g. previous
 season's own HR9) for v1 - keeps the comparison to "same KNN inputs, but

@@ -28,11 +28,16 @@ config.AGE_CURVE_PITCHER_METRICS's docstring for why) in favor of
 defense-independent component/composite rates, the same philosophy as
 pitchers.py's Power_A_PLUS.
 
-No ML library is used (no scikit-learn dependency exists in this project -
-see requirements.txt): K-nearest-neighbors on a single dimension is a
-straightforward sort, matching this project's established pattern of
-hand-implementing its own statistics (log5, z-scoring) rather than pulling
-in a library for one call.
+The K-nearest-neighbors search here is still hand-implemented (a
+straightforward sort on a single dimension), matching this project's
+established pattern of implementing its own statistics (log5, z-scoring)
+rather than pulling in a library for one call - unchanged even though
+scikit-learn is now a real project dependency (requirements.txt): HR9
+specifically was found to be weak enough (see backtest numbers below) that
+a genuine ML follow-up was worth trying, and it won - see age_curve_ml.py
+and scripts/train_age_curve_hr9_model.py. Every OTHER metric here
+(AVG/OBP/SLG/OPS/K9/BB9/FIP) is untouched and still served by this
+module's original KNN path.
 
 v1 scope, deliberately not overbuilt: one metric's value at a time for the
 similarity search (not a joint multi-metric distance), no era/park

@@ -649,13 +649,62 @@ AGE_CURVE_HR9_GBM_PARAM_GRID = {
     "max_iter": [100, 200, 300],
 }
 
-# Results filled in after scripts/train_dfs_ml_models.py actually ran
-# against real persisted 2026 Statcast (full history, not just the 15-20
-# date heuristic sample) - reported honestly whether or not each model
-# beat its heuristic; see that script's module docstring and
-# docs/dfs.html for how the outcome is surfaced.
+# Results from scripts/train_dfs_ml_models.py, run against the FULL real
+# persisted 2026 Statcast history (114 hitter dates / 99 pitcher dates, not
+# just the 15-20 date heuristic sample above) - nested walk-forward grid
+# search on the earlier dates only, evaluated ONCE on the untouched final
+# ML_FINAL_HOLDOUT_DATES-date block. All three signals cleared the bar
+# (beat both the naive baseline AND the existing heuristic) and are now
+# LIVE (see dfs_ml.apply_ml_overrides) - reported honestly, same as every
+# other backtest here, and this WOULD have said so if a model hadn't
+# cleared the bar (see git history / README for that framing):
 #
-# [placeholder - filled in once scripts/train_dfs_ml_models.py has run]
+#   DK_Points_Hitter (HistGradientBoostingRegressor, max_depth=2,
+#   learning_rate=0.03, max_iter=100, min_samples_leaf=200):
+#     MAE 3.6374 vs. naive-baseline MAE 3.7183 vs. heuristic MAE 3.7504,
+#     correlation 0.145 (n=5,606) - a real, if still modest, signal where
+#     the heuristic had none (-0.004). The matchup-ratio heuristic
+#     (compute_matchup_adjustment) is no longer used for this signal's
+#     live output; its raw ingredients (starter/bullpen PAVE, Park_Factor,
+#     is_home, the batter's own WAVE/Game_Hit_Probability/Consistency/
+#     Approach) are fed to the model directly instead - see dfs_ml.py.
+#
+#   Expected_H_Allowed (Ridge, alpha=30):
+#     MAE 1.7647 vs. naive-baseline MAE 1.8151 vs. heuristic MAE 2.6665,
+#     correlation 0.250 (n=479) - the heuristic's MAE was WORSE than the
+#     naive baseline (flagged as a likely systematic scaling bias in
+#     PAVE * Expected_IP * DFS_BATTERS_FACED_PER_INNING); a plain
+#     recalibrating regression on the SAME inputs fixed it, confirming
+#     that diagnosis.
+#
+#   Expected_BB (Ridge, alpha=100):
+#     MAE 1.0875 vs. naive-baseline MAE 1.0999 vs. heuristic MAE 1.1096,
+#     correlation 0.119 (n=479) - the smallest improvement of the three
+#     (walk rate over a single start is still high-variance), but a real
+#     one on both MAE and beating the baseline the heuristic didn't
+#     clearly beat before.
+#
+# Re-run scripts/train_dfs_ml_models.py (and update this comment) after
+# any change to the DFS feature set, PAVE_WINDOWS, or DFS_PITCHER_WINDOWS -
+# a stale saved model silently keeps serving old-feature-distribution
+# predictions otherwise.
+
+# Age Curves HR9 result, from scripts/train_age_curve_hr9_model.py (same
+# 500-season, 2010-2019, seed-0 sample scripts/backtest_age_curve.py
+# already used for the KNN number above - recomputed fresh, not assumed
+# stale): HistGradientBoostingRegressor (max_depth=3, learning_rate=0.05,
+# max_iter=100), trained ONLY on seasons before AGE_CURVE_HR9_TEST_YEAR_START
+# (1871-2009, 16,324 rows) - MAE 0.3190 vs. naive-baseline MAE 0.3264 vs.
+# KNN heuristic MAE 0.3312, correlation 0.359 vs. KNN's 0.321 (n=296/500).
+# HR9 is genuinely the hardest of the four signals (single-season HR9 is
+# substantially batted-ball-luck/park/defense-driven, not just a modeling
+# gap - see age_curve_ml.py's module docstring) but a real multi-dimensional
+# regression DID beat both the naive baseline and the single-dimension KNN
+# search here, contrary to the honestly-stated-up-front possibility that it
+# might not. Now LIVE for HR9 only (see build_age_curves.py's
+# build_projections_for_group) - every other Age Curves metric (AVG/OBP/
+# SLG/OPS/K9/BB9/FIP) is untouched and still served by the original KNN
+# path, which was already beating its own baseline.
 
 # Statcast plate-appearance outcome values that count as a "completed" event
 # (used to filter pitch-by-pitch data down to one row per at-bat outcome).

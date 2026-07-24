@@ -22,17 +22,24 @@ That ratio is a real heuristic, not a rigorous transform: it's derived
 from hit-PROBABILITY signals but applied multiplicatively to a
 TOTAL-BASES signal - the two are correlated but not the same thing (a
 good matchup for making contact isn't necessarily proportionally as good
-for extra-base power). This is the single highest-risk modeling choice
-here - see scripts/backtest_dfs_rankings.py for how well it actually
-holds up.
+for extra-base power). This was flagged as the single highest-risk
+modeling choice here, and the real backtest (scripts/backtest_dfs_rankings.py)
+confirmed it: essentially zero correlation (-0.004) against actual
+next-game hit-type points - reported honestly at the time, not hidden.
 
-**Backtest result (config.py's DFS section has the full numbers): this
-heuristic does NOT hold up.** DK_Points_Hitter's real backtest correlation
-against actual next-game hit-type points is -0.004 (essentially zero) -
-reported honestly, not hidden. Treat DK_Points_Hitter as unvalidated for
-now; dropping compute_matchup_adjustment entirely (using raw
-Expected_Bases) or a different adjustment approach is a needed follow-up,
-not a nice-to-have.
+**Update: this heuristic has since been replaced for live output.**
+dfs_ml.py trains a gradient-boosting model (scripts/train_dfs_ml_models.py)
+on the RAW ingredients this ratio was built from (the batter's own
+WAVE/Game_Hit_Probability/Consistency/Approach, the opposing starter's and
+bullpen's PAVE, Park_Factor, is_home) instead of the multiplicative ratio
+itself, validated on a real held-out backtest (config.py's ML section has
+the full numbers: correlation improved from -0.004 to 0.145, MAE beats
+both the naive baseline and this module's own heuristic). When a
+validated model artifact exists (config.DFS_HITTER_MODEL_PATH),
+dfs_ml.apply_ml_overrides swaps it in for DK_Points_Hitter automatically;
+compute_matchup_adjustment/compute_hitter_dk_points below are the fallback
+path, used whenever no validated artifact is present - they are NOT
+removed, and remain what a fresh install without a trained model serves.
 
 **Explicitly excluded from v1** (documented, not silently rounded away):
 BB, HBP, runs scored, RBI, and stolen bases. This project has no
@@ -78,6 +85,21 @@ approximate), and the rare discrete bonuses (complete game, complete game
 shutout, no-hitter). Relief pitchers are entirely out of scope - IP per
 appearance is only a meaningful "per start" number for a starter, not a
 bullpen arm's variable-length outing.
+
+**Update: Expected_H_Allowed and Expected_BB have since been replaced for
+live output.** The original backtest found Expected_H_Allowed's MAE was
+actually WORSE than the naive baseline (a likely systematic scaling bias
+in the PAVE * batters-faced calculation above) and Expected_BB only weakly
+correlated. scripts/train_dfs_ml_models.py trains a Ridge regression on
+the SAME inputs (K9/BB9/HR9/IP_per_start/Expected_IP/Expected_K/
+Expected_H_Allowed/FIP_Windowed) for each component separately, validated
+on a real held-out backtest - both now beat their naive baseline AND this
+module's own heuristic (config.py's ML section has the full numbers).
+dfs_ml.apply_ml_overrides swaps in either/both wherever a validated
+artifact exists (config.DFS_PITCHER_H_ALLOWED_MODEL_PATH/
+DFS_PITCHER_BB_MODEL_PATH), recomputing DK_Points_Pitcher from whichever
+components were actually used; compute_pitcher_dk_points below remains the
+fallback path when no validated artifact is present.
 
 ## Qualifiers
 
