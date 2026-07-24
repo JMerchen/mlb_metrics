@@ -11,6 +11,7 @@
 
 async function loadCSV(path){
 const response = await fetch(`${path}?t=${Date.now()}`, {cache:"no-store"})
+if(!response.ok){ throw new Error(`Failed to load ${path}: ${response.status}`) }
 const text = await response.text()
 return Papa.parse(text, {header:true, skipEmptyLines:true}).data
 }
