@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 from sklearn.linear_model import Ridge
 
-from mlb_metrics import config, dfs_ml, ml_models
+from mlb_metrics import config, dfs, dfs_ml, ml_models
 
 
 def _wave_row(key_mlbam, team, **overrides):
@@ -145,6 +145,17 @@ def test_apply_ml_overrides_no_model_leaves_heuristic_untouched(tmp_path, monkey
 
     assert out_hitters.loc[0, "DK_Points_Hitter"] == pytest.approx(4.17)
     assert out_hitters.loc[0, "DK_Points_Hitter_Source"] == "heuristic"
+    # Regression guard: merging hitter_features into hitters_df used to
+    # silently rename shared columns (PA_L, Expected_Bases, ...) to _x/_y
+    # suffixes, so HITTER_DFS_COLUMNS' own names vanished from the output
+    # entirely - every dashboard cell showed blank/undefined. Assert the
+    # exact expected column set and that the untouched fields kept their
+    # real values, not NaN from a botched merge.
+    assert set(out_hitters.columns) == set(dfs.HITTER_DFS_COLUMNS) | {"DK_Points_Hitter_Source"}
+    assert not any(col.endswith(("_x", "_y")) for col in out_hitters.columns)
+    assert out_hitters.loc[0, "PA_L"] == 20
+    assert out_hitters.loc[0, "Expected_Bases"] == pytest.approx(1.5)
+    assert out_hitters.loc[0, "Game_Hit_Probability"] == pytest.approx(0.70)
     assert out_pitchers.loc[0, "Expected_H_Allowed"] == pytest.approx(8.0)
     assert out_pitchers.loc[0, "Expected_BB"] == pytest.approx(2.0)
     assert out_pitchers.loc[0, "Expected_H_Allowed_Source"] == "heuristic"
@@ -182,8 +193,16 @@ def test_apply_ml_overrides_with_model_overrides_and_recomputes_pitcher_total(tm
 
     assert out_hitters.loc[0, "DK_Points_Hitter"] == pytest.approx(6.5)
     assert out_hitters.loc[0, "DK_Points_Hitter_Source"] == "model"
-    # Feature columns must not leak into the returned output frame.
-    assert not set(dfs_ml.HITTER_FEATURE_COLUMNS) - {"is_home"} & set(out_hitters.columns)
+    # Feature-only columns (WAVE, starter_PAVE, ...) must not leak into the
+    # returned output frame, and the columns HITTER_DFS_COLUMNS shares with
+    # HITTER_FEATURE_COLUMNS (PA_L, Expected_Bases, ...) must survive
+    # intact under their real names, not get silently suffixed away by a
+    # botched merge.
+    feature_only_columns = set(dfs_ml.HITTER_FEATURE_COLUMNS) - set(dfs.HITTER_DFS_COLUMNS)
+    assert not feature_only_columns & set(out_hitters.columns)
+    assert set(out_hitters.columns) == set(dfs.HITTER_DFS_COLUMNS) | {"DK_Points_Hitter_Source"}
+    assert out_hitters.loc[0, "PA_L"] == 20
+    assert out_hitters.loc[0, "Expected_Bases"] == pytest.approx(1.5)
 
     assert out_pitchers.loc[0, "Expected_H_Allowed"] == pytest.approx(7.0)
     assert out_pitchers.loc[0, "Expected_BB"] == pytest.approx(1.5)

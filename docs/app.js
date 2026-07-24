@@ -34,6 +34,10 @@ cache:
 
 )
 
+if(!response.ok){
+throw new Error(`Failed to load ${path}: ${response.status}`)
+}
+
 const text =
 await response.text()
 

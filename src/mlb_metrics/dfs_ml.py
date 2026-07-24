@@ -146,21 +146,30 @@ def apply_ml_overrides(
     (HITTER_DFS_COLUMNS); `hitter_features` is build_hitter_features's
     output for the same slate (carries key_mlbam + HITTER_FEATURE_COLUMNS,
     including the raw matchup ingredients HITTER_DFS_COLUMNS doesn't
-    expose) - merged internally, not required to already be joined.
-    `pitchers_df` is dfs.compute_pitcher_dk_points's own output
+    expose). The two share several column names (PA_L, Expected_Bases,
+    Game_Hit_Probability, is_home, Matchup_Hit_Probability), so this
+    predicts from `hitter_features` directly (never merges its columns
+    into `hitters_df`, which would otherwise silently rename the shared
+    columns to `_x`/`_y` suffixes - a real bug caught after shipping,
+    since HITTER_DFS_COLUMNS' own PA_L/Expected_Bases/etc. would vanish
+    from the output CSV and the dashboard would show every cell as blank)
+    and merges back only the one new prediction column, keyed on
+    key_mlbam. `pitchers_df` is dfs.compute_pitcher_dk_points's own output
     (PITCHER_DFS_COLUMNS), which already carries every column in
-    PITCHER_FEATURE_COLUMNS directly, so no separate features frame is
-    needed on the pitcher side."""
-    hitters_df = hitters_df.merge(
-        hitter_features[["key_mlbam"] + HITTER_FEATURE_COLUMNS], on="key_mlbam", how="left"
-    )
+    PITCHER_FEATURE_COLUMNS directly under its own names, so no merge is
+    needed on the pitcher side at all."""
+    hitters_df = hitters_df.copy()
     hitters_df["DK_Points_Hitter_Source"] = "heuristic"
     hitter_model = ml_models.load_model(config.DFS_HITTER_MODEL_PATH)
-    if hitter_model is not None and not hitters_df.empty:
-        X = hitter_feature_matrix(hitters_df)
-        hitters_df["DK_Points_Hitter"] = hitter_model.predict(X).clip(min=0)
-        hitters_df["DK_Points_Hitter_Source"] = "model"
-    hitters_df = hitters_df.drop(columns=HITTER_FEATURE_COLUMNS, errors="ignore")
+    if hitter_model is not None and not hitters_df.empty and not hitter_features.empty:
+        X = hitter_feature_matrix(hitter_features)
+        predicted = hitter_model.predict(X).clip(min=0)
+        prediction_lookup = pd.DataFrame({"key_mlbam": hitter_features["key_mlbam"], "_ml_dk_points_hitter": predicted})
+        hitters_df = hitters_df.merge(prediction_lookup, on="key_mlbam", how="left")
+        has_prediction = hitters_df["_ml_dk_points_hitter"].notna()
+        hitters_df.loc[has_prediction, "DK_Points_Hitter"] = hitters_df.loc[has_prediction, "_ml_dk_points_hitter"]
+        hitters_df.loc[has_prediction, "DK_Points_Hitter_Source"] = "model"
+        hitters_df = hitters_df.drop(columns="_ml_dk_points_hitter")
     hitters_df = hitters_df.sort_values("DK_Points_Hitter", ascending=False)
 
     pitchers_df = pitchers_df.copy()
