@@ -37,7 +37,7 @@ not just the blended point total.
 
 import pandas as pd
 
-from mlb_metrics import config, data, dfs, game_picks_backtest, helpers, matchup, pipeline, pitcher_form
+from mlb_metrics import config, data, dfs, dfs_ml, game_picks_backtest, helpers, matchup, pipeline, pitcher_form
 
 
 def derive_historical_team_schedule(persisted_statcast: pd.DataFrame) -> pd.DataFrame:
@@ -116,6 +116,52 @@ def compute_actual_pitcher_dk_points(day_completed_pitcher_events: pd.DataFrame)
     ]
 
 
+def _compute_date_outputs(persisted: pd.DataFrame, team_schedule: pd.DataFrame, date) -> dict | None:
+    """One date's worth of no-lookahead recomputation, shared by
+    backtest_dfs_projections (heuristic-only) and assemble_ml_training_rows
+    (heuristic + raw features) so the per-date pipeline recompute is
+    written once. Returns None when there's no usable history or no
+    scheduled games that date (both callers skip the date in that case)."""
+    history = persisted[persisted["game_date"] < date]
+    if history.empty:
+        return None
+
+    todays_schedule = team_schedule[team_schedule["date"] == date]
+    if todays_schedule.empty:
+        return None
+
+    outputs = pipeline.compute_outputs(history)
+
+    data_with_game_id = data.assign_game_ids(history)
+    roles = data.label_pitcher_roles(data_with_game_id)
+    pdf_with_role = pipeline.build_pitcher_events_with_role(data_with_game_id, roles)
+    pitcher_form_df = pitcher_form.compute_pitcher_dfs_form(pdf_with_role)
+
+    matchup_probability = matchup.compute_matchup_hit_probability(
+        outputs["wave"], outputs["pave"], outputs["confidence"], todays_schedule
+    )
+    projected_hitters = dfs.compute_hitter_dk_points(outputs["wave"], matchup_probability, todays_schedule)
+    projected_pitchers = dfs.compute_pitcher_dk_points(outputs["pave"], pitcher_form_df, todays_schedule)
+
+    day_events = persisted[persisted["game_date"] == date]
+    actual_hitters = compute_actual_hitter_dk_points(
+        data.completed_events(day_events, ["game_date", "batter", "events"])
+    )
+    actual_pitchers = compute_actual_pitcher_dk_points(
+        data.completed_events(day_events, ["game_date", "pitcher", "events"])
+    )
+
+    return {
+        "outputs": outputs,
+        "todays_schedule": todays_schedule,
+        "matchup_probability": matchup_probability,
+        "projected_hitters": projected_hitters,
+        "projected_pitchers": projected_pitchers,
+        "actual_hitters": actual_hitters,
+        "actual_pitchers": actual_pitchers,
+    }
+
+
 def backtest_dfs_projections(raw_dir: str = "data/raw", season: int | None = None, days: int = 20) -> dict[str, pd.DataFrame]:
     """No-lookahead backtest: for each of the last `days` real game dates,
     recomputes that day's DFS projections using ONLY Statcast strictly
@@ -136,42 +182,17 @@ def backtest_dfs_projections(raw_dir: str = "data/raw", season: int | None = Non
     hitter_rows = []
     pitcher_rows = []
     for date in dates:
-        history = persisted[persisted["game_date"] < date]
-        if history.empty:
+        day = _compute_date_outputs(persisted, team_schedule, date)
+        if day is None:
             continue
 
-        todays_schedule = team_schedule[team_schedule["date"] == date]
-        if todays_schedule.empty:
-            continue
-
-        outputs = pipeline.compute_outputs(history)
-
-        data_with_game_id = data.assign_game_ids(history)
-        roles = data.label_pitcher_roles(data_with_game_id)
-        pdf_with_role = pipeline.build_pitcher_events_with_role(data_with_game_id, roles)
-        pitcher_form_df = pitcher_form.compute_pitcher_dfs_form(pdf_with_role)
-
-        matchup_probability = matchup.compute_matchup_hit_probability(
-            outputs["wave"], outputs["pave"], outputs["confidence"], todays_schedule
-        )
-        projected_hitters = dfs.compute_hitter_dk_points(outputs["wave"], matchup_probability, todays_schedule)
-        projected_pitchers = dfs.compute_pitcher_dk_points(outputs["pave"], pitcher_form_df, todays_schedule)
-
-        day_events = persisted[persisted["game_date"] == date]
-        actual_hitters = compute_actual_hitter_dk_points(
-            data.completed_events(day_events, ["game_date", "batter", "events"])
-        )
-        actual_pitchers = compute_actual_pitcher_dk_points(
-            data.completed_events(day_events, ["game_date", "pitcher", "events"])
-        )
-
-        hitters_scored = projected_hitters.merge(actual_hitters, on="key_mlbam", how="inner")
+        hitters_scored = day["projected_hitters"].merge(day["actual_hitters"], on="key_mlbam", how="inner")
         if not hitters_scored.empty:
             hitters_scored = hitters_scored.copy()
             hitters_scored["date"] = date
             hitter_rows.append(hitters_scored[["date", "key_mlbam", "DK_Points_Hitter", "Actual_DK_Points_Modeled"]])
 
-        pitchers_scored = projected_pitchers.merge(actual_pitchers, on="key_mlbam", how="inner")
+        pitchers_scored = day["projected_pitchers"].merge(day["actual_pitchers"], on="key_mlbam", how="inner")
         if not pitchers_scored.empty:
             pitchers_scored = pitchers_scored.copy()
             pitchers_scored["date"] = date
@@ -182,6 +203,71 @@ def backtest_dfs_projections(raw_dir: str = "data/raw", season: int | None = Non
                         "Expected_IP", "Actual_IP", "Expected_K", "Actual_K",
                         "Expected_BB", "Actual_BB", "Expected_H_Allowed", "Actual_H",
                     ]
+                ]
+            )
+
+    hitters_result = pd.concat(hitter_rows, ignore_index=True) if hitter_rows else pd.DataFrame()
+    pitchers_result = pd.concat(pitcher_rows, ignore_index=True) if pitcher_rows else pd.DataFrame()
+    return {"hitters": hitters_result, "pitchers": pitchers_result}
+
+
+def assemble_ml_training_rows(raw_dir: str = "data/raw", season: int | None = None, days: int | None = None) -> dict[str, pd.DataFrame]:
+    """Same no-lookahead per-date recompute as backtest_dfs_projections,
+    but retains the RAW feature ingredients (dfs_ml.HITTER_FEATURE_COLUMNS/
+    PITCHER_FEATURE_COLUMNS) alongside each row's real outcome label - the
+    training table dfs_ml.py's train_* functions fit against, instead of
+    just the already-blended heuristic projection.
+
+    `days=None` (the default here, unlike backtest_dfs_projections's
+    default of 20) uses the FULL persisted history, since model training
+    benefits from as much real data as available while a quick
+    heuristic-only sanity check does not.
+
+    Returns {"hitters": DataFrame, "pitchers": DataFrame}, one row per
+    (date, key_mlbam) with feature columns plus:
+      hitters:  Actual_DK_Points_Modeled
+      pitchers: Actual_H, Actual_BB (plus Actual_IP/Actual_K, carried for
+                completeness even though this phase only trains H/BB models)
+    No column derived from that date's OWN outcome (any Actual_*-prefixed
+    column) is ever included among the FEATURE columns - see
+    tests/test_dfs_backtest.py's leakage-guard test."""
+    season = season or config.SEASON_START.year
+    persisted = data.load_persisted_statcast(raw_dir, season)
+    if persisted is None:
+        return {"hitters": pd.DataFrame(), "pitchers": pd.DataFrame()}
+
+    team_schedule = derive_historical_team_schedule(persisted)
+    dates = sorted(team_schedule["date"].unique())
+    if days:
+        dates = dates[-days:]
+
+    hitter_rows = []
+    pitcher_rows = []
+    for date in dates:
+        day = _compute_date_outputs(persisted, team_schedule, date)
+        if day is None:
+            continue
+
+        hitter_features = dfs_ml.build_hitter_features(
+            day["outputs"]["wave"], day["outputs"]["pave"], day["outputs"]["confidence"],
+            day["todays_schedule"], day["matchup_probability"],
+        )
+        hitters_scored = hitter_features.merge(day["actual_hitters"], on="key_mlbam", how="inner")
+        if not hitters_scored.empty:
+            hitters_scored = hitters_scored.copy()
+            hitters_scored["date"] = date
+            hitter_rows.append(
+                hitters_scored[["date", "key_mlbam"] + dfs_ml.HITTER_FEATURE_COLUMNS + ["Actual_DK_Points_Modeled"]]
+            )
+
+        pitchers_scored = day["projected_pitchers"].merge(day["actual_pitchers"], on="key_mlbam", how="inner")
+        if not pitchers_scored.empty:
+            pitchers_scored = pitchers_scored.copy()
+            pitchers_scored["date"] = date
+            pitcher_rows.append(
+                pitchers_scored[
+                    ["date", "key_mlbam"] + dfs_ml.PITCHER_FEATURE_COLUMNS
+                    + ["Actual_IP", "Actual_K", "Actual_BB", "Actual_H"]
                 ]
             )
 

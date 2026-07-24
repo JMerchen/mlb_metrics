@@ -1,7 +1,20 @@
 import pandas as pd
 import pytest
 
-from mlb_metrics import config, dfs_backtest
+from mlb_metrics import config, data, dfs_backtest, dfs_ml
+
+
+@pytest.fixture(autouse=True)
+def _no_network_name_register(monkeypatch):
+    # chadwick_register() (data.get_name_register's underlying fetch) hits
+    # a network URL this sandbox blocks - names aren't used in any numeric
+    # computation pipeline.compute_outputs does, so an empty-but-correctly-
+    # shaped register is a safe stand-in for every test in this file that
+    # exercises the real pipeline (assemble_ml_training_rows).
+    monkeypatch.setattr(
+        data, "get_name_register",
+        lambda: pd.DataFrame(columns=["key_mlbam", "key_bbref", "name_first", "name_last"]),
+    )
 
 
 def _statcast_game(game_pk, date, home_team, away_team, home_pitcher, away_pitcher, home_score, away_score):
@@ -93,3 +106,91 @@ def test_compute_actual_pitcher_dk_points_zero_ip_does_not_divide_by_zero():
 
     assert result.loc[99, "Actual_IP"] == 0
     assert result.loc[99, "Actual_DK_Points_Modeled"] == 0
+
+
+def test_ml_feature_columns_contain_no_leaked_outcome_column():
+    # dfs_ml's feature schema must never include a same-day-outcome column
+    # (anything Actual_*-prefixed) - assemble_ml_training_rows below relies
+    # on this staying true to avoid training on the answer.
+    assert not any(col.startswith("Actual_") for col in dfs_ml.HITTER_FEATURE_COLUMNS)
+    assert not any(col.startswith("Actual_") for col in dfs_ml.PITCHER_FEATURE_COLUMNS)
+
+
+def _game_rows(game_pk, date, events, pitcher=99, batter=1, home_team="NYY", away_team="BOS"):
+    # teams.compute_home_run_stats needs both a "homer" and a "non_homer"
+    # at-bat where the score actually changes (pre_score != post_score) -
+    # both home_run and single bump away_score by 1 run here (a
+    # simplification; other hit types don't drive in runs in this
+    # fixture, which is fine for this test).
+    rows = []
+    away_runs = 0
+    for i, e in enumerate(events):
+        pre = away_runs
+        if e in ("home_run", "single"):
+            away_runs += 1
+        rows.append({
+            "game_pk": game_pk, "game_date": date, "pitcher": pitcher, "batter": batter,
+            "events": e, "p_throws": "R", "inning_topbot": "Top",
+            "home_team": home_team, "away_team": away_team,
+            "at_bat_number": i + 1, "pitch_number": 1,
+            "home_score": 0, "away_score": pre,
+            "post_home_score": 0, "post_away_score": away_runs,
+        })
+    return rows
+
+
+def _multi_game_statcast(n_games=6, gap_days=5):
+    # teams.compute_home_run_stats needs at least one "home_run" event to
+    # appear so its homer/non_homer pivot has both columns.
+    events = ["strikeout"] * 5 + ["field_out"] * 6 + ["walk"] * 3 + ["single"] * 4 + ["double"] * 1 + ["home_run"] * 1  # 20/game
+    rows = []
+    for i in range(n_games):
+        date = pd.Timestamp("2026-05-01") + pd.Timedelta(days=i * gap_days)
+        rows.extend(_game_rows(i + 1, date, events))
+    return pd.DataFrame(rows)
+
+
+def test_assemble_ml_training_rows_full_history_has_expected_schema_and_no_leakage(tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    _multi_game_statcast(n_games=6).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    result = dfs_backtest.assemble_ml_training_rows(str(raw_dir), season=2026, days=None)
+
+    assert not result["hitters"].empty
+    expected_hitter_cols = {"date", "key_mlbam", *dfs_ml.HITTER_FEATURE_COLUMNS, "Actual_DK_Points_Modeled"}
+    assert set(result["hitters"].columns) == expected_hitter_cols
+
+    assert not result["pitchers"].empty
+    expected_pitcher_cols = {
+        "date", "key_mlbam", *dfs_ml.PITCHER_FEATURE_COLUMNS,
+        "Actual_IP", "Actual_K", "Actual_BB", "Actual_H",
+    }
+    assert set(result["pitchers"].columns) == expected_pitcher_cols
+
+    # Every scored date is strictly after the earliest game date - the
+    # first date can never be scored since it has no prior history at all.
+    assert (result["hitters"]["date"] > pd.Timestamp("2026-05-01")).all()
+    assert (result["pitchers"]["date"] > pd.Timestamp("2026-05-01")).all()
+
+
+def test_assemble_ml_training_rows_days_truncates_to_most_recent_dates(tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    _multi_game_statcast(n_games=6).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    full = dfs_backtest.assemble_ml_training_rows(str(raw_dir), season=2026, days=None)
+    truncated = dfs_backtest.assemble_ml_training_rows(str(raw_dir), season=2026, days=1)
+
+    assert truncated["hitters"]["date"].nunique() <= 1
+    assert full["hitters"]["date"].nunique() >= truncated["hitters"]["date"].nunique()
+
+
+def test_assemble_ml_training_rows_no_persisted_data_returns_empty(tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+
+    result = dfs_backtest.assemble_ml_training_rows(str(raw_dir), season=2026, days=None)
+
+    assert result["hitters"].empty
+    assert result["pitchers"].empty

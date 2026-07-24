@@ -573,6 +573,90 @@ DFS_BATTERS_FACED_PER_INNING = 4.335
 # Re-run this backtest (and update these numbers) after any change to
 # DFS_PITCHER_WINDOWS/DFS_BATTERS_FACED_PER_INNING/DFS_MATCHUP_RATIO_CLIP.
 
+# --- Machine Learning (weak-signal follow-up: ml_models.py, dfs_ml.py, age_curve_ml.py) ---
+#
+# The heuristic backtest numbers directly above (DK_Points_Hitter corr
+# -0.004; Expected_H_Allowed MAE worse than baseline; Expected_BB corr
+# 0.182) and Age Curves' HR9 "wash" (see below) motivated a real attempt at
+# walk-forward-validated ML models (scripts/train_dfs_ml_models.py,
+# scripts/train_age_curve_hr9_model.py) rather than tuning the existing
+# heuristics further. See ml_models.py's module docstring for the shared
+# walk-forward CV mechanism and dfs_ml.py/age_curve_ml.py for what each
+# model is trained on.
+
+# WalkForwardDateSplit parameters for the two DFS pitcher-side models
+# (Expected_H_Allowed, Expected_BB) - larger blocks than the hitter side
+# since pitcher-start rows are far sparser per date (~2 starters/team,
+# ~13-26 rows/date vs. thousands of hitter-day rows).
+ML_WALK_FORWARD_MIN_TRAIN_DATES_HITTER = 30
+ML_WALK_FORWARD_TEST_BLOCK_DATES_HITTER = 10
+ML_WALK_FORWARD_MIN_TRAIN_DATES_PITCHER = 40
+ML_WALK_FORWARD_TEST_BLOCK_DATES_PITCHER = 15
+
+# Dates reserved as a final holdout the grid search never sees at all -
+# model selection (grid search + CV) only ever uses earlier dates; the
+# before/after numbers reported in this file's comments and in the README
+# come exclusively from predicting this untouched block, refit on
+# everything before it. Matches the size of the original 15-20 date
+# heuristic-only backtest sample, so it's a fair head-to-head comparison.
+ML_FINAL_HOLDOUT_DATES = 20
+
+DFS_HITTER_MODEL_PATH = "data/models/dfs_hitter_model.joblib"
+DFS_PITCHER_H_ALLOWED_MODEL_PATH = "data/models/dfs_pitcher_h_allowed_model.joblib"
+DFS_PITCHER_BB_MODEL_PATH = "data/models/dfs_pitcher_bb_model.joblib"
+AGE_CURVE_HR9_MODEL_PATH = "data/models/age_curve_hr9_model.joblib"
+
+# Deliberately narrow grids (1-2 hyperparameters, <10 combinations) given
+# the modest walk-forward fold count on the DFS side (~116 dates -> ~6-8
+# blocked CV folds) - a wide sweep over that few folds would just fit CV
+# noise, not find a real best setting. Ridge is the primary candidate for
+# both pitcher signals (small distinct-pitcher pool, ~755 across full
+# history); a heavily depth-capped gradient-boosting grid is included as a
+# secondary candidate only for the hitter signal, where the distinct-batter
+# pool (~604) and row count are both larger.
+DFS_HITTER_RIDGE_ALPHA_GRID = [0.1, 1, 3, 10, 30, 100]
+DFS_HITTER_GBM_PARAM_GRID = {
+    "max_depth": [2, 3],
+    "learning_rate": [0.03, 0.1],
+    "max_iter": [100, 200],
+    "min_samples_leaf": [50, 200],
+}
+DFS_PITCHER_RIDGE_ALPHA_GRID = [0.1, 0.3, 1, 3, 10, 30, 100]
+
+# Age Curves HR9's year-blocked CV (age_curve_ml.YearBlockedSplit) trains
+# only on seasons strictly before AGE_CURVE_HR9_TEST_YEAR_START (a
+# conservative, no-lookahead choice for a single GLOBAL regression model -
+# stricter than age_curve.backtest_projection_accuracy's own per-row "at or
+# before this test season's year" cutoff, which lets a later test row see
+# comparables from just-earlier years in the SAME held-out decade; a single
+# regression trained once can't cheaply replicate that per-row refiltering,
+# so this holds out the whole 2010-2019 decade rather than only each row's
+# own future). That decade of pre-2010 training data spans 1871-2009 (~139
+# years), which comfortably supports more CV folds than the DFS side's
+# ~116 dates - the wider grid below is a real fold-count difference, not a
+# contradiction of the narrow-grid caution above.
+AGE_CURVE_HR9_TEST_YEAR_START = 2010
+AGE_CURVE_HR9_TEST_YEAR_END = 2019
+AGE_CURVE_HR9_TEST_SAMPLE_SIZE = 500
+AGE_CURVE_HR9_TEST_SEED = 0
+ML_WALK_FORWARD_MIN_TRAIN_YEARS = 40
+ML_WALK_FORWARD_TEST_BLOCK_YEARS = 10
+
+AGE_CURVE_HR9_RIDGE_ALPHA_GRID = [0.1, 0.3, 1, 3, 10, 30, 100, 300]
+AGE_CURVE_HR9_GBM_PARAM_GRID = {
+    "max_depth": [3, 5, None],
+    "learning_rate": [0.05, 0.1],
+    "max_iter": [100, 200, 300],
+}
+
+# Results filled in after scripts/train_dfs_ml_models.py actually ran
+# against real persisted 2026 Statcast (full history, not just the 15-20
+# date heuristic sample) - reported honestly whether or not each model
+# beat its heuristic; see that script's module docstring and
+# docs/dfs.html for how the outcome is surfaced.
+#
+# [placeholder - filled in once scripts/train_dfs_ml_models.py has run]
+
 # Statcast plate-appearance outcome values that count as a "completed" event
 # (used to filter pitch-by-pitch data down to one row per at-bat outcome).
 COUNTED_EVENTS = [

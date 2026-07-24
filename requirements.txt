@@ -3,3 +3,5 @@ numpy
 pybaseball
 pyarrow
 MLB-StatsAPI
+scikit-learn
+joblib

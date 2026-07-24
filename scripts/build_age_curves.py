@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import pandas as pd
 
-from mlb_metrics import age_curve, config, data, lahman_data, pipeline, traditional_stats
+from mlb_metrics import age_curve, age_curve_ml, config, data, lahman_data, ml_models, pipeline, traditional_stats
 
 CURRENT_HITTER_COLUMNS = ["key_mlbam", "playerID", "name_first", "name_last", "age", "AB", "AVG", "OBP", "SLG", "OPS"]
 CURRENT_PITCHER_COLUMNS = ["key_mlbam", "playerID", "name_first", "name_last", "age", "IP", "K9", "BB9", "HR9", "FIP"]
@@ -149,18 +149,34 @@ def build_player_history_export(
 
 
 def build_projections_for_group(
-    current_players: pd.DataFrame, historical_seasons: pd.DataFrame, metrics: list[str], people: pd.DataFrame
+    current_players: pd.DataFrame, historical_seasons: pd.DataFrame, metrics: list[str], people: pd.DataFrame,
+    hr9_model=None,
 ) -> tuple[list[dict], list[pd.DataFrame], list[pd.DataFrame]]:
     """Runs find_comparables/project_next_season/league_age_curve for every
     (player, metric) pair in one current-player pool (hitters or pitchers)
     against its own matching historical-seasons table - shared by both
-    groups in main() rather than duplicating the loop per position type."""
+    groups in main() rather than duplicating the loop per position type.
+
+    `hr9_model` (a fitted regressor, or None) only ever applies to
+    metric=="HR9" - see age_curve_ml.py's module docstring for why HR9
+    specifically got an ML attempt. When given, HR9's PROJECTION comes
+    from age_curve_ml.project_next_season_ml instead of the KNN average,
+    but the comparable-player LIST still comes from find_comparables as
+    usual (real historical context for the page, independent of which
+    method produced the number) - only the projected value itself
+    switches source. Every other metric is completely untouched. None
+    (the default, and what's passed whenever no validated model artifact
+    exists - see main()) reproduces the original KNN-only behavior
+    exactly."""
     rows = []
     comparable_frames = []
     for _, player in current_players.iterrows():
         for metric in metrics:
             comparables = age_curve.find_comparables(player["age"], player[metric], historical_seasons, metric=metric)
-            projection = age_curve.project_next_season(comparables, historical_seasons, metric=metric)
+            if metric == "HR9" and hr9_model is not None:
+                projection = age_curve_ml.project_next_season_ml(hr9_model, player)
+            else:
+                projection = age_curve.project_next_season(comparables, historical_seasons, metric=metric)
             rows.append(
                 {
                     "key_mlbam": player["key_mlbam"],
@@ -203,11 +219,18 @@ def main():
         f"{len(current_hitters)} qualified current hitters, {len(current_pitchers)} qualified current pitchers."
     )
 
+    hr9_model = ml_models.load_model(config.AGE_CURVE_HR9_MODEL_PATH)
+    print(
+        "HR9 projection source: "
+        + ("ML model (validated - see scripts/train_age_curve_hr9_model.py)" if hr9_model is not None
+           else "KNN heuristic (no validated model artifact found)")
+    )
+
     hitter_rows, hitter_comparables, hitter_league = build_projections_for_group(
         current_hitters, historical_hitter_seasons, config.AGE_CURVE_HITTER_METRICS, people
     )
     pitcher_rows, pitcher_comparables, pitcher_league = build_projections_for_group(
-        current_pitchers, historical_pitcher_seasons, config.AGE_CURVE_PITCHER_METRICS, people
+        current_pitchers, historical_pitcher_seasons, config.AGE_CURVE_PITCHER_METRICS, people, hr9_model=hr9_model
     )
     rows = hitter_rows + pitcher_rows
     comparable_frames = hitter_comparables + pitcher_comparables

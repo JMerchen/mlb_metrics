@@ -18,6 +18,15 @@ a genuinely separate, occasionally-flaky data source) leaves yesterday's
 dfs_*.csv files in place rather than writing anything - same resilience
 tradeoff pipeline.run() already accepts for probable_pitchers.csv.
 
+After the heuristic projections are built, dfs_ml.apply_ml_overrides
+swaps in a trained ML model's prediction for any of
+DK_Points_Hitter/Expected_H_Allowed/Expected_BB wherever
+scripts/train_dfs_ml_models.py has validated one (config.DFS_*_MODEL_PATH
+exists and beat both the naive baseline and the heuristic on a held-out
+backtest) - a missing/not-yet-trained artifact silently keeps the
+existing heuristic, so this script's behavior never depends on whether
+that weekly training job has run yet.
+
 Usage:
     python scripts/build_dfs_rankings.py
 """
@@ -31,7 +40,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import pandas as pd
 
-from mlb_metrics import config, data, dfs, matchup, pitcher_form, pipeline, schedule
+from mlb_metrics import config, data, dfs, dfs_ml, matchup, pitcher_form, pipeline, schedule
 
 
 def main():
@@ -78,6 +87,9 @@ def main():
 
     hitters = dfs.compute_hitter_dk_points(wave, matchup_probability, schedule_df)
     pitchers = dfs.compute_pitcher_dk_points(pave, pitcher_form_df, schedule_df)
+
+    hitter_features = dfs_ml.build_hitter_features(wave, pave, confidence, schedule_df, matchup_probability)
+    hitters, pitchers = dfs_ml.apply_ml_overrides(hitters, hitter_features, pitchers)
 
     os.makedirs(args.data_dir, exist_ok=True)
     hitters.to_csv(os.path.join(args.data_dir, "dfs_hitters.csv"), index=False)
