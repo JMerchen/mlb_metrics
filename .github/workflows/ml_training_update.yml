@@ -1,8 +1,8 @@
-name: Daily Update
+name: ML Signal Training Update
 
 on:
   schedule:
-    - cron: "0 12 * * *"
+    - cron: "0 14 * * 0"
   workflow_dispatch:
 
 jobs:
@@ -32,25 +32,28 @@ jobs:
 
       - name: Create output folders
         run: |
-          mkdir -p docs/data
-          mkdir -p data/raw
-          mkdir -p data/predictions
+          mkdir -p data/models
+          mkdir -p data/raw/lahman
 
-      - name: Run model
+      - name: Train DFS ML models (hitter, pitcher H allowed, pitcher BB)
         run: |
-          python scripts/wave.py
+          python scripts/train_dfs_ml_models.py
 
-      - name: Build DFS rankings
+      - name: Convert Lahman_Raw CSVs to parquet
         run: |
-          python scripts/build_dfs_rankings.py
+          python scripts/fetch_lahman.py
+
+      - name: Train Age Curves HR9 model
+        run: |
+          python scripts/train_age_curve_hr9_model.py
 
       - name: Commit updates
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add docs/data/ data/raw/ data/predictions/
+          git add data/models/
 
-          git commit -m "Daily update" || echo "No changes"
+          git commit -m "ML signal training update" || echo "No changes"
 
           git push

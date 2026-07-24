@@ -1,0 +1,95 @@
+// DFS Rankings page - separate from app.js/age-curves.js since this page
+// is standalone (see docs/dfs.html). loadCSV/buildTable are copied (not
+// shared - no build step in docs/, same convention age-curves.js already
+// documents).
+//
+// Rankings only - no salary data, no lineup optimizer. See dfs.py's
+// module docstring and README for the exact DK-points methodology and
+// known v1 limitations (BB/HBP/R/RBI/SB excluded for hitters; Win/CG/
+// no-hitter bonuses excluded for pitchers).
+
+async function loadCSV(path){
+const response = await fetch(`${path}?t=${Date.now()}`, {cache:"no-store"})
+const text = await response.text()
+return Papa.parse(text, {header:true, skipEmptyLines:true}).data
+}
+
+function buildTable(data, id, limit=null){
+if(limit){ data = data.slice(0, limit) }
+const el = document.getElementById(id)
+if(!data.length){ el.innerHTML = "No data"; return }
+let html = "<table><tr>"
+Object.keys(data[0]).forEach(k=>{ html += `<th>${k}</th>` })
+html += "</tr>"
+data.forEach(row=>{
+html += "<tr>"
+Object.values(row).forEach(v=>{ html += `<td>${v}</td>` })
+html += "</tr>"
+})
+html += "</table>"
+el.innerHTML = html
+}
+
+let dfsHitters = []
+let dfsPitchers = []
+
+function selectPosition(position){
+document.querySelectorAll("#positionTabs .tabButton").forEach(btn=>{
+btn.classList.toggle("active", btn.dataset.position === position)
+})
+document.getElementById("hittersTable").style.display = position === "hitters" ? "" : "none"
+document.getElementById("pitchersTable").style.display = position === "pitchers" ? "" : "none"
+}
+
+function renderHitters(){
+const rows = dfsHitters.map(p=>({
+"Player": `${p.name_first} ${p.name_last}`,
+"Team": p.team,
+"Opp": `${p.is_home === "True" || p.is_home === "true" ? "vs" : "@"} ${p.opponent}`,
+"Expected Bases": p.Expected_Bases && p.Expected_Bases !== "" ? Number(p.Expected_Bases).toFixed(2) : "-",
+"Matchup Ratio": p.Matchup_Ratio && p.Matchup_Ratio !== "" ? Number(p.Matchup_Ratio).toFixed(2) : "-",
+"DK Pts": p.DK_Points_Hitter && p.DK_Points_Hitter !== "" ? Number(p.DK_Points_Hitter).toFixed(2) : "-",
+}))
+buildTable(rows, "hittersTable")
+}
+
+function renderPitchers(){
+const rows = dfsPitchers.map(p=>({
+"Player": `${p.name_first} ${p.name_last}`,
+"Team": p.team,
+"Opp": `${p.is_home === "True" || p.is_home === "true" ? "vs" : "@"} ${p.opponent}`,
+"K9": p.K9 && p.K9 !== "" ? Number(p.K9).toFixed(1) : "-",
+"BB9": p.BB9 && p.BB9 !== "" ? Number(p.BB9).toFixed(1) : "-",
+"HR9": p.HR9 && p.HR9 !== "" ? Number(p.HR9).toFixed(1) : "-",
+"Exp IP": p.Expected_IP && p.Expected_IP !== "" ? Number(p.Expected_IP).toFixed(1) : "-",
+"DK Pts": p.DK_Points_Pitcher && p.DK_Points_Pitcher !== "" ? Number(p.DK_Points_Pitcher).toFixed(2) : "-",
+}))
+buildTable(rows, "pitchersTable")
+}
+
+async function loadAll(){
+
+try{
+dfsHitters = await loadCSV("./data/dfs_hitters.csv")
+}catch(e){
+console.log("no dfs_hitters.csv yet", e)
+}
+
+try{
+dfsPitchers = await loadCSV("./data/dfs_pitchers.csv")
+}catch(e){
+console.log("no dfs_pitchers.csv yet", e)
+}
+
+if(!dfsHitters.length && !dfsPitchers.length){
+document.getElementById("hittersTable").innerHTML =
+"No DFS rankings published yet - this page needs scripts/build_dfs_rankings.py to have been run at least once."
+return
+}
+
+renderHitters()
+renderPitchers()
+
+}
+
+loadAll()

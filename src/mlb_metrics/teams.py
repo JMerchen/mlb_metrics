@@ -56,7 +56,17 @@ def compute_home_run_stats(data: pd.DataFrame):
     hr = hr[hr["pre_score"] != hr["post_score"]][["team", "hr", "pre_score", "post_score"]]
     hr = hr.groupby(["team", "hr"], as_index=False).sum()
     hr["runs_scored"] = hr["post_score"] - hr["pre_score"]
-    hr = hr.pivot(index="team", columns="hr", values="runs_scored").fillna(0).reset_index()
+    hr = hr.pivot(index="team", columns="hr", values="runs_scored").fillna(0)
+    # Early in a season (or any short as-of-date history slice - see
+    # dfs_backtest.assemble_ml_training_rows, which replays from day one),
+    # no home run may have been scored yet at all, so the pivot can be
+    # missing the "homer" column entirely (or, in principle, "non_homer") -
+    # add it back as all-zero rather than crashing on a real but temporary
+    # data state.
+    for column in ("homer", "non_homer"):
+        if column not in hr.columns:
+            hr[column] = 0.0
+    hr = hr.reset_index()
     hr["runs_scored"] = hr["homer"] + hr["non_homer"]
     hr["home_run_reliance"] = hr["homer"] / hr["runs_scored"]
     hr = hr.merge(hpg, on="team").merge(ghi, on="team")

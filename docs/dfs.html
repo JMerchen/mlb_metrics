@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8">
+
+<title>MLB Metrics - DFS Rankings</title>
+
+<link
+rel="stylesheet"
+href="./style.css">
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>
+DFS Rankings
+</h1>
+
+<div class="tabGroup pageTabs">
+<a class="tabButton" href="./index.html">Predictive Metrics</a>
+<a class="tabButton" href="./age-curves.html">Age Curves</a>
+<a class="tabButton active" href="./dfs.html">DFS Rankings</a>
+</div>
+
+<p style="opacity:.75; max-width:700px;">
+Today's hitters and probable starting pitchers, ranked by estimated
+DraftKings Classic MLB fantasy points. This is a ranked list of good
+plays, NOT a salary-cap lineup optimizer - no salary data is used
+anywhere on this page. Hitter points model hit-type scoring only
+(singles/doubles/triples/home runs, adjusted for today's actual
+opposing pitcher) - walks, HBP, runs, RBIs, and stolen bases are NOT
+included, since this project has no walk-rate, lineup-run-context, or
+stolen-base signal yet. Pitcher points model innings/strikeouts/walks
+allowed/hits allowed plus an estimated earned-run penalty (from FIP, not
+real ERA - see README for why); wins and complete-game/no-hitter bonuses
+are NOT included. See README for the full methodology, known
+limitations, and backtest numbers.
+</p>
+
+<p style="opacity:.75; max-width:700px; border-left:3px solid #4a90d9; padding-left:10px;">
+<strong>Backtested against real outcomes, reported honestly:</strong> the
+original heuristic hitter ranking had essentially zero real correlation
+with actual next-game results (-0.004). A gradient-boosting model trained
+on the same underlying matchup ingredients (not the flawed heuristic
+formula) has since replaced it and now shows a real, if still modest,
+positive signal (correlation 0.145). Pitcher hits-allowed and walks
+projections were similarly upgraded via a validated regression model.
+None of these are strong signals yet - treat them as directionally useful,
+not high-confidence - but each one now beats both a naive guess and its
+own prior heuristic on real held-out data. See README for the full
+numbers and methodology.
+</p>
+
+<div class="tabGroup" id="positionTabs">
+<button class="tabButton active" data-position="hitters" onclick="selectPosition('hitters')">Hitters</button>
+<button class="tabButton" data-position="pitchers" onclick="selectPosition('pitchers')">Pitchers</button>
+</div>
+
+<div class="scrollbox" id="hittersTable">
+</div>
+
+<div class="scrollbox" id="pitchersTable" style="display:none;">
+</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<script src="./dfs.js"></script>
+
+</body>
+
+</html>

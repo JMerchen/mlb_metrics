@@ -66,3 +66,25 @@ def test_compute_park_factors_uses_final_combined_score_not_every_pitch():
 
     assert park_factors.loc["A", "Park_Factor"] == pytest.approx(1.0)
     assert park_factors.loc["B", "Park_Factor"] == pytest.approx(1.0)
+
+
+def test_compute_home_run_stats_no_home_runs_yet_does_not_crash():
+    # Regression test: early in a season (or any short as-of-date history
+    # slice - see dfs_backtest.assemble_ml_training_rows, which replays
+    # from day one), no home run may have occurred at all yet, so the
+    # internal pivot table can be missing the "homer" column entirely -
+    # this used to raise KeyError("homer") instead of just reporting 0.
+    data = pd.DataFrame([
+        {
+            "game_id": 1, "home_team": "NYY", "away_team": "BOS", "inning_topbot": "Top",
+            "events": "single", "home_score": 0, "away_score": 0, "post_home_score": 0, "post_away_score": 1,
+        },
+        {
+            "game_id": 1, "home_team": "NYY", "away_team": "BOS", "inning_topbot": "Bot",
+            "events": "field_out", "home_score": 0, "away_score": 1, "post_home_score": 0, "post_away_score": 1,
+        },
+    ])
+
+    for_merge, sus = teams.compute_home_run_stats(data)  # must not raise
+
+    assert list(for_merge.columns) == ["team", "home_run_reliance", "homer_per_game", "game_homer_rate"]

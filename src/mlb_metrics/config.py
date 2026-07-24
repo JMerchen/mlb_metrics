@@ -364,13 +364,17 @@ AGE_CURVE_PITCHER_METRICS = ["K9", "BB9", "HR9", "FIP"]
 
 # FIP = (13*HR + 3*(BB+HBP) - 2*K) / IP + this constant. The constant is a
 # pure additive shift (traditionally computed per-season so lgFIP==lgERA)
-# that puts FIP on the same familiar ~3-4 scale as ERA - it does NOT affect
-# comparable-search distances or projections at all (both are computed as
-# differences, and an additive constant cancels out of any difference). A
+# that puts FIP on the same familiar ~3-4 scale as ERA. For age_curve.py it
+# does NOT affect comparable-search distances or projections at all (both
+# are computed as differences, and an additive constant cancels out of any
+# difference) - purely cosmetic there, not a modeling simplification. A
 # single fixed value is used here instead of a real per-season constant
 # (which would need runs-allowed/ERA data this project deliberately doesn't
-# use) - purely cosmetic, not a modeling simplification.
-AGE_CURVE_FIP_CONSTANT = 3.10
+# use elsewhere). Also reused by dfs.py's Expected_ER estimate (see its
+# docstring) - shared across both consumers rather than duplicated, since
+# it's the same constant either way. Not "AGE_CURVE_*"-prefixed despite
+# originating there, since it's no longer Age-Curves-only.
+FIP_CONSTANT = 3.10
 
 # Minimum at-bats for a hitter season (current or historical) to be
 # eligible at all - a tiny-sample season can otherwise show an OPS of 0 or
@@ -426,6 +430,281 @@ AGE_CURVE_AGE_WINDOW = 1
 # though it correlates with itself somewhat. Treat HR9 projections as a
 # weak signal. Re-run this backtest (and update these numbers) after any
 # change to AGE_CURVE_K_NEIGHBORS/AGE_CURVE_AGE_WINDOW/AGE_CURVE_MIN_IP.
+
+# --- DFS Player Rankings (docs/dfs.html, dfs.py) ---
+#
+# Estimated DraftKings Classic MLB fantasy points for today's hitters and
+# probable starters - a ranked list of good plays, NOT a salary-cap lineup
+# optimizer (no salary data is ingested anywhere in this project). See
+# dfs.py's module docstring for the full methodology and v1 limitations.
+
+# DraftKings Classic MLB scoring, confirmed live (not from memory) via
+# https://dknetwork.draftkings.com/2020/05/29/beginner-mlb-dfs-scoring/ and
+# https://www.draftkings.com/help/rules/2/59 - hitters.
+DFS_DK_HITTER_SINGLE_POINTS = 3
+DFS_DK_HITTER_DOUBLE_POINTS = 5
+DFS_DK_HITTER_TRIPLE_POINTS = 8
+DFS_DK_HITTER_HR_POINTS = 10
+# Not used by the v1 projection (no walk-rate/lineup-run-context/steal
+# signal exists in this project yet - see dfs.py's module docstring) - kept
+# only so dfs_backtest.py can report the FULL real DK score for a
+# historical day alongside the modeled (hit-only) subset, honestly, instead
+# of silently comparing against a partial actual.
+DFS_DK_HITTER_RUN_POINTS = 2
+DFS_DK_HITTER_RBI_POINTS = 2
+DFS_DK_HITTER_BB_POINTS = 2
+DFS_DK_HITTER_HBP_POINTS = 2
+DFS_DK_HITTER_SB_POINTS = 5
+# DraftKings removed the caught-stealing penalty from its current ruleset
+# (confirmed live via web search, July 2026) - 0, not a negative value.
+DFS_DK_HITTER_CS_POINTS = 0
+
+# DraftKings Classic MLB scoring - pitchers. Same sources as above.
+DFS_DK_PITCHER_IP_POINTS = 2.25  # per inning (0.75 per out)
+DFS_DK_PITCHER_K_POINTS = 2
+DFS_DK_PITCHER_BB_POINTS = -0.6
+DFS_DK_PITCHER_H_POINTS = -0.6
+DFS_DK_PITCHER_HBP_POINTS = -0.6
+DFS_DK_PITCHER_ER_POINTS = -2
+# Out of scope for v1 (see dfs.py's module docstring: Win needs a
+# win-probability estimate this project doesn't build; CG/CGSO/no-hitter
+# are rare discrete events with no signal here) - kept, unused, purely as a
+# visible reminder of what real DK pitcher scoring includes that this
+# ranking does NOT model, so a reader doesn't mistake DK_Points_Pitcher for
+# the full real score.
+DFS_DK_PITCHER_WIN_POINTS = 4
+DFS_DK_PITCHER_CG_POINTS = 2.5
+DFS_DK_PITCHER_CGSO_POINTS = 2.5
+DFS_DK_PITCHER_NO_HITTER_POINTS = 5
+
+# DK's hitter scoring is non-linear in total bases (a double isn't 2x a
+# single's value: 5 != 2*3), but this project only computes a linear
+# Expected_Bases signal (hitters.compute_wtb) - no per-player 1B/2B/3B/HR
+# rate breakdown exists. This is a single calibrated "DK points per
+# expected total base" approximating that non-linear scoring: computed
+# from REAL MLB-wide hit-type shares, Lahman batting 2015-2025 (not a
+# guessed league average) -
+#   singles 272,744 / doubles 84,058 / triples 7,831 / HR 59,419 of
+#   424,052 total hits -> shares 64.32% / 19.82% / 1.85% / 14.01%
+#   TB/hit  = .6432*1 + .1982*2 + .0185*3 + .1401*4 = 1.6555
+#   pts/hit = .6432*3 + .1982*5 + .0185*8 + .1401*10 = 4.4696
+#   pts/TB  = 4.4696 / 1.6555 = 2.6998
+DFS_DK_POINTS_PER_TOTAL_BASE = 2.6998
+
+# Ratio of Matchup_Hit_Probability to the batter's own blended
+# Game_Hit_Probability, used to scale Expected_Bases for today's specific
+# matchup (see dfs.compute_matchup_adjustment). Game_Hit_Probability is
+# floored at this value before dividing, so a batter with almost no
+# recorded games doesn't blow the ratio up arbitrarily large on noise.
+DFS_MATCHUP_RATIO_MIN_DENOM = 0.05
+
+# Same outlier protection as MATCHUP_PAVE_PLUS_CLIP, reused for
+# consistency: a 2x swing either direction off a real matchup edge is
+# already large; wider than that is almost certainly small-sample noise,
+# not real signal. Unvalidated at this exact value - revisit once
+# scripts/backtest_dfs_rankings.py has real numbers.
+DFS_MATCHUP_RATIO_CLIP = (0.5, 1.75)
+
+# pitcher_form.compute_pitcher_dfs_form's window scheme - deliberately a
+# SEPARATE constant from PAVE_WINDOWS (not reused), even though it starts
+# from the same weighting, so tuning one never silently perturbs the other
+# (PAVE_WINDOWS also feeds matchup.py's log5 blend and game_picks.py, both
+# already backtested against the current weights). Windows are wider than
+# PAVE_WINDOWS's: PAVE blends AT-BAT-level data (hundreds of rows/window
+# even in a short window); this blends START-level data (~1 start per 5
+# days for a rotation pitcher), so PAVE's 15-day window would leave as few
+# as 2-3 real starts in the tightest bucket. First-pass, unvalidated -
+# revisit once the backtest script has real MAE/correlation numbers across
+# alternative weightings.
+DFS_PITCHER_WINDOWS = [
+    (None, 0.30),
+    (60, 0.25),
+    (30, 0.25),
+    (15, 0.20),
+]
+
+# A pitcher needs at least this many recorded starts (pitcher_form's
+# unweighted full-season `starts` count) to be ranked at all - a 1-2 start
+# sample is enough for HR9 especially to be pure small-sample noise (one
+# blowup start can swing it to an absurd extreme). Modest, not a
+# qualified-ERA-title bar - a rookie's second MLB start should still
+# surface, same reasoning as AGE_CURVE_MIN_IP being deliberately modest.
+DFS_PITCHER_MIN_STARTS = 3
+
+# Sabermetric rule of thumb translating Expected_IP into an estimated
+# batters-faced count, used only to scale PAVE (an AB-level rate) into
+# Expected_H_Allowed = PAVE * Expected_IP * this constant, since neither
+# PAVE nor pitcher_form.py carries a real per-appearance batters-faced
+# count. Computed from this project's OWN persisted 2026 Statcast (not a
+# guessed league average): 113,334 real completed at-bat events over
+# 78,432 real outs recorded (26,144 IP) = 4.335 batters faced per inning.
+DFS_BATTERS_FACED_PER_INNING = 4.335
+
+# Empirically validated (scripts/backtest_dfs_rankings.py) against 15 real
+# game dates in July 2026, recomputed fresh from persisted Statcast with no
+# lookahead (the same discipline as game_picks_backtest.py/
+# backtest_age_curve.py) - see dfs_backtest.py's module docstring for
+# exactly what "actual" means and its honesty limits.
+#
+# Hitters (DK_Points_Hitter, hit-type scoring only): MAE 3.7719 vs. 3.7496
+# naive-baseline MAE, correlation -0.004 (n=4,156 scored). This is
+# reported honestly as NOT a working signal for single-game DFS
+# hit-scoring, not hidden or rounded away - the projection is
+# indistinguishable from noise at the single-game level. The single
+# highest-risk design choice here (see dfs.py's module docstring) is
+# compute_matchup_adjustment's ratio, derived from hit-PROBABILITY signals
+# but applied to a TOTAL-BASES signal - this backtest is exactly the check
+# that heuristic needed, and it does not hold up. Do not treat
+# DK_Points_Hitter as validated; a real revision (dropping the ratio
+# entirely and backtesting raw Expected_Bases, or a different adjustment
+# approach) is a needed follow-up, not a nice-to-have.
+#
+# Pitchers: a real, if modest, positive signal - better than hitters, but
+# still weak on some components:
+#   Expected_IP:         MAE 1.0257 vs. 1.0332 baseline, correlation 0.351 (n=360)
+#   Expected_K:           MAE 1.8971 vs. 1.9922 baseline, correlation 0.393 (n=360)
+#   Expected_BB:           MAE 1.0570 vs. 1.0380 baseline, correlation 0.182 (n=360) - weak
+#   Expected_H_Allowed:     MAE 2.6545 vs. 1.7860 baseline, correlation 0.223 (n=360) - MAE
+#     actually WORSE than the naive baseline despite positive correlation,
+#     suggesting DFS_BATTERS_FACED_PER_INNING/PAVE scaling is systematically
+#     off, not just noisy - a second flagged follow-up.
+#   DK_Points_Pitcher (combined): MAE 6.9409 vs. 7.1970 baseline,
+#     correlation 0.306 (n=360) - IP/K carry the real signal here.
+# Re-run this backtest (and update these numbers) after any change to
+# DFS_PITCHER_WINDOWS/DFS_BATTERS_FACED_PER_INNING/DFS_MATCHUP_RATIO_CLIP.
+
+# --- Machine Learning (weak-signal follow-up: ml_models.py, dfs_ml.py, age_curve_ml.py) ---
+#
+# The heuristic backtest numbers directly above (DK_Points_Hitter corr
+# -0.004; Expected_H_Allowed MAE worse than baseline; Expected_BB corr
+# 0.182) and Age Curves' HR9 "wash" (see below) motivated a real attempt at
+# walk-forward-validated ML models (scripts/train_dfs_ml_models.py,
+# scripts/train_age_curve_hr9_model.py) rather than tuning the existing
+# heuristics further. See ml_models.py's module docstring for the shared
+# walk-forward CV mechanism and dfs_ml.py/age_curve_ml.py for what each
+# model is trained on.
+
+# WalkForwardDateSplit parameters for the two DFS pitcher-side models
+# (Expected_H_Allowed, Expected_BB) - larger blocks than the hitter side
+# since pitcher-start rows are far sparser per date (~2 starters/team,
+# ~13-26 rows/date vs. thousands of hitter-day rows).
+ML_WALK_FORWARD_MIN_TRAIN_DATES_HITTER = 30
+ML_WALK_FORWARD_TEST_BLOCK_DATES_HITTER = 10
+ML_WALK_FORWARD_MIN_TRAIN_DATES_PITCHER = 40
+ML_WALK_FORWARD_TEST_BLOCK_DATES_PITCHER = 15
+
+# Dates reserved as a final holdout the grid search never sees at all -
+# model selection (grid search + CV) only ever uses earlier dates; the
+# before/after numbers reported in this file's comments and in the README
+# come exclusively from predicting this untouched block, refit on
+# everything before it. Matches the size of the original 15-20 date
+# heuristic-only backtest sample, so it's a fair head-to-head comparison.
+ML_FINAL_HOLDOUT_DATES = 20
+
+DFS_HITTER_MODEL_PATH = "data/models/dfs_hitter_model.joblib"
+DFS_PITCHER_H_ALLOWED_MODEL_PATH = "data/models/dfs_pitcher_h_allowed_model.joblib"
+DFS_PITCHER_BB_MODEL_PATH = "data/models/dfs_pitcher_bb_model.joblib"
+AGE_CURVE_HR9_MODEL_PATH = "data/models/age_curve_hr9_model.joblib"
+
+# Deliberately narrow grids (1-2 hyperparameters, <10 combinations) given
+# the modest walk-forward fold count on the DFS side (~116 dates -> ~6-8
+# blocked CV folds) - a wide sweep over that few folds would just fit CV
+# noise, not find a real best setting. Ridge is the primary candidate for
+# both pitcher signals (small distinct-pitcher pool, ~755 across full
+# history); a heavily depth-capped gradient-boosting grid is included as a
+# secondary candidate only for the hitter signal, where the distinct-batter
+# pool (~604) and row count are both larger.
+DFS_HITTER_RIDGE_ALPHA_GRID = [0.1, 1, 3, 10, 30, 100]
+DFS_HITTER_GBM_PARAM_GRID = {
+    "max_depth": [2, 3],
+    "learning_rate": [0.03, 0.1],
+    "max_iter": [100, 200],
+    "min_samples_leaf": [50, 200],
+}
+DFS_PITCHER_RIDGE_ALPHA_GRID = [0.1, 0.3, 1, 3, 10, 30, 100]
+
+# Age Curves HR9's year-blocked CV (age_curve_ml.YearBlockedSplit) trains
+# only on seasons strictly before AGE_CURVE_HR9_TEST_YEAR_START (a
+# conservative, no-lookahead choice for a single GLOBAL regression model -
+# stricter than age_curve.backtest_projection_accuracy's own per-row "at or
+# before this test season's year" cutoff, which lets a later test row see
+# comparables from just-earlier years in the SAME held-out decade; a single
+# regression trained once can't cheaply replicate that per-row refiltering,
+# so this holds out the whole 2010-2019 decade rather than only each row's
+# own future). That decade of pre-2010 training data spans 1871-2009 (~139
+# years), which comfortably supports more CV folds than the DFS side's
+# ~116 dates - the wider grid below is a real fold-count difference, not a
+# contradiction of the narrow-grid caution above.
+AGE_CURVE_HR9_TEST_YEAR_START = 2010
+AGE_CURVE_HR9_TEST_YEAR_END = 2019
+AGE_CURVE_HR9_TEST_SAMPLE_SIZE = 500
+AGE_CURVE_HR9_TEST_SEED = 0
+ML_WALK_FORWARD_MIN_TRAIN_YEARS = 40
+ML_WALK_FORWARD_TEST_BLOCK_YEARS = 10
+
+AGE_CURVE_HR9_RIDGE_ALPHA_GRID = [0.1, 0.3, 1, 3, 10, 30, 100, 300]
+AGE_CURVE_HR9_GBM_PARAM_GRID = {
+    "max_depth": [3, 5, None],
+    "learning_rate": [0.05, 0.1],
+    "max_iter": [100, 200, 300],
+}
+
+# Results from scripts/train_dfs_ml_models.py, run against the FULL real
+# persisted 2026 Statcast history (114 hitter dates / 99 pitcher dates, not
+# just the 15-20 date heuristic sample above) - nested walk-forward grid
+# search on the earlier dates only, evaluated ONCE on the untouched final
+# ML_FINAL_HOLDOUT_DATES-date block. All three signals cleared the bar
+# (beat both the naive baseline AND the existing heuristic) and are now
+# LIVE (see dfs_ml.apply_ml_overrides) - reported honestly, same as every
+# other backtest here, and this WOULD have said so if a model hadn't
+# cleared the bar (see git history / README for that framing):
+#
+#   DK_Points_Hitter (HistGradientBoostingRegressor, max_depth=2,
+#   learning_rate=0.03, max_iter=100, min_samples_leaf=200):
+#     MAE 3.6374 vs. naive-baseline MAE 3.7183 vs. heuristic MAE 3.7504,
+#     correlation 0.145 (n=5,606) - a real, if still modest, signal where
+#     the heuristic had none (-0.004). The matchup-ratio heuristic
+#     (compute_matchup_adjustment) is no longer used for this signal's
+#     live output; its raw ingredients (starter/bullpen PAVE, Park_Factor,
+#     is_home, the batter's own WAVE/Game_Hit_Probability/Consistency/
+#     Approach) are fed to the model directly instead - see dfs_ml.py.
+#
+#   Expected_H_Allowed (Ridge, alpha=30):
+#     MAE 1.7647 vs. naive-baseline MAE 1.8151 vs. heuristic MAE 2.6665,
+#     correlation 0.250 (n=479) - the heuristic's MAE was WORSE than the
+#     naive baseline (flagged as a likely systematic scaling bias in
+#     PAVE * Expected_IP * DFS_BATTERS_FACED_PER_INNING); a plain
+#     recalibrating regression on the SAME inputs fixed it, confirming
+#     that diagnosis.
+#
+#   Expected_BB (Ridge, alpha=100):
+#     MAE 1.0875 vs. naive-baseline MAE 1.0999 vs. heuristic MAE 1.1096,
+#     correlation 0.119 (n=479) - the smallest improvement of the three
+#     (walk rate over a single start is still high-variance), but a real
+#     one on both MAE and beating the baseline the heuristic didn't
+#     clearly beat before.
+#
+# Re-run scripts/train_dfs_ml_models.py (and update this comment) after
+# any change to the DFS feature set, PAVE_WINDOWS, or DFS_PITCHER_WINDOWS -
+# a stale saved model silently keeps serving old-feature-distribution
+# predictions otherwise.
+
+# Age Curves HR9 result, from scripts/train_age_curve_hr9_model.py (same
+# 500-season, 2010-2019, seed-0 sample scripts/backtest_age_curve.py
+# already used for the KNN number above - recomputed fresh, not assumed
+# stale): HistGradientBoostingRegressor (max_depth=3, learning_rate=0.05,
+# max_iter=100), trained ONLY on seasons before AGE_CURVE_HR9_TEST_YEAR_START
+# (1871-2009, 16,324 rows) - MAE 0.3190 vs. naive-baseline MAE 0.3264 vs.
+# KNN heuristic MAE 0.3312, correlation 0.359 vs. KNN's 0.321 (n=296/500).
+# HR9 is genuinely the hardest of the four signals (single-season HR9 is
+# substantially batted-ball-luck/park/defense-driven, not just a modeling
+# gap - see age_curve_ml.py's module docstring) but a real multi-dimensional
+# regression DID beat both the naive baseline and the single-dimension KNN
+# search here, contrary to the honestly-stated-up-front possibility that it
+# might not. Now LIVE for HR9 only (see build_age_curves.py's
+# build_projections_for_group) - every other Age Curves metric (AVG/OBP/
+# SLG/OPS/K9/BB9/FIP) is untouched and still served by the original KNN
+# path, which was already beating its own baseline.
 
 # Statcast plate-appearance outcome values that count as a "completed" event
 # (used to filter pitch-by-pitch data down to one row per at-bat outcome).

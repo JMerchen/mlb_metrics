@@ -434,7 +434,7 @@ performance) and applies the same reasoning here. `K9`/`BB9`/`HR9` are the
 three defense-independent "own stuff" component rates (mirroring
 `AVG`/`OBP`/`SLG`'s role on the hitter side); `FIP` combines those same
 three components into one number (mirroring `OPS`), using a fixed
-constant (`config.AGE_CURVE_FIP_CONSTANT = 3.10`, a pure additive shift
+constant (`config.FIP_CONSTANT = 3.10`, a pure additive shift
 that doesn't affect comparable-search distances or projections) rather
 than a real per-season constant, which would need ERA/runs data.
 
@@ -453,10 +453,11 @@ metric is selected (e.g. their power comps vs. their contact comps).
 docstring), run independently for each metric: find the
 `AGE_CURVE_K_NEIGHBORS` (25) historical same-position seasons within
 `AGE_CURVE_AGE_WINDOW` (1) year of the current player's age with the
-closest value on that metric (a hand-implemented nearest-neighbor sort -
-no scikit-learn dependency, matching this project's pattern of
-implementing its own stats rather than pulling in an ML library for one
-call), then look at what those comparables actually did on that same
+closest value on that metric (a hand-implemented nearest-neighbor sort,
+matching this project's pattern of implementing its own stats rather than
+pulling in an ML library for one call - unchanged even though
+scikit-learn is now a real dependency for the HR9 follow-up below), then
+look at what those comparables actually did on that same
 metric the *following* season. Comparables with no next season on record
 (retired, hurt, released, or fell below `AGE_CURVE_MIN_AB`/`AGE_CURVE_MIN_IP`)
 are excluded from the projection and that excluded fraction is reported
@@ -519,19 +520,204 @@ resolvable next season and are reported, not hidden.)
 Pitcher metrics, same methodology: `K9` shows a strong signal (the
 strongest of any Age Curves metric, hitter or pitcher - strikeout rate is
 largely an "own stuff" skill that persists year to year); `BB9` and `FIP`
-both clearly beat their baselines; `HR9` is reported honestly as a wash -
-it correlates with next-season `HR9` (year-to-year home-run rate is
-notoriously volatile, driven by batted-ball luck/park effects/defense as
-much as pitcher skill) but its MAE is statistically indistinguishable
-from just guessing the sample mean, so treat `HR9` projections on this
-page as a weak signal, not a strong one:
+both clearly beat their baselines; `HR9`'s single-dimension comparable
+search *used to be* reported honestly as a wash - it correlated with
+next-season `HR9` (year-to-year home-run rate is notoriously volatile,
+driven by batted-ball luck/park effects/defense as much as pitcher skill)
+but its MAE was statistically indistinguishable from just guessing the
+sample mean. A real ML follow-up fixed that (see "Machine learning
+follow-up" below) - `HR9` in the table is now the ML result, and the KNN
+comparable search remains what every other metric here uses:
 
 | metric | MAE | naive baseline MAE | correlation | n scored |
 |---|---|---|---|---|
 | K9 | 1.1476 | 1.5878 | 0.746 | 296/500 |
 | BB9 | 0.6277 | 0.7776 | 0.616 | 296/500 |
-| HR9 | 0.3312 | 0.3264 | 0.321 | 296/500 |
+| HR9 (KNN, superseded) | 0.3312 | 0.3264 | 0.321 | 296/500 |
+| HR9 (ML, live) | 0.3190 | 0.3264 | 0.359 | 296/500 |
 | FIP | 0.5907 | 0.6606 | 0.440 | 296/500 |
+
+### Machine learning follow-up: HR9
+
+`HR9` was the weakest signal in this project by a clear margin (README's
+DFS section below has the other three), so it got a real ML attempt
+(`age_curve_ml.py`, `scripts/train_age_curve_hr9_model.py`) rather than
+further heuristic tuning: a gradient-boosting regression on all six
+features together (`age`, `IP`, `K9`, `BB9`, `HR9`, `FIP`) instead of the
+KNN path's single dimension (`HR9`'s own value). Trained ONLY on seasons
+before 2010 (16,324 rows, 1871-2009) - a stricter, single-global-model
+analogue of the KNN backtest's own no-lookahead discipline (year-blocked
+cross-validation, `age_curve_ml.YearBlockedSplit`, picks hyperparameters
+using only that pre-2010 pool) - then evaluated once on the exact same
+500-season 2010-2019 holdout the KNN number above uses.
+
+The honest expectation going in was that this might simply not be
+fixable by any model built from a pitcher's own aggregate rate stats
+(single-season HR9 is substantially batted-ball-luck/park/defense-driven).
+That turned out to be too pessimistic: the model beat both the naive
+baseline and the KNN search, and is now the live projection source for
+`HR9` specifically - every other metric is untouched, still served by the
+original KNN comparable search. See `config.py`'s Age Curves section for
+the model's selected hyperparameters and `age_curve_ml.py`'s module
+docstring for the full methodology.
+
+## DFS Player Rankings (`docs/dfs.html`, `dfs.py`)
+
+A standalone page ranking today's hitters and probable starting pitchers
+by estimated DraftKings Classic MLB fantasy points. This is explicitly a
+**ranked list of good plays, not a salary-cap lineup optimizer** - no
+salary data is ingested anywhere in this project, by design (the user
+requested rankings/projections only, not a full optimizer).
+
+DraftKings' scoring rules (`config.DFS_DK_*`) were confirmed live via web
+search, not pulled from memory, with sources cited directly in
+`config.py`:
+[dknetwork.draftkings.com](https://dknetwork.draftkings.com/2020/05/29/beginner-mlb-dfs-scoring/)
+and [draftkings.com/help/rules/2/59](https://www.draftkings.com/help/rules/2/59).
+Hitters: single=3, double=5, triple=8, HR=10, run=2, RBI=2, BB=2, HBP=2,
+SB=5, and (confirmed current as of July 2026) **no caught-stealing
+penalty** - DraftKings removed it from the current ruleset. Pitchers:
+2.25 points/inning (0.75/out), K=2, win=4, ER=-2, H=-0.6, BB=-0.6,
+HBP=-0.6, plus rare complete-game/shutout/no-hitter bonuses.
+
+### Hitters
+
+DK pays non-linearly for hit type (a double isn't 2x a single's value: 5
+!= 2*3), but this project only computes a linear `Expected_Bases` signal
+(`hitters.compute_wtb`) - no per-player 1B/2B/3B/HR rate breakdown
+exists. `DK_Points_Hitter` approximates the non-linear scoring with a
+single calibrated "DK points per expected total base" constant,
+`config.DFS_DK_POINTS_PER_TOTAL_BASE = 2.6998`, computed from **real**
+Lahman batting 2015-2025 hit-type shares (not a guessed league average -
+see the constant's docstring for the full arithmetic), applied to
+`Expected_Bases` after scaling it for today's specific matchup via
+`dfs.compute_matchup_adjustment` - a ratio of `Matchup_Hit_Probability`
+(today's actual opposing pitcher, platoon+park adjusted) to the batter's
+own blended `Game_Hit_Probability`.
+
+**Explicitly excluded from v1**: BB, HBP, runs scored, RBI, and stolen
+bases - this project has no walk-rate, lineup-run-context, or
+stolen-base signal at all today, and faking precision on those would be
+worse than leaving them out. `DK_Points_Hitter` is a hit-scoring-only
+estimate, not the full DK score.
+
+### Pitchers
+
+Needed one new signal this project didn't have: `pitcher_form.py`'s
+recency-windowed `K9`/`BB9`/`HR9`/innings-per-start, mirroring
+`pitchers.compute_pave`'s windowing pattern but applied to start-level
+data via its own separate `config.DFS_PITCHER_WINDOWS` (deliberately not
+reusing `PAVE_WINDOWS`, since PAVE blends at-bat-level data while this
+blends start-level data and needs wider windows to avoid tiny-sample
+buckets). `DK_Points_Pitcher` combines expected innings, strikeouts,
+walks, and hits allowed (the last via PAVE scaled by
+`config.DFS_BATTERS_FACED_PER_INNING = 4.335`, computed from this
+project's own persisted 2026 Statcast) plus an estimated earned-run
+penalty. `Expected_ER` is derived from a windowed FIP
+(`config.FIP_CONSTANT`, shared with Age Curves) rather than a real ER
+signal - this project has a consistent house principle against modeling
+ERA/earned runs directly, since they're defense/sequencing-dependent
+rather than purely the pitcher's own skill (the same reasoning
+`Power_A_PLUS` and Age Curves' pitcher metrics already use FIP over ERA
+for).
+
+**Explicitly excluded from v1**: Win (needs a win-probability estimate
+too dependent on the pitcher's own team's offense to reasonably
+approximate) and the rare discrete bonuses (complete game, shutout,
+no-hitter). Relief pitchers are entirely out of scope - a meaningful
+"innings per appearance" number only exists for a starter, not a
+variable-length bullpen outing. A pitcher needs
+`config.DFS_PITCHER_MIN_STARTS` (3) recorded starts and to be a team's
+announced probable starter today to be ranked at all - no neutral
+fallback for an unannounced pitcher.
+
+### Cadence and pipeline
+
+Unlike Age Curves (weekly - historical comparables barely move day to
+day), DFS rankings run **daily**, wired directly into
+`daily_update.yml` right after the model step
+(`scripts/build_dfs_rankings.py`, writing
+`docs/data/dfs_hitters.csv`/`dfs_pitchers.csv`), since matchups and
+probable starters change every day and a weekly cadence would serve
+stale matchups six days out of seven. A failed probable-pitcher fetch or
+an empty schedule leaves the previous day's files untouched rather than
+overwriting them with nothing.
+
+`dfs_backtest.py` validates the projections with the same no-lookahead
+discipline as `game_picks_backtest.py`/`backtest_age_curve.py`: for each
+of a sample of real past game dates, `pipeline.compute_outputs` is
+recomputed fresh from an as-of-date slice of persisted Statcast (nothing
+after that date is visible), and the resulting projections are compared
+against that date's real outcomes.
+
+**Validated against real data**: 15 real game dates in July 2026,
+recomputed with no lookahead. Reported honestly, not softened - this is
+the ORIGINAL heuristic-only backtest; three of these five signals have
+since been superseded by validated ML models (see "Machine learning
+follow-up" below), kept here for the historical record:
+
+| signal | MAE | naive baseline MAE | correlation | n scored |
+|---|---|---|---|---|
+| `DK_Points_Hitter` (heuristic, superseded) | 3.7719 | 3.7496 | -0.004 | 4,156 |
+| `Expected_IP` | 1.0257 | 1.0332 | 0.351 | 360 |
+| `Expected_K` | 1.8971 | 1.9922 | 0.393 | 360 |
+| `Expected_BB` (heuristic, superseded) | 1.0570 | 1.0380 | 0.182 | 360 |
+| `Expected_H_Allowed` (heuristic, superseded) | 2.6545 | 1.7860 | 0.223 | 360 |
+| `DK_Points_Pitcher` (combined, heuristic) | 6.9409 | 7.1970 | 0.306 | 360 |
+
+The hitter ranking's real-world correlation was essentially zero -
+`compute_matchup_adjustment`'s ratio (derived from hit-PROBABILITY
+signals but applied multiplicatively to a TOTAL-BASES signal, flagged up
+front as the single highest-risk modeling choice in this feature) did
+**not** hold up at the single-game level. `Expected_H_Allowed`'s MAE was
+actually worse than the naive baseline despite a positive correlation,
+suggesting the PAVE-to-hits-allowed scaling was systematically off, not
+just noisy. `Expected_IP`/`Expected_K` already beat their baselines and
+were left alone - the ML follow-up below only targeted the three flagged
+signals.
+
+### Machine learning follow-up: hitter and pitcher models
+
+`DK_Points_Hitter`, `Expected_H_Allowed`, and `Expected_BB` each got a
+real ML attempt (`dfs_ml.py`, `scripts/train_dfs_ml_models.py`) rather
+than further heuristic tuning, once the numbers above showed they weren't
+working. Trained on the FULL persisted 2026 Statcast history (114 hitter
+dates / 99 pitcher dates - far more than the original 15-date sample),
+with walk-forward blocked cross-validation (`ml_models.WalkForwardDateSplit`)
+for grid search and a final holdout (the most recent `config.ML_FINAL_HOLDOUT_DATES`
+= 20 dates) the grid search never sees at all - the reported numbers below
+come exclusively from that untouched holdout, refit on everything before
+it, so they're a fair head-to-head against the original 15-20 date
+heuristic numbers:
+
+| signal | model | MAE | naive baseline MAE | heuristic MAE | correlation | n scored |
+|---|---|---|---|---|---|---|
+| `DK_Points_Hitter` | gradient boosting | 3.6374 | 3.7183 | 3.7504 | 0.145 | 5,606 |
+| `Expected_H_Allowed` | Ridge (alpha=30) | 1.7647 | 1.8151 | 2.6665 | 0.250 | 479 |
+| `Expected_BB` | Ridge (alpha=100) | 1.0875 | 1.0999 | 1.1096 | 0.119 | 479 |
+
+All three beat both the naive baseline and their own prior heuristic, so
+all three are now **live** (`dfs_ml.apply_ml_overrides`, called from
+`scripts/build_dfs_rankings.py` every day) - a missing/not-yet-trained
+model artifact falls back to the original heuristic automatically, so
+nothing breaks if the weekly training workflow hasn't run yet. None of
+these are strong signals - correlations of 0.12-0.25 mean there's still a
+lot of unexplained variance - but each is a real, validated improvement
+over both guessing and the prior heuristic, reported honestly rather than
+oversold. The hitter model's biggest structural change: instead of
+`compute_matchup_adjustment`'s flagged-risky ratio, it's trained directly
+on the ratio's raw ingredients (the batter's own `WAVE`/
+`Game_Hit_Probability`/`Consistency`/`Approach`, the opposing starter's
+and bullpen's `PAVE`, `Park_Factor`, `is_home`) via `dfs_ml.build_hitter_features` -
+letting the model find its own combination instead of inheriting the
+multiplicative assumption that turned out not to hold up.
+
+Model training runs weekly (`.github/workflows/ml_training_update.yml`,
+same cadence rationale as Age Curves - re-fitting from full history is
+too slow for the daily pipeline), committing `data/models/*.joblib`
+alongside the code. Re-run `scripts/train_dfs_ml_models.py` (and update
+the numbers above) after any change to the DFS feature set or windowing
+constants.
 
 ## Running
 
