@@ -3,10 +3,12 @@
 // shared - no build step in docs/, same convention age-curves.js already
 // documents).
 //
-// Rankings only - no salary data, no lineup optimizer. See dfs.py's
-// module docstring and README for the exact DK-points methodology and
-// known v1 limitations (BB/HBP/R/RBI/SB excluded for hitters; Win/CG/
-// no-hitter bonuses excluded for pitchers).
+// See dfs.py's module docstring and README for the exact DK-points
+// methodology and known v1 limitations (BB/HBP/R/RBI/SB excluded for
+// hitters; Win/CG/no-hitter bonuses excluded for pitchers). The Optimal
+// Lineup tab's Estimated_Salary is a MODELED estimate, not a real
+// DraftKings price - see renderOptimalLineup below and
+// estimated_salary.py's module docstring.
 
 async function loadCSV(path){
 const response = await fetch(`${path}?t=${Date.now()}`, {cache:"no-store"})
@@ -33,6 +35,7 @@ el.innerHTML = html
 
 let dfsHitters = []
 let dfsPitchers = []
+let dfsOptimalLineup = []
 
 function selectPosition(position){
 document.querySelectorAll("#positionTabs .tabButton").forEach(btn=>{
@@ -40,6 +43,7 @@ btn.classList.toggle("active", btn.dataset.position === position)
 })
 document.getElementById("hittersTable").style.display = position === "hitters" ? "" : "none"
 document.getElementById("pitchersTable").style.display = position === "pitchers" ? "" : "none"
+document.getElementById("optimalLineupSection").style.display = position === "optimal" ? "" : "none"
 }
 
 function renderHitters(){
@@ -68,6 +72,21 @@ const rows = dfsPitchers.map(p=>({
 buildTable(rows, "pitchersTable")
 }
 
+// "Est. Salary" column header spells out the disclaimer inline, not just
+// in the warning box above the table - a user could screenshot/scroll
+// past the box, so the number itself carries the caveat with it.
+function renderOptimalLineup(){
+const rows = dfsOptimalLineup.map(p=>({
+"Slot": p.dk_slot,
+"Player": `${p.name_first} ${p.name_last}`,
+"Team": p.team,
+"Opp": `${p.is_home === "True" || p.is_home === "true" ? "vs" : "@"} ${p.opponent}`,
+"DK Pts": p.DK_Points && p.DK_Points !== "" ? Number(p.DK_Points).toFixed(2) : "-",
+"Est. Salary (NOT a real DK price)": p.Estimated_Salary && p.Estimated_Salary !== "" ? `$${Number(p.Estimated_Salary).toLocaleString()}` : "-",
+}))
+buildTable(rows, "optimalLineupTable")
+}
+
 async function loadAll(){
 
 try{
@@ -82,6 +101,12 @@ dfsPitchers = await loadCSV("./data/dfs_pitchers.csv")
 console.log("no dfs_pitchers.csv yet", e)
 }
 
+try{
+dfsOptimalLineup = await loadCSV("./data/optimal_lineup.csv")
+}catch(e){
+console.log("no optimal_lineup.csv yet", e)
+}
+
 if(!dfsHitters.length && !dfsPitchers.length){
 document.getElementById("hittersTable").innerHTML =
 "No DFS rankings published yet - this page needs scripts/build_dfs_rankings.py to have been run at least once."
@@ -90,6 +115,13 @@ return
 
 renderHitters()
 renderPitchers()
+
+if(!dfsOptimalLineup.length){
+document.getElementById("optimalLineupTable").innerHTML =
+"No optimal lineup published yet - this page needs scripts/build_optimal_lineup.py to have been run at least once."
+}else{
+renderOptimalLineup()
+}
 
 }
 

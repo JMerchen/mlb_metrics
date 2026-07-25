@@ -5,3 +5,4 @@ pyarrow
 MLB-StatsAPI
 scikit-learn
 joblib
+pulp

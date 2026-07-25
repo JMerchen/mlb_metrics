@@ -30,9 +30,9 @@ DFS Rankings
 
 <p style="opacity:.75; max-width:700px;">
 Today's hitters and probable starting pitchers, ranked by estimated
-DraftKings Classic MLB fantasy points. This is a ranked list of good
-plays, NOT a salary-cap lineup optimizer - no salary data is used
-anywhere on this page. Hitter points model hit-type scoring only
+DraftKings Classic MLB fantasy points, plus an Optimal Lineup tab that
+builds a salary-cap-and-position-slot DraftKings Classic lineup on top of
+those projections. Hitter points model hit-type scoring only
 (singles/doubles/triples/home runs, adjusted for today's actual
 opposing pitcher) - walks, HBP, runs, RBIs, and stolen bases are NOT
 included, since this project has no walk-rate, lineup-run-context, or
@@ -60,12 +60,30 @@ numbers and methodology.
 <div class="tabGroup" id="positionTabs">
 <button class="tabButton active" data-position="hitters" onclick="selectPosition('hitters')">Hitters</button>
 <button class="tabButton" data-position="pitchers" onclick="selectPosition('pitchers')">Pitchers</button>
+<button class="tabButton" data-position="optimal" onclick="selectPosition('optimal')">Optimal Lineup</button>
 </div>
 
 <div class="scrollbox" id="hittersTable">
 </div>
 
 <div class="scrollbox" id="pitchersTable" style="display:none;">
+</div>
+
+<div id="optimalLineupSection" style="display:none;">
+
+<p style="max-width:700px; padding:10px; border:2px solid #e53935; border-radius:4px; background:rgba(229,57,53,0.08);">
+<strong>Estimated_Salary is NOT a real DraftKings price.</strong> DraftKings
+has no public API for contest salaries, so this project cannot fetch real
+ones. Every dollar figure below is a MODELED estimate derived from this
+project's own point projections (see README's "Optimal Lineup" section for
+the exact formula) - it is not sourced from DraftKings in any way. Always
+verify the real price on DraftKings.com before entering any contest, and
+do not assume a lineup built here is a valid budget on the real platform.
+</p>
+
+<div class="scrollbox" id="optimalLineupTable">
+</div>
+
 </div>
 
 </div>
