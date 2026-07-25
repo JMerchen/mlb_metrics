@@ -1,5 +1,6 @@
 date,rank,name,predicted_probability,actual_hit,status
-2026-07-24,1,Yordan Álvarez,0.7833919437340153,,pending
+2026-07-25,1,Gabriel Moreno,0.7968632697947213,,pending
+2026-07-24,1,Yordan Álvarez,0.7833919437340153,1.0,hit
 2026-07-23,,,,,no_pick
 2026-07-22,1,Chase DeLauter,0.7925967492260062,1.0,hit
 2026-07-22,1,Gleyber Torres,0.7769743935309974,,no_game
