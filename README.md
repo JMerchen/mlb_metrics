@@ -564,10 +564,13 @@ docstring for the full methodology.
 ## DFS Player Rankings (`docs/dfs.html`, `dfs.py`)
 
 A standalone page ranking today's hitters and probable starting pitchers
-by estimated DraftKings Classic MLB fantasy points. This is explicitly a
-**ranked list of good plays, not a salary-cap lineup optimizer** - no
-salary data is ingested anywhere in this project, by design (the user
-requested rankings/projections only, not a full optimizer).
+by estimated DraftKings Classic MLB fantasy points. Originally a
+**ranked list of good plays, not a salary-cap lineup optimizer** (no
+salary data is ingested anywhere in this project, by design - the user's
+original request was rankings/projections only). An "Optimal Lineup" tab
+has since been added on top of these same projections - see "Optimal
+Lineup" below for what changed and, critically, why its salaries are a
+MODELED estimate, not real DraftKings prices.
 
 DraftKings' scoring rules (`config.DFS_DK_*`) were confirmed live via web
 search, not pulled from memory, with sources cited directly in
@@ -718,6 +721,110 @@ too slow for the daily pipeline), committing `data/models/*.joblib`
 alongside the code. Re-run `scripts/train_dfs_ml_models.py` (and update
 the numbers above) after any change to the DFS feature set or windowing
 constants.
+
+## Optimal Lineup (`docs/dfs.html`'s "Optimal Lineup" tab, `dfs_optimizer.py`)
+
+**`Estimated_Salary` is NOT a real DraftKings price.** DraftKings has no
+public API for contest salaries - there is no free, ToS-compliant way to
+fetch real ones. Scraping DraftKings' site was ruled out (fragile, likely
+against their Terms of Service) and so was a manual daily CSV upload;
+instead, on the user's own explicit direction ("build your best guess at
+pricing based on performance"), `Estimated_Salary` is a MODELED number
+derived entirely from this project's own `DK_Points_Hitter`/
+`DK_Points_Pitcher` projections. Never treat it as a real, submittable
+DraftKings price, and never assume a lineup built here is a valid budget
+on the real platform - a real DFS player could lose real money making
+either assumption. This is disclaimed everywhere the number surfaces: the
+column is always named `Estimated_Salary` (never bare `Salary`), a
+red-bordered warning box sits directly above the Optimal Lineup tab's
+table, the rendered column header itself reads "Est. Salary (NOT a real
+DK price)" (not relying solely on the box above it), and every module
+docstring involved (`estimated_salary.py`, `dfs_optimizer.py`,
+`roster_positions.py`) restates it.
+
+**DraftKings Classic MLB roster rules**, confirmed live via web search
+(not memory) against
+[draftkings.com/help/rules/mlb](https://www.draftkings.com/help/rules/mlb):
+10 roster spots - 2 P, C, 1B, 2B, 3B, SS, 3 OF (no FLEX/UTIL slot) - and a
+$50,000 salary cap (`config.DFS_ROSTER_SLOTS`/`DFS_SALARY_CAP`). Real DK
+salaries always use a $2,000 floor and $100 increments (also confirmed via
+that source, `config.DFS_ESTIMATED_SALARY_FLOOR`/`_ROUND_TO`) - the salary
+*ceiling* values (`DFS_ESTIMATED_SALARY_CEILING_HITTER`/`_PITCHER`) are
+NOT from an official DK table (DraftKings doesn't publish one; prices
+float algorithmically) - they're anecdotal 2026 examples from secondary
+sources, rounded outward. This floor/increment-are-real-but-ceiling-is-
+anecdotal distinction is itself part of the honesty requirement here.
+
+**The formula** (`estimated_salary.py`): linear min-max scaling of a
+player's own `DK_Points_Hitter`/`DK_Points_Pitcher` into
+[`DFS_ESTIMATED_SALARY_FLOOR`, the position-appropriate ceiling], clipped
+at both ends, rounded to the nearest $100. The reference point range each
+scale maps FROM (`DFS_REFERENCE_MIN/MAX_POINTS_HITTER`/`PITCHER`) is
+computed from this project's own first real day of production DFS output
+(2026-07-24: 513 qualified hitters ranged 2.584-4.683 points; 27 probable
+starters ranged 2.617-22.750) - not guessed, but explicitly a v1
+calibration from a single day, to be revisited once more production days
+accumulate. This is a single-signal (points only) linear model - real DK
+pricing also reflects season-long track record, popularity/ownership
+effects, and other signals this project doesn't compute - a deliberate v1
+simplification, not hidden.
+
+**Position eligibility** (`roster_positions.py`): a genuinely new data
+source for this project - no fielding-position data existed anywhere
+before this. Fetched via the MLB Stats API's `people` endpoint
+(`statsapi.get("people", {"personIds": ...})`), queried directly by
+`key_mlbam` (this project's own player id - no name-matching needed).
+Restricted to a player's single PRIMARY position, NOT DraftKings' real
+multi-position eligibility (which DK derives from recent multi-position
+starts) - a player whose primary position has no DK Classic slot at all
+(most commonly "DH", a common primary role for several everyday hitters)
+is excluded outright, a real v1 gap, not hidden. The field paths used here
+are based on the MLB-StatsAPI package's own implementation and public
+documentation, not a live-confirmed response (this sandbox cannot reach
+statsapi.mlb.com at all - the same restriction `schedule.py`'s probable-
+pitcher fetch already documents) - `scripts/debug_statsapi_positions.py`
+(run through the `Debug statsapi` GitHub Actions workflow, real network
+access) is the same bootstrapping step `schedule.py`'s own field paths
+went through before being trusted in production.
+
+**The optimizer** (`dfs_optimizer.py`): an exact MILP (mixed-integer
+linear program), solved via [PuLP](https://github.com/coin-or/pulp)'s
+bundled CBC solver - a new dependency, added because this is a real
+knapsack/assignment problem (choosing 3 of ~80-100 OF-eligible candidates
+alone is already a ~117,000-combination choice, before the shared salary-
+cap budget across every other slot is considered), where a greedy
+best-points-per-dollar pick per slot does NOT guarantee the true optimum.
+The slot groups happen to be disjoint in this v1 design (one primary
+position per player), which would let a hand-rolled DP solve this without
+a new dependency - PuLP was chosen anyway since it directly expresses the
+real constraints without careful group-merge bookkeeping, and because it
+survives the near-certain follow-up of real DK multi-position eligibility
+(which breaks the disjoint-groups assumption a DP would depend on, while
+ILP trivially generalizes). A two-way player (appearing in both the
+hitter and pitcher pools) is constrained to be selected at most once
+across both roles, so the optimizer can never fill two roster slots with
+the same real person. Returns no lineup (not a crash) if the slate can't
+fill every slot or the cheapest possible full roster exceeds the cap -
+`scripts/build_optimal_lineup.py` leaves the previous day's
+`optimal_lineup.csv` in place in that case, same resilience pattern as a
+failed schedule fetch elsewhere in this project.
+
+`scripts/build_optimal_lineup.py` runs daily (`daily_update.yml`,
+immediately after `scripts/build_dfs_rankings.py`), writing
+`docs/data/optimal_lineup.csv` (the 10 selected players) and
+`docs/data/dfs_salary_pool.csv` (every eligible player considered, for
+transparency into what the optimizer actually saw).
+
+**Explicit v1 scope cuts**: no real DK multi-position eligibility (single
+primary position only - full-time DH players are excluded entirely); no
+multi-lineup generation, no GPP-vs-cash-game strategy, no ownership-
+projection/game-theory diversification (one single "best" lineup per
+day); no live salary scraping or manual upload path (both explicitly
+rejected in favor of the modeled-estimate approach); relief pitchers
+remain out of scope (inherited from `dfs.py`'s own probable-starters-only
+restriction). Salary-accuracy backtesting is also explicitly out of scope
+- there's no real DraftKings price to validate `Estimated_Salary` against,
+unlike every other backtested signal in this project.
 
 ## Running
 

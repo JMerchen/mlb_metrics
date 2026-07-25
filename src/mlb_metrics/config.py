@@ -434,9 +434,11 @@ AGE_CURVE_AGE_WINDOW = 1
 # --- DFS Player Rankings (docs/dfs.html, dfs.py) ---
 #
 # Estimated DraftKings Classic MLB fantasy points for today's hitters and
-# probable starters - a ranked list of good plays, NOT a salary-cap lineup
-# optimizer (no salary data is ingested anywhere in this project). See
-# dfs.py's module docstring for the full methodology and v1 limitations.
+# probable starters - a ranked list of good plays. See dfs.py's module
+# docstring for the full methodology and v1 limitations. A separate
+# "Optimal Lineup" section further below builds a salary-cap-and-position
+# optimizer on top of these projections - see that section's own comment
+# for why its salaries are a modeled estimate, not real DraftKings prices.
 
 # DraftKings Classic MLB scoring, confirmed live (not from memory) via
 # https://dknetwork.draftkings.com/2020/05/29/beginner-mlb-dfs-scoring/ and
@@ -705,6 +707,62 @@ AGE_CURVE_HR9_GBM_PARAM_GRID = {
 # build_projections_for_group) - every other Age Curves metric (AVG/OBP/
 # SLG/OPS/K9/BB9/FIP) is untouched and still served by the original KNN
 # path, which was already beating its own baseline.
+
+# --- Optimal Lineup (docs/dfs.html's "Optimal Lineup" tab, roster_positions.py,
+# estimated_salary.py, dfs_optimizer.py, scripts/build_optimal_lineup.py) ---
+#
+# A salary-cap-and-position-slot DraftKings Classic MLB lineup optimizer,
+# built on top of the DFS Player Rankings' own DK_Points_Hitter/
+# DK_Points_Pitcher projections. IMPORTANT: DraftKings has no public API for
+# real contest salaries - there is no free, ToS-compliant way to fetch them.
+# Rather than scrape DraftKings (fragile, likely against their ToS) or
+# require a manual daily CSV upload, Estimated_Salary here is a MODELED
+# number derived from this project's own point projections - explicitly NOT
+# a real DraftKings price. This was an explicit user decision ("build your
+# best guess at pricing based on performance") after the tradeoffs were
+# raised, not a default fallen into unnoticed. See estimated_salary.py's
+# module docstring for the exact formula and every place this gets
+# relabeled/disclaimed (config.py here, the CSV column name itself
+# `Estimated_Salary` never bare `Salary`, docs/dfs.html's warning box,
+# docs/dfs.js's rendered column header, README). A real DFS player could
+# lose real money mistaking this for what DraftKings will actually charge -
+# treat every one of those disclaimer sites as load-bearing, not decorative.
+
+# DraftKings Classic MLB roster construction, confirmed live via web search
+# (not memory) against https://www.draftkings.com/help/rules/mlb: 10 roster
+# spots, no FLEX/UTIL slot, $50,000 salary cap.
+DFS_ROSTER_SLOTS = {"P": 2, "C": 1, "1B": 1, "2B": 1, "3B": 1, "SS": 1, "OF": 3}
+DFS_SALARY_CAP = 50000
+
+# Real DK salaries: a universal $2,000 floor and always $100 increments -
+# both confirmed via the same source above. The ceiling values below are
+# NOT from an official DK table (DraftKings doesn't publish one - prices
+# float algorithmically) - they're anecdotal 2026 examples from secondary
+# sources (elite starters ~$9,500-$10,500, elite bats ~$5,500-$6,500+),
+# rounded outward to a defensible ceiling. This distinction (floor/increment
+# are real DK rules; ceilings are estimates) is itself part of the honesty
+# requirement here - don't let the presence of some real numbers imply the
+# ceilings are equally authoritative.
+DFS_ESTIMATED_SALARY_FLOOR = 2000
+DFS_ESTIMATED_SALARY_ROUND_TO = 100
+DFS_ESTIMATED_SALARY_CEILING_HITTER = 6500
+DFS_ESTIMATED_SALARY_CEILING_PITCHER = 11000
+
+# The DK_Points_Hitter/DK_Points_Pitcher range Estimated_Salary linearly
+# scales from, computed from the FIRST real day of production DFS output
+# this project has (2026-07-24, docs/data/dfs_hitters.csv/dfs_pitchers.csv:
+# n=513 qualified hitters, n=27 probable starters) - not guessed. Hitters:
+# DK_Points_Hitter ranged 2.584-4.683 (mean 3.656). Pitchers: DK_Points_Pitcher
+# ranged 2.617-22.750 (mean 13.625, much wider - a 27-pitcher sample mixes
+# real aces against emergency/spot starters). A future day's outlier outside
+# this range simply clips to the salary floor/ceiling (compute_estimated_salary
+# always clips), so this isn't a hard failure mode - but treat these bounds
+# as a v1 calibration from one day of real data, not a stable long-run
+# distribution; revisit once more production days accumulate.
+DFS_REFERENCE_MIN_POINTS_HITTER = 2.584
+DFS_REFERENCE_MAX_POINTS_HITTER = 4.683
+DFS_REFERENCE_MIN_POINTS_PITCHER = 2.617
+DFS_REFERENCE_MAX_POINTS_PITCHER = 22.750
 
 # Statcast plate-appearance outcome values that count as a "completed" event
 # (used to filter pitch-by-pitch data down to one row per at-bat outcome).

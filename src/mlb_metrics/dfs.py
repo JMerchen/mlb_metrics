@@ -1,7 +1,11 @@
 """Estimated DraftKings Classic MLB fantasy points for today's hitters and
 probable starting pitchers - a ranked list of good plays for
-docs/dfs.html, NOT a salary-cap lineup optimizer (no salary data is
-ingested anywhere in this project - see config.py's DFS section for why).
+docs/dfs.html. This module itself has no notion of salary or roster slots
+- that's dfs_optimizer.py's job (see its module docstring), built on top
+of this module's DK_Points_Hitter/DK_Points_Pitcher output. IMPORTANT:
+the optimizer's salaries are a MODELED estimate, not real DraftKings
+prices - DraftKings has no public salary API - see
+estimated_salary.py's module docstring before assuming otherwise.
 
 DraftKings' scoring rules (config.DFS_DK_*) were confirmed live via web
 search (not from memory) - see config.py's DFS section for sources.
