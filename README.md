@@ -271,6 +271,93 @@ game identity at all; `game_id` itself stays a dense, date-ordered integer
 against a real historical `wave.csv` commit: reconstructed
 `Game_Hit_Probability` now matches the committed values exactly.
 
+### Real bug fixed: PAVE excluded strikeouts from the AB denominator
+
+Surfaced by a direct, specific complaint: a hitter's DFS matchup that day
+was against Jacob Misiorowski, a dominant strikeout starter, and neither
+`Matchup_Hit_Probability` nor the DFS pitcher projection treated that
+matchup as tough at all. `pitchers._pave_rate` converts a hits-per-plate-
+appearance rate into a hits-per-at-bat rate by excluding non-at-bat
+events from the denominator - but the original formula excluded
+strikeouts from that denominator ALONGSIDE walks/HBP
+(`helpers.is_strikeout_walk_hbp`). A strikeout **is** an official at-bat;
+only a walk or HBP isn't. Excluding it too shrinks the effective
+denominator for every strikeout a pitcher records, which **inflates**
+the computed hit-rate for exactly the pitchers who rack up the most
+strikeouts - the more swings-and-misses a pitcher generates, the worse
+the old formula made him look. Fixed by excluding only walks/HBP
+(`helpers.is_non_at_bat_event`), leaving strikeouts in the AB count.
+
+Confirmed against Misiorowski's real 2026 Statcast log (439 batters
+faced: 173 K, 28 BB, 8 HBP, 61 hits): the old formula gave a full-season
+PAVE of 0.265 (PAVE_PLUS ~0.93 - barely better than average); the fixed
+formula gives 61/(439-28-8) = 0.151 - genuinely elite, matching his real
+Cy-Young-caliber season.
+
+**Re-backtested on the same real 20-date sample, same dates, before vs.
+after the fix** (`dfs_backtest.backtest_dfs_projections` - the pitcher
+side is the most directly affected, since `Expected_H_Allowed = PAVE *
+Expected_IP * DFS_BATTERS_FACED_PER_INNING`):
+
+| signal | MAE before | MAE after | naive-baseline MAE | correlation before | correlation after |
+|---|---|---|---|---|---|
+| `Expected_H_Allowed` vs. `Actual_H` | 2.6252 | **1.8032** | 1.8395 | 0.262 | 0.299 |
+| `DK_Points_Pitcher` (combined) | 6.8840 | 6.8312 | 7.1776 | 0.327 | 0.332 |
+| `DK_Points_Hitter` (heuristic) | 4.7161 | 4.7156 | 4.6879 | 0.010 | 0.010 |
+
+`Expected_H_Allowed` is the headline result: its MAE was worse than the
+naive baseline before this fix (a previously-documented, unresolved weak
+signal - see "Pitchers" below) and now **beats** the baseline for the
+first time, a direct, real confirmation that the bug fix - not just the
+Misiorowski anecdote - measurably improved a signal this project had
+already flagged as broken. `DK_Points_Pitcher`'s combined MAE improves
+more modestly (it also blends the FIP-based ER estimate, which PAVE
+doesn't touch). `DK_Points_Hitter`'s heuristic number is essentially
+unchanged - expected, since that heuristic's correlation was already
+near zero for unrelated, previously-documented reasons (the
+`compute_matchup_adjustment` ratio - see "Hitters" below), and hitters'
+live projection is served by the ML model, not this heuristic, anyway.
+
+**What this fix reaches, project-wide**: every consumer of
+`PAVE`/`PAVE_PLUS`/`Bullpen_PAVE` - `matchup.py`'s
+`Matchup_Hit_Probability` (both the hitter matchup ratio above and its
+Boom-Adjusted/Value_Score downstream uses), `game_picks.py`'s
+susceptibility signal (blended against `Power_A_PLUS`, see
+`GAME_PICK_SUSCEPTIBILITY_WEIGHT`), and `dfs.py`'s `Expected_H_Allowed`.
+The DFS hitter/pitcher ML models (`dfs_ml.py`) were retrained after this
+fix since `starter_PAVE`/`Bullpen_PAVE`/`Expected_H_Allowed` are direct
+input features - see "Machine learning follow-up" below for the
+retrained numbers.
+
+**Automated Game Picks re-checked too, same 20-date sample, before vs.
+after** (`game_picks_backtest.reconstruct_historical_game_picks_from_persisted`,
+also a fresh recompute, not a git-history replay): accuracy actually went
+from 57.9% to 56.1% (Brier 0.2470 -> 0.2486) - a small move in the WRONG
+direction. On n=57 resolved games that's exactly one game's outcome
+flipping, well within noise for a sample this size - not treated as a
+real regression, but reported plainly rather than omitted because it
+didn't confirm the hypothesis. The likely reason it barely moved at all
+either way: `game_picks.py` blends `PAVE_PLUS` (a ratio re-normalized to
+mean 1.0 across that day's qualified pitcher pool), not the raw PAVE
+rate the DFS pitcher signals use directly - renormalization absorbs most
+of a uniform formula shift, so this signal was always going to be far
+less sensitive to the fix than `Expected_H_Allowed`'s raw AB-rate
+calculation. `GAME_PICK_SUSCEPTIBILITY_WEIGHT` (0.5) was left unchanged;
+one game on n=57 isn't grounds to recalibrate a weight that was itself
+chosen from a real backtest.
+
+**What could NOT be cleanly re-verified**: the 65.8%->75.0% Beat the
+Streak hit-rate uplift reported just above, and the original
+`Ceiling_DK_Points`/`Boom_Rate` capture-rate backtests, replay
+git-history-committed CSV snapshots (`docs/data/wave.csv`/`confidence.csv`
+at past commits) that were computed under the OLD, buggy PAVE - rewriting
+that committed history to "fix" it retroactively isn't something this
+project does. Those numbers stand as historically accurate for what was
+live at the time; the corrected signal's real effect on live picks will
+show up naturally as new daily data accumulates under the fixed formula
+going forward, the same way any other model change's live impact is
+observed.
+
 ### Platoon and park awareness
 
 Two further adjustments to `Matchup_Hit_Probability`, on top of the base
@@ -781,6 +868,30 @@ alongside the code. Re-run `scripts/train_dfs_ml_models.py` (and update
 the numbers above) after any change to the DFS feature set or windowing
 constants.
 
+**Retrained again 2026-07-26** after the PAVE bug fix above
+(`starter_PAVE`/`Bullpen_PAVE` are direct hitter-model features;
+`Expected_H_Allowed` - itself PAVE-derived - is a direct pitcher-model
+feature), against the full persisted history (118 hitter dates / 103
+pitcher dates):
+
+| signal | model | MAE | naive baseline MAE | heuristic MAE | correlation | n scored |
+|---|---|---|---|---|---|---|
+| `DK_Points_Hitter` | gradient boosting | 4.6299 | 4.6648 | 4.7156 | 0.161 | 5,760 |
+| `Expected_H_Allowed` | Ridge (alpha=30) | 1.7685 | 1.8395 | 1.8032 | 0.297 | 481 |
+| `Expected_BB` | Ridge (alpha=0.1) | 1.0141 | 1.0310 | 1.0689 | 0.130 | 481 |
+
+`DK_Points_Hitter`'s numbers are essentially unchanged from the prior
+retrain (correlation 0.161 vs. 0.162) - expected, since PAVE isn't the
+reason this signal's correlation is weak (see "Hitters" above).
+`Expected_H_Allowed` is the interesting one: the PAVE fix alone already
+turned its HEURISTIC from worse-than-baseline (MAE 2.6252 pre-fix) into
+better-than-baseline (1.8032) on the identical dates - and this retrained
+model improves on that fixed heuristic further still (1.7685), a real
+additional gain stacked on top of the formula fix, not just the model
+recovering ground the bug had cost it. All three again beat both the
+naive baseline and their own (now-corrected) heuristic, so all three
+stayed live with these updated weights.
+
 ## Optimal Lineup (`docs/dfs.html`'s "Optimal Lineup" tab, `dfs_optimizer.py`)
 
 **`Estimated_Salary` is NOT a real DraftKings price.** DraftKings has no
@@ -1117,6 +1228,17 @@ improvement over it. This is reported plainly rather than reframed as a
 win, matching how this project has always handled a backtest that didn't
 confirm the hypothesis (see Age Curves HR9's KNN-vs-ML precedent,
 Ceiling/Boom-Adjusted's pitcher non-results above).
+
+**Re-checked after the PAVE bug fix above** (`Matchup_Ratio` reads
+`Matchup_Hit_Probability`, a direct PAVE consumer; `Boom_Rate` itself is
+historical-outcome-only and unaffected): n=5,547/675 real boom-days (a
+slightly larger accumulated sample than the original 5,430/689, not a
+strict same-day A/B) - mean projection 10.8%, `Matchup_Boom_Score` 14.5%,
+`Boom_Rate` alone 17.6%. The ordering conclusion is UNCHANGED - `Boom_Rate`
+alone still clearly beats `Matchup_Boom_Score` - with a small, consistent
+uptick across all three from the corrected matchup input. The fix didn't
+overturn this finding; `Matchup_Ratio` remains a weak signal for
+reasons unrelated to the PAVE bug (see above).
 
 **Hitters only** - pitchers have no `Matchup_Ratio` analog in this
 project, and the earlier Ceiling/Boom-Adjusted backtests already found no

@@ -29,7 +29,10 @@ WAVE_WINDOWS = [
 # probability: probability = 1 - (1 - rate) ** WAVE_TRIALS_PER_GAME.
 WAVE_TRIALS_PER_GAME = 3.5
 
-# PAVE (pitcher hits-allowed rate, adjusted for K/BB/HBP rate): full/30d/81d/15d.
+# PAVE (pitcher hits-allowed rate, converted from a per-PA rate to a
+# per-AB rate by excluding walks/HBP only - NOT strikeouts, which are
+# real at-bats; see pitchers.py's module docstring for the real bug this
+# used to have): full/30d/81d/15d.
 PAVE_WINDOWS = [
     (None, 0.300),
     (30, 0.265),
@@ -670,51 +673,49 @@ AGE_CURVE_HR9_GBM_PARAM_GRID = {
 }
 
 # Results from scripts/train_dfs_ml_models.py, run 2026-07-26 against the
-# FULL real persisted 2026 Statcast history (117 hitter dates / 102
-# pitcher dates - retrained after DK_Points_Hitter's scoring widened to
-# include BB/HBP/RBI, see dfs.py's module docstring; the OLD model
-# artifact was deleted rather than left in place, since its schema no
-# longer matched dfs_ml.HITTER_FEATURE_COLUMNS). Nested walk-forward grid
-# search on the earlier dates only, evaluated ONCE on the untouched final
-# ML_FINAL_HOLDOUT_DATES-date block. All three signals cleared the bar
-# (beat both the naive baseline AND the existing heuristic) and are now
-# LIVE (see dfs_ml.apply_ml_overrides) - reported honestly, same as every
-# other backtest here, and this WOULD have said so if a model hadn't
-# cleared the bar (see git history / README for that framing):
+# FULL real persisted 2026 Statcast history (118 hitter dates / 103
+# pitcher dates - retrained after fixing a real PAVE bug: the formula
+# excluded strikeouts from the at-bat denominator alongside walks/HBP,
+# inflating hit-rate-against for exactly the pitchers who strike the most
+# batters out (see pitchers.py's module docstring and the README's "Real
+# bug fixed: PAVE excluded strikeouts" section for the full story and the
+# heuristic-level before/after numbers). starter_PAVE/Bullpen_PAVE
+# (hitter features) and Expected_H_Allowed (a pitcher feature, itself
+# PAVE-derived) all shifted, so all three models needed retraining even
+# though none of their own feature SCHEMA changed - old model artifacts
+# were kept, not deleted, since the schema is unchanged, but the weights
+# are new). Nested walk-forward grid search on the earlier dates only,
+# evaluated ONCE on the untouched final ML_FINAL_HOLDOUT_DATES-date block.
+# All three signals cleared the bar (beat both the naive baseline AND the
+# existing heuristic) and are now LIVE (see dfs_ml.apply_ml_overrides) -
+# reported honestly, same as every other backtest here, and this WOULD
+# have said so if a model hadn't cleared the bar (see git history / README
+# for that framing):
 #
 #   DK_Points_Hitter (HistGradientBoostingRegressor, max_depth=2,
-#   learning_rate=0.03, max_iter=200, min_samples_leaf=200):
-#     MAE 4.6716 vs. naive-baseline MAE 4.7210 vs. heuristic MAE 4.7569,
-#     correlation 0.162 (n=5,642) - a real, if still modest, signal where
-#     the widened heuristic had essentially none (0.009, see the backtest
-#     comment above) - actually a slight IMPROVEMENT over the pre-widening
-#     model's 0.145, not just a like-for-like swap. The matchup-ratio
-#     heuristic (compute_matchup_adjustment) is still not used for this
-#     signal's live output; its raw ingredients (starter/bullpen PAVE,
-#     Park_Factor, is_home, the batter's own WAVE/Game_Hit_Probability/
-#     Consistency/Approach) plus the new Expected_BB/Expected_HBP/
-#     Expected_RBI are fed to the model directly instead - see dfs_ml.py.
-#     MAE/correlation are on the wider post-BB/HBP/RBI point scale, so are
-#     NOT directly comparable in absolute terms to the pre-widening 3.6374
-#     MAE figure kept in git history - only the relative
-#     model-vs-heuristic-vs-baseline ordering is a fair comparison.
+#   learning_rate=0.03, max_iter=100, min_samples_leaf=200):
+#     MAE 4.6299 vs. naive-baseline MAE 4.6648 vs. heuristic MAE 4.7156,
+#     correlation 0.161 (n=5,760) - essentially unchanged from the
+#     pre-PAVE-fix retrain (0.162), as expected: this signal's heuristic
+#     correlation was already near-zero for unrelated reasons (the
+#     compute_matchup_adjustment ratio, not PAVE directly - see "Hitters"
+#     below), so a PAVE fix alone wasn't expected to move it much.
 #
 #   Expected_H_Allowed (Ridge, alpha=30):
-#     MAE 1.7385 vs. naive-baseline MAE 1.8164 vs. heuristic MAE 2.6241,
-#     correlation 0.302 (n=468) - the heuristic's MAE was WORSE than the
-#     naive baseline (flagged as a likely systematic scaling bias in
-#     PAVE * Expected_IP * DFS_BATTERS_FACED_PER_INNING); a plain
-#     recalibrating regression on the SAME inputs fixed it, confirming
-#     that diagnosis. This signal's own inputs are unaffected by the
-#     hitter-scoring widening above - retrained only because more
-#     persisted history had accumulated by this date.
+#     MAE 1.7685 vs. naive-baseline MAE 1.8395 vs. heuristic MAE 1.8032,
+#     correlation 0.297 (n=481) - the PAVE fix alone already pulled the
+#     heuristic from worse-than-baseline (2.6252 pre-fix, same dates) to
+#     better-than-baseline (1.8032); this retrained model improves on
+#     that fixed heuristic further still (1.7685), a genuine additional
+#     gain on top of the formula fix, not just recovering ground the bug
+#     had cost.
 #
 #   Expected_BB (Ridge, alpha=0.1):
-#     MAE 1.0233 vs. naive-baseline MAE 1.0389 vs. heuristic MAE 1.0744,
-#     correlation 0.120 (n=468) - the smallest improvement of the three
-#     (walk rate over a single start is still high-variance), but a real
-#     one on both MAE and beating the baseline the heuristic didn't
-#     clearly beat before.
+#     MAE 1.0141 vs. naive-baseline MAE 1.0310 vs. heuristic MAE 1.0689,
+#     correlation 0.130 (n=481) - Expected_BB doesn't consume PAVE
+#     directly, so this retrain's small movement vs. the prior run
+#     reflects more persisted history accumulating, not the PAVE fix
+#     itself.
 #
 # Re-run scripts/train_dfs_ml_models.py (and update this comment) after
 # any change to the DFS feature set, PAVE_WINDOWS, or DFS_PITCHER_WINDOWS -

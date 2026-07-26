@@ -1,7 +1,28 @@
-"""Pitcher metrics: PAVE (batting-average-against, adjusted for K/BB/HBP
-rate) and PAVE_PLUS (normalized to the qualified-pitcher league average),
-plus Bullpen_PAVE: the same PAVE formula pooled across a team's relief
-appearances only.
+"""Pitcher metrics: PAVE (batting-average-against, converting a per-plate-
+appearance hit rate to a per-at-bat one by excluding walks/HBP from the
+denominator) and PAVE_PLUS (normalized to the qualified-pitcher league
+average), plus Bullpen_PAVE: the same PAVE formula pooled across a team's
+relief appearances only.
+
+**Real bug fixed here (found via a real production complaint - a hitter's
+matchup against a dominant strikeout starter, Jacob Misiorowski, wasn't
+being treated as tough at all)**: the original formula excluded
+strikeouts from the AB denominator ALONGSIDE walks/HBP
+(`helpers.is_strikeout_walk_hbp`), not just walks/HBP. A strikeout IS an
+official at-bat - only walks and HBP aren't - so that formula shrank the
+effective denominator for every strikeout a pitcher recorded, which
+INFLATES the computed hit-rate for exactly the pitchers who rack up the
+most strikeouts (the more good things a swing-and-miss ace does, the
+worse this formula made him look). Confirmed against Misiorowski's real
+2026 Statcast log (439 batters faced, 173 K, 28 BB, 8 HBP, 61 hits): the
+old formula computed a full-season PAVE of 0.265 (PAVE_PLUS ~0.93 -
+barely better than average); the corrected formula (excluding only
+walks/HBP, `helpers.is_non_at_bat_event`) gives 61/(439-28-8) = 0.151 -
+genuinely elite, matching his real Cy-Young-caliber season. This affected
+every consumer of PAVE/PAVE_PLUS/Bullpen_PAVE project-wide (matchup.py's
+Matchup_Hit_Probability, game_picks.py's susceptibility signal, dfs.py's
+Expected_H_Allowed) - see each module's own backtest re-run after this
+fix for the corrected numbers.
 
 Bullpen_PAVE exists because a hitter's 3-5 at-bats in a game are not all
 against the starter - typically only 2-3 are, with the rest against
@@ -44,16 +65,19 @@ def _slice_by_days(frame: pd.DataFrame, latest, days_back):
 
 _STAT_FNS = {
     "hit": helpers.is_hit,
-    "stk": helpers.is_strikeout_walk_hbp,
+    "non_ab": helpers.is_non_at_bat_event,
     "tba": helpers.total_bases,
     "hr": helpers.is_home_run,
 }
 
 
 def _pave_rate(agg: pd.DataFrame) -> pd.Series:
+    """hits / AB, where AB = PA - walks - HBP (a strikeout stays IN the
+    AB count - see module docstring's "real bug fixed here" for why this
+    matters)."""
     baa = agg["hit"] / agg["n"]
-    stk_rate = agg["stk"] / agg["n"]
-    return baa / (1 - stk_rate)
+    non_ab_rate = agg["non_ab"] / agg["n"]
+    return baa / (1 - non_ab_rate)
 
 
 _RATE_FNS = {
