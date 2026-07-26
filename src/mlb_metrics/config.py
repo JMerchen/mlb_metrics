@@ -850,6 +850,46 @@ DFS_BOOM_ADJUSTED_K_GRID = [0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0]
 DFS_BOOM_ADJUSTED_K_HITTER = 1.0
 DFS_BOOM_ADJUSTED_K_PITCHER = 0.0
 
+# --- Matchup_Boom_Score (dfs_ceiling.compute_matchup_boom_score, hitters only) ---
+#
+# Real evidence from an actual DK contest (winner spent $17,500 on
+# pitchers, this project's own suggestion over $21,000, and even after
+# the salary parity fix above a real slate's mean-projection lineup only
+# totaled ~81 points) surfaced a deeper gap: neither Ceiling_DK_Points nor
+# Boom_Adjusted_DK_Points reads TODAY's matchup on their volatility side -
+# only the mean term does. This asks a genuinely different question: WHICH
+# hitters are likely to boom today, given today's specific opponent, not
+# just who has boomed historically.
+#
+# Backtested (dfs_ceiling.backtest_matchup_boom_signal, same 20-date
+# no-lookahead sample, n=5,430, 689 real boom-days against an average
+# no-lookahead threshold of ~14.0 points) - capture rate of those 689 real
+# boom days (what fraction were flagged in advance by each signal's own
+# top decile):
+#
+#   Mean projection (DK_Points_Hitter) alone:            10.6%
+#   Matchup_Boom_Score (Boom_Rate * today's Matchup_Ratio): 14.1%
+#   Boom_Rate alone (NO matchup adjustment at all):        17.3%
+#
+# Honest, somewhat surprising result: the matchup adjustment made it
+# WORSE, not better. Boom_Rate alone beat the matchup-multiplied version
+# by a real margin. Multiplying by Matchup_Ratio added noise here,
+# consistent with Matchup_Ratio already being flagged elsewhere in this
+# project (dfs.py's module docstring) as the single highest-risk modeling
+# choice in the whole DFS feature set - already superseded by an ML model
+# for the main hitter projection for exactly this reason. The same weak
+# signal that dragged down DK_Points_Hitter drags down Matchup_Boom_Score
+# when multiplied in.
+#
+# Because Boom_Rate is the real, validated win here, it's exposed as its
+# own dfs_hitters.csv column (not just an internal ingredient of
+# Matchup_Boom_Score) - Boom_Rate should be treated as the more trustworthy
+# signal; Matchup_Boom_Score ships informational/exploratory only, not as
+# an improvement over it. Reported plainly, not reframed as a win - same
+# honesty standard as every other backtest in this project. Re-run this
+# backtest (and update this comment) after any change to
+# dfs.compute_matchup_adjustment's formula.
+
 # --- Optimal Lineup (docs/dfs.html's "Optimal Lineup" tab, roster_positions.py,
 # estimated_salary.py, dfs_optimizer.py, scripts/build_optimal_lineup.py) ---
 #

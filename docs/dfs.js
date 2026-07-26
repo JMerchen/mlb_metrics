@@ -7,12 +7,16 @@
 // methodology and known v1 limitations (hitters now score BB/HBP/RBI too;
 // Runs/SB still excluded - no reliable structured signal exists for
 // either; Win/CG/no-hitter bonuses excluded for pitchers). Ceiling (P90),
-// Boom-Adjusted, and Matchup Boom (hitters only) are dfs_ceiling.py's
-// upside/volatility signals - additional informational columns alongside
-// the mean DK Pts projection, not replacements for it; see
-// dfs_ceiling.py's module docstring and README for what each measures
-// and the real backtest numbers behind them. The Optimal Lineup tab's
-// Estimated_Salary is a MODELED estimate,
+// Boom-Adjusted, Boom Rate, and Matchup Boom (last two hitters only) are
+// dfs_ceiling.py's upside/volatility signals - additional informational
+// columns alongside the mean DK Pts projection, not replacements for it.
+// Real backtest finding worth knowing: Boom Rate (a player's plain
+// historical boom frequency) actually beat Matchup Boom (the same rate
+// adjusted by today's matchup) at flagging real boom days - the matchup
+// multiplier added noise, not signal, so Boom Rate is the more
+// trustworthy of the two. See dfs_ceiling.py's module docstring and
+// README for the full numbers. The Optimal Lineup tab's Estimated_Salary
+// is a MODELED estimate,
 // not a real DraftKings price - see renderOptimalLineup below and
 // estimated_salary.py's module docstring.
 
@@ -65,6 +69,7 @@ const rows = dfsHitters.map(p=>({
 "DK Pts": p.DK_Points_Hitter && p.DK_Points_Hitter !== "" ? Number(p.DK_Points_Hitter).toFixed(2) : "-",
 "Ceiling (P90)": p.Ceiling_DK_Points && p.Ceiling_DK_Points !== "" ? Number(p.Ceiling_DK_Points).toFixed(2) : "-",
 "Boom-Adjusted": p.Boom_Adjusted_DK_Points && p.Boom_Adjusted_DK_Points !== "" ? Number(p.Boom_Adjusted_DK_Points).toFixed(2) : "-",
+"Boom Rate": p.Boom_Rate && p.Boom_Rate !== "" ? Number(p.Boom_Rate).toFixed(3) : "-",
 "Matchup Boom": p.Matchup_Boom_Score && p.Matchup_Boom_Score !== "" ? Number(p.Matchup_Boom_Score).toFixed(3) : "-",
 }))
 buildTable(rows, "hittersTable")

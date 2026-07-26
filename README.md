@@ -1085,7 +1085,38 @@ on their volatility side - only the mean term reads today's opponent.
   P(boom) in a literal sense.
 
 **Backtested** (`dfs_ceiling.backtest_matchup_boom_signal`, same 20-date
-no-lookahead sample, hitters only): `MATCHUP_BOOM_RESULTS_PLACEHOLDER`
+no-lookahead sample, hitters only, n=5,430, 689 real boom-days against an
+average no-lookahead threshold of ~14.0 points) - capture rate of those
+689 real boom days, i.e. what fraction were flagged in advance by each
+signal's own top decile:
+
+| signal | capture rate |
+|---|---|
+| Mean projection (`DK_Points_Hitter`) alone | 10.6% |
+| `Matchup_Boom_Score` (boom rate x today's matchup) | 14.1% |
+| `Boom_Rate` alone (no matchup adjustment at all) | **17.3%** |
+
+**Honest, somewhat surprising result: the matchup adjustment made it
+WORSE, not better.** `Boom_Rate` alone - a player's plain historical
+frequency of clearing the shared bar, with no read on today's opponent at
+all - beat the matchup-multiplied version by a real margin (17.3% vs.
+14.1%), and both comfortably beat the mean projection. Multiplying by
+`Matchup_Ratio` added noise rather than signal here - consistent with
+`Matchup_Ratio` already being flagged elsewhere in this project (see
+`dfs.py`'s module docstring) as the single highest-risk modeling choice
+in the whole DFS feature set, and already SUPERSEDED by an ML model for
+the main hitter projection specifically because the heuristic ratio
+didn't hold up. The same weak signal dragging down `DK_Points_Hitter`
+drags down `Matchup_Boom_Score` too when multiplied in.
+
+Because `Boom_Rate` is the real, validated win here, it's exposed as its
+own column (not just an internal ingredient of `Matchup_Boom_Score`) -
+use `Boom_Rate` to identify genuinely boom-prone hitters; treat
+`Matchup_Boom_Score` as informational/exploratory only, not as an
+improvement over it. This is reported plainly rather than reframed as a
+win, matching how this project has always handled a backtest that didn't
+confirm the hypothesis (see Age Curves HR9's KNN-vs-ML precedent,
+Ceiling/Boom-Adjusted's pitcher non-results above).
 
 **Hitters only** - pitchers have no `Matchup_Ratio` analog in this
 project, and the earlier Ceiling/Boom-Adjusted backtests already found no
