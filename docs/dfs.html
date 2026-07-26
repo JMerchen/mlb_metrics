@@ -70,6 +70,19 @@ to build a ceiling-maximizing lineup instead. See README for the backtest
 that checked whether ranking by ceiling actually helps.
 </p>
 
+<p style="opacity:.75; max-width:700px; border-left:3px solid #4a90d9; padding-left:10px;">
+<strong>Boom-Adjusted:</strong> neither pure mean nor pure ceiling - a
+player with real, FREQUENT upside swings (sometimes 20, sometimes 5,
+sometimes 0, averaging 4.8) ranks above a metronomic player averaging a
+flat 5, without the score being blind to the mean the way a single
+ceiling game is. Computed as the mean projection plus a validated
+multiple of the player's own real historical upside-only volatility (a
+"semi-deviation" - only above-average games count, so bust-heavy players
+aren't rewarded the way a boom-heavy player is). Also informational only;
+pass <code>--objective boom</code> to build a boom-adjusted lineup. See
+README for the exact formula and the k-value backtest that chose it.
+</p>
+
 <div class="tabGroup" id="positionTabs">
 <button class="tabButton active" data-position="hitters" onclick="selectPosition('hitters')">Hitters</button>
 <button class="tabButton" data-position="pitchers" onclick="selectPosition('pitchers')">Pitchers</button>

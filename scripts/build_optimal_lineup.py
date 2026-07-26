@@ -21,22 +21,26 @@ even the cheapest full roster exceeds the cap) all leave yesterday's
 optimal_lineup.csv in place rather than writing anything.
 
 Also writes docs/data/dfs_salary_pool.csv (every eligible player considered,
-with their dk_slot/DK_Points/Ceiling_DK_Points/Estimated_Salary) - not
-required by the page, but real transparency into what the optimizer
-actually saw, matching this project's "don't hide the ingredients"
-culture.
+with their dk_slot/DK_Points/Ceiling_DK_Points/Boom_Adjusted_DK_Points/
+Estimated_Salary) - not required by the page, but real transparency into
+what the optimizer actually saw, matching this project's "don't hide the
+ingredients" culture.
 
-`--objective {mean,ceiling}` selects what the optimizer maximizes: "mean"
-(the default, preserving all prior behavior) uses DK_Points_Hitter/Pitcher;
-"ceiling" uses dfs_ceiling.py's Ceiling_DK_Points instead, for a
-tournament/GPP-style lineup built from real historical spike-game upside
-rather than reliable-average points. Ceiling is opt-in, not the default -
-see dfs_ceiling.py's module docstring for why (the signal hasn't been
-validated to actually help yet).
+`--objective {mean,ceiling,boom}` selects what the optimizer maximizes:
+"mean" (the default, preserving all prior behavior) uses
+DK_Points_Hitter/Pitcher; "ceiling" uses dfs_ceiling.py's Ceiling_DK_Points
+instead, for a tournament/GPP-style lineup built from a single real
+historical spike game; "boom" uses Boom_Adjusted_DK_Points (mean + k times
+a player's real historical UPSIDE-ONLY volatility) - a middle ground the
+user explicitly asked for, rewarding real, frequent boom potential without
+chasing one outlier game the way pure ceiling does. None of "ceiling"/
+"boom" is the default - see dfs_ceiling.py's module docstring for the
+backtest evidence behind each.
 
 Usage:
     python scripts/build_optimal_lineup.py
     python scripts/build_optimal_lineup.py --objective ceiling
+    python scripts/build_optimal_lineup.py --objective boom
 """
 
 import argparse
@@ -49,7 +53,7 @@ import pandas as pd
 
 from mlb_metrics import config, dfs_optimizer, roster_positions
 
-OBJECTIVE_COLUMNS = {"mean": "DK_Points", "ceiling": "Ceiling_DK_Points"}
+OBJECTIVE_COLUMNS = {"mean": "DK_Points", "ceiling": "Ceiling_DK_Points", "boom": "Boom_Adjusted_DK_Points"}
 
 
 def main():

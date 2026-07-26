@@ -41,19 +41,23 @@ one real person to fill two different roster slots at once), which isn't
 a legal DK lineup. solve_optimal_lineup adds a `<= 1` constraint across any
 key_mlbam appearing more than once in the pool to prevent this.
 
-## Objective: mean points (default) or ceiling
+## Objective: mean points (default), ceiling, or boom-adjusted
 
 solve_optimal_lineup's `objective_column` selects what gets maximized:
 "DK_Points" (the default, preserving all prior behavior - the existing
-mean projection) or "Ceiling_DK_Points" (dfs_ceiling.py's real-history
-upside signal, for a tournament/GPP-style lineup built from spike-game
-players instead of reliable-average ones). Ceiling is NOT the default -
-see dfs_ceiling.py's module docstring for why it ships opt-in until a
-real backtest validates it actually helps. A player with no real scored
-history has no per-player ceiling to fall back to salary-cap math on, so
-build_player_pool defaults their Ceiling_DK_Points to their own DK_Points
-(the mean projection) rather than leaving it NaN, which would otherwise
-make them silently unselectable under a ceiling objective."""
+mean projection), "Ceiling_DK_Points" (dfs_ceiling.py's real-history
+90th-percentile upside signal, for a boom-or-bust tournament/GPP lineup),
+or "Boom_Adjusted_DK_Points" (dfs_ceiling.py's mean + k*upside-deviation
+blend - rewards a player's real, FREQUENT volatility without chasing a
+single outlier game the way pure ceiling does; see dfs_ceiling.py's
+module docstring for the exact math and why this is neither pure mean nor
+pure ceiling). None of the two alternatives is the default - see
+dfs_ceiling.py's module docstring for why each ships opt-in until backtest
+evidence validates it. A player with no real scored history has no
+per-player ceiling/deviation to fall back to salary-cap math on, so
+build_player_pool defaults both alternative columns to their own DK_Points
+(the mean projection) rather than leaving them NaN, which would otherwise
+make them silently unselectable under a non-mean objective."""
 
 import pandas as pd
 import pulp
@@ -62,7 +66,7 @@ from mlb_metrics import config, estimated_salary
 
 POOL_COLUMNS = [
     "key_mlbam", "name_first", "name_last", "team", "opponent", "dk_slot",
-    "DK_Points", "Ceiling_DK_Points", "Estimated_Salary",
+    "DK_Points", "Ceiling_DK_Points", "Boom_Adjusted_DK_Points", "Estimated_Salary",
 ]
 
 
@@ -79,17 +83,19 @@ def build_player_pool(hitters: pd.DataFrame, pitchers: pd.DataFrame, eligibility
     directly."""
     hitters = hitters.merge(eligibility[["key_mlbam", "dk_slot"]], on="key_mlbam", how="inner").copy()
     hitters["DK_Points"] = hitters["DK_Points_Hitter"]
-    if "Ceiling_DK_Points" not in hitters.columns:
-        hitters["Ceiling_DK_Points"] = pd.NA
-    hitters["Ceiling_DK_Points"] = hitters["Ceiling_DK_Points"].fillna(hitters["DK_Points_Hitter"])
+    for column in ("Ceiling_DK_Points", "Boom_Adjusted_DK_Points"):
+        if column not in hitters.columns:
+            hitters[column] = pd.NA
+        hitters[column] = hitters[column].fillna(hitters["DK_Points_Hitter"])
     hitters["Estimated_Salary"] = estimated_salary.compute_hitter_estimated_salary(hitters["DK_Points_Hitter"])
 
     pitchers = pitchers.copy()
     pitchers["dk_slot"] = "P"
     pitchers["DK_Points"] = pitchers["DK_Points_Pitcher"]
-    if "Ceiling_DK_Points" not in pitchers.columns:
-        pitchers["Ceiling_DK_Points"] = pd.NA
-    pitchers["Ceiling_DK_Points"] = pitchers["Ceiling_DK_Points"].fillna(pitchers["DK_Points_Pitcher"])
+    for column in ("Ceiling_DK_Points", "Boom_Adjusted_DK_Points"):
+        if column not in pitchers.columns:
+            pitchers[column] = pd.NA
+        pitchers[column] = pitchers[column].fillna(pitchers["DK_Points_Pitcher"])
     pitchers["Estimated_Salary"] = estimated_salary.compute_pitcher_estimated_salary(pitchers["DK_Points_Pitcher"])
 
     return pd.concat([hitters[POOL_COLUMNS], pitchers[POOL_COLUMNS]], ignore_index=True)

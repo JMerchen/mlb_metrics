@@ -171,3 +171,128 @@ def test_backtest_ceiling_signal_returns_well_formed_metrics(tmp_path):
             if "ceiling_capture_rate" in metrics:
                 assert 0.0 <= metrics["ceiling_capture_rate"] <= 1.0
                 assert 0.0 <= metrics["mean_projection_capture_rate"] <= 1.0
+
+
+def test_compute_upside_deviation_exact_arithmetic_for_a_qualified_player():
+    # Player 1: [0, 0, 10, 10, 10] -> mean=6. Upside-only deviations:
+    # 0 (below mean, clipped to 0), 0, 4, 4, 4 -> squared: 0,0,16,16,16.
+    # mean of those / 5 games = 48/5 = 9.6 -> sqrt = 3.098...
+    values = [0, 0, 10, 10, 10, 0, 0, 10, 10, 10]  # 10 games, clears min_games=10
+    history = pd.DataFrame({"key_mlbam": [1] * len(values), "Actual_DK_Points_Modeled": values})
+
+    result = dfs_ceiling.compute_upside_deviation(history, min_games=10).set_index("key_mlbam")
+
+    mean = sum(values) / len(values)
+    expected = (sum(max(v - mean, 0) ** 2 for v in values) / len(values)) ** 0.5
+    assert result.loc[1, "Upside_Deviation"] == pytest.approx(expected)
+    assert result.loc[1, "n_games"] == 10
+    assert result.loc[1, "Upside_Deviation_Source"] == "player"
+
+
+def test_compute_upside_deviation_ignores_downside_spread():
+    # Two series with the SAME mean (9) and the SAME upside-side values
+    # (10, 12, 14, 16, 18), but very different downside spread - a
+    # symmetric bust pattern in one, a shallow one in the other. Only the
+    # upside side is measured, so both must produce the SAME
+    # Upside_Deviation despite very different overall variance.
+    symmetric_bust = [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]  # mean=9
+    shallow_bust = [4, 4, 4, 4, 4, 10, 12, 14, 16, 18]  # mean=9 too
+    assert sum(symmetric_bust) / len(symmetric_bust) == pytest.approx(sum(shallow_bust) / len(shallow_bust))
+
+    history_symmetric = pd.DataFrame({"key_mlbam": [1] * len(symmetric_bust), "Actual_DK_Points_Modeled": symmetric_bust})
+    history_shallow = pd.DataFrame({"key_mlbam": [1] * len(shallow_bust), "Actual_DK_Points_Modeled": shallow_bust})
+    result_symmetric = dfs_ceiling.compute_upside_deviation(history_symmetric, min_games=10).set_index("key_mlbam")
+    result_shallow = dfs_ceiling.compute_upside_deviation(history_shallow, min_games=10).set_index("key_mlbam")
+
+    assert result_symmetric.loc[1, "Upside_Deviation"] == pytest.approx(result_shallow.loc[1, "Upside_Deviation"])
+
+
+def test_compute_upside_deviation_small_sample_falls_back_to_group_wide():
+    player_1_values = list(range(1, 16))  # 15 games, clears min_games=10
+    player_2_values = [0, 20]  # only 2 games, below min_games=10
+    history = pd.DataFrame({
+        "key_mlbam": [1] * len(player_1_values) + [2] * len(player_2_values),
+        "Actual_DK_Points_Modeled": player_1_values + player_2_values,
+    })
+
+    result = dfs_ceiling.compute_upside_deviation(history, min_games=10).set_index("key_mlbam")
+
+    all_values = player_1_values + player_2_values
+    group_mean = sum(all_values) / len(all_values)
+    expected_group_deviation = (sum(max(v - group_mean, 0) ** 2 for v in all_values) / len(all_values)) ** 0.5
+
+    assert result.loc[2, "n_games"] == 2
+    assert result.loc[2, "Upside_Deviation_Source"] == "group_fallback"
+    assert result.loc[2, "Upside_Deviation"] == pytest.approx(expected_group_deviation)
+    assert result.loc[1, "Upside_Deviation_Source"] == "player"
+    # Player 1's own value must differ from the group-wide fallback here -
+    # otherwise this test couldn't distinguish "used its own value" from
+    # "used the fallback by coincidence".
+    assert result.loc[1, "Upside_Deviation"] != pytest.approx(expected_group_deviation)
+
+
+def test_compute_upside_deviation_empty_history_returns_empty_with_expected_columns():
+    result = dfs_ceiling.compute_upside_deviation(pd.DataFrame(columns=["key_mlbam", "Actual_DK_Points_Modeled"]))
+    assert result.empty
+    assert list(result.columns) == ["key_mlbam", "Upside_Deviation", "n_games", "Upside_Deviation_Source"]
+
+
+def test_compute_boom_adjusted_score_exact_arithmetic():
+    mean_points = pd.Series([5.0, 10.0])
+    upside_deviation = pd.Series([2.0, 0.5])
+
+    result = dfs_ceiling.compute_boom_adjusted_score(mean_points, upside_deviation, k=1.5)
+
+    assert result.tolist() == pytest.approx([5.0 + 1.5 * 2.0, 10.0 + 1.5 * 0.5])
+
+
+def test_compute_boom_adjusted_score_zero_k_reduces_to_mean():
+    mean_points = pd.Series([5.0, 10.0])
+    upside_deviation = pd.Series([2.0, 0.5])
+
+    result = dfs_ceiling.compute_boom_adjusted_score(mean_points, upside_deviation, k=0.0)
+
+    assert result.tolist() == pytest.approx(mean_points.tolist())
+
+
+def test_compute_boom_adjusted_score_rewards_volatile_player_over_steady_one_with_same_or_higher_mean():
+    # The user's exact scenario: player A scores a flat 5 every night
+    # (zero deviation); player B averages 4.8 but with real upside swings
+    # (nonzero Upside_Deviation). A positive k must rank B above A despite
+    # B's slightly lower mean.
+    mean_points = pd.Series({"A": 5.0, "B": 4.8})
+    upside_deviation = pd.Series({"A": 0.0, "B": 6.0})
+
+    result = dfs_ceiling.compute_boom_adjusted_score(mean_points, upside_deviation, k=0.5)
+
+    assert result["B"] > result["A"]
+
+
+def test_backtest_boom_adjusted_signal_no_persisted_data_returns_zero_n_per_k(tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+
+    result = dfs_ceiling.backtest_boom_adjusted_signal(str(raw_dir), season=2026, days=20, k_grid=[0.0, 1.0])
+
+    assert result["hitters"][0.0]["n"] == 0
+    assert result["hitters"][1.0]["n"] == 0
+    assert result["pitchers"][0.0]["n"] == 0
+
+
+def test_backtest_boom_adjusted_signal_returns_well_formed_metrics_per_k(tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    _multi_game_statcast(n_games=8).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    k_grid = [0.0, 0.5, 1.0]
+    result = dfs_ceiling.backtest_boom_adjusted_signal(str(raw_dir), season=2026, days=5, k_grid=k_grid)
+
+    for player_type in ("hitters", "pitchers"):
+        for k in k_grid:
+            metrics = result[player_type][k]
+            assert "n" in metrics
+            if metrics["n"] >= 2 and "correlation" in metrics:
+                correlation = metrics["correlation"]
+                assert pd.isna(correlation) or -1.0 <= correlation <= 1.0
+                if "capture_rate" in metrics:
+                    assert 0.0 <= metrics["capture_rate"] <= 1.0

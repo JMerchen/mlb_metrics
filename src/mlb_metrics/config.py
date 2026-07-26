@@ -800,6 +800,30 @@ DFS_CEILING_MIN_GAMES = 10
 # yet. Re-run this backtest (and update this comment) after any change to
 # DK_Points_Hitter/DK_Points_Pitcher's own formula.
 
+# --- Boom_Adjusted_DK_Points (dfs_ceiling.compute_boom_adjusted_score) ---
+#
+# Neither pure mean nor pure ceiling: the user explicitly wants a player
+# with real, frequent upside swings (sometimes 20, sometimes 5, sometimes
+# 0, averaging 4.8) ranked ABOVE a metronomic player averaging a flat 5 -
+# credit for genuine volatility, not a max-chasing boom-or-bust score and
+# not blind to the mean either. Boom_Adjusted_DK_Points =
+# DK_Points_Hitter/Pitcher (today's mean projection) + k * Upside_Deviation
+# (a player's own real historical UPSIDE-ONLY semi-deviation - see
+# dfs_ceiling.compute_upside_deviation's docstring for exactly why it's a
+# semi-deviation, not plain stdev).
+#
+# The grid dfs_ceiling.backtest_boom_adjusted_signal searches to pick k
+# from real data rather than guessing one.
+DFS_BOOM_ADJUSTED_K_GRID = [0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0]
+
+# Chosen k per player type (may legitimately differ, or land on 0.0 for a
+# type where no k beat the plain mean - see dfs_ceiling.py's Ceiling_DK_Points
+# precedent, which found real signal for hitters but not pitchers).
+# PLACEHOLDER pending backtest_boom_adjusted_signal's real results - see
+# this comment's continuation once the real backtest has run.
+DFS_BOOM_ADJUSTED_K_HITTER = 0.5
+DFS_BOOM_ADJUSTED_K_PITCHER = 0.5
+
 # --- Optimal Lineup (docs/dfs.html's "Optimal Lineup" tab, roster_positions.py,
 # estimated_salary.py, dfs_optimizer.py, scripts/build_optimal_lineup.py) ---
 #
