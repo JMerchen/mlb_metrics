@@ -27,6 +27,13 @@ backtest) - a missing/not-yet-trained artifact silently keeps the
 existing heuristic, so this script's behavior never depends on whether
 that weekly training job has run yet.
 
+Also merges in Ceiling_DK_Points (dfs_ceiling.py) - an ADDITIONAL
+informational upside/volatility column alongside the existing mean
+projection, not a replacement for it (see dfs_ceiling.py's module
+docstring for why). A player with no real scored history at all (a true
+rookie/no games yet) gets Ceiling_Source="no_history" and a missing
+Ceiling_DK_Points rather than a faked value.
+
 Usage:
     python scripts/build_dfs_rankings.py
 """
@@ -40,7 +47,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import pandas as pd
 
-from mlb_metrics import config, data, dfs, dfs_ml, matchup, pitcher_form, pipeline, schedule
+from mlb_metrics import config, data, dfs, dfs_ceiling, dfs_ml, matchup, pitcher_form, pipeline, schedule
 
 
 def main():
@@ -90,6 +97,15 @@ def main():
 
     hitter_features = dfs_ml.build_hitter_features(wave, pave, confidence, schedule_df, matchup_probability)
     hitters, pitchers = dfs_ml.apply_ml_overrides(hitters, hitter_features, pitchers)
+
+    points_history = dfs_ceiling.compute_player_dk_points_history(persisted)
+    hitter_ceiling = dfs_ceiling.compute_ceiling_percentiles(points_history["hitters"])
+    pitcher_ceiling = dfs_ceiling.compute_ceiling_percentiles(points_history["pitchers"])
+    hitters = hitters.merge(hitter_ceiling, on="key_mlbam", how="left")
+    pitchers = pitchers.merge(pitcher_ceiling, on="key_mlbam", how="left")
+    for df in (hitters, pitchers):
+        df["Ceiling_Source"] = df["Ceiling_Source"].fillna("no_history")
+        df["n_games"] = df["n_games"].fillna(0)
 
     os.makedirs(args.data_dir, exist_ok=True)
     hitters.to_csv(os.path.join(args.data_dir, "dfs_hitters.csv"), index=False)

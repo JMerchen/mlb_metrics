@@ -32,11 +32,11 @@ DFS Rankings
 Today's hitters and probable starting pitchers, ranked by estimated
 DraftKings Classic MLB fantasy points, plus an Optimal Lineup tab that
 builds a salary-cap-and-position-slot DraftKings Classic lineup on top of
-those projections. Hitter points model hit-type scoring only
+those projections. Hitter points model hit-type scoring
 (singles/doubles/triples/home runs, adjusted for today's actual
-opposing pitcher) - walks, HBP, runs, RBIs, and stolen bases are NOT
-included, since this project has no walk-rate, lineup-run-context, or
-stolen-base signal yet. Pitcher points model innings/strikeouts/walks
+opposing pitcher) plus walks, hit-by-pitch, and RBIs - runs scored and
+stolen bases are NOT included, since this project has no reliable
+runner-tracking or stolen-base signal yet. Pitcher points model innings/strikeouts/walks
 allowed/hits allowed plus an estimated earned-run penalty (from FIP, not
 real ERA - see README for why); wins and complete-game/no-hitter bonuses
 are NOT included. See README for the full methodology, known
@@ -49,12 +49,25 @@ original heuristic hitter ranking had essentially zero real correlation
 with actual next-game results (-0.004). A gradient-boosting model trained
 on the same underlying matchup ingredients (not the flawed heuristic
 formula) has since replaced it and now shows a real, if still modest,
-positive signal (correlation 0.145). Pitcher hits-allowed and walks
+positive signal (correlation 0.162). Pitcher hits-allowed and walks
 projections were similarly upgraded via a validated regression model.
 None of these are strong signals yet - treat them as directionally useful,
 not high-confidence - but each one now beats both a naive guess and its
 own prior heuristic on real held-out data. See README for the full
 numbers and methodology.
+</p>
+
+<p style="opacity:.75; max-width:700px; border-left:3px solid #4a90d9; padding-left:10px;">
+<strong>Ceiling (P90):</strong> a player's own real historical 90th-percentile
+DK-point game - an UPSIDE signal for tournament-style lineups, alongside
+(not instead of) the mean projection above. Tournament-winning lineups
+tend to come from players who spiked well above their average on the day,
+not from players who reliably hit their mean - this column surfaces who
+has actually done that before. Informational only: the Optimal Lineup tab
+defaults to maximizing the mean projection; pass
+<code>--objective ceiling</code> to <code>scripts/build_optimal_lineup.py</code>
+to build a ceiling-maximizing lineup instead. See README for the backtest
+that checked whether ranking by ceiling actually helps.
 </p>
 
 <div class="tabGroup" id="positionTabs">

@@ -22,7 +22,18 @@ matchup.py's own internal log5-blend inputs - the opposing starter's PAVE,
 their bullpen's PAVE, the venue's Park_Factor, is_home) instead of only
 the already-blended Matchup_Hit_Probability, so a model can learn its own
 (possibly additive, possibly nonlinear) combination rather than
-inheriting the multiplicative assumption.
+inheriting the multiplicative assumption. Also includes Expected_BB/
+Expected_HBP/Expected_RBI (hitters.compute_extended_dk_rates) now that
+dfs.compute_hitter_dk_points scores those categories too - the SAME
+raw-ingredients philosophy applies: these are fed directly, not run
+through the flagged ratio.
+
+**Retraining note**: HITTER_FEATURE_COLUMNS widened when BB/HBP/RBI
+scoring shipped - any model artifact trained on the OLD (narrower) schema
+is schema-incompatible and MUST be retired (deleted, not left in place)
+whenever this list changes, since apply_ml_overrides's predict() call is
+NOT wrapped in a try/except - a stale artifact would hard-crash
+scripts/build_dfs_rankings.py rather than gracefully falling back.
 
 ## Pitcher features: dfs.py's own engineered columns
 
@@ -55,6 +66,7 @@ from mlb_metrics import config, dfs, ml_models
 HITTER_FEATURE_COLUMNS = [
     "WAVE", "WAVE_L", "WAVE_R", "PA_L", "PA_R", "probability",
     "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
+    "Expected_BB", "Expected_HBP", "Expected_RBI",
     "starter_PAVE", "Bullpen_PAVE", "Park_Factor", "is_home",
     "Matchup_Hit_Probability",
 ]

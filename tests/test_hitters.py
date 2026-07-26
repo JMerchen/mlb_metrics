@@ -7,11 +7,22 @@ LATEST = "2026-06-20"
 
 
 def _at_bats(batter, throws, rows):
-    """rows: list of (game_date, events) tuples."""
-    return [
-        {"batter": batter, "game_date": pd.Timestamp(date), "events": events, "p_throws": throws}
-        for date, events in rows
-    ]
+    """rows: list of (game_date, events) tuples, or (game_date, events,
+    bat_score, post_bat_score) 4-tuples when a row needs a real RBI delta -
+    bat_score/post_bat_score default to (0, 0) (Expected_RBI == 0) when
+    omitted, so existing 2-tuple call sites are unaffected."""
+    result = []
+    for row in rows:
+        if len(row) == 4:
+            date, events, bat_score, post_bat_score = row
+        else:
+            date, events = row
+            bat_score, post_bat_score = 0, 0
+        result.append({
+            "batter": batter, "game_date": pd.Timestamp(date), "events": events, "p_throws": throws,
+            "bat_score": bat_score, "post_bat_score": post_bat_score,
+        })
+    return result
 
 
 def test_compute_wave_blends_windows_and_converts_to_probability():
@@ -73,6 +84,43 @@ def test_wave_excludes_batters_with_no_full_season_at_bats_vs_rhp():
     assert wave.empty
 
 
+def test_compute_extended_dk_rates_exact_arithmetic_all_windows():
+    # All 5 PAs land within 7 days of LATEST (2026-06-20), so they're
+    # included in every one of config.WHOPS_WTB_WINDOWS (7d/15d/30d/full) -
+    # weights sum to 1.0, so the blended rate equals the raw rate exactly,
+    # same technique the WAVE window test above uses.
+    rows = _at_bats(1, "R", [
+        ("2026-06-15", "walk"),
+        ("2026-06-16", "hit_by_pitch"),
+        ("2026-06-17", "single", 2, 3),   # scores 1 run -> 1 RBI
+        ("2026-06-18", "field_out"),
+        ("2026-06-19", "field_out"),
+    ])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_extended_dk_rates(dt).set_index("key_mlbam")
+
+    from mlb_metrics import config
+    expected_rate = 1 / 5
+    assert result.loc[1, "Expected_BB"] == pytest.approx(expected_rate * config.WTB_TRIALS_PER_GAME)
+    assert result.loc[1, "Expected_HBP"] == pytest.approx(expected_rate * config.WTB_TRIALS_PER_GAME)
+    assert result.loc[1, "Expected_RBI"] == pytest.approx(expected_rate * config.WTB_TRIALS_PER_GAME)
+
+
+def test_compute_extended_dk_rates_blends_platoon_share():
+    # Batter faces both sides with different BB rates - isolate the
+    # abtl/abtr platoon blend the same way test_compute_wave's batter 3 does.
+    rows = _at_bats(1, "R", [("2026-06-19", "walk"), ("2026-06-19", "field_out")])  # 1/2 BB vs R
+    rows += _at_bats(1, "L", [("2026-06-19", "field_out"), ("2026-06-19", "field_out")])  # 0/2 BB vs L
+    dt = pd.DataFrame(rows)
+
+    from mlb_metrics import config
+    result = hitters.compute_extended_dk_rates(dt).set_index("key_mlbam")
+
+    # 2 PA each side -> abtr = abtl = 0.5; blended BB rate = 0.5*0.5 + 0*0.5 = 0.25
+    assert result.loc[1, "Expected_BB"] == pytest.approx(0.25 * config.WTB_TRIALS_PER_GAME)
+
+
 def test_compute_game_hit_probability_blends_game_level_hit_rate():
     rows = [
         {"batter": 1, "game_id": 1, "game_date": pd.Timestamp("2026-03-12"), "events": "field_out"},
@@ -104,6 +152,7 @@ def test_assemble_hitters_output_columns_and_derived_fields():
         "key_mlbam", "name_first", "name_last", "team", "PA_L", "PA_R",
         "WAVE", "WAVE_L", "WAVE_R", "probability_L", "probability_R", "probability",
         "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
+        "Expected_BB", "Expected_HBP", "Expected_RBI",
     ]
     row = result.iloc[0]
     assert row["name_last"] == "Player"

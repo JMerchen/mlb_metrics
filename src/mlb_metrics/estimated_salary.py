@@ -16,17 +16,31 @@ or `DK_Salary` (config.py, this module, dfs_optimizer.py,
 scripts/build_optimal_lineup.py, the CSV column header, docs/dfs.html's
 warning box, docs/dfs.js's rendered table header, README).
 
-## The formula
+## The formula: ONE shared dollars-per-point rate
 
 Linear min-max scaling of DK_Points_Hitter/DK_Points_Pitcher into
-[config.DFS_ESTIMATED_SALARY_FLOOR, config.DFS_ESTIMATED_SALARY_CEILING_HITTER
-or _PITCHER], clipped at both ends, then rounded to the nearest
+[config.DFS_ESTIMATED_SALARY_FLOOR, config.DFS_ESTIMATED_SALARY_CEILING],
+clipped at both ends, then rounded to the nearest
 config.DFS_ESTIMATED_SALARY_ROUND_TO ($100 - real DK salaries are always
-$100 increments, confirmed via web search). The reference min/max points
-each scale maps FROM (config.DFS_REFERENCE_MIN/MAX_POINTS_HITTER/PITCHER)
-are computed from this project's own first real day of production DFS
-output, not guessed - see those constants' docstring in config.py for the
-exact numbers and their v1-calibration caveat.
+$100 increments, confirmed via web search). Both hitters and pitchers
+scale from the SAME reference point range
+(config.DFS_REFERENCE_MIN_POINTS/DFS_REFERENCE_MAX_POINTS) into the SAME
+salary range - a deliberate fix for a real bug found in production (see
+git history / README's "Salary $/point parity" note): the original v1 had
+each position group independently min-max-scaled to its OWN point range
+and its OWN salary ceiling, which silently made a pitcher point worth
+roughly 5x a hitter point in salary terms purely because pitcher DK
+scoring naturally spans a much wider raw point range (box-score categories
+piling up over 6 innings) than hitters' hit-type-driven scoring - a
+scaling artifact, not real relative DFS value. One point is one point on
+DraftKings regardless of position; this formula now prices it that way.
+A pitcher still costs far more than a hitter in practice, but because
+pitchers genuinely PROJECT far more points (the real point spread), not
+because of a second hidden per-position rescaling on top of that.
+
+The shared reference min/max points are computed from this project's own
+real production DFS output, not guessed - see those constants' docstring
+in config.py for the exact numbers and their v1-calibration caveat.
 
 This is a single-signal (DK_Points only) linear model - real DK pricing
 also reflects season-long track record, popularity/ownership effects, and
@@ -43,7 +57,7 @@ def compute_estimated_salary(
     reference_min_points: float,
     reference_max_points: float,
     floor: int = config.DFS_ESTIMATED_SALARY_FLOOR,
-    ceiling: int = config.DFS_ESTIMATED_SALARY_CEILING_HITTER,
+    ceiling: int = config.DFS_ESTIMATED_SALARY_CEILING,
     round_to: int = config.DFS_ESTIMATED_SALARY_ROUND_TO,
 ) -> pd.Series:
     """Linear min-max scaling of `dk_points` into [floor, ceiling], clipped
@@ -64,18 +78,21 @@ def compute_estimated_salary(
 
 
 def compute_hitter_estimated_salary(dk_points_hitter: pd.Series) -> pd.Series:
+    """Delegates to the SHARED reference range/ceiling (not a
+    hitter-specific one) - see module docstring for why: one DK point is
+    worth the same salary dollars regardless of position."""
     return compute_estimated_salary(
         dk_points_hitter,
-        config.DFS_REFERENCE_MIN_POINTS_HITTER,
-        config.DFS_REFERENCE_MAX_POINTS_HITTER,
-        ceiling=config.DFS_ESTIMATED_SALARY_CEILING_HITTER,
+        config.DFS_REFERENCE_MIN_POINTS,
+        config.DFS_REFERENCE_MAX_POINTS,
     )
 
 
 def compute_pitcher_estimated_salary(dk_points_pitcher: pd.Series) -> pd.Series:
+    """Delegates to the SAME shared reference range/ceiling
+    compute_hitter_estimated_salary uses - see module docstring."""
     return compute_estimated_salary(
         dk_points_pitcher,
-        config.DFS_REFERENCE_MIN_POINTS_PITCHER,
-        config.DFS_REFERENCE_MAX_POINTS_PITCHER,
-        ceiling=config.DFS_ESTIMATED_SALARY_CEILING_PITCHER,
+        config.DFS_REFERENCE_MIN_POINTS,
+        config.DFS_REFERENCE_MAX_POINTS,
     )

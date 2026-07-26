@@ -45,12 +45,46 @@ compute_matchup_adjustment/compute_hitter_dk_points below are the fallback
 path, used whenever no validated artifact is present - they are NOT
 removed, and remain what a fresh install without a trained model serves.
 
-**Explicitly excluded from v1** (documented, not silently rounded away):
-BB, HBP, runs scored, RBI, and stolen bases. This project has no
-walk-rate, lineup-run-context (runners on base when a player bats depends
-on teammates' OBP, not just this player), or stolen-base signal at all
-today - faking precision on those would be worse than leaving them out.
-DK_Points_Hitter is a hit-scoring-only estimate, not the full DK score.
+**Update: BB/HBP/RBI now included too.** The original v1 excluded five of
+DraftKings' nine hitter scoring categories (BB, HBP, runs, RBI, SB) - a
+gap the real data made obvious once compared against real elite hitters
+(a high-OBP power bat's real DK average is substantially inflated by
+walks/runs/RBI, categories this model couldn't see at all, which
+compressed exactly the players who should separate from replacement
+level). `hitters.compute_extended_dk_rates` now adds recency-windowed
+Expected_BB/Expected_HBP/Expected_RBI (same windowed-blend machinery as
+Expected_Bases, reusing config.WHOPS_WTB_WINDOWS - see that function's
+docstring), each scored at its own DK point value
+(config.DFS_DK_HITTER_BB_POINTS/HBP_POINTS/RBI_POINTS) and added directly
+to DK_Points_Hitter - NOT run through compute_matchup_adjustment's ratio,
+which was already flagged as this module's highest-risk choice and
+confirmed not to hold up; compounding it onto three more categories would
+just spread that same risk further. `DK_Points_Hitter_HitType` keeps the
+old hit-only subtotal alongside the new combined total, for continuity
+with the original backtest numbers.
+
+Expected_RBI is itself an approximation (helpers.estimate_rbi: a
+completed plate appearance's own bat_score/post_bat_score delta) with two
+known, accepted limitations - see that function's docstring (can miss a
+run scored on an earlier pitch of the same PA; can't distinguish a
+legitimate RBI from an error-scored or GIDP-third-out run, neither of
+which is a real RBI).
+
+**Still explicitly excluded from v1**: runs scored (crediting the RUN to
+the batter who eventually scored needs tracking a specific runner across
+multiple subsequent plate appearances within the same game/inning via
+on_1b/on_2b/on_3b - real engineering work with real edge-case risk from
+wild pitches/passed balls/caught-stealing/errors moving runners in ways
+not obviously visible in this project's row-per-pitch data shape,
+deferred as a documented v1.1 follow-up, not silently dropped) and stolen
+bases (Statcast's `events` column has no structured stolen-base event
+type at all - steals only appear in the free-text `des` description
+field, e.g. "Jeremy Peña steals (1) 2nd base", attributed to whoever was
+AT BAT during the steal, not the runner - crediting the correct player
+would require parsing a name out of free text and matching it back to a
+player id, a real departure from this project's established numeric-ID-
+join convention (schedule.py's/roster_positions.py's explicit rationale
+for avoiding name-matching) - explicitly NOT planned, not just deferred).
 
 ## Pitchers
 
@@ -122,9 +156,9 @@ from mlb_metrics import config
 
 HITTER_DFS_COLUMNS = [
     "key_mlbam", "name_first", "name_last", "team", "opponent", "is_home",
-    "PA_L", "PA_R", "Expected_Bases", "Game_Hit_Probability",
-    "Matchup_Hit_Probability", "Matchup_Ratio", "Adjusted_Expected_Bases",
-    "DK_Points_Hitter",
+    "PA_L", "PA_R", "Expected_Bases", "Expected_BB", "Expected_HBP", "Expected_RBI",
+    "Game_Hit_Probability", "Matchup_Hit_Probability", "Matchup_Ratio",
+    "Adjusted_Expected_Bases", "DK_Points_Hitter_HitType", "DK_Points_Hitter",
 ]
 
 PITCHER_DFS_COLUMNS = [
@@ -177,7 +211,13 @@ def compute_hitter_dk_points(
         scheduled["Matchup_Hit_Probability"], scheduled["Game_Hit_Probability"]
     )
     scheduled["Adjusted_Expected_Bases"] = scheduled["Expected_Bases"] * scheduled["Matchup_Ratio"]
-    scheduled["DK_Points_Hitter"] = scheduled["Adjusted_Expected_Bases"] * config.DFS_DK_POINTS_PER_TOTAL_BASE
+    scheduled["DK_Points_Hitter_HitType"] = scheduled["Adjusted_Expected_Bases"] * config.DFS_DK_POINTS_PER_TOTAL_BASE
+    scheduled["DK_Points_Hitter"] = (
+        scheduled["DK_Points_Hitter_HitType"]
+        + scheduled["Expected_BB"] * config.DFS_DK_HITTER_BB_POINTS
+        + scheduled["Expected_HBP"] * config.DFS_DK_HITTER_HBP_POINTS
+        + scheduled["Expected_RBI"] * config.DFS_DK_HITTER_RBI_POINTS
+    )
 
     return scheduled[HITTER_DFS_COLUMNS].sort_values("DK_Points_Hitter", ascending=False)
 

@@ -55,5 +55,18 @@ def test_is_hit_by_pitch():
     assert helpers.is_hit_by_pitch(EVENTS).tolist() == [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0]
 
 
+def test_is_walk_for_dk_scoring_counts_intentional_walks_too():
+    events = pd.Series(["walk", "intent_walk", "single", "strikeout"])
+    assert helpers.is_walk_for_dk_scoring(events).tolist() == [1, 1, 0, 0]
+
+
+def test_estimate_rbi_exact_score_delta_clipped_at_zero():
+    df = pd.DataFrame({
+        "bat_score": [0, 2, 5],
+        "post_bat_score": [2, 2, 4],  # last row: a data artifact, must clip to 0 not go negative
+    })
+    assert helpers.estimate_rbi(df).tolist() == [2, 0, 0]
+
+
 def test_outs_recorded():
     assert helpers.outs_recorded(OUTS_EVENTS).tolist() == [1, 1, 1, 1, 2, 2, 2, 0, 0, 0, 0]

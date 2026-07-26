@@ -87,6 +87,42 @@ def test_build_optimal_lineup_writes_lineup_and_pool(tmp_path, monkeypatch):
     assert "Estimated_Salary" in lineup.columns and "Salary" not in lineup.columns
 
 
+def test_build_optimal_lineup_ceiling_objective_can_select_different_players(tmp_path, monkeypatch):
+    module = _load_build_optimal_lineup_module()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    hitters, pitchers, slot_by_key = _full_slate()
+
+    # Give the OF candidate with the WORST mean projection a dramatically
+    # higher Ceiling_DK_Points, and the OF candidate that would normally be
+    # the mean pick a dramatically LOWER one - so "mean" and "ceiling"
+    # disagree on who fills that slot.
+    of_keys = [k for k, slot in slot_by_key.items() if slot == "OF"]
+    hitters = hitters.set_index("key_mlbam")
+    hitters["Ceiling_DK_Points"] = hitters["DK_Points_Hitter"]
+    worst_mean_of = min(of_keys, key=lambda k: hitters.loc[k, "DK_Points_Hitter"])
+    best_mean_of = max(of_keys, key=lambda k: hitters.loc[k, "DK_Points_Hitter"])
+    hitters.loc[worst_mean_of, "Ceiling_DK_Points"] = 50.0
+    hitters.loc[best_mean_of, "Ceiling_DK_Points"] = 0.5
+    hitters = hitters.reset_index()
+
+    _write_daily_csvs(data_dir, hitters, pitchers)
+    monkeypatch.setattr(module.roster_positions, "fetch_position_eligibility", _eligibility_fetcher(slot_by_key))
+
+    sys.argv = ["build_optimal_lineup.py", "--data-dir", str(data_dir), "--objective", "mean"]
+    module.main()
+    mean_lineup = pd.read_csv(data_dir / "optimal_lineup.csv")
+
+    sys.argv = ["build_optimal_lineup.py", "--data-dir", str(data_dir), "--objective", "ceiling"]
+    module.main()
+    ceiling_lineup = pd.read_csv(data_dir / "optimal_lineup.csv")
+
+    assert worst_mean_of not in mean_lineup["key_mlbam"].tolist()
+    assert worst_mean_of in ceiling_lineup["key_mlbam"].tolist()
+    assert best_mean_of in mean_lineup["key_mlbam"].tolist()
+    assert best_mean_of not in ceiling_lineup["key_mlbam"].tolist()
+
+
 def test_build_optimal_lineup_missing_daily_csvs_writes_nothing(tmp_path):
     module = _load_build_optimal_lineup_module()
     data_dir = tmp_path / "data"

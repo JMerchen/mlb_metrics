@@ -48,7 +48,7 @@ def main():
     hitters = result["hitters"]
     pitchers = result["pitchers"]
 
-    print(f"\n=== Hitters (hit-type DK points only - BB/HBP/R/RBI/SB excluded from both sides, not modeled) ===")
+    print(f"\n=== Hitters (hit-type + BB/HBP/RBI DK points - Runs/SB still excluded from both sides, not modeled) ===")
     if hitters.empty:
         print("No scorable hitter-days.")
     else:

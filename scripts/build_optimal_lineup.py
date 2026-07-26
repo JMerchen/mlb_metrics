@@ -21,12 +21,22 @@ even the cheapest full roster exceeds the cap) all leave yesterday's
 optimal_lineup.csv in place rather than writing anything.
 
 Also writes docs/data/dfs_salary_pool.csv (every eligible player considered,
-with their dk_slot/DK_Points/Estimated_Salary) - not required by the page,
-but real transparency into what the optimizer actually saw, matching this
-project's "don't hide the ingredients" culture.
+with their dk_slot/DK_Points/Ceiling_DK_Points/Estimated_Salary) - not
+required by the page, but real transparency into what the optimizer
+actually saw, matching this project's "don't hide the ingredients"
+culture.
+
+`--objective {mean,ceiling}` selects what the optimizer maximizes: "mean"
+(the default, preserving all prior behavior) uses DK_Points_Hitter/Pitcher;
+"ceiling" uses dfs_ceiling.py's Ceiling_DK_Points instead, for a
+tournament/GPP-style lineup built from real historical spike-game upside
+rather than reliable-average points. Ceiling is opt-in, not the default -
+see dfs_ceiling.py's module docstring for why (the signal hasn't been
+validated to actually help yet).
 
 Usage:
     python scripts/build_optimal_lineup.py
+    python scripts/build_optimal_lineup.py --objective ceiling
 """
 
 import argparse
@@ -39,10 +49,13 @@ import pandas as pd
 
 from mlb_metrics import config, dfs_optimizer, roster_positions
 
+OBJECTIVE_COLUMNS = {"mean": "DK_Points", "ceiling": "Ceiling_DK_Points"}
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--data-dir", default="docs/data")
+    parser.add_argument("--objective", choices=sorted(OBJECTIVE_COLUMNS), default="mean")
     args = parser.parse_args()
 
     hitters_path = os.path.join(args.data_dir, "dfs_hitters.csv")
@@ -70,7 +83,7 @@ def main():
         print("No players resolved a DK roster slot today - leaving yesterday's optimal_lineup.csv in place, if any.")
         return
 
-    lineup = dfs_optimizer.solve_optimal_lineup(pool)
+    lineup = dfs_optimizer.solve_optimal_lineup(pool, objective_column=OBJECTIVE_COLUMNS[args.objective])
     if lineup is None:
         print("Optimizer could not fill a full lineup under the salary cap today (too few eligible players at "
               "some position, or the cap is infeasible) - leaving yesterday's optimal_lineup.csv in place, if any.")
@@ -80,9 +93,10 @@ def main():
     pool.to_csv(os.path.join(args.data_dir, "dfs_salary_pool.csv"), index=False)
     lineup.to_csv(os.path.join(args.data_dir, "optimal_lineup.csv"), index=False)
     print(
-        f"Wrote optimal_lineup.csv ({len(lineup)} players, "
+        f"Wrote optimal_lineup.csv (objective={args.objective}, {len(lineup)} players, "
         f"{lineup['Estimated_Salary'].sum():.0f}/{config.DFS_SALARY_CAP} of cap, "
-        f"{lineup['DK_Points'].sum():.2f} total DK_Points [ESTIMATED salaries, not real DraftKings prices]) "
+        f"{lineup['DK_Points'].sum():.2f} total DK_Points / {lineup['Ceiling_DK_Points'].sum():.2f} total "
+        f"Ceiling_DK_Points [ESTIMATED salaries, not real DraftKings prices]) "
         f"and dfs_salary_pool.csv ({len(pool)} eligible players)."
     )
 

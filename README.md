@@ -588,8 +588,8 @@ HBP=-0.6, plus rare complete-game/shutout/no-hitter bonuses.
 DK pays non-linearly for hit type (a double isn't 2x a single's value: 5
 != 2*3), but this project only computes a linear `Expected_Bases` signal
 (`hitters.compute_wtb`) - no per-player 1B/2B/3B/HR rate breakdown
-exists. `DK_Points_Hitter` approximates the non-linear scoring with a
-single calibrated "DK points per expected total base" constant,
+exists. `DK_Points_Hitter_HitType` approximates the non-linear scoring
+with a single calibrated "DK points per expected total base" constant,
 `config.DFS_DK_POINTS_PER_TOTAL_BASE = 2.6998`, computed from **real**
 Lahman batting 2015-2025 hit-type shares (not a guessed league average -
 see the constant's docstring for the full arithmetic), applied to
@@ -598,11 +598,41 @@ see the constant's docstring for the full arithmetic), applied to
 (today's actual opposing pitcher, platoon+park adjusted) to the batter's
 own blended `Game_Hit_Probability`.
 
-**Explicitly excluded from v1**: BB, HBP, runs scored, RBI, and stolen
-bases - this project has no walk-rate, lineup-run-context, or
-stolen-base signal at all today, and faking precision on those would be
-worse than leaving them out. `DK_Points_Hitter` is a hit-scoring-only
-estimate, not the full DK score.
+**Widened beyond hit types (2026-07-26)**: `DK_Points_Hitter` also scores
+walks, hit-by-pitch, and RBI on top of `DK_Points_Hitter_HitType`, via
+`hitters.compute_extended_dk_rates` - the same recency-windowed,
+platoon-blended architecture `compute_wave`/`compute_whops` already use
+(`config.WHOPS_WTB_WINDOWS`), reused rather than inventing a new one.
+- **BB/HBP**: trivial from the persisted Statcast `events` column -
+  `helpers.is_walk_for_dk_scoring` (a walk OR an intentional walk;
+  deliberately a separate classifier from the existing `helpers.is_walk`,
+  which several already-validated signals - pitcher BB9, Age Curves BB9,
+  the pitcher-side DFS backtest - depend on and which must NOT silently
+  change scope) and `helpers.is_hit_by_pitch`.
+- **RBI**: not a structured Statcast field, so `helpers.estimate_rbi`
+  approximates it as `post_bat_score - bat_score` on the batter's own
+  plate-appearance-ending row (both columns exist on every persisted row)
+  - the standard Statcast RBI-approximation technique. Two accepted
+  simplifications: a bases-loaded walk's forced-in run is credited as a
+  "BB" event, not separately as an RBI (DK scores it as both; this
+  doesn't), and this can't distinguish a batter's own go-ahead RBI from,
+  e.g., a run that scored on the same play for an unrelated reason on rare
+  multi-run plays. Clipped at 0 (an RBI can't be negative).
+
+**Still excluded**: runs scored by the batter (would need real multi-PA
+baserunner tracking across plate appearances within a game/inning - a
+real but deferred v1.1 follow-up, not built) and stolen bases (Statcast
+has no structured `events` value for a steal at all - it only appears in
+the free-text `des` field, and is attributed to whoever was AT BAT during
+the steal, not the runner - parsing that reliably would mean matching on
+names, which conflicts with this project's numeric-ID-only join
+convention everywhere else; explicitly scope-cut, not planned even for
+v1.1).
+
+**Backtest reality check**: widening the scored categories did NOT fix
+`DK_Points_Hitter`'s underlying weak-signal problem - see "Machine
+learning follow-up" below for the numbers and why the ML model, not this
+heuristic, is what's actually live.
 
 ### Pitchers
 
@@ -661,7 +691,7 @@ follow-up" below), kept here for the historical record:
 
 | signal | MAE | naive baseline MAE | correlation | n scored |
 |---|---|---|---|---|
-| `DK_Points_Hitter` (heuristic, superseded) | 3.7719 | 3.7496 | -0.004 | 4,156 |
+| `DK_Points_Hitter` (heuristic, hit-type only, superseded) | 3.7719 | 3.7496 | -0.004 | 4,156 |
 | `Expected_IP` | 1.0257 | 1.0332 | 0.351 | 360 |
 | `Expected_K` | 1.8971 | 1.9922 | 0.393 | 360 |
 | `Expected_BB` (heuristic, superseded) | 1.0570 | 1.0380 | 0.182 | 360 |
@@ -679,39 +709,68 @@ just noisy. `Expected_IP`/`Expected_K` already beat their baselines and
 were left alone - the ML follow-up below only targeted the three flagged
 signals.
 
+**Hitter scoring widened (2026-07-26)**: `DK_Points_Hitter` now also
+scores BB/HBP/RBI, not just hit types (see `dfs.py`'s module docstring for
+exactly what's included and why runs/stolen bases still aren't - no
+reliable structured signal exists for either in the persisted Statcast
+data). Re-running the same heuristic backtest against 20 recent game dates
+with the widened scoring: MAE 4.7569 vs. 4.7457 naive-baseline MAE,
+correlation 0.009 (n=5,430 scored). Widening the scored categories did
+**not** fix the underlying weak-signal problem - the heuristic's
+correlation is still essentially zero, because the flawed
+`compute_matchup_adjustment` ratio still drives most of the point total
+(`DK_Points_Hitter_HitType`) and the new BB/HBP/RBI terms are additive on
+top of it, not a structural fix. The live default for `DK_Points_Hitter`
+is the ML model below (trained directly on raw ingredients, bypassing
+that ratio), not this heuristic.
+
 ### Machine learning follow-up: hitter and pitcher models
 
 `DK_Points_Hitter`, `Expected_H_Allowed`, and `Expected_BB` each got a
 real ML attempt (`dfs_ml.py`, `scripts/train_dfs_ml_models.py`) rather
 than further heuristic tuning, once the numbers above showed they weren't
-working. Trained on the FULL persisted 2026 Statcast history (114 hitter
-dates / 99 pitcher dates - far more than the original 15-date sample),
-with walk-forward blocked cross-validation (`ml_models.WalkForwardDateSplit`)
+working. Trained on the FULL persisted 2026 Statcast history, with
+walk-forward blocked cross-validation (`ml_models.WalkForwardDateSplit`)
 for grid search and a final holdout (the most recent `config.ML_FINAL_HOLDOUT_DATES`
 = 20 dates) the grid search never sees at all - the reported numbers below
 come exclusively from that untouched holdout, refit on everything before
 it, so they're a fair head-to-head against the original 15-20 date
-heuristic numbers:
+heuristic numbers.
+
+**Retrained 2026-07-26** after `DK_Points_Hitter`'s scoring widened to
+include BB/HBP/RBI (see "Hitters" above) - the old model artifact was
+deleted, not left in place, since its feature schema no longer matched
+`dfs_ml.HITTER_FEATURE_COLUMNS`:
 
 | signal | model | MAE | naive baseline MAE | heuristic MAE | correlation | n scored |
 |---|---|---|---|---|---|---|
-| `DK_Points_Hitter` | gradient boosting | 3.6374 | 3.7183 | 3.7504 | 0.145 | 5,606 |
-| `Expected_H_Allowed` | Ridge (alpha=30) | 1.7647 | 1.8151 | 2.6665 | 0.250 | 479 |
-| `Expected_BB` | Ridge (alpha=100) | 1.0875 | 1.0999 | 1.1096 | 0.119 | 479 |
+| `DK_Points_Hitter` | gradient boosting | 4.6716 | 4.7210 | 4.7569 | 0.162 | 5,642 |
+| `Expected_H_Allowed` | Ridge (alpha=30) | 1.7385 | 1.8164 | 2.6241 | 0.302 | 468 |
+| `Expected_BB` | Ridge (alpha=0.1) | 1.0233 | 1.0389 | 1.0744 | 0.120 | 468 |
+
+`DK_Points_Hitter`'s MAE is on the wider post-BB/HBP/RBI point scale, so
+not directly comparable in absolute terms to the pre-widening figure kept
+in git history (3.6374) - but its correlation actually IMPROVED (0.162 vs.
+0.145), a genuine gain, not just a like-for-like retrain.
+`Expected_H_Allowed`/`Expected_BB`'s own inputs are unaffected by the
+hitter-scoring widening - they were retrained only because more persisted
+history had accumulated by this date; their small movement versus the
+original run reflects that, not the widening itself.
 
 All three beat both the naive baseline and their own prior heuristic, so
 all three are now **live** (`dfs_ml.apply_ml_overrides`, called from
 `scripts/build_dfs_rankings.py` every day) - a missing/not-yet-trained
 model artifact falls back to the original heuristic automatically, so
 nothing breaks if the weekly training workflow hasn't run yet. None of
-these are strong signals - correlations of 0.12-0.25 mean there's still a
+these are strong signals - correlations of 0.12-0.30 mean there's still a
 lot of unexplained variance - but each is a real, validated improvement
 over both guessing and the prior heuristic, reported honestly rather than
 oversold. The hitter model's biggest structural change: instead of
 `compute_matchup_adjustment`'s flagged-risky ratio, it's trained directly
 on the ratio's raw ingredients (the batter's own `WAVE`/
 `Game_Hit_Probability`/`Consistency`/`Approach`, the opposing starter's
-and bullpen's `PAVE`, `Park_Factor`, `is_home`) via `dfs_ml.build_hitter_features` -
+and bullpen's `PAVE`, `Park_Factor`, `is_home`, plus `Expected_BB`/
+`Expected_HBP`/`Expected_RBI`) via `dfs_ml.build_hitter_features` -
 letting the model find its own combination instead of inheriting the
 multiplicative assumption that turned out not to hold up.
 
@@ -749,24 +808,68 @@ docstring involved (`estimated_salary.py`, `dfs_optimizer.py`,
 $50,000 salary cap (`config.DFS_ROSTER_SLOTS`/`DFS_SALARY_CAP`). Real DK
 salaries always use a $2,000 floor and $100 increments (also confirmed via
 that source, `config.DFS_ESTIMATED_SALARY_FLOOR`/`_ROUND_TO`) - the salary
-*ceiling* values (`DFS_ESTIMATED_SALARY_CEILING_HITTER`/`_PITCHER`) are
-NOT from an official DK table (DraftKings doesn't publish one; prices
-float algorithmically) - they're anecdotal 2026 examples from secondary
-sources, rounded outward. This floor/increment-are-real-but-ceiling-is-
-anecdotal distinction is itself part of the honesty requirement here.
+*ceiling* (`DFS_ESTIMATED_SALARY_CEILING`) is NOT from an official DK
+table (DraftKings doesn't publish one; prices float algorithmically) -
+it's an anecdotal 2026 example from secondary sources, rounded outward.
+This floor/increment-are-real-but-ceiling-is-anecdotal distinction is
+itself part of the honesty requirement here.
 
 **The formula** (`estimated_salary.py`): linear min-max scaling of a
 player's own `DK_Points_Hitter`/`DK_Points_Pitcher` into
-[`DFS_ESTIMATED_SALARY_FLOOR`, the position-appropriate ceiling], clipped
-at both ends, rounded to the nearest $100. The reference point range each
-scale maps FROM (`DFS_REFERENCE_MIN/MAX_POINTS_HITTER`/`PITCHER`) is
-computed from this project's own first real day of production DFS output
-(2026-07-24: 513 qualified hitters ranged 2.584-4.683 points; 27 probable
-starters ranged 2.617-22.750) - not guessed, but explicitly a v1
-calibration from a single day, to be revisited once more production days
-accumulate. This is a single-signal (points only) linear model - real DK
-pricing also reflects season-long track record, popularity/ownership
-effects, and other signals this project doesn't compute - a deliberate v1
+[`DFS_ESTIMATED_SALARY_FLOOR`, `DFS_ESTIMATED_SALARY_CEILING`], clipped at
+both ends, rounded to the nearest $100.
+
+**Salary $/point parity fix (2026-07-26)**: the original v1 scaled
+hitters and pitchers into SEPARATE reference point ranges and SEPARATE
+salary ceilings, each independently min-max-scaled to its own group. This
+was a real bug, caught by inspecting a real optimizer output: two elite
+pitchers alone consumed ~$22K of the $50K cap, leaving the other 8 hitter
+slots filled with replacement-level bats. The root cause wasn't that
+pitchers are really worth that much more - it's that pitcher DK scoring
+naturally spans a much wider raw point range (~2.6-22.75, box-score
+categories piling up over 6 innings) than hitters' hit-type-driven
+scoring (~2.6-4.7 pre-widening), so independently rescaling each group to
+its own ceiling made a pitcher's marginal DK point worth roughly 5x a
+hitter's in salary terms - a scaling artifact, not real relative DFS
+value. Fixed by collapsing both groups onto ONE shared reference point
+range (`DFS_REFERENCE_MIN_POINTS`/`DFS_REFERENCE_MAX_POINTS`) and ONE
+shared ceiling (`DFS_ESTIMATED_SALARY_CEILING`) - both
+`compute_hitter_estimated_salary`/`compute_pitcher_estimated_salary` now
+delegate to the same constants, guaranteeing the same dollars-per-point
+rate regardless of position (`test_hitter_and_pitcher_salary_share_same_dollar_per_point_rate`
+is a direct regression test for this). A pitcher still costs far more
+than a hitter in practice - just because pitchers genuinely PROJECT far
+more points, the real reason, not a second hidden rescaling on top of it.
+
+**Acceptance check, against real production `DK_Points` from 2026-07-25**
+(`docs/data/dfs_hitters.csv`/`dfs_pitchers.csv`): under the OLD
+per-position scale, a hitter projecting exactly 8.0 points priced at
+**$6,500** (pinned to the hitter ceiling - 8 points was near the top of
+hitters' whole observed range) while a pitcher projecting the SAME 8.0
+points priced at only **$4,400** (still cheap relative to pitchers' much
+wider range) - the same real point total was worth 48% more salary
+depending on which position scored it, purely a scaling artifact. Under
+the NEW shared scale, both price identically at **$4,800**. The real
+top-2-pitchers-eat-the-budget case also improved: the two highest-scoring
+real pitchers that day (22.75 and 22.39 points) combined for $21,800
+under the old scale vs. $20,100 under the new one.
+
+The shared reference range is computed from a REAL 20-game-date backtest
+sample (`dfs_backtest.backtest_dfs_projections`, the same no-lookahead
+recompute every other backtest in this project uses), pooling both
+position groups' `DK_Points` together - not guessed, and not a single
+day's snapshot like the pre-fix v1 constants were: hitters'
+`DK_Points_Hitter` ranged 0.1595-16.6757 (mean 4.827, n=5,430); pitchers'
+`DK_Points_Pitcher` ranged 0.1207-25.1412 (mean 11.459, n=468). The
+pitcher range fully spans the hitter range on both ends, so the shared
+min/max are effectively the pitcher extremes - expected, not a bug, since
+pitcher DK scoring genuinely spans a wider range even after the hitter
+scoring widened. Under this shared scale, a real average hitter (~4.8
+points) now prices around $3,700 and a real average pitcher (~11.5
+points) around $6,100 - a plausible, non-degenerate spread. This is still
+a single-signal (points only) linear model - real DK pricing also
+reflects season-long track record, popularity/ownership effects, and
+other signals this project doesn't compute - a deliberate v1
 simplification, not hidden.
 
 **Position eligibility** (`roster_positions.py`): a genuinely new data
@@ -814,6 +917,59 @@ immediately after `scripts/build_dfs_rankings.py`), writing
 `docs/data/optimal_lineup.csv` (the 10 selected players) and
 `docs/data/dfs_salary_pool.csv` (every eligible player considered, for
 transparency into what the optimizer actually saw).
+
+### Ceiling / volatility signal (`dfs_ceiling.py`)
+
+GPP (tournament) DFS lineups are won by boom/spike-game players, not
+players who reliably score near their own mean - a real, well-known DFS
+strategy concept the user raised directly ("the winner won't have players
+getting 5 points across their lineup, they're more likely to have lucked
+into players averaging 15 or so"). Every signal in this project up to
+this point was a MEAN projection; nothing measured upside.
+`Ceiling_DK_Points` is the `config.DFS_CEILING_PERCENTILE`-th percentile
+(90th) of a player's own REAL historical modeled DK points
+(`dfs_backtest.compute_actual_hitter_dk_points`/
+`compute_actual_pitcher_dk_points` applied per real game date they
+played) - a genuine outcome-history signal, not a new projection model. A
+player with fewer than `config.DFS_CEILING_MIN_GAMES` (10) real scored
+games falls back to the group-wide (all hitters', or all pitchers')
+percentile instead of a noisy small-sample per-player number
+(`Ceiling_Source` marks which applies). Merged into `dfs_hitters.csv`/
+`dfs_pitchers.csv` as an ADDITIONAL informational column, never replacing
+`DK_Points_Hitter`/`DK_Points_Pitcher`.
+
+**Backtested before trusting it** (`dfs_ceiling.backtest_ceiling_signal`,
+same 20-date no-lookahead sample as the heuristic DFS backtest,
+`Ceiling_DK_Points` computed from ONLY history strictly before each test
+date): does ranking by ceiling actually surface real boom-game days
+better than ranking by the existing mean projection? Measured as a
+"capture rate" - of the player-days that ACTUALLY landed in that date's
+real top decile, what fraction were ALSO top-decile by `Ceiling_DK_Points`
+going in, vs. by the mean projection instead:
+
+| player type | correlation | real top-decile days | ceiling capture rate | mean-projection capture rate |
+|---|---|---|---|---|
+| Hitters | 0.127 | 543 (n=5,430) | 19.3% | 10.1% |
+| Pitchers | 0.313 | 47 (n=468) | 23.4% | 27.7% |
+
+For hitters, ceiling-ranking is genuinely ~2x better than the mean
+projection at flagging real boom days in advance (the mean projection is
+barely above the ~10% base rate - `DK_Points_Hitter` has almost no power
+to predict WHICH day a hitter booms). For pitchers, there's no clear
+edge - the mean projection actually did slightly better on this (small,
+n=47) sample. **Reported as a mixed result, not oversold**: this is a
+validated upside signal for hitters specifically, not a blanket win.
+
+Because of that mixed result, `Ceiling_DK_Points` ships
+**informational-only** - the Optimal Lineup optimizer still defaults to
+maximizing the mean projection. Pass `--objective ceiling` to
+`scripts/build_optimal_lineup.py` (`dfs_optimizer.solve_optimal_lineup`'s
+new `objective_column` parameter) to build a ceiling-maximizing lineup
+instead - opt-in, not the default, until real backtest evidence supports
+defaulting to it (which it does not yet, especially for pitchers). A
+player with no `Ceiling_DK_Points` at all (no real scored history yet)
+falls back to their own mean projection in the optimizer's pool, so
+they're never silently unselectable under the ceiling objective.
 
 **Explicit v1 scope cuts**: no real DK multi-position eligibility (single
 primary position only - full-time DH players are excluded entirely); no

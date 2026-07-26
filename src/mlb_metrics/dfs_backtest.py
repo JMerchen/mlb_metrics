@@ -13,10 +13,18 @@ same shape dfs.compute_hitter_dk_points/compute_pitcher_dk_points expect.
 
 ## What "actual" means here, and its honesty limits
 
-compute_actual_hitter_dk_points scores ONLY the hit-type categories
-dfs.compute_hitter_dk_points itself models (1B/2B/3B/HR) - BB/HBP/R/RBI/SB
-are excluded from both sides, not just the projection, since there's
-nothing to validate for a category the model doesn't project at all.
+compute_actual_hitter_dk_points scores hit-type (1B/2B/3B/HR) plus
+BB/HBP/RBI (dfs.compute_hitter_dk_points's current full scope, since
+hitters.compute_extended_dk_rates added those) - runs scored and stolen
+bases remain excluded from both sides, not just the projection, since
+there's nothing to validate for a category the model doesn't project at
+all (see dfs.py's module docstring for why those two specifically are
+deferred/not-planned). RBI uses the SAME approximation
+(helpers.estimate_rbi - a completed PA's own bat_score/post_bat_score
+delta) on both the projected and "actual" side, so this validates the
+projection's own logic being reapplied to real data, not RBI accuracy
+against a truly independent ground truth (there is none available here) -
+same category of limitation as the pitcher ER/FIP validation below.
 
 compute_actual_pitcher_dk_points computes real IP/K/BB/H from that start's
 actual events (the same classifiers pitcher_form.py/
@@ -63,9 +71,10 @@ def derive_historical_team_schedule(persisted_statcast: pd.DataFrame) -> pd.Data
 
 
 def compute_actual_hitter_dk_points(day_completed_batter_events: pd.DataFrame) -> pd.DataFrame:
-    """[key_mlbam, Actual_DK_Points_Modeled] - real DK hit-type points
-    (1B/2B/3B/HR only - the same subset dfs.compute_hitter_dk_points
-    models) for one date's real completed at-bat events, keyed by batter."""
+    """[key_mlbam, Actual_DK_Points_Modeled] - real DK hit-type + BB/HBP/RBI
+    points (the current full scope dfs.compute_hitter_dk_points models) for
+    one date's real completed at-bat events, keyed by batter. Needs
+    bat_score/post_bat_score columns (helpers.estimate_rbi)."""
     df = day_completed_batter_events.copy()
     events = df["events"]
     df["points"] = (
@@ -73,6 +82,9 @@ def compute_actual_hitter_dk_points(day_completed_batter_events: pd.DataFrame) -
         + (events == "double") * config.DFS_DK_HITTER_DOUBLE_POINTS
         + (events == "triple") * config.DFS_DK_HITTER_TRIPLE_POINTS
         + (events == "home_run") * config.DFS_DK_HITTER_HR_POINTS
+        + helpers.is_walk_for_dk_scoring(events) * config.DFS_DK_HITTER_BB_POINTS
+        + helpers.is_hit_by_pitch(events) * config.DFS_DK_HITTER_HBP_POINTS
+        + helpers.estimate_rbi(df) * config.DFS_DK_HITTER_RBI_POINTS
     )
     agg = df.groupby("batter", as_index=False)["points"].sum()
     return agg.rename(columns={"batter": "key_mlbam", "points": "Actual_DK_Points_Modeled"})
@@ -145,7 +157,7 @@ def _compute_date_outputs(persisted: pd.DataFrame, team_schedule: pd.DataFrame, 
 
     day_events = persisted[persisted["game_date"] == date]
     actual_hitters = compute_actual_hitter_dk_points(
-        data.completed_events(day_events, ["game_date", "batter", "events"])
+        data.completed_events(day_events, ["game_date", "batter", "events", "bat_score", "post_bat_score"])
     )
     actual_pitchers = compute_actual_pitcher_dk_points(
         data.completed_events(day_events, ["game_date", "pitcher", "events"])
