@@ -46,7 +46,7 @@ jobs:
 
       - name: Build optimal lineup
         run: |
-          python scripts/build_optimal_lineup.py
+          python scripts/build_optimal_lineup.py --objective value
 
       - name: Commit updates
         run: |

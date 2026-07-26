@@ -26,6 +26,12 @@ def _load_build_optimal_lineup_module():
 
 
 def _full_slate():
+    # DK_Points values spread wide enough (see estimated_salary.py's shared
+    # reference range) that the max-achievable roster salary comfortably
+    # clears config.DFS_VALUE_MIN_SALARY_FRACTION * DFS_SALARY_CAP - a real
+    # slate has plenty of players priced well above the floor, so the test
+    # pool needs to too, or the "value" objective's min_salary floor would
+    # be infeasible here even though it's achievable in practice.
     slot_layout = [("C", 2), ("1B", 2), ("2B", 2), ("3B", 2), ("SS", 2), ("OF", 5)]
     hitter_rows = []
     slot_by_key = {}
@@ -36,7 +42,7 @@ def _full_slate():
                 "key_mlbam": key, "name_first": "H", "name_last": str(key), "team": "BOS", "opponent": "NYY",
                 "is_home": True, "PA_L": 20, "PA_R": 20, "Expected_Bases": 1.5, "Game_Hit_Probability": 0.7,
                 "Matchup_Hit_Probability": 0.7, "Matchup_Ratio": 1.0, "Adjusted_Expected_Bases": 1.5,
-                "DK_Points_Hitter": 3.0 + i * 0.5,
+                "DK_Points_Hitter": 5.0 + i * 1.0,
             })
             slot_by_key[key] = slot
             key += 1
@@ -47,7 +53,7 @@ def _full_slate():
             "key_mlbam": 900 + i, "name_first": "P", "name_last": str(i), "team": "NYY", "opponent": "BOS",
             "is_home": False, "starts": 5, "K9": 9.0, "BB9": 3.0, "HR9": 1.0, "IP_per_start": 6.0,
             "Expected_IP": 6.0, "Expected_K": 6.0, "Expected_BB": 2.0, "Expected_H_Allowed": 5.0,
-            "FIP_Windowed": 4.0, "Expected_ER": 2.0, "DK_Points_Pitcher": 10.0 + i,
+            "FIP_Windowed": 4.0, "Expected_ER": 2.0, "DK_Points_Pitcher": 12.0 + i * 2.0,
         })
 
     return pd.DataFrame(hitter_rows), pd.DataFrame(pitcher_rows), slot_by_key
@@ -153,6 +159,62 @@ def test_build_optimal_lineup_boom_objective_can_select_different_players(tmp_pa
     assert worst_mean_of in boom_lineup["key_mlbam"].tolist()
     assert best_mean_of in mean_lineup["key_mlbam"].tolist()
     assert best_mean_of not in boom_lineup["key_mlbam"].tolist()
+
+
+def test_build_optimal_lineup_value_objective_avoids_overpriced_pitcher(tmp_path, monkeypatch):
+    # The real scenario reported: "mean" picks the two highest-DK_Points
+    # pitchers even though one is a "superstar" whose price already
+    # reflects its whole projection, while a cheaper "star" pitcher with
+    # real Upside_Deviation offers better boom-adjusted value per dollar.
+    module = _load_build_optimal_lineup_module()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    hitters, pitchers, slot_by_key = _full_slate()
+
+    # 3 pitcher candidates, only 2 P slots: index 0 (10.0 pts, lowest mean)
+    # gets a huge real Upside_Deviation - under "mean" it's the clear
+    # loser; under "value" its boom-adjusted points-per-dollar should beat
+    # at least one of the higher-mean, zero-deviation candidates.
+    pitchers = pitchers.set_index("key_mlbam")
+    pitchers["Upside_Deviation"] = 0.0
+    underpriced_star = pitchers.index[0]  # 10.0 DK_Points_Pitcher
+    pitchers.loc[underpriced_star, "Upside_Deviation"] = 15.0
+    pitchers = pitchers.reset_index()
+
+    _write_daily_csvs(data_dir, hitters, pitchers)
+    monkeypatch.setattr(module.roster_positions, "fetch_position_eligibility", _eligibility_fetcher(slot_by_key))
+
+    sys.argv = ["build_optimal_lineup.py", "--data-dir", str(data_dir), "--objective", "mean"]
+    module.main()
+    mean_lineup = pd.read_csv(data_dir / "optimal_lineup.csv")
+
+    sys.argv = ["build_optimal_lineup.py", "--data-dir", str(data_dir), "--objective", "value"]
+    module.main()
+    value_lineup = pd.read_csv(data_dir / "optimal_lineup.csv")
+
+    assert underpriced_star not in mean_lineup["key_mlbam"].tolist()
+    assert underpriced_star in value_lineup["key_mlbam"].tolist()
+
+
+def test_build_optimal_lineup_value_objective_spends_near_min_salary_floor(tmp_path, monkeypatch):
+    # Real data showed objective="value" alone (no floor) can leave a large
+    # chunk of the cap unspent, since maximizing a per-dollar ratio has no
+    # pressure to spend near the cap. build_optimal_lineup.py must pass
+    # min_salary for "value" so the written lineup actually uses most of
+    # the budget.
+    module = _load_build_optimal_lineup_module()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    hitters, pitchers, slot_by_key = _full_slate()
+    _write_daily_csvs(data_dir, hitters, pitchers)
+    monkeypatch.setattr(module.roster_positions, "fetch_position_eligibility", _eligibility_fetcher(slot_by_key))
+
+    sys.argv = ["build_optimal_lineup.py", "--data-dir", str(data_dir), "--objective", "value"]
+    module.main()
+    value_lineup = pd.read_csv(data_dir / "optimal_lineup.csv")
+
+    min_salary = module.config.DFS_VALUE_MIN_SALARY_FRACTION * module.config.DFS_SALARY_CAP
+    assert value_lineup["Estimated_Salary"].sum() >= min_salary
 
 
 def test_build_optimal_lineup_missing_daily_csvs_writes_nothing(tmp_path):

@@ -92,6 +92,55 @@ def test_build_player_pool_uses_real_boom_adjusted_when_present():
     assert pool.loc[99, "Boom_Adjusted_DK_Points"] == 18.0
 
 
+def test_build_player_pool_value_score_hitter_uses_boom_adjusted_over_salary():
+    from mlb_metrics import estimated_salary
+
+    hitter = _hitter_row(1, 4.0)
+    hitter["Boom_Adjusted_DK_Points"] = 6.2
+    hitters = pd.DataFrame([hitter])
+    pitchers = pd.DataFrame([_pitcher_row(99, 15.0)])
+    eligibility = pd.DataFrame([{"key_mlbam": 1, "primary_position": "SS", "dk_slot": "SS"}])
+
+    pool = dfs_optimizer.build_player_pool(hitters, pitchers, eligibility).set_index("key_mlbam")
+
+    expected_salary = estimated_salary.compute_hitter_estimated_salary(pd.Series([4.0])).iloc[0]
+    expected_value = 6.2 / (expected_salary / 1000)
+    assert pool.loc[1, "Value_Score"] == pytest.approx(expected_value)
+
+
+def test_build_player_pool_value_score_pitcher_uses_upside_deviation_and_configured_k():
+    from mlb_metrics import config, estimated_salary
+
+    pitcher = _pitcher_row(99, 15.0)
+    pitcher["Upside_Deviation"] = 3.0
+    hitters = pd.DataFrame([_hitter_row(1, 4.0)])
+    pitchers = pd.DataFrame([pitcher])
+    eligibility = pd.DataFrame([{"key_mlbam": 1, "primary_position": "SS", "dk_slot": "SS"}])
+
+    pool = dfs_optimizer.build_player_pool(hitters, pitchers, eligibility).set_index("key_mlbam")
+
+    expected_salary = estimated_salary.compute_pitcher_estimated_salary(pd.Series([15.0])).iloc[0]
+    expected_value_points = 15.0 + config.DFS_VALUE_BOOM_K_PITCHER * 3.0
+    expected_value = expected_value_points / (expected_salary / 1000)
+    assert pool.loc[99, "Value_Score"] == pytest.approx(expected_value)
+
+
+def test_build_player_pool_value_score_pitcher_falls_back_to_zero_deviation_when_missing():
+    # No Upside_Deviation column at all - must default to 0 (no boom
+    # credit), not error or leave NaN.
+    from mlb_metrics import estimated_salary
+
+    hitters = pd.DataFrame([_hitter_row(1, 4.0)])
+    pitchers = pd.DataFrame([_pitcher_row(99, 15.0)])
+    eligibility = pd.DataFrame([{"key_mlbam": 1, "primary_position": "SS", "dk_slot": "SS"}])
+
+    pool = dfs_optimizer.build_player_pool(hitters, pitchers, eligibility).set_index("key_mlbam")
+
+    expected_salary = estimated_salary.compute_pitcher_estimated_salary(pd.Series([15.0])).iloc[0]
+    expected_value = 15.0 / (expected_salary / 1000)
+    assert pool.loc[99, "Value_Score"] == pytest.approx(expected_value)
+
+
 def test_build_player_pool_excludes_hitter_with_no_eligibility():
     hitters = pd.DataFrame([_hitter_row(1, 4.0), _hitter_row(2, 3.0)])
     pitchers = pd.DataFrame(columns=list(_pitcher_row(0, 0).keys()))
@@ -171,6 +220,37 @@ def test_solve_optimal_lineup_infeasible_cap_returns_none():
 def test_solve_optimal_lineup_empty_pool_returns_none():
     pool = pd.DataFrame(columns=dfs_optimizer.POOL_COLUMNS)
     result = dfs_optimizer.solve_optimal_lineup(pool, salary_cap=50000, roster_slots={"OF": 3})
+
+    assert result is None
+
+
+def test_solve_optimal_lineup_min_salary_forces_the_pricier_pick():
+    # Same two-candidate OF slot as
+    # test_solve_optimal_lineup_picks_higher_points_under_binding_cap, but
+    # with DK_Points reversed so the objective alone would pick the
+    # cheaper/worse one - only a min_salary floor should force the pricier
+    # pick.
+    pool = pd.DataFrame([
+        {"key_mlbam": 1, "name_first": "A", "name_last": "A", "team": "BOS", "opponent": "NYY",
+         "dk_slot": "OF", "DK_Points": 3.0, "Estimated_Salary": 5000},
+        {"key_mlbam": 2, "name_first": "B", "name_last": "B", "team": "BOS", "opponent": "NYY",
+         "dk_slot": "OF", "DK_Points": 10.0, "Estimated_Salary": 2000},
+    ])
+    unconstrained = dfs_optimizer.solve_optimal_lineup(pool, salary_cap=50000, roster_slots={"OF": 1})
+    assert unconstrained["key_mlbam"].tolist() == [2]
+
+    floored = dfs_optimizer.solve_optimal_lineup(pool, salary_cap=50000, roster_slots={"OF": 1}, min_salary=3000)
+    assert floored["key_mlbam"].tolist() == [1]
+
+
+def test_solve_optimal_lineup_min_salary_infeasible_returns_none():
+    pool = pd.DataFrame([
+        {"key_mlbam": 1, "name_first": "A", "name_last": "A", "team": "BOS", "opponent": "NYY",
+         "dk_slot": "OF", "DK_Points": 5.0, "Estimated_Salary": 3000},
+    ])
+    result = dfs_optimizer.solve_optimal_lineup(
+        pool, salary_cap=50000, roster_slots={"OF": 1}, min_salary=4000
+    )
 
     assert result is None
 

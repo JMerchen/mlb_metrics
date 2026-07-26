@@ -41,32 +41,53 @@ one real person to fill two different roster slots at once), which isn't
 a legal DK lineup. solve_optimal_lineup adds a `<= 1` constraint across any
 key_mlbam appearing more than once in the pool to prevent this.
 
-## Objective: mean points (default), ceiling, or boom-adjusted
+## Objective: mean points (default), ceiling, boom-adjusted, or value
 
 solve_optimal_lineup's `objective_column` selects what gets maximized:
 "DK_Points" (the default, preserving all prior behavior - the existing
 mean projection), "Ceiling_DK_Points" (dfs_ceiling.py's real-history
 90th-percentile upside signal, for a boom-or-bust tournament/GPP lineup),
-or "Boom_Adjusted_DK_Points" (dfs_ceiling.py's mean + k*upside-deviation
+"Boom_Adjusted_DK_Points" (dfs_ceiling.py's mean + k*upside-deviation
 blend - rewards a player's real, FREQUENT volatility without chasing a
-single outlier game the way pure ceiling does; see dfs_ceiling.py's
-module docstring for the exact math and why this is neither pure mean nor
-pure ceiling). None of the two alternatives is the default - see
-dfs_ceiling.py's module docstring for why each ships opt-in until backtest
-evidence validates it. A player with no real scored history has no
-per-player ceiling/deviation to fall back to salary-cap math on, so
-build_player_pool defaults both alternative columns to their own DK_Points
-(the mean projection) rather than leaving them NaN, which would otherwise
-make them silently unselectable under a non-mean objective."""
+single outlier game the way pure ceiling does), or "Value_Score"
+(boom-adjusted points PER $1,000 of Estimated_Salary).
+
+**Why Value_Score exists**: real evidence from an actual DK contest
+showed that maximizing ANY of the point-like objectives above - mean,
+ceiling, or boom-adjusted - independently converges on the same two most
+expensive pitchers, because Estimated_Salary's fixed floor means a high
+scorer of ANY position gets a structurally better AVERAGE dollars-per-
+point rate (the floor is a smaller fraction of a bigger price), so a
+budget-constrained points-maximizer will always rationally overpay for
+the biggest scorers first. Value_Score inverts that: it explicitly
+rewards being UNDERPRICED relative to real upside (a "star") over being
+already fully priced-in (a "superstar") - see config.DFS_VALUE_BOOM_K_PITCHER's
+docstring for the full reasoning and an explicit caveat about what's
+validated here vs. not.
+
+**Value_Score's own flaw, found and fixed in the same pass**: maximizing
+a per-dollar ratio carries no pressure to spend near the cap - a real
+sanity check left $10,300 of $50,000 unspent. solve_optimal_lineup's
+`min_salary` parameter fixes this (see config.DFS_VALUE_MIN_SALARY_FRACTION's
+docstring for the real numbers behind the chosen floor); build_optimal_lineup.py
+passes it only when objective="value".
+
+None of the three alternatives is the default - see dfs_ceiling.py's
+module docstring for why each ships opt-in. A player with no real scored
+history has no per-player ceiling/deviation to fall back to salary-cap
+math on, so build_player_pool defaults every alternative column to its
+own DK_Points (the mean projection) rather than leaving it NaN, which
+would otherwise make that player silently unselectable under a non-mean
+objective."""
 
 import pandas as pd
 import pulp
 
-from mlb_metrics import config, estimated_salary
+from mlb_metrics import config, dfs_ceiling, estimated_salary
 
 POOL_COLUMNS = [
     "key_mlbam", "name_first", "name_last", "team", "opponent", "dk_slot",
-    "DK_Points", "Ceiling_DK_Points", "Boom_Adjusted_DK_Points", "Estimated_Salary",
+    "DK_Points", "Ceiling_DK_Points", "Boom_Adjusted_DK_Points", "Value_Score", "Estimated_Salary",
 ]
 
 
@@ -88,6 +109,10 @@ def build_player_pool(hitters: pd.DataFrame, pitchers: pd.DataFrame, eligibility
             hitters[column] = pd.NA
         hitters[column] = hitters[column].fillna(hitters["DK_Points_Hitter"])
     hitters["Estimated_Salary"] = estimated_salary.compute_hitter_estimated_salary(hitters["DK_Points_Hitter"])
+    # Reuses hitters' own Boom_Adjusted_DK_Points (already k=1.0, the
+    # validated hitter value) as Value_Score's numerator - no separate
+    # hitter constant needed, unlike pitchers below.
+    hitters["Value_Score"] = hitters["Boom_Adjusted_DK_Points"] / (hitters["Estimated_Salary"] / 1000)
 
     pitchers = pitchers.copy()
     pitchers["dk_slot"] = "P"
@@ -97,6 +122,20 @@ def build_player_pool(hitters: pd.DataFrame, pitchers: pd.DataFrame, eligibility
             pitchers[column] = pd.NA
         pitchers[column] = pitchers[column].fillna(pitchers["DK_Points_Pitcher"])
     pitchers["Estimated_Salary"] = estimated_salary.compute_pitcher_estimated_salary(pitchers["DK_Points_Pitcher"])
+    # Value_Score's pitcher numerator is DELIBERATELY NOT the same as
+    # pitchers' own Boom_Adjusted_DK_Points column (which uses k=0.0 - see
+    # config.DFS_BOOM_ADJUSTED_K_PITCHER's docstring, validated against a
+    # different question that k didn't help). Recomputed here with
+    # config.DFS_VALUE_BOOM_K_PITCHER instead - see that constant's
+    # docstring for why this is a deliberate strategic choice, not a
+    # re-validated statistical claim.
+    if "Upside_Deviation" not in pitchers.columns:
+        pitchers["Upside_Deviation"] = pd.NA
+    pitcher_upside_deviation = pitchers["Upside_Deviation"].fillna(0)
+    pitcher_value_points = dfs_ceiling.compute_boom_adjusted_score(
+        pitchers["DK_Points_Pitcher"], pitcher_upside_deviation, config.DFS_VALUE_BOOM_K_PITCHER
+    )
+    pitchers["Value_Score"] = pitcher_value_points / (pitchers["Estimated_Salary"] / 1000)
 
     return pd.concat([hitters[POOL_COLUMNS], pitchers[POOL_COLUMNS]], ignore_index=True)
 
@@ -106,6 +145,7 @@ def solve_optimal_lineup(
     salary_cap: float = config.DFS_SALARY_CAP,
     roster_slots: dict = config.DFS_ROSTER_SLOTS,
     objective_column: str = "DK_Points",
+    min_salary: float | None = None,
 ) -> pd.DataFrame | None:
     """Exact MILP: maximize total `objective_column` (default "DK_Points",
     the existing mean projection - pass "Ceiling_DK_Points" for a
@@ -117,7 +157,15 @@ def solve_optimal_lineup(
     already exceeds the cap - the same documented-fallback resilience
     pattern used elsewhere in this project (e.g.
     dfs.compute_pitcher_dk_points's unannounced-starter exclusion,
-    pipeline.run()'s failed-schedule-fetch handling)."""
+    pipeline.run()'s failed-schedule-fetch handling).
+
+    `min_salary` (default None, i.e. no floor) adds
+    sum(Estimated_Salary) >= min_salary. Needed specifically for
+    objective_column="Value_Score": maximizing a per-dollar ratio carries
+    no pressure to spend near the cap on its own (confirmed via a real
+    sanity check - see config.DFS_VALUE_MIN_SALARY_FRACTION's docstring),
+    so scripts/build_optimal_lineup.py passes one only for that
+    objective."""
     if pool.empty:
         return None
 
@@ -127,6 +175,8 @@ def solve_optimal_lineup(
 
     problem += pulp.lpSum(x[i] * pool.loc[i, objective_column] for i in pool.index)
     problem += pulp.lpSum(x[i] * pool.loc[i, "Estimated_Salary"] for i in pool.index) <= salary_cap
+    if min_salary is not None:
+        problem += pulp.lpSum(x[i] * pool.loc[i, "Estimated_Salary"] for i in pool.index) >= min_salary
 
     for slot, count in roster_slots.items():
         slot_indices = pool.index[pool["dk_slot"] == slot]

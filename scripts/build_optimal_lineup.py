@@ -22,25 +22,46 @@ optimal_lineup.csv in place rather than writing anything.
 
 Also writes docs/data/dfs_salary_pool.csv (every eligible player considered,
 with their dk_slot/DK_Points/Ceiling_DK_Points/Boom_Adjusted_DK_Points/
-Estimated_Salary) - not required by the page, but real transparency into
-what the optimizer actually saw, matching this project's "don't hide the
-ingredients" culture.
+Value_Score/Estimated_Salary) - not required by the page, but real
+transparency into what the optimizer actually saw, matching this
+project's "don't hide the ingredients" culture.
 
-`--objective {mean,ceiling,boom}` selects what the optimizer maximizes:
-"mean" (the default, preserving all prior behavior) uses
+`--objective {mean,ceiling,boom,value}` selects what the optimizer
+maximizes: "mean" (the default, preserving all prior behavior) uses
 DK_Points_Hitter/Pitcher; "ceiling" uses dfs_ceiling.py's Ceiling_DK_Points
 instead, for a tournament/GPP-style lineup built from a single real
 historical spike game; "boom" uses Boom_Adjusted_DK_Points (mean + k times
 a player's real historical UPSIDE-ONLY volatility) - a middle ground the
 user explicitly asked for, rewarding real, frequent boom potential without
-chasing one outlier game the way pure ceiling does. None of "ceiling"/
-"boom" is the default - see dfs_ceiling.py's module docstring for the
-backtest evidence behind each.
+chasing one outlier game the way pure ceiling does; "value" uses
+Value_Score (boom-adjusted points PER $1,000 of Estimated_Salary) - real
+evidence showed "mean"/"ceiling"/"boom" all independently converge on the
+same two most expensive pitchers (Estimated_Salary's fixed floor makes
+ANY high scorer look structurally cheaper per point on average, so a raw
+points-maximizer always overpays for the biggest scorers regardless of
+position), leaving no budget to build a real mix of consistent-floor and
+genuine-boom hitters. "value" explicitly rewards being underpriced
+relative to real upside (a "star") instead of chasing raw point totals
+(a "superstar" that's already fully priced in) - see
+config.DFS_VALUE_BOOM_K_PITCHER's docstring for the full reasoning. None
+of "ceiling"/"boom"/"value" is the default - see dfs_ceiling.py's and
+dfs_optimizer.py's module docstrings for the backtest evidence (or, for
+"value," the explicit reasoning where backtest evidence doesn't directly
+apply) behind each.
+
+"value" also passes solve_optimal_lineup a min_salary floor
+(config.DFS_VALUE_MIN_SALARY_FRACTION * DFS_SALARY_CAP) - maximizing a
+per-dollar ratio alone carries no pressure to spend near the cap, and a
+real sanity check confirmed it: "value" with no floor left $10,300 of
+$50,000 unspent. See config.DFS_VALUE_MIN_SALARY_FRACTION's docstring
+for the real numbers behind the chosen floor. The other three objectives
+pass no min_salary (unchanged behavior).
 
 Usage:
     python scripts/build_optimal_lineup.py
     python scripts/build_optimal_lineup.py --objective ceiling
     python scripts/build_optimal_lineup.py --objective boom
+    python scripts/build_optimal_lineup.py --objective value
 """
 
 import argparse
@@ -53,7 +74,10 @@ import pandas as pd
 
 from mlb_metrics import config, dfs_optimizer, roster_positions
 
-OBJECTIVE_COLUMNS = {"mean": "DK_Points", "ceiling": "Ceiling_DK_Points", "boom": "Boom_Adjusted_DK_Points"}
+OBJECTIVE_COLUMNS = {
+    "mean": "DK_Points", "ceiling": "Ceiling_DK_Points",
+    "boom": "Boom_Adjusted_DK_Points", "value": "Value_Score",
+}
 
 
 def main():
@@ -87,7 +111,10 @@ def main():
         print("No players resolved a DK roster slot today - leaving yesterday's optimal_lineup.csv in place, if any.")
         return
 
-    lineup = dfs_optimizer.solve_optimal_lineup(pool, objective_column=OBJECTIVE_COLUMNS[args.objective])
+    min_salary = config.DFS_VALUE_MIN_SALARY_FRACTION * config.DFS_SALARY_CAP if args.objective == "value" else None
+    lineup = dfs_optimizer.solve_optimal_lineup(
+        pool, objective_column=OBJECTIVE_COLUMNS[args.objective], min_salary=min_salary
+    )
     if lineup is None:
         print("Optimizer could not fill a full lineup under the salary cap today (too few eligible players at "
               "some position, or the cap is infeasible) - leaving yesterday's optimal_lineup.csv in place, if any.")

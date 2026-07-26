@@ -890,6 +890,69 @@ DFS_BOOM_ADJUSTED_K_PITCHER = 0.0
 # backtest (and update this comment) after any change to
 # dfs.compute_matchup_adjustment's formula.
 
+# --- Value_Score (dfs_optimizer.py, "stars not superstars" roster construction) ---
+#
+# Real evidence from an actual DK contest: this project's own mean/
+# ceiling/boom-adjusted optimizer objectives all independently converged
+# on the SAME two most expensive pitchers, spending $19,900-$21,200 on
+# pitching and leaving barely enough budget for 8 undifferentiated
+# floor-priced hitters. Root cause, diagnosed directly against real
+# numbers: Estimated_Salary's fixed $2,000 floor is a much smaller
+# fraction of an elite player's price than a replacement-level player's,
+# so ANY high scorer - regardless of position - gets a structurally
+# better AVERAGE dollars-per-point rate purely from that floor dilution,
+# even though the earlier parity fix already equalized the MARGINAL rate.
+# An objective that maximizes raw point totals under a budget will always
+# rationally chase that average-rate advantage and overpay for the 1-2
+# biggest scorers, leaving nothing to build a real roster (a mix of
+# reliable "consistent" floor plays and genuine "boom" upside plays, in
+# the user's own framing - "consistent players carry their own, boom
+# players pick up slack") with what's left.
+#
+# Value_Score = boom-adjusted points per $1,000 of Estimated_Salary -
+# directly rewards being UNDERPRICED relative to real upside (a "star")
+# over being fully priced-in already (a "superstar"), instead of chasing
+# raw point totals regardless of cost. Computed for BOTH hitters and
+# pitchers (dfs_optimizer.build_player_pool), unlike Boom_Adjusted_DK_Points/
+# Matchup_Boom_Score above, which are hitter-validated or hitter-only.
+#
+# DFS_VALUE_BOOM_K_PITCHER gives pitchers real boom credit for this
+# specific objective - explicitly NOT the same as DFS_BOOM_ADJUSTED_K_PITCHER
+# (0.0) above, which was validated against a different, narrower question
+# (does boom-adjusting predict WHICH DAY a pitcher booms - it didn't).
+# Implemented here anyway, per explicit user direction, because Value_Score
+# answers a different question: roster-construction diversification, not
+# single-day prediction. Matches hitters' own validated k=1.0 for
+# consistency - not independently re-validated for pitchers via a capture-
+# rate backtest (that specific metric already showed no k helps there for
+# THAT question), so treat this as a deliberate strategic choice, not a
+# claimed statistical win.
+DFS_VALUE_BOOM_K_PITCHER = 1.0
+
+# Value_Score maximizes a per-dollar RATIO, which carries no pressure to
+# spend anywhere close to the salary cap - confirmed via a real sanity
+# check against actual production data: objective=Value_Score selected a
+# full legal lineup for only $39,700 of the $50,000 cap (total DK_Points
+# fell from 81.38 to 56.31 vs. objective=DK_Points on the same slate),
+# because leaving $10,300 unspent doesn't cost the ratio objective
+# anything. That's a real flaw, not the intended "stars not superstars"
+# behavior - a usable lineup has to actually spend close to its budget.
+#
+# DFS_VALUE_MIN_SALARY_FRACTION adds a floor constraint
+# (sum(Estimated_Salary) >= fraction * DFS_SALARY_CAP) so the optimizer is
+# forced to use most of the cap even under Value_Score. Chosen via the
+# same real pool, testing three fractions of the $50,000 cap:
+#   0.85 (min $42,500): total_salary=$43,900  DK_Points=67.99  pitcher_salary=$16,900
+#   0.90 (min $45,000): total_salary=$46,000  DK_Points=73.66  pitcher_salary=$19,000
+#   0.95 (min $47,500): total_salary=$47,500  DK_Points=77.79  pitcher_salary=$19,900
+# 0.95 defeats the purpose (pitcher spend creeps back to the same
+# overpriced $19,900 the whole feature exists to avoid). 0.85 keeps
+# pitcher spend near the real winning-lineup range ($17,500-$18,100 in
+# the contest that originally motivated this) while still using most of
+# the budget - the best balance of the three, not a formally optimized
+# value.
+DFS_VALUE_MIN_SALARY_FRACTION = 0.85
+
 # --- Optimal Lineup (docs/dfs.html's "Optimal Lineup" tab, roster_positions.py,
 # estimated_salary.py, dfs_optimizer.py, scripts/build_optimal_lineup.py) ---
 #
