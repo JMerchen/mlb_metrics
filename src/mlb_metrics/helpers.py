@@ -49,6 +49,20 @@ def is_strikeout_walk_hbp(events: pd.Series) -> pd.Series:
     return events.isin(STRIKEOUT_WALK_HBP_EVENTS).astype(int)
 
 
+def is_non_at_bat_event(events: pd.Series) -> pd.Series:
+    """Walk or HBP - the only two event types excluded from the AB
+    denominator when converting a per-PA rate to a per-AB rate (a
+    strikeout IS an official at-bat, unlike a walk/HBP - see
+    pitchers.py's PAVE for the real bug this distinction fixed: an
+    earlier version used is_strikeout_walk_hbp here instead, which
+    wrongly excluded strikeouts from the AB count too, inflating
+    hit-rate-against for exactly the pitchers who rack up the most
+    strikeouts). Equivalent to `1 - is_official_at_bat`, exposed as its
+    own classifier for the same reason is_official_at_bat is: callers
+    read the intent directly rather than re-deriving it from a negation."""
+    return events.isin(NON_AT_BAT_EVENTS).astype(int)
+
+
 def is_strikeout(events: pd.Series) -> pd.Series:
     return events.isin(STRIKEOUT_EVENTS).astype(int)
 

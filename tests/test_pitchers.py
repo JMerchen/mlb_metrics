@@ -10,11 +10,18 @@ def _events(pitcher, rows):
     ]
 
 
-def test_compute_pave_blends_windows_with_strikeout_adjustment():
+def test_compute_pave_blends_windows_excluding_only_walks_and_hbp_from_ab():
     # Windows relative to latest=2026-06-20: full/30d/81d/15d cutoffs are
     # 2026-03-25(season start-ish)/05-21/03-31/06-05.
+    #
+    # A "walk" (not a strikeout) is the only non-AB event here, on purpose:
+    # PAVE used to exclude strikeouts from the AB denominator too (a real
+    # bug - see pitchers.py's module docstring), which this fixture would
+    # NOT have caught, since it has no walk/HBP-vs-strikeout distinction to
+    # exercise unless a real non-AB event (walk/HBP) is present. The
+    # strikeout below must stay IN every window's AB count.
     rows = _events(1, [
-        ("2026-03-01", "field_out"),                # only in full
+        ("2026-03-01", "walk"),                      # only in full
         ("2026-04-15", "single"), ("2026-04-15", "field_out"),   # in 81d, not 30d/15d
         ("2026-06-01", "single"), ("2026-06-01", "strikeout"),   # in 30d, not 15d
         ("2026-06-18", "single"),                    # in 15d
@@ -26,11 +33,11 @@ def test_compute_pave_blends_windows_with_strikeout_adjustment():
     assert pave.loc[1, "at_bats"] == 6
     assert pave.loc[1, "hits"] == 3
     assert pave.loc[1, "TBA"] == 3
-    # full: baa=3/6=.5, stk_rate=1/6 -> pave_full=.5/(5/6)=.6
-    # 30d: baa=2/3, stk_rate=1/3 -> pave_30 = (2/3)/(2/3) = 1.0
-    # 81d: baa=3/5, stk_rate=1/5 -> pave_81 = .6/.8=.75
-    # 15d: baa=1/1, stk_rate=0 -> pave_15=1.0
-    expected = 0.6 * 0.3 + 1.0 * 0.265 + 0.75 * 0.23 + 1.0 * 0.205
+    # full: baa=3/6=.5, non_ab_rate=1/6 (the one walk) -> pave_full=.5/(5/6)=.6
+    # 30d: baa=2/3, non_ab_rate=0 (the strikeout stays IN the AB count) -> pave_30=2/3
+    # 81d: baa=3/5, non_ab_rate=0 -> pave_81=.6
+    # 15d: baa=1/1, non_ab_rate=0 -> pave_15=1.0
+    expected = 0.6 * 0.3 + (2 / 3) * 0.265 + 0.6 * 0.23 + 1.0 * 0.205
     assert pave.loc[1, "PAVE"] == pytest.approx(expected)
 
     # power_a (total bases allowed per PA): full=3/6=.5, 30d=2/3, 81d=3/5=.6,
@@ -42,9 +49,10 @@ def test_compute_pave_blends_windows_with_strikeout_adjustment():
 
 
 def test_assemble_pitchers_normalizes_pave_plus_to_qualified_mean():
-    # Pitcher 1: same data as above (PAVE ~= 0.8225, at_bats=6, qualifies).
+    # Pitcher 1: same data as the compute_pave test above (blended
+    # PAVE ~= 0.699667, at_bats=6, qualifies).
     rows = _events(1, [
-        ("2026-03-01", "field_out"),
+        ("2026-03-01", "walk"),
         ("2026-04-15", "single"), ("2026-04-15", "field_out"),
         ("2026-06-01", "single"), ("2026-06-01", "strikeout"),
         ("2026-06-18", "single"),
@@ -66,8 +74,9 @@ def test_assemble_pitchers_normalizes_pave_plus_to_qualified_mean():
 
     result = pitchers.assemble_pitchers(pdf, names, latest_pitcher_team).set_index("key_mlbam")
 
+    pitcher_1_pave = 0.6 * 0.3 + (2 / 3) * 0.265 + 0.6 * 0.23 + 1.0 * 0.205
     assert result.loc[1, "PAVE_PLUS"] == pytest.approx(1.0)
-    assert result.loc[2, "PAVE_PLUS"] == pytest.approx(1.0 / 0.8225, rel=1e-3)
+    assert result.loc[2, "PAVE_PLUS"] == pytest.approx(1.0 / pitcher_1_pave, rel=1e-3)
 
     # baa blended = .5*.3 + (2/3)*.265 + .6*.23 + 1*.205 = .669675 -> Expected_Hits = baa * 22
     assert result.loc[1, "Expected_Hits"] == pytest.approx(0.669675 * 22, rel=1e-3)
@@ -129,11 +138,12 @@ def _bullpen_row(team, pitcher, date, events, is_starter):
 
 
 def test_compute_bullpen_pave_excludes_starters_and_pools_by_team():
+    pitcher_1_pave = 0.6 * 0.3 + (2 / 3) * 0.265 + 0.6 * 0.23 + 1.0 * 0.205
     rows = [
         # Team X's bullpen (two different relievers pooled together): the
         # exact same events as the compute_pave test above, split across two
-        # pitchers, so Bullpen_PAVE(X) should equal that test's PAVE (0.8225).
-        _bullpen_row("X", 11, "2026-03-01", "field_out", False),
+        # pitchers, so Bullpen_PAVE(X) should equal that test's blended PAVE.
+        _bullpen_row("X", 11, "2026-03-01", "walk", False),
         _bullpen_row("X", 11, "2026-04-15", "single", False),
         _bullpen_row("X", 12, "2026-04-15", "field_out", False),
         _bullpen_row("X", 12, "2026-06-01", "single", False),
@@ -150,8 +160,8 @@ def test_compute_bullpen_pave_excludes_starters_and_pools_by_team():
     result = pitchers.compute_bullpen_pave(pdf_with_role).set_index("team")
 
     assert result.loc["X", "Bullpen_AtBats"] == 6
-    mean_pave = (0.8225 + 1.0) / 2
-    assert result.loc["X", "Bullpen_PAVE_PLUS"] == pytest.approx(0.8225 / mean_pave, rel=1e-3)
+    mean_pave = (pitcher_1_pave + 1.0) / 2
+    assert result.loc["X", "Bullpen_PAVE_PLUS"] == pytest.approx(pitcher_1_pave / mean_pave, rel=1e-3)
     assert result.loc["Y", "Bullpen_PAVE_PLUS"] == pytest.approx(1.0 / mean_pave, rel=1e-3)
 
     # Same underlying at-bats as the power_a test above: team X's power_a

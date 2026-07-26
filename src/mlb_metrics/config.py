@@ -29,7 +29,10 @@ WAVE_WINDOWS = [
 # probability: probability = 1 - (1 - rate) ** WAVE_TRIALS_PER_GAME.
 WAVE_TRIALS_PER_GAME = 3.5
 
-# PAVE (pitcher hits-allowed rate, adjusted for K/BB/HBP rate): full/30d/81d/15d.
+# PAVE (pitcher hits-allowed rate, converted from a per-PA rate to a
+# per-AB rate by excluding walks/HBP only - NOT strikeouts, which are
+# real at-bats; see pitchers.py's module docstring for the real bug this
+# used to have): full/30d/81d/15d.
 PAVE_WINDOWS = [
     (None, 0.300),
     (30, 0.265),

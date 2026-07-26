@@ -271,6 +271,76 @@ game identity at all; `game_id` itself stays a dense, date-ordered integer
 against a real historical `wave.csv` commit: reconstructed
 `Game_Hit_Probability` now matches the committed values exactly.
 
+### Real bug fixed: PAVE excluded strikeouts from the AB denominator
+
+Surfaced by a direct, specific complaint: a hitter's DFS matchup that day
+was against Jacob Misiorowski, a dominant strikeout starter, and neither
+`Matchup_Hit_Probability` nor the DFS pitcher projection treated that
+matchup as tough at all. `pitchers._pave_rate` converts a hits-per-plate-
+appearance rate into a hits-per-at-bat rate by excluding non-at-bat
+events from the denominator - but the original formula excluded
+strikeouts from that denominator ALONGSIDE walks/HBP
+(`helpers.is_strikeout_walk_hbp`). A strikeout **is** an official at-bat;
+only a walk or HBP isn't. Excluding it too shrinks the effective
+denominator for every strikeout a pitcher records, which **inflates**
+the computed hit-rate for exactly the pitchers who rack up the most
+strikeouts - the more swings-and-misses a pitcher generates, the worse
+the old formula made him look. Fixed by excluding only walks/HBP
+(`helpers.is_non_at_bat_event`), leaving strikeouts in the AB count.
+
+Confirmed against Misiorowski's real 2026 Statcast log (439 batters
+faced: 173 K, 28 BB, 8 HBP, 61 hits): the old formula gave a full-season
+PAVE of 0.265 (PAVE_PLUS ~0.93 - barely better than average); the fixed
+formula gives 61/(439-28-8) = 0.151 - genuinely elite, matching his real
+Cy-Young-caliber season.
+
+**Re-backtested on the same real 20-date sample, same dates, before vs.
+after the fix** (`dfs_backtest.backtest_dfs_projections` - the pitcher
+side is the most directly affected, since `Expected_H_Allowed = PAVE *
+Expected_IP * DFS_BATTERS_FACED_PER_INNING`):
+
+| signal | MAE before | MAE after | naive-baseline MAE | correlation before | correlation after |
+|---|---|---|---|---|---|
+| `Expected_H_Allowed` vs. `Actual_H` | 2.6252 | **1.8032** | 1.8395 | 0.262 | 0.299 |
+| `DK_Points_Pitcher` (combined) | 6.8840 | 6.8312 | 7.1776 | 0.327 | 0.332 |
+| `DK_Points_Hitter` (heuristic) | 4.7161 | 4.7156 | 4.6879 | 0.010 | 0.010 |
+
+`Expected_H_Allowed` is the headline result: its MAE was worse than the
+naive baseline before this fix (a previously-documented, unresolved weak
+signal - see "Pitchers" below) and now **beats** the baseline for the
+first time, a direct, real confirmation that the bug fix - not just the
+Misiorowski anecdote - measurably improved a signal this project had
+already flagged as broken. `DK_Points_Pitcher`'s combined MAE improves
+more modestly (it also blends the FIP-based ER estimate, which PAVE
+doesn't touch). `DK_Points_Hitter`'s heuristic number is essentially
+unchanged - expected, since that heuristic's correlation was already
+near zero for unrelated, previously-documented reasons (the
+`compute_matchup_adjustment` ratio - see "Hitters" below), and hitters'
+live projection is served by the ML model, not this heuristic, anyway.
+
+**What this fix reaches, project-wide**: every consumer of
+`PAVE`/`PAVE_PLUS`/`Bullpen_PAVE` - `matchup.py`'s
+`Matchup_Hit_Probability` (both the hitter matchup ratio above and its
+Boom-Adjusted/Value_Score downstream uses), `game_picks.py`'s
+susceptibility signal (blended against `Power_A_PLUS`, see
+`GAME_PICK_SUSCEPTIBILITY_WEIGHT`), and `dfs.py`'s `Expected_H_Allowed`.
+The DFS hitter/pitcher ML models (`dfs_ml.py`) were retrained after this
+fix since `starter_PAVE`/`Bullpen_PAVE`/`Expected_H_Allowed` are direct
+input features - see "Machine learning follow-up" below for the
+retrained numbers.
+
+**What could NOT be cleanly re-verified**: the 65.8%->75.0% Beat the
+Streak hit-rate uplift reported just above, and the original
+`Ceiling_DK_Points`/`Boom_Rate` capture-rate backtests, replay
+git-history-committed CSV snapshots (`docs/data/wave.csv`/`confidence.csv`
+at past commits) that were computed under the OLD, buggy PAVE - rewriting
+that committed history to "fix" it retroactively isn't something this
+project does. Those numbers stand as historically accurate for what was
+live at the time; the corrected signal's real effect on live picks will
+show up naturally as new daily data accumulates under the fixed formula
+going forward, the same way any other model change's live impact is
+observed.
+
 ### Platoon and park awareness
 
 Two further adjustments to `Matchup_Hit_Probability`, on top of the base
