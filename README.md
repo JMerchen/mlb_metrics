@@ -1229,6 +1229,17 @@ win, matching how this project has always handled a backtest that didn't
 confirm the hypothesis (see Age Curves HR9's KNN-vs-ML precedent,
 Ceiling/Boom-Adjusted's pitcher non-results above).
 
+**Re-checked after the PAVE bug fix above** (`Matchup_Ratio` reads
+`Matchup_Hit_Probability`, a direct PAVE consumer; `Boom_Rate` itself is
+historical-outcome-only and unaffected): n=5,547/675 real boom-days (a
+slightly larger accumulated sample than the original 5,430/689, not a
+strict same-day A/B) - mean projection 10.8%, `Matchup_Boom_Score` 14.5%,
+`Boom_Rate` alone 17.6%. The ordering conclusion is UNCHANGED - `Boom_Rate`
+alone still clearly beats `Matchup_Boom_Score` - with a small, consistent
+uptick across all three from the corrected matchup input. The fix didn't
+overturn this finding; `Matchup_Ratio` remains a weak signal for
+reasons unrelated to the PAVE bug (see above).
+
 **Hitters only** - pitchers have no `Matchup_Ratio` analog in this
 project, and the earlier Ceiling/Boom-Adjusted backtests already found no
 real upside-signal edge for pitchers, so this wasn't extended to a
