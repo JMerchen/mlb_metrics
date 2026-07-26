@@ -3,22 +3,11 @@
 // shared - no build step in docs/, same convention age-curves.js already
 // documents).
 //
-// See dfs.py's module docstring and README for the exact DK-points
-// methodology and known v1 limitations (hitters now score BB/HBP/RBI too;
-// Runs/SB still excluded - no reliable structured signal exists for
-// either; Win/CG/no-hitter bonuses excluded for pitchers). Ceiling (P90),
-// Boom-Adjusted, Boom Rate, and Matchup Boom (last two hitters only) are
-// dfs_ceiling.py's upside/volatility signals - additional informational
-// columns alongside the mean DK Pts projection, not replacements for it.
-// Real backtest finding worth knowing: Boom Rate (a player's plain
-// historical boom frequency) actually beat Matchup Boom (the same rate
-// adjusted by today's matchup) at flagging real boom days - the matchup
-// multiplier added noise, not signal, so Boom Rate is the more
-// trustworthy of the two. See dfs_ceiling.py's module docstring and
-// README for the full numbers. The Optimal Lineup tab's Estimated_Salary
-// is a MODELED estimate,
-// not a real DraftKings price - see renderOptimalLineup below and
-// estimated_salary.py's module docstring.
+// See dfs.py's/dfs_ceiling.py's/estimated_salary.py's module docstrings
+// and the README for the full DK-points methodology, the Ceiling/
+// Boom-Adjusted/Boom Rate/Matchup Boom signals, backtest numbers, and
+// known limitations (including that Estimated_Salary is a MODELED
+// estimate, not a real DraftKings price).
 
 async function loadCSV(path){
 const response = await fetch(`${path}?t=${Date.now()}`, {cache:"no-store"})
@@ -91,9 +80,6 @@ const rows = dfsPitchers.map(p=>({
 buildTable(rows, "pitchersTable")
 }
 
-// "Est. Salary" column header spells out the disclaimer inline, not just
-// in the warning box above the table - a user could screenshot/scroll
-// past the box, so the number itself carries the caveat with it.
 function renderOptimalLineup(){
 const rows = dfsOptimalLineup.map(p=>({
 "Slot": p.dk_slot,
@@ -101,7 +87,7 @@ const rows = dfsOptimalLineup.map(p=>({
 "Team": p.team,
 "Opp": `${p.is_home === "True" || p.is_home === "true" ? "vs" : "@"} ${p.opponent}`,
 "DK Pts": p.DK_Points && p.DK_Points !== "" ? Number(p.DK_Points).toFixed(2) : "-",
-"Est. Salary (NOT a real DK price)": p.Estimated_Salary && p.Estimated_Salary !== "" ? `$${Number(p.Estimated_Salary).toLocaleString()}` : "-",
+"Est. Salary": p.Estimated_Salary && p.Estimated_Salary !== "" ? `$${Number(p.Estimated_Salary).toLocaleString()}` : "-",
 }))
 buildTable(rows, "optimalLineupTable")
 }

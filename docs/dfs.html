@@ -32,72 +32,9 @@ DFS Rankings
 Today's hitters and probable starting pitchers, ranked by estimated
 DraftKings Classic MLB fantasy points, plus an Optimal Lineup tab that
 builds a salary-cap-and-position-slot DraftKings Classic lineup on top of
-those projections. Hitter points model hit-type scoring
-(singles/doubles/triples/home runs, adjusted for today's actual
-opposing pitcher) plus walks, hit-by-pitch, and RBIs - runs scored and
-stolen bases are NOT included, since this project has no reliable
-runner-tracking or stolen-base signal yet. Pitcher points model innings/strikeouts/walks
-allowed/hits allowed plus an estimated earned-run penalty (from FIP, not
-real ERA - see README for why); wins and complete-game/no-hitter bonuses
-are NOT included. See README for the full methodology, known
-limitations, and backtest numbers.
-</p>
-
-<p style="opacity:.75; max-width:700px; border-left:3px solid #4a90d9; padding-left:10px;">
-<strong>Backtested against real outcomes, reported honestly:</strong> the
-original heuristic hitter ranking had essentially zero real correlation
-with actual next-game results (-0.004). A gradient-boosting model trained
-on the same underlying matchup ingredients (not the flawed heuristic
-formula) has since replaced it and now shows a real, if still modest,
-positive signal (correlation 0.162). Pitcher hits-allowed and walks
-projections were similarly upgraded via a validated regression model.
-None of these are strong signals yet - treat them as directionally useful,
-not high-confidence - but each one now beats both a naive guess and its
-own prior heuristic on real held-out data. See README for the full
-numbers and methodology.
-</p>
-
-<p style="opacity:.75; max-width:700px; border-left:3px solid #4a90d9; padding-left:10px;">
-<strong>Ceiling (P90):</strong> a player's own real historical 90th-percentile
-DK-point game - an UPSIDE signal for tournament-style lineups, alongside
-(not instead of) the mean projection above. Tournament-winning lineups
-tend to come from players who spiked well above their average on the day,
-not from players who reliably hit their mean - this column surfaces who
-has actually done that before. Informational only: the Optimal Lineup tab
-defaults to maximizing the mean projection; pass
-<code>--objective ceiling</code> to <code>scripts/build_optimal_lineup.py</code>
-to build a ceiling-maximizing lineup instead. See README for the backtest
-that checked whether ranking by ceiling actually helps.
-</p>
-
-<p style="opacity:.75; max-width:700px; border-left:3px solid #4a90d9; padding-left:10px;">
-<strong>Boom-Adjusted:</strong> neither pure mean nor pure ceiling - a
-player with real, FREQUENT upside swings (sometimes 20, sometimes 5,
-sometimes 0, averaging 4.8) ranks above a metronomic player averaging a
-flat 5, without the score being blind to the mean the way a single
-ceiling game is. Computed as the mean projection plus a validated
-multiple of the player's own real historical upside-only volatility (a
-"semi-deviation" - only above-average games count, so bust-heavy players
-aren't rewarded the way a boom-heavy player is). Also informational only;
-pass <code>--objective boom</code> to build a boom-adjusted lineup. See
-README for the exact formula and the k-value backtest that chose it.
-</p>
-
-<p style="opacity:.75; max-width:700px; border-left:3px solid #4a90d9; padding-left:10px;">
-<strong>Boom Rate (hitters only):</strong> a player's real historical
-rate of clearing a fixed, league-wide boom bar (not their own percentile -
-see README for why that would be tautological). Backtested as the
-STRONGEST of this project's boom-flagging signals: 17.3% real capture
-rate on actual boom days, vs. 10.6% for the plain mean projection.
-<strong>Matchup Boom</strong> takes that same rate and scales it by
-today's opposing-pitcher/park matchup favorability - the intent was to
-predict WHICH matchups make a boom more likely today, not just who has
-boomed before, but the real backtest found the matchup adjustment
-actually made it WORSE (14.1% capture rate, below Boom Rate alone) - the
-matchup signal it multiplies by is already flagged elsewhere on this page
-as high-risk. Reported honestly: treat Boom Rate as the more trustworthy
-of the two; Matchup Boom is informational/exploratory only. See README
-for the full numbers.
+those projections. See the
+<a href="https://github.com/JMerchen/mlb_metrics#dfs-player-rankings-docsdfshtml-dfspy" style="color:inherit">README</a>
+for the full methodology, known limitations, and backtest numbers.
 </p>
 
 <div class="tabGroup" id="positionTabs">
@@ -113,16 +50,6 @@ for the full numbers.
 </div>
 
 <div id="optimalLineupSection" style="display:none;">
-
-<p style="max-width:700px; padding:10px; border:2px solid #e53935; border-radius:4px; background:rgba(229,57,53,0.08);">
-<strong>Estimated_Salary is NOT a real DraftKings price.</strong> DraftKings
-has no public API for contest salaries, so this project cannot fetch real
-ones. Every dollar figure below is a MODELED estimate derived from this
-project's own point projections (see README's "Optimal Lineup" section for
-the exact formula) - it is not sourced from DraftKings in any way. Always
-verify the real price on DraftKings.com before entering any contest, and
-do not assume a lineup built here is a valid budget on the real platform.
-</p>
 
 <div class="scrollbox" id="optimalLineupTable">
 </div>
