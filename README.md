@@ -851,6 +851,30 @@ alongside the code. Re-run `scripts/train_dfs_ml_models.py` (and update
 the numbers above) after any change to the DFS feature set or windowing
 constants.
 
+**Retrained again 2026-07-26** after the PAVE bug fix above
+(`starter_PAVE`/`Bullpen_PAVE` are direct hitter-model features;
+`Expected_H_Allowed` - itself PAVE-derived - is a direct pitcher-model
+feature), against the full persisted history (118 hitter dates / 103
+pitcher dates):
+
+| signal | model | MAE | naive baseline MAE | heuristic MAE | correlation | n scored |
+|---|---|---|---|---|---|---|
+| `DK_Points_Hitter` | gradient boosting | 4.6299 | 4.6648 | 4.7156 | 0.161 | 5,760 |
+| `Expected_H_Allowed` | Ridge (alpha=30) | 1.7685 | 1.8395 | 1.8032 | 0.297 | 481 |
+| `Expected_BB` | Ridge (alpha=0.1) | 1.0141 | 1.0310 | 1.0689 | 0.130 | 481 |
+
+`DK_Points_Hitter`'s numbers are essentially unchanged from the prior
+retrain (correlation 0.161 vs. 0.162) - expected, since PAVE isn't the
+reason this signal's correlation is weak (see "Hitters" above).
+`Expected_H_Allowed` is the interesting one: the PAVE fix alone already
+turned its HEURISTIC from worse-than-baseline (MAE 2.6252 pre-fix) into
+better-than-baseline (1.8032) on the identical dates - and this retrained
+model improves on that fixed heuristic further still (1.7685), a real
+additional gain stacked on top of the formula fix, not just the model
+recovering ground the bug had cost it. All three again beat both the
+naive baseline and their own (now-corrected) heuristic, so all three
+stayed live with these updated weights.
+
 ## Optimal Lineup (`docs/dfs.html`'s "Optimal Lineup" tab, `dfs_optimizer.py`)
 
 **`Estimated_Salary` is NOT a real DraftKings price.** DraftKings has no
