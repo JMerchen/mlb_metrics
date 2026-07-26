@@ -329,6 +329,23 @@ fix since `starter_PAVE`/`Bullpen_PAVE`/`Expected_H_Allowed` are direct
 input features - see "Machine learning follow-up" below for the
 retrained numbers.
 
+**Automated Game Picks re-checked too, same 20-date sample, before vs.
+after** (`game_picks_backtest.reconstruct_historical_game_picks_from_persisted`,
+also a fresh recompute, not a git-history replay): accuracy actually went
+from 57.9% to 56.1% (Brier 0.2470 -> 0.2486) - a small move in the WRONG
+direction. On n=57 resolved games that's exactly one game's outcome
+flipping, well within noise for a sample this size - not treated as a
+real regression, but reported plainly rather than omitted because it
+didn't confirm the hypothesis. The likely reason it barely moved at all
+either way: `game_picks.py` blends `PAVE_PLUS` (a ratio re-normalized to
+mean 1.0 across that day's qualified pitcher pool), not the raw PAVE
+rate the DFS pitcher signals use directly - renormalization absorbs most
+of a uniform formula shift, so this signal was always going to be far
+less sensitive to the fix than `Expected_H_Allowed`'s raw AB-rate
+calculation. `GAME_PICK_SUSCEPTIBILITY_WEIGHT` (0.5) was left unchanged;
+one game on n=57 isn't grounds to recalibrate a weight that was itself
+chosen from a real backtest.
+
 **What could NOT be cleanly re-verified**: the 65.8%->75.0% Beat the
 Streak hit-rate uplift reported just above, and the original
 `Ceiling_DK_Points`/`Boom_Rate` capture-rate backtests, replay
