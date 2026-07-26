@@ -42,21 +42,38 @@ def test_compute_estimated_salary_degenerate_reference_range_maps_to_floor():
     assert result.tolist() == [2000, 2000]
 
 
-def test_compute_hitter_estimated_salary_uses_configured_hitter_bounds():
+def test_compute_hitter_estimated_salary_uses_shared_reference_bounds():
     from mlb_metrics import config
-    points = pd.Series([config.DFS_REFERENCE_MIN_POINTS_HITTER, config.DFS_REFERENCE_MAX_POINTS_HITTER])
+    points = pd.Series([config.DFS_REFERENCE_MIN_POINTS, config.DFS_REFERENCE_MAX_POINTS])
 
     result = estimated_salary.compute_hitter_estimated_salary(points)
 
     assert result.iloc[0] == config.DFS_ESTIMATED_SALARY_FLOOR
-    assert result.iloc[1] == config.DFS_ESTIMATED_SALARY_CEILING_HITTER
+    assert result.iloc[1] == config.DFS_ESTIMATED_SALARY_CEILING
 
 
-def test_compute_pitcher_estimated_salary_uses_configured_pitcher_bounds():
+def test_compute_pitcher_estimated_salary_uses_shared_reference_bounds():
     from mlb_metrics import config
-    points = pd.Series([config.DFS_REFERENCE_MIN_POINTS_PITCHER, config.DFS_REFERENCE_MAX_POINTS_PITCHER])
+    points = pd.Series([config.DFS_REFERENCE_MIN_POINTS, config.DFS_REFERENCE_MAX_POINTS])
 
     result = estimated_salary.compute_pitcher_estimated_salary(points)
 
     assert result.iloc[0] == config.DFS_ESTIMATED_SALARY_FLOOR
-    assert result.iloc[1] == config.DFS_ESTIMATED_SALARY_CEILING_PITCHER
+    assert result.iloc[1] == config.DFS_ESTIMATED_SALARY_CEILING
+
+
+def test_hitter_and_pitcher_salary_share_same_dollar_per_point_rate():
+    # The real bug this fix addresses: a hitter and a pitcher projecting
+    # the SAME DK_Points must get the SAME Estimated_Salary - one DK point
+    # is worth the same dollar amount regardless of position. Any point
+    # value strictly between the shared floor/ceiling reference points
+    # works as the probe; picking the midpoint avoids relying on either
+    # endpoint alone.
+    from mlb_metrics import config
+    midpoint = (config.DFS_REFERENCE_MIN_POINTS + config.DFS_REFERENCE_MAX_POINTS) / 2
+    points = pd.Series([midpoint])
+
+    hitter_salary = estimated_salary.compute_hitter_estimated_salary(points)
+    pitcher_salary = estimated_salary.compute_pitcher_estimated_salary(points)
+
+    assert hitter_salary.iloc[0] == pitcher_salary.iloc[0]

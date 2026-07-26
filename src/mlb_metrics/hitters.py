@@ -36,12 +36,18 @@ def _slice_by_days(frame: pd.DataFrame, latest, days_back):
 
 def _side_window_agg(dt: pd.DataFrame, latest, days_back, throws: str, stat_fns: dict) -> pd.DataFrame:
     """One row per batter: `n` (at-bat count) plus the sum of each stat in
-    `stat_fns`, restricted to the window and the given opposing-pitcher hand."""
+    `stat_fns`, restricted to the window and the given opposing-pitcher hand.
+
+    Each `stat_fns` value is `fn(side_df) -> Series`, given the WHOLE
+    windowed/sided frame (not just its `events` column) - needed by stats
+    like `helpers.estimate_rbi` that read more than one column
+    (`bat_score`/`post_bat_score`). Existing `events`-only classifiers
+    (`helpers.is_hit`, etc.) are passed as `lambda df: helpers.is_hit(df["events"])`."""
     window_df = _slice_by_days(dt, latest, days_back)
     side_df = window_df[window_df["p_throws"] == throws].copy()
     side_df["n"] = 1
     for name, fn in stat_fns.items():
-        side_df[name] = fn(side_df["events"])
+        side_df[name] = fn(side_df)
     cols = ["batter", "n"] + list(stat_fns.keys())
     return side_df[cols].groupby("batter", as_index=False).sum()
 
@@ -79,7 +85,7 @@ def compute_wave(dt: pd.DataFrame) -> pd.DataFrame:
     """Recency-weighted at-bat hit rate vs L/R pitching, converted to a
     per-game hit probability. Returns key_mlbam, WAVE, WAVE_L, WAVE_R,
     l_at_bat, r_at_bat, probability, probability_L, probability_R."""
-    stat_fns = {"hit": helpers.is_hit}
+    stat_fns = {"hit": lambda df: helpers.is_hit(df["events"])}
     rate_fns = {"rate": lambda agg: agg["hit"] / agg["n"]}
 
     r_blended, r_full = _blend_windows(dt, config.WAVE_WINDOWS, "R", stat_fns, rate_fns)
@@ -114,9 +120,9 @@ def compute_whops(dt: pd.DataFrame) -> pd.DataFrame:
     across windows. Computed for completeness but - as in the original
     script - not currently merged into any output table."""
     stat_fns = {
-        "ob": helpers.is_on_base,
-        "sv": helpers.total_bases,
-        "ab": helpers.is_official_at_bat,
+        "ob": lambda df: helpers.is_on_base(df["events"]),
+        "sv": lambda df: helpers.total_bases(df["events"]),
+        "ab": lambda df: helpers.is_official_at_bat(df["events"]),
     }
 
     def ops_rate(agg):
@@ -154,7 +160,7 @@ def compute_whops(dt: pd.DataFrame) -> pd.DataFrame:
 
 def compute_wtb(dt: pd.DataFrame) -> pd.DataFrame:
     """Recency-weighted slugging value, blended by throws, plus Expected_Bases."""
-    stat_fns = {"sv": helpers.total_bases}
+    stat_fns = {"sv": lambda df: helpers.total_bases(df["events"])}
     rate_fns = {"slg": lambda agg: agg["sv"] / agg["n"]}
     windows = config.WHOPS_WTB_WINDOWS
 
@@ -175,6 +181,60 @@ def compute_wtb(dt: pd.DataFrame) -> pd.DataFrame:
     wtb = wtb.rename(columns={"batter": "key_mlbam"})
 
     return wtb[["key_mlbam", "pa_lfull", "pa_rfull", "WTB_l", "WTB_r", "WTB", "Expected_Bases"]]
+
+
+def compute_extended_dk_rates(dt: pd.DataFrame) -> pd.DataFrame:
+    """Recency-windowed BB/HBP/RBI rates for DK Classic MLB scoring
+    (dfs.py's compute_hitter_dk_points), reusing the exact same windowed
+    blend machinery WAVE/WHOPS/WTB already use. Deliberately reuses
+    config.WHOPS_WTB_WINDOWS (not a new dedicated window constant) - these
+    draw from the identical per-PA event stream WTB already blends, at the
+    same row granularity, so a separate window schedule would be an
+    unjustified extra knob, not a real architectural need (contrast with
+    pitcher_form.py's DFS_PITCHER_WINDOWS, which is deliberately separate
+    because it blends START-level, not AT-BAT-level, data).
+
+    `dt` must carry `bat_score`/`post_bat_score` (see
+    pipeline.build_pitch_events) for helpers.estimate_rbi.
+
+    Returns [key_mlbam, Expected_BB, Expected_HBP, Expected_RBI] - a
+    per-game expected count for each, converted from the blended per-PA
+    rate via config.WTB_TRIALS_PER_GAME (the same at-bat-per-game
+    assumption Expected_Bases already uses)."""
+    stat_fns = {
+        "bb": lambda df: helpers.is_walk_for_dk_scoring(df["events"]),
+        "hbp": lambda df: helpers.is_hit_by_pitch(df["events"]),
+        "rbi": helpers.estimate_rbi,
+    }
+    rate_fns = {
+        "bb_rate": lambda agg: agg["bb"] / agg["n"],
+        "hbp_rate": lambda agg: agg["hbp"] / agg["n"],
+        "rbi_rate": lambda agg: agg["rbi"] / agg["n"],
+    }
+    windows = config.WHOPS_WTB_WINDOWS
+
+    r_blended, r_full = _blend_windows(dt, windows, "R", stat_fns, rate_fns)
+    l_blended, l_full = _blend_windows(dt, windows, "L", stat_fns, rate_fns)
+
+    r_blended = r_blended.rename(columns={"bb_rate": "BB_rate_R", "hbp_rate": "HBP_rate_R", "rbi_rate": "RBI_rate_R"})
+    l_blended = l_blended.rename(columns={"bb_rate": "BB_rate_L", "hbp_rate": "HBP_rate_L", "rbi_rate": "RBI_rate_L"})
+
+    result = r_full.rename(columns={"n": "pa_rfull"})
+    result = result.merge(r_blended, on="batter", how="left")
+    result = result.merge(l_full.rename(columns={"n": "pa_lfull"}), on="batter", how="left")
+    result = result.merge(l_blended, on="batter", how="left")
+    result = result.fillna(0)
+
+    result["abt"] = result["pa_lfull"] + result["pa_rfull"]
+    result["abtl"] = result["pa_lfull"] / result["abt"]
+    result["abtr"] = result["pa_rfull"] / result["abt"]
+
+    for stat in ("BB", "HBP", "RBI"):
+        blended_rate = result[f"{stat}_rate_R"] * result["abtr"] + result[f"{stat}_rate_L"] * result["abtl"]
+        result[f"Expected_{stat}"] = (blended_rate * config.WTB_TRIALS_PER_GAME).fillna(0)
+
+    result = result.rename(columns={"batter": "key_mlbam"})
+    return result[["key_mlbam", "Expected_BB", "Expected_HBP", "Expected_RBI"]]
 
 
 def compute_game_hit_probability(data_with_game_id: pd.DataFrame) -> pd.DataFrame:
@@ -221,11 +281,13 @@ def assemble_hitters(
     """
     wave = compute_wave(dt)
     wtb = compute_wtb(dt)
+    extended_dk_rates = compute_extended_dk_rates(dt)
     game_hit_prob = compute_game_hit_probability(data_with_game_id)
 
     hitters = wave.merge(
         wtb[["key_mlbam", "pa_lfull", "pa_rfull", "Expected_Bases"]], on="key_mlbam", how="left"
     )
+    hitters = hitters.merge(extended_dk_rates, on="key_mlbam", how="left")
     hitters = hitters.merge(game_hit_prob, on="key_mlbam", how="left")
     hitters = hitters.merge(names, on="key_mlbam", how="left")
     hitters = hitters.merge(latest_team, on="key_mlbam", how="left")
@@ -239,6 +301,7 @@ def assemble_hitters(
             "pa_lfull", "pa_rfull",
             "WAVE", "WAVE_L", "WAVE_R", "probability_L", "probability_R", "probability",
             "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
+            "Expected_BB", "Expected_HBP", "Expected_RBI",
         ]
     ].fillna(0)
 

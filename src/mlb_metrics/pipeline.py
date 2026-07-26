@@ -25,8 +25,13 @@ from mlb_metrics import (
 
 
 def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
-    """Completed at-bat events with batter/p_throws, used by WAVE/WHOPS/WTB."""
-    return data.completed_events(df, ["game_date", "batter", "events", "p_throws"])
+    """Completed at-bat events with batter/p_throws, used by WAVE/WHOPS/WTB.
+    Carries bat_score/post_bat_score too (helpers.estimate_rbi, via
+    hitters.compute_extended_dk_rates) - both already exist on every raw
+    Statcast row, so no extra fetch/join is needed to add them here."""
+    return data.completed_events(
+        df, ["game_date", "batter", "events", "p_throws", "bat_score", "post_bat_score"]
+    )
 
 
 def build_pitcher_events(df: pd.DataFrame) -> pd.DataFrame:

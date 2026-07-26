@@ -31,6 +31,7 @@ def _write_daily_csvs(data_dir):
         "PA_L": 20, "PA_R": 20, "WAVE": 0.28, "WAVE_L": 0.28, "WAVE_R": 0.28,
         "probability_L": 0.6, "probability_R": 0.6, "probability": 0.6,
         "Game_Hit_Probability": 0.70, "Consistency": 0.1, "Approach": 0.4, "Expected_Bases": 1.5,
+        "Expected_BB": 0.3, "Expected_HBP": 0.1, "Expected_RBI": 0.4,
     }])
     pave = pd.DataFrame([{
         "key_mlbam": 99, "name_first": "Test", "name_last": "Pitcher", "team": "NYY",
@@ -56,6 +57,7 @@ def _write_persisted_statcast(raw_dir, n_starts=1):
                 "pitcher": 99, "batter": 1, "events": e, "p_throws": "R",
                 "inning_topbot": "Top", "home_team": "NYY", "away_team": "BOS",
                 "at_bat_number": i + 1, "pitch_number": 1,
+                "bat_score": 0, "post_bat_score": 0,
             })
     pd.DataFrame(rows).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
 

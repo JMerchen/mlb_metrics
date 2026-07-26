@@ -27,6 +27,16 @@ backtest) - a missing/not-yet-trained artifact silently keeps the
 existing heuristic, so this script's behavior never depends on whether
 that weekly training job has run yet.
 
+Also merges in Ceiling_DK_Points and Boom_Adjusted_DK_Points
+(dfs_ceiling.py) - ADDITIONAL informational upside/volatility columns
+alongside the existing mean projection, not a replacement for it (see
+dfs_ceiling.py's module docstring for why). A player with no real scored
+history at all (a true rookie/no games yet) gets
+Ceiling_Source/Upside_Deviation_Source="no_history" and a missing
+Ceiling_DK_Points/Upside_Deviation rather than a faked value;
+Boom_Adjusted_DK_Points falls back to the plain mean projection for that
+player in that case (mean + k*0, since there's no real deviation to add).
+
 Usage:
     python scripts/build_dfs_rankings.py
 """
@@ -40,7 +50,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import pandas as pd
 
-from mlb_metrics import config, data, dfs, dfs_ml, matchup, pitcher_form, pipeline, schedule
+from mlb_metrics import config, data, dfs, dfs_ceiling, dfs_ml, matchup, pitcher_form, pipeline, schedule
 
 
 def main():
@@ -90,6 +100,38 @@ def main():
 
     hitter_features = dfs_ml.build_hitter_features(wave, pave, confidence, schedule_df, matchup_probability)
     hitters, pitchers = dfs_ml.apply_ml_overrides(hitters, hitter_features, pitchers)
+
+    points_history = dfs_ceiling.compute_player_dk_points_history(persisted)
+    hitter_ceiling = dfs_ceiling.compute_ceiling_percentiles(points_history["hitters"])
+    pitcher_ceiling = dfs_ceiling.compute_ceiling_percentiles(points_history["pitchers"])
+    hitters = hitters.merge(hitter_ceiling, on="key_mlbam", how="left")
+    pitchers = pitchers.merge(pitcher_ceiling, on="key_mlbam", how="left")
+    for df in (hitters, pitchers):
+        df["Ceiling_Source"] = df["Ceiling_Source"].fillna("no_history")
+        df["n_games"] = df["n_games"].fillna(0)
+
+    # Only key_mlbam/Upside_Deviation/Upside_Deviation_Source are merged
+    # here, deliberately excluding compute_upside_deviation's own n_games -
+    # hitters/pitchers already carry an n_games column from the
+    # Ceiling_DK_Points merge above, and merging a second same-named
+    # column would silently suffix both to n_games_x/n_games_y (the exact
+    # column-collision bug this project already shipped once - see
+    # dfs_ml.apply_ml_overrides's docstring for the precedent).
+    upside_columns = ["key_mlbam", "Upside_Deviation", "Upside_Deviation_Source"]
+    hitter_deviation = dfs_ceiling.compute_upside_deviation(points_history["hitters"])
+    pitcher_deviation = dfs_ceiling.compute_upside_deviation(points_history["pitchers"])
+    hitters = hitters.merge(hitter_deviation[upside_columns], on="key_mlbam", how="left")
+    pitchers = pitchers.merge(pitcher_deviation[upside_columns], on="key_mlbam", how="left")
+    hitters["Upside_Deviation_Source"] = hitters["Upside_Deviation_Source"].fillna("no_history")
+    pitchers["Upside_Deviation_Source"] = pitchers["Upside_Deviation_Source"].fillna("no_history")
+    hitters["Upside_Deviation"] = hitters["Upside_Deviation"].fillna(0)
+    pitchers["Upside_Deviation"] = pitchers["Upside_Deviation"].fillna(0)
+    hitters["Boom_Adjusted_DK_Points"] = dfs_ceiling.compute_boom_adjusted_score(
+        hitters["DK_Points_Hitter"], hitters["Upside_Deviation"], config.DFS_BOOM_ADJUSTED_K_HITTER
+    )
+    pitchers["Boom_Adjusted_DK_Points"] = dfs_ceiling.compute_boom_adjusted_score(
+        pitchers["DK_Points_Pitcher"], pitchers["Upside_Deviation"], config.DFS_BOOM_ADJUSTED_K_PITCHER
+    )
 
     os.makedirs(args.data_dir, exist_ok=True)
     hitters.to_csv(os.path.join(args.data_dir, "dfs_hitters.csv"), index=False)

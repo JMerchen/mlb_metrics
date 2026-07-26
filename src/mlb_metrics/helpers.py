@@ -57,6 +57,24 @@ def is_walk(events: pd.Series) -> pd.Series:
     return (events == "walk").astype(int)
 
 
+# DK Classic MLB fantasy scoring counts an intentional walk as a walk too -
+# a genuinely different rule from is_walk above (used by pitcher_form.py's
+# BB9, traditional_stats.py's Age Curves BB9, and dfs_backtest.py's
+# pitcher-actual BB - all three already validated against the plain "walk"
+# definition). Deliberately a SEPARATE classifier rather than widening
+# is_walk, so this doesn't silently perturb those three already-shipped
+# numbers. In practice "intent_walk" rows never reach this function today
+# anyway - config.COUNTED_EVENTS (the upstream completed-PA filter every
+# caller's input already passed through) doesn't include "intent_walk", so
+# real intentional walks are NOT currently credited to DK_Points_Hitter - a
+# known, small (~0.3% of real plate appearances) gap, flagged honestly
+# rather than fixed by touching COUNTED_EVENTS, which many other
+# already-validated metrics (WAVE, PAVE, WHOPS) share and would need
+# re-validating if its PA population changed.
+def is_walk_for_dk_scoring(events: pd.Series) -> pd.Series:
+    return events.isin({"walk", "intent_walk"}).astype(int)
+
+
 def is_hit_by_pitch(events: pd.Series) -> pd.Series:
     return (events == "hit_by_pitch").astype(int)
 
@@ -76,3 +94,25 @@ def is_on_base(events: pd.Series) -> pd.Series:
 
 def is_official_at_bat(events: pd.Series) -> pd.Series:
     return (~events.isin(NON_AT_BAT_EVENTS)).astype(int)
+
+
+def estimate_rbi(df: pd.DataFrame) -> pd.Series:
+    """Runs driven in on this completed plate appearance, approximated as
+    `post_bat_score - bat_score` on the PA's own final-pitch row (the one
+    row per PA data.completed_events already collapses every caller's
+    input to) - the standard Statcast RBI-approximation technique. Needs
+    the whole row (not just `events`), unlike every other classifier here.
+
+    Two known, accepted simplifications, same documented-tradeoff category
+    as this project's FIP-for-ER estimate:
+    - This is the LAST pitch's own score delta, not a true first-pitch-of-
+      PA to last-pitch-of-PA delta - a run that scored on an EARLIER pitch
+      of the same PA (e.g. a wild pitch with the bases loaded before ball
+      four) is missed. Rare in practice.
+    - Cannot distinguish a legitimate RBI from a run that scored on a
+      fielding error or the batter's own GIDP third-out (no RBI credited
+      under official rules in either case) - both look identical to a bare
+      score delta under this technique.
+    Clipped at 0 (a score can only increase within one PA - a negative
+    delta would only ever indicate a data artifact)."""
+    return (df["post_bat_score"] - df["bat_score"]).clip(lower=0).astype(int)

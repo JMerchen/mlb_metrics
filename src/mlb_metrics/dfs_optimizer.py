@@ -39,14 +39,35 @@ true two-way player) gets one pool row per role, each with its own dk_slot
 - without an explicit guard, the optimizer could select both rows (using
 one real person to fill two different roster slots at once), which isn't
 a legal DK lineup. solve_optimal_lineup adds a `<= 1` constraint across any
-key_mlbam appearing more than once in the pool to prevent this."""
+key_mlbam appearing more than once in the pool to prevent this.
+
+## Objective: mean points (default), ceiling, or boom-adjusted
+
+solve_optimal_lineup's `objective_column` selects what gets maximized:
+"DK_Points" (the default, preserving all prior behavior - the existing
+mean projection), "Ceiling_DK_Points" (dfs_ceiling.py's real-history
+90th-percentile upside signal, for a boom-or-bust tournament/GPP lineup),
+or "Boom_Adjusted_DK_Points" (dfs_ceiling.py's mean + k*upside-deviation
+blend - rewards a player's real, FREQUENT volatility without chasing a
+single outlier game the way pure ceiling does; see dfs_ceiling.py's
+module docstring for the exact math and why this is neither pure mean nor
+pure ceiling). None of the two alternatives is the default - see
+dfs_ceiling.py's module docstring for why each ships opt-in until backtest
+evidence validates it. A player with no real scored history has no
+per-player ceiling/deviation to fall back to salary-cap math on, so
+build_player_pool defaults both alternative columns to their own DK_Points
+(the mean projection) rather than leaving them NaN, which would otherwise
+make them silently unselectable under a non-mean objective."""
 
 import pandas as pd
 import pulp
 
 from mlb_metrics import config, estimated_salary
 
-POOL_COLUMNS = ["key_mlbam", "name_first", "name_last", "team", "opponent", "dk_slot", "DK_Points", "Estimated_Salary"]
+POOL_COLUMNS = [
+    "key_mlbam", "name_first", "name_last", "team", "opponent", "dk_slot",
+    "DK_Points", "Ceiling_DK_Points", "Boom_Adjusted_DK_Points", "Estimated_Salary",
+]
 
 
 def build_player_pool(hitters: pd.DataFrame, pitchers: pd.DataFrame, eligibility: pd.DataFrame) -> pd.DataFrame:
@@ -62,11 +83,19 @@ def build_player_pool(hitters: pd.DataFrame, pitchers: pd.DataFrame, eligibility
     directly."""
     hitters = hitters.merge(eligibility[["key_mlbam", "dk_slot"]], on="key_mlbam", how="inner").copy()
     hitters["DK_Points"] = hitters["DK_Points_Hitter"]
+    for column in ("Ceiling_DK_Points", "Boom_Adjusted_DK_Points"):
+        if column not in hitters.columns:
+            hitters[column] = pd.NA
+        hitters[column] = hitters[column].fillna(hitters["DK_Points_Hitter"])
     hitters["Estimated_Salary"] = estimated_salary.compute_hitter_estimated_salary(hitters["DK_Points_Hitter"])
 
     pitchers = pitchers.copy()
     pitchers["dk_slot"] = "P"
     pitchers["DK_Points"] = pitchers["DK_Points_Pitcher"]
+    for column in ("Ceiling_DK_Points", "Boom_Adjusted_DK_Points"):
+        if column not in pitchers.columns:
+            pitchers[column] = pd.NA
+        pitchers[column] = pitchers[column].fillna(pitchers["DK_Points_Pitcher"])
     pitchers["Estimated_Salary"] = estimated_salary.compute_pitcher_estimated_salary(pitchers["DK_Points_Pitcher"])
 
     return pd.concat([hitters[POOL_COLUMNS], pitchers[POOL_COLUMNS]], ignore_index=True)
@@ -76,9 +105,12 @@ def solve_optimal_lineup(
     pool: pd.DataFrame,
     salary_cap: float = config.DFS_SALARY_CAP,
     roster_slots: dict = config.DFS_ROSTER_SLOTS,
+    objective_column: str = "DK_Points",
 ) -> pd.DataFrame | None:
-    """Exact MILP: maximize total DK_Points subject to
-    sum(Estimated_Salary) <= salary_cap and, for every slot in
+    """Exact MILP: maximize total `objective_column` (default "DK_Points",
+    the existing mean projection - pass "Ceiling_DK_Points" for a
+    tournament/GPP-style upside lineup instead, see module docstring)
+    subject to sum(Estimated_Salary) <= salary_cap and, for every slot in
     `roster_slots`, exactly that many players with a matching dk_slot are
     selected. Returns None (not an exception) if infeasible - too few
     eligible players at some slot, or the cheapest possible full roster
@@ -93,7 +125,7 @@ def solve_optimal_lineup(
     problem = pulp.LpProblem("optimal_lineup", pulp.LpMaximize)
     x = {i: pulp.LpVariable(f"x_{i}", cat="Binary") for i in pool.index}
 
-    problem += pulp.lpSum(x[i] * pool.loc[i, "DK_Points"] for i in pool.index)
+    problem += pulp.lpSum(x[i] * pool.loc[i, objective_column] for i in pool.index)
     problem += pulp.lpSum(x[i] * pool.loc[i, "Estimated_Salary"] for i in pool.index) <= salary_cap
 
     for slot, count in roster_slots.items():

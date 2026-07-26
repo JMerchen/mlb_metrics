@@ -4,10 +4,15 @@
 // documents).
 //
 // See dfs.py's module docstring and README for the exact DK-points
-// methodology and known v1 limitations (BB/HBP/R/RBI/SB excluded for
-// hitters; Win/CG/no-hitter bonuses excluded for pitchers). The Optimal
-// Lineup tab's Estimated_Salary is a MODELED estimate, not a real
-// DraftKings price - see renderOptimalLineup below and
+// methodology and known v1 limitations (hitters now score BB/HBP/RBI too;
+// Runs/SB still excluded - no reliable structured signal exists for
+// either; Win/CG/no-hitter bonuses excluded for pitchers). Ceiling (P90)
+// and Boom-Adjusted are dfs_ceiling.py's upside/volatility signals -
+// additional informational columns alongside the mean DK Pts projection,
+// not replacements for it; see dfs_ceiling.py's module docstring and
+// README for what each measures and the real backtest numbers behind
+// them. The Optimal Lineup tab's Estimated_Salary is a MODELED estimate,
+// not a real DraftKings price - see renderOptimalLineup below and
 // estimated_salary.py's module docstring.
 
 async function loadCSV(path){
@@ -53,7 +58,12 @@ const rows = dfsHitters.map(p=>({
 "Opp": `${p.is_home === "True" || p.is_home === "true" ? "vs" : "@"} ${p.opponent}`,
 "Expected Bases": p.Expected_Bases && p.Expected_Bases !== "" ? Number(p.Expected_Bases).toFixed(2) : "-",
 "Matchup Ratio": p.Matchup_Ratio && p.Matchup_Ratio !== "" ? Number(p.Matchup_Ratio).toFixed(2) : "-",
+"Exp BB": p.Expected_BB && p.Expected_BB !== "" ? Number(p.Expected_BB).toFixed(2) : "-",
+"Exp HBP": p.Expected_HBP && p.Expected_HBP !== "" ? Number(p.Expected_HBP).toFixed(2) : "-",
+"Exp RBI": p.Expected_RBI && p.Expected_RBI !== "" ? Number(p.Expected_RBI).toFixed(2) : "-",
 "DK Pts": p.DK_Points_Hitter && p.DK_Points_Hitter !== "" ? Number(p.DK_Points_Hitter).toFixed(2) : "-",
+"Ceiling (P90)": p.Ceiling_DK_Points && p.Ceiling_DK_Points !== "" ? Number(p.Ceiling_DK_Points).toFixed(2) : "-",
+"Boom-Adjusted": p.Boom_Adjusted_DK_Points && p.Boom_Adjusted_DK_Points !== "" ? Number(p.Boom_Adjusted_DK_Points).toFixed(2) : "-",
 }))
 buildTable(rows, "hittersTable")
 }
@@ -68,6 +78,8 @@ const rows = dfsPitchers.map(p=>({
 "HR9": p.HR9 && p.HR9 !== "" ? Number(p.HR9).toFixed(1) : "-",
 "Exp IP": p.Expected_IP && p.Expected_IP !== "" ? Number(p.Expected_IP).toFixed(1) : "-",
 "DK Pts": p.DK_Points_Pitcher && p.DK_Points_Pitcher !== "" ? Number(p.DK_Points_Pitcher).toFixed(2) : "-",
+"Ceiling (P90)": p.Ceiling_DK_Points && p.Ceiling_DK_Points !== "" ? Number(p.Ceiling_DK_Points).toFixed(2) : "-",
+"Boom-Adjusted": p.Boom_Adjusted_DK_Points && p.Boom_Adjusted_DK_Points !== "" ? Number(p.Boom_Adjusted_DK_Points).toFixed(2) : "-",
 }))
 buildTable(rows, "pitchersTable")
 }

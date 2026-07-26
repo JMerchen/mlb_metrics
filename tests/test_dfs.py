@@ -36,15 +36,16 @@ def test_compute_matchup_adjustment_floors_denominator_before_dividing():
     assert result.iloc[0] == pytest.approx(hi)  # still clipped, but via the floored denom
 
 
-def _wave_row(key_mlbam, team, pa_l, pa_r, expected_bases, game_hit_probability):
+def _wave_row(key_mlbam, team, pa_l, pa_r, expected_bases, game_hit_probability, expected_bb=0.0, expected_hbp=0.0, expected_rbi=0.0):
     return {
         "key_mlbam": key_mlbam, "name_first": "Test", "name_last": "Hitter", "team": team,
         "PA_L": pa_l, "PA_R": pa_r, "Expected_Bases": expected_bases, "Game_Hit_Probability": game_hit_probability,
+        "Expected_BB": expected_bb, "Expected_HBP": expected_hbp, "Expected_RBI": expected_rbi,
     }
 
 
 def test_compute_hitter_dk_points_exact_arithmetic():
-    wave = pd.DataFrame([_wave_row(1, "BOS", 20, 20, 1.5, 0.70)])
+    wave = pd.DataFrame([_wave_row(1, "BOS", 20, 20, 1.5, 0.70, expected_bb=0.4, expected_hbp=0.1, expected_rbi=0.3)])
     matchup_probability = pd.DataFrame([{"key_mlbam": 1, "Matchup_Hit_Probability": 0.84}])
     schedule_df = pd.DataFrame([{"team": "BOS", "opponent": "NYY", "is_home": True}])
 
@@ -52,11 +53,18 @@ def test_compute_hitter_dk_points_exact_arithmetic():
 
     expected_ratio = 0.84 / 0.70
     expected_adjusted = 1.5 * expected_ratio
-    expected_points = expected_adjusted * config.DFS_DK_POINTS_PER_TOTAL_BASE
+    expected_hit_type_points = expected_adjusted * config.DFS_DK_POINTS_PER_TOTAL_BASE
+    expected_points = (
+        expected_hit_type_points
+        + 0.4 * config.DFS_DK_HITTER_BB_POINTS
+        + 0.1 * config.DFS_DK_HITTER_HBP_POINTS
+        + 0.3 * config.DFS_DK_HITTER_RBI_POINTS
+    )
 
     assert result.loc[1, "opponent"] == "NYY"
     assert result.loc[1, "Matchup_Ratio"] == pytest.approx(expected_ratio)
     assert result.loc[1, "Adjusted_Expected_Bases"] == pytest.approx(expected_adjusted)
+    assert result.loc[1, "DK_Points_Hitter_HitType"] == pytest.approx(expected_hit_type_points)
     assert result.loc[1, "DK_Points_Hitter"] == pytest.approx(expected_points)
 
 

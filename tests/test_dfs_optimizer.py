@@ -36,6 +36,62 @@ def test_build_player_pool_joins_eligibility_and_computes_salary():
     assert list(pool.reset_index().columns) == dfs_optimizer.POOL_COLUMNS
 
 
+def test_build_player_pool_ceiling_falls_back_to_dk_points_when_missing():
+    # No Ceiling_DK_Points column at all in the input (an older CSV, or a
+    # player with no real scored history yet) - must default to the mean
+    # projection rather than leaving NaN, which would make the player
+    # silently unselectable under a ceiling-objective solve.
+    hitters = pd.DataFrame([_hitter_row(1, 4.0)])
+    pitchers = pd.DataFrame([_pitcher_row(99, 15.0)])
+    eligibility = pd.DataFrame([{"key_mlbam": 1, "primary_position": "SS", "dk_slot": "SS"}])
+
+    pool = dfs_optimizer.build_player_pool(hitters, pitchers, eligibility).set_index("key_mlbam")
+
+    assert pool.loc[1, "Ceiling_DK_Points"] == 4.0
+    assert pool.loc[99, "Ceiling_DK_Points"] == 15.0
+
+
+def test_build_player_pool_uses_real_ceiling_when_present():
+    hitter = _hitter_row(1, 4.0)
+    hitter["Ceiling_DK_Points"] = 9.5
+    pitcher = _pitcher_row(99, 15.0)
+    pitcher["Ceiling_DK_Points"] = 25.0
+    hitters = pd.DataFrame([hitter])
+    pitchers = pd.DataFrame([pitcher])
+    eligibility = pd.DataFrame([{"key_mlbam": 1, "primary_position": "SS", "dk_slot": "SS"}])
+
+    pool = dfs_optimizer.build_player_pool(hitters, pitchers, eligibility).set_index("key_mlbam")
+
+    assert pool.loc[1, "Ceiling_DK_Points"] == 9.5
+    assert pool.loc[99, "Ceiling_DK_Points"] == 25.0
+
+
+def test_build_player_pool_boom_adjusted_falls_back_to_dk_points_when_missing():
+    hitters = pd.DataFrame([_hitter_row(1, 4.0)])
+    pitchers = pd.DataFrame([_pitcher_row(99, 15.0)])
+    eligibility = pd.DataFrame([{"key_mlbam": 1, "primary_position": "SS", "dk_slot": "SS"}])
+
+    pool = dfs_optimizer.build_player_pool(hitters, pitchers, eligibility).set_index("key_mlbam")
+
+    assert pool.loc[1, "Boom_Adjusted_DK_Points"] == 4.0
+    assert pool.loc[99, "Boom_Adjusted_DK_Points"] == 15.0
+
+
+def test_build_player_pool_uses_real_boom_adjusted_when_present():
+    hitter = _hitter_row(1, 4.0)
+    hitter["Boom_Adjusted_DK_Points"] = 6.2
+    pitcher = _pitcher_row(99, 15.0)
+    pitcher["Boom_Adjusted_DK_Points"] = 18.0
+    hitters = pd.DataFrame([hitter])
+    pitchers = pd.DataFrame([pitcher])
+    eligibility = pd.DataFrame([{"key_mlbam": 1, "primary_position": "SS", "dk_slot": "SS"}])
+
+    pool = dfs_optimizer.build_player_pool(hitters, pitchers, eligibility).set_index("key_mlbam")
+
+    assert pool.loc[1, "Boom_Adjusted_DK_Points"] == 6.2
+    assert pool.loc[99, "Boom_Adjusted_DK_Points"] == 18.0
+
+
 def test_build_player_pool_excludes_hitter_with_no_eligibility():
     hitters = pd.DataFrame([_hitter_row(1, 4.0), _hitter_row(2, 3.0)])
     pitchers = pd.DataFrame(columns=list(_pitcher_row(0, 0).keys()))

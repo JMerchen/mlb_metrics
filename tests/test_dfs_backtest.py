@@ -55,19 +55,49 @@ def test_derive_historical_team_schedule_widens_to_one_row_per_team():
 
 
 def _batter_events(batter, events, date="2026-06-01"):
-    return [{"game_date": pd.Timestamp(date), "batter": batter, "events": e} for e in events]
+    """`events` items are either a bare event string (bat_score/post_bat_score
+    default to 0, i.e. no RBI) or an (event, bat_score, post_bat_score)
+    3-tuple for a row that needs a real RBI delta."""
+    rows = []
+    for item in events:
+        if isinstance(item, tuple):
+            event, bat_score, post_bat_score = item
+        else:
+            event, bat_score, post_bat_score = item, 0, 0
+        rows.append({
+            "game_date": pd.Timestamp(date), "batter": batter, "events": event,
+            "bat_score": bat_score, "post_bat_score": post_bat_score,
+        })
+    return rows
 
 
-def test_compute_actual_hitter_dk_points_hit_types_only():
-    rows = _batter_events(1, ["single", "double", "triple", "home_run", "walk", "field_out"])
+def test_compute_actual_hitter_dk_points_hit_type_plus_bb_hbp_rbi():
+    rows = _batter_events(1, [
+        "single", "double", "triple", "home_run",
+        "walk", "intent_walk", "hit_by_pitch",
+        ("field_out", 2, 3),  # scores a run -> 1 RBI, no hit-type/BB/HBP points
+        "field_out",  # 0-0, no RBI - confirms field_out itself is never scored
+    ])
     result = dfs_backtest.compute_actual_hitter_dk_points(pd.DataFrame(rows)).set_index("key_mlbam")
 
     expected = (
         config.DFS_DK_HITTER_SINGLE_POINTS + config.DFS_DK_HITTER_DOUBLE_POINTS
         + config.DFS_DK_HITTER_TRIPLE_POINTS + config.DFS_DK_HITTER_HR_POINTS
+        + 2 * config.DFS_DK_HITTER_BB_POINTS  # walk + intent_walk
+        + config.DFS_DK_HITTER_HBP_POINTS
+        + 1 * config.DFS_DK_HITTER_RBI_POINTS
     )
-    # walk/field_out contribute 0 - not modeled, confirming they're excluded.
-    assert result.loc[1, "Actual_DK_Points_Modeled"] == expected
+    assert result.loc[1, "Actual_DK_Points_Modeled"] == pytest.approx(expected)
+
+
+def test_compute_actual_hitter_dk_points_still_excludes_runs_and_steals():
+    # No column here can carry a "run scored" or "stolen base" signal at
+    # all - a field_out with no score change contributes exactly 0,
+    # confirming those two categories are structurally impossible to
+    # accidentally credit, not just zero-weighted.
+    rows = _batter_events(1, ["field_out"])
+    result = dfs_backtest.compute_actual_hitter_dk_points(pd.DataFrame(rows)).set_index("key_mlbam")
+    assert result.loc[1, "Actual_DK_Points_Modeled"] == 0
 
 
 def _pitcher_events(pitcher, events, date="2026-06-01"):
@@ -135,6 +165,10 @@ def _game_rows(game_pk, date, events, pitcher=99, batter=1, home_team="NYY", awa
             "at_bat_number": i + 1, "pitch_number": 1,
             "home_score": 0, "away_score": pre,
             "post_home_score": 0, "post_away_score": away_runs,
+            # bat_score/post_bat_score are the BATTING team's own score
+            # (helpers.estimate_rbi) - the away team bats on every "Top"
+            # row in this fixture, so these mirror away_score/post_away_score.
+            "bat_score": pre, "post_bat_score": away_runs,
         })
     return rows
 

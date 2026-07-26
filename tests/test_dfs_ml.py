@@ -11,6 +11,7 @@ def _wave_row(key_mlbam, team, **overrides):
         "WAVE": 0.28, "WAVE_L": 0.30, "WAVE_R": 0.27, "PA_L": 20, "PA_R": 40,
         "probability": 0.65, "Game_Hit_Probability": 0.70, "Consistency": 0.05,
         "Approach": 0.45, "Expected_Bases": 1.5,
+        "Expected_BB": 0.3, "Expected_HBP": 0.1, "Expected_RBI": 0.4,
     }
     row.update(overrides)
     return row
@@ -48,6 +49,7 @@ def test_build_hitter_features_falls_back_to_wave_when_wave_l_r_missing():
         "key_mlbam": 1, "team": "BOS", "WAVE": 0.28, "PA_L": 20, "PA_R": 40,
         "probability": 0.65, "Game_Hit_Probability": 0.70, "Consistency": 0.05,
         "Approach": 0.45, "Expected_Bases": 1.5,
+        "Expected_BB": 0.3, "Expected_HBP": 0.1, "Expected_RBI": 0.4,
     }])
     pave = pd.DataFrame([{"key_mlbam": 99, "PAVE": 0.24}])
     confidence = pd.DataFrame([{"team": "NYY", "Bullpen_PAVE": 0.26, "Park_Factor": 0.95}])
@@ -116,8 +118,9 @@ def _hitter_output_row(key_mlbam):
     return {
         "key_mlbam": key_mlbam, "name_first": "Test", "name_last": "Hitter", "team": "BOS",
         "opponent": "NYY", "is_home": True, "PA_L": 20, "PA_R": 40, "Expected_Bases": 1.5,
+        "Expected_BB": 0.3, "Expected_HBP": 0.1, "Expected_RBI": 0.4,
         "Game_Hit_Probability": 0.70, "Matchup_Hit_Probability": 0.72, "Matchup_Ratio": 1.03,
-        "Adjusted_Expected_Bases": 1.545, "DK_Points_Hitter": 4.17,
+        "Adjusted_Expected_Bases": 1.545, "DK_Points_Hitter_HitType": 3.09, "DK_Points_Hitter": 4.17,
     }
 
 
