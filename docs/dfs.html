@@ -83,6 +83,18 @@ pass <code>--objective boom</code> to build a boom-adjusted lineup. See
 README for the exact formula and the k-value backtest that chose it.
 </p>
 
+<p style="opacity:.75; max-width:700px; border-left:3px solid #4a90d9; padding-left:10px;">
+<strong>Matchup Boom (hitters only):</strong> WHICH matchups make a boom
+more likely today, not just who has boomed before. A player's real
+historical rate of clearing a fixed, league-wide boom bar, scaled by
+today's actual opposing-pitcher/park matchup favorability. A ranking
+signal, not a calibrated probability - see README for the real backtest
+(including honest sample-size caveats: booms are rare, and slicing them
+by matchup shrinks the sample further) that checked whether this beats a
+player's context-free boom rate alone, or the plain mean projection
+alone, at flagging real boom days in advance.
+</p>
+
 <div class="tabGroup" id="positionTabs">
 <button class="tabButton active" data-position="hitters" onclick="selectPosition('hitters')">Hitters</button>
 <button class="tabButton" data-position="pitchers" onclick="selectPosition('pitchers')">Pitchers</button>

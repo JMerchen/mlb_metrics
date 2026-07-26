@@ -1042,6 +1042,60 @@ column, not a default. Pass `--objective boom` to
 ground between the "mean" and "ceiling" objectives, backed by the
 balance/backtest reasoning above rather than picked arbitrarily.
 
+### Matchup-aware boom score (`Matchup_Boom_Score`, hitters only)
+
+Real evidence from an actual DraftKings contest surfaced the next gap:
+the winning lineup spent $17,500 on its 2 pitchers and second place
+$18,100, vs. this project's own suggested lineup spending over $21,000 -
+and even after recalibrating the salary model with real backtest data
+(see "Salary $/point parity fix" above), the optimizer's mean-projection
+total for a real slate came out to only ~81 points, far below what
+winning lineups actually need. The user's own accounting of what a
+winning lineup needs: pitchers contribute roughly 50-60 points combined
+(achievable from mean projections alone); the other ~100 points need to
+come from 8 position players, and since only a handful of hitters
+project anywhere near the ~12-point average that would require, **a few
+specific hitters need to boom** - both the real 1st- and 2nd-place
+lineups had 3 players combine for roughly 60 points between them. The
+ask: predict WHICH hitters are most likely to boom today, based on their
+matchup, not just who has boomed historically.
+
+`Ceiling_DK_Points` and `Boom_Adjusted_DK_Points` are both matchup-BLIND
+on their volatility side - only the mean term reads today's opponent.
+`Matchup_Boom_Score` fixes that:
+
+- `compute_boom_threshold`: a single FIXED, GROUP-WIDE point value (the
+  `config.DFS_CEILING_PERCENTILE`-th percentile pooled across every real
+  hitter-game, not each player's own percentile). A per-player threshold
+  would be tautological here - by construction, roughly 10% of ANY
+  player's own games clear their OWN 90th percentile, so every player's
+  "boom rate" against their own bar would converge to about the same
+  number regardless of how boom-prone they really are.
+- `compute_boom_rate`: each player's real historical rate of clearing
+  that SHARED bar - now players genuinely differ (a boom-prone hitter
+  clears it far more than a steady one). Small-sample players (fewer
+  than `config.DFS_CEILING_MIN_GAMES` real games) fall back to the
+  group-wide clear rate.
+- `compute_matchup_boom_score`: `Boom_Rate * Matchup_Ratio` - today's
+  real opposing-pitcher/park-adjusted matchup signal
+  (`dfs.compute_matchup_adjustment`'s output, already computed as part
+  of `DK_Points_Hitter`) scales the player's own boom frequency up or
+  down for today specifically. This is a RANKING signal, not a
+  calibrated probability, despite "boom" in the name - never treat it as
+  P(boom) in a literal sense.
+
+**Backtested** (`dfs_ceiling.backtest_matchup_boom_signal`, same 20-date
+no-lookahead sample, hitters only): `MATCHUP_BOOM_RESULTS_PLACEHOLDER`
+
+**Hitters only** - pitchers have no `Matchup_Ratio` analog in this
+project, and the earlier Ceiling/Boom-Adjusted backtests already found no
+real upside-signal edge for pitchers, so this wasn't extended to a
+foundation that had already shown no signal. Not wired into the
+optimizer's `--objective` flag either (a full-lineup objective needs a
+value for every roster slot including pitchers, which this doesn't
+have) - it's a pure informational column for identifying which hitters to
+prioritize, matching how it was actually asked for.
+
 ## Running
 
 ```

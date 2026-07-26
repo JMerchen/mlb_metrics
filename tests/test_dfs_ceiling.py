@@ -296,3 +296,107 @@ def test_backtest_boom_adjusted_signal_returns_well_formed_metrics_per_k(tmp_pat
                 assert pd.isna(correlation) or -1.0 <= correlation <= 1.0
                 if "capture_rate" in metrics:
                     assert 0.0 <= metrics["capture_rate"] <= 1.0
+
+
+def test_compute_boom_threshold_is_group_wide_not_per_player():
+    # Player 1 has a much higher scoring floor than player 2 - a
+    # per-player threshold would differ between them, but
+    # compute_boom_threshold must pool everyone into ONE shared number.
+    history = pd.DataFrame({
+        "key_mlbam": [1] * 10 + [2] * 10,
+        "Actual_DK_Points_Modeled": list(range(10, 20)) + list(range(0, 10)),
+    })
+
+    threshold = dfs_ceiling.compute_boom_threshold(history, percentile=90)
+
+    expected = pd.concat([pd.Series(range(10, 20)), pd.Series(range(0, 10))]).quantile(0.90)
+    assert threshold == pytest.approx(expected)
+
+
+def test_compute_boom_threshold_empty_history_returns_nan():
+    threshold = dfs_ceiling.compute_boom_threshold(pd.DataFrame(columns=["Actual_DK_Points_Modeled"]))
+    assert pd.isna(threshold)
+
+
+def test_compute_boom_rate_exact_arithmetic():
+    # Player 1 clears the threshold (10) in 3 of 10 games; player 2 never does.
+    history = pd.DataFrame({
+        "key_mlbam": [1] * 10 + [2] * 10,
+        "Actual_DK_Points_Modeled": [15, 12, 11, 5, 5, 5, 5, 5, 5, 5] + [5] * 10,
+    })
+
+    result = dfs_ceiling.compute_boom_rate(history, threshold=10, min_games=5).set_index("key_mlbam")
+
+    assert result.loc[1, "Boom_Rate"] == pytest.approx(0.3)
+    assert result.loc[1, "Boom_Rate_Source"] == "player"
+    assert result.loc[2, "Boom_Rate"] == pytest.approx(0.0)
+
+
+def test_compute_boom_rate_small_sample_falls_back_to_group_wide():
+    history = pd.DataFrame({
+        "key_mlbam": [1] * 12 + [2, 2],
+        "Actual_DK_Points_Modeled": [15, 15, 15, 5, 5, 5, 5, 5, 5, 5, 5, 5] + [15, 15],
+    })
+
+    result = dfs_ceiling.compute_boom_rate(history, threshold=10, min_games=10).set_index("key_mlbam")
+
+    all_points = [15, 15, 15, 5, 5, 5, 5, 5, 5, 5, 5, 5, 15, 15]
+    expected_group_rate = sum(1 for v in all_points if v >= 10) / len(all_points)
+
+    assert result.loc[2, "n_games"] == 2
+    assert result.loc[2, "Boom_Rate_Source"] == "group_fallback"
+    assert result.loc[2, "Boom_Rate"] == pytest.approx(expected_group_rate)
+    assert result.loc[1, "Boom_Rate_Source"] == "player"
+    # Player 1's own boom rate (3/12 = 0.25) must differ from the group
+    # rate here, so this test can actually distinguish the two paths.
+    assert result.loc[1, "Boom_Rate"] != pytest.approx(expected_group_rate)
+
+
+def test_compute_boom_rate_empty_history_returns_empty_with_expected_columns():
+    result = dfs_ceiling.compute_boom_rate(pd.DataFrame(columns=["key_mlbam", "Actual_DK_Points_Modeled"]), threshold=10)
+    assert result.empty
+    assert list(result.columns) == ["key_mlbam", "Boom_Rate", "n_games", "Boom_Rate_Source"]
+
+
+def test_compute_boom_rate_nan_threshold_returns_empty():
+    history = pd.DataFrame({"key_mlbam": [1], "Actual_DK_Points_Modeled": [5]})
+    result = dfs_ceiling.compute_boom_rate(history, threshold=float("nan"))
+    assert result.empty
+
+
+def test_compute_matchup_boom_score_exact_arithmetic():
+    boom_rate = pd.Series([0.1, 0.2])
+    matchup_ratio = pd.Series([1.5, 0.8])
+
+    result = dfs_ceiling.compute_matchup_boom_score(boom_rate, matchup_ratio)
+
+    assert result.tolist() == pytest.approx([0.1 * 1.5, 0.2 * 0.8])
+
+
+def test_compute_matchup_boom_score_favorable_matchup_beats_unfavorable_at_same_boom_rate():
+    boom_rate = pd.Series({"A": 0.15, "B": 0.15})
+    matchup_ratio = pd.Series({"A": 1.4, "B": 0.7})
+
+    result = dfs_ceiling.compute_matchup_boom_score(boom_rate, matchup_ratio)
+
+    assert result["A"] > result["B"]
+
+
+def test_backtest_matchup_boom_signal_no_persisted_data_returns_zero_n(tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    result = dfs_ceiling.backtest_matchup_boom_signal(str(raw_dir), season=2026, days=20)
+    assert result["n"] == 0
+
+
+def test_backtest_matchup_boom_signal_returns_well_formed_metrics(tmp_path):
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    _multi_game_statcast(n_games=8).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    result = dfs_ceiling.backtest_matchup_boom_signal(str(raw_dir), season=2026, days=5)
+
+    assert "n" in result
+    if result["n"] >= 2 and "n_actual_booms" in result and result["n_actual_booms"] > 0:
+        for key in ("matchup_boom_capture_rate", "boom_rate_only_capture_rate", "mean_projection_capture_rate"):
+            assert 0.0 <= result[key] <= 1.0
