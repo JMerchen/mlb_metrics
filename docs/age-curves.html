@@ -31,25 +31,10 @@ Age Curves
 <p style="opacity:.75; max-width:700px;">
 Pick a current hitter or pitcher and a stat, and see how their season
 compares to historical players at the same age, and what a next season
-might look like based on what those comparable players actually did.
-Each metric gets its own comparable search - power, plate discipline,
-contact rate, and pitching components all age differently, so a single
-blended number would hide that. Pitcher metrics (K9/BB9/HR9/FIP)
-deliberately exclude ERA - see README for why. Exploratory, not a live
-prediction - built from
-<a href="https://github.com/chadwickbureau/baseballdatabank" style="color:inherit">Lahman's Baseball Database</a>
-(1871-present), not this project's own Statcast-based models. No era/park
-adjustment - see README for details and known limitations.
-</p>
-
-<p style="opacity:.75; max-width:700px; border-left:3px solid #4a90d9; padding-left:10px;">
-<strong>Update:</strong> HR9's single-dimension comparable search used to
-be reported as a wash (its projection error was statistically
-indistinguishable from just guessing the average). A multi-dimensional
-regression trained on age/IP/K9/BB9/HR9/FIP together has since beaten both
-that baseline and the original comparable search on a real held-out
-sample, and now powers HR9's projection specifically - every other metric
-here is unchanged. See README for the full numbers.
+might look like based on what those comparable players actually did. See
+the
+<a href="https://github.com/JMerchen/mlb_metrics#age-curves-docsage-curveshtml-exploratory---separate-page" style="color:inherit">README</a>
+for the full methodology, known limitations, and backtest numbers.
 </p>
 
 <div class="tabGroup" id="metricTabs">
