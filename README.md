@@ -1127,6 +1127,80 @@ value for every roster slot including pitchers, which this doesn't
 have) - it's a pure informational column for identifying which hitters to
 prioritize, matching how it was actually asked for.
 
+### Value_Score: "stars, not superstars" (`dfs_optimizer.py --objective value`)
+
+None of the fixes above (salary parity, `Boom_Adjusted_DK_Points`,
+`Matchup_Boom_Score`) actually solved the real complaint. Real evidence,
+reported directly: on an actual slate, `mean`/`ceiling`/`boom` all
+independently converged on the SAME two most expensive pitchers, spending
+$19,900-$21,200 of the $50,000 cap on pitching and leaving barely enough
+room for 8 undifferentiated floor-priced hitters. The user's diagnosis,
+verified against the numbers rather than taken on faith: `Estimated_Salary`'s
+fixed $2,000 floor (see "Salary $/point parity fix" above) is a much
+smaller fraction of an elite player's price than a replacement-level
+player's, so ANY high scorer - regardless of position - gets a
+structurally better AVERAGE dollars-per-point rate purely from that floor
+dilution, even though the parity fix already equalized the MARGINAL rate.
+An objective that maximizes raw point totals under a budget will always
+rationally chase that average-rate advantage and overpay for the 1-2
+biggest scorers, leaving nothing to build a real roster - a mix of
+reliable "consistent" floor plays and genuine "boom" upside plays
+("consistent players carry their own, boom players pick up slack," in the
+user's own framing) - with what's left. This is a roster-CONSTRUCTION
+problem, not a single-day boom-prediction problem, so it's a different
+question from the capture-rate backtests above - **implemented per
+explicit user direction ("implement no matter the test"), not validated
+against a capture-rate backtest the way `Ceiling_DK_Points`/`Boom_Rate`
+were.**
+
+`Value_Score = boom-adjusted points / (Estimated_Salary / 1000)` -
+directly rewards being UNDERPRICED relative to real upside (a "star")
+over being already fully priced-in (a "superstar"), computed for BOTH
+hitters (reusing their own validated `Boom_Adjusted_DK_Points`, k=1.0) and
+pitchers (a separate boom-adjusted computation using
+`config.DFS_VALUE_BOOM_K_PITCHER = 1.0` - deliberately NOT the same as
+`DFS_BOOM_ADJUSTED_K_PITCHER`'s validated 0.0, which answers the
+different, narrower question of predicting which day a pitcher booms).
+
+**A second real flaw, found via the same honest sanity check that shipped
+this feature**: maximizing a per-dollar RATIO carries no pressure to
+spend near the cap. Tested against real production data
+(`docs/data/dfs_salary_pool.csv` recomputed with real `Upside_Deviation`):
+`objective=value` with no floor picked a full legal lineup for only
+$39,700 of the $50,000 cap - total `DK_Points` fell from 81.38 (mean
+objective, same slate) to 56.31, because leaving $10,300 unspent doesn't
+cost the ratio objective anything. Fixed with a `min_salary` floor
+constraint on the same MILP (`solve_optimal_lineup`'s new `min_salary`
+parameter: `sum(Estimated_Salary) >= min_salary`), set to
+`config.DFS_VALUE_MIN_SALARY_FRACTION` (0.85) of the cap - chosen by
+testing three fractions against the same real pool:
+
+| min_salary fraction | total salary spent | total DK_Points | pitcher salary |
+|---|---|---|---|
+| 0.85 ($42,500) | $43,900 | 67.99 | $16,900 |
+| 0.90 ($45,000) | $46,000 | 73.66 | $19,000 |
+| 0.95 ($47,500) | $47,500 | 77.79 | $19,900 |
+
+0.95 defeats the whole point - pitcher spend creeps back to the same
+$19,900 this feature exists to avoid. 0.85 keeps pitcher spend near the
+real winning-lineup range ($17,500-$18,100 in the contest that originally
+motivated this work) while still using most of the budget - the best
+balance of the three tested, not a formally optimized value.
+`scripts/build_optimal_lineup.py` passes this floor only for
+`--objective value`; `mean`/`ceiling`/`boom` are unchanged (no floor).
+
+**`value` is now the daily production default** (`daily_update.yml` runs
+`python scripts/build_optimal_lineup.py --objective value`), unlike
+`ceiling`/`boom` which stay opt-in-only behind the flag. This is a
+deliberate exception to this project's usual "don't default to an
+unvalidated signal" rule: `mean`'s real-world failure mode (chronic
+pitcher overspend) is exactly what motivated this whole feature, so
+leaving `value` opt-in would mean the live "Optimal Lineup" tab kept
+showing the broken behavior even after building the fix.
+`dfs_optimizer.solve_optimal_lineup`'s own function default stays
+`"DK_Points"` (mean) for library/test backward compatibility - only the
+daily workflow's invocation changed.
+
 ## Running
 
 ```
