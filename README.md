@@ -982,6 +982,66 @@ restriction). Salary-accuracy backtesting is also explicitly out of scope
 - there's no real DraftKings price to validate `Estimated_Salary` against,
 unlike every other backtested signal in this project.
 
+### Boom-Adjusted DK Points (`dfs_ceiling.py`)
+
+The user's own framing, verbatim: "player A scores 5 points literally
+every night... player B sometimes scores 15, sometimes 5, sometimes 20,
+and even sometimes 0, and he thus averages 4.8 - I'd rather have player B
+than player A," followed by an explicit rejection of both extremes: "I
+don't want straight boom or bust nor straight mean. Neither is
+optimizing." Pure `Ceiling_DK_Points` (a single 90th-percentile game) is
+exactly the "straight boom" case it rejects - it credits raw upside
+regardless of how OFTEN a player actually reaches it. The plain mean is
+the other rejected extreme.
+
+`Boom_Adjusted_DK_Points = mean_projection + k * Upside_Deviation`, where
+`Upside_Deviation` is a player's own real historical UPSIDE-ONLY
+semi-deviation (`dfs_ceiling.compute_upside_deviation`): `sqrt(mean((x -
+their_own_historical_mean).clip(lower=0) ** 2))` over ALL their real
+games, not just the boom ones. Below-average games contribute exactly
+0 - this is deliberately a semi-deviation, not plain standard deviation,
+because plain stdev would reward bust-heavy inconsistency exactly as much
+as boom-heavy inconsistency, the opposite of the point. Dividing by the
+FULL game count (not just the boom subset) means a player who booms
+rarely scores lower than one who booms often at similar magnitude -
+real DFS value tracks boom FREQUENCY, not just size, which is exactly
+what distinguished player B from a player who got lucky once.
+
+**k was backtested, not guessed** (`dfs_ceiling.backtest_boom_adjusted_signal`,
+same 20-date no-lookahead sample and capture-rate methodology as
+`Ceiling_DK_Points`'s own backtest, run once per candidate k):
+
+| player type | k=0.0 (mean) | k=1.0 (chosen, hitters) | k=2.0 (grid max) |
+|---|---|---|---|
+| Hitters correlation | 0.009 | 0.044 | 0.061 |
+| Hitters capture rate | 10.1% | 12.5% | 13.3% |
+| Pitchers correlation | 0.337 | 0.339 (k=0.75 peak) | 0.328 |
+| Pitchers capture rate | 27.7% | 27.7% | 25.5% |
+
+For hitters, correlation and capture rate rose monotonically across the
+ENTIRE tested grid (0.0 through 2.0) without ever turning over - the grid
+didn't localize a true peak. The grid-max k=2.0 was deliberately NOT
+chosen anyway: a real check of magnitude (mean historical
+`Upside_Deviation` 4.417 vs. mean `DK_Points_Hitter` 5.185) shows that at
+k=2.0 the volatility term outweighs the mean term by nearly 2:1 - which
+just recreates pure ceiling-chasing under a different name, the opposite
+of what was asked for. **k=1.0** was chosen instead: it keeps the two
+terms roughly balanced (mean contributes ~54% of a typical score,
+deviation ~46%) while still capturing a real, validated improvement over
+the plain mean (capture rate +24% relative). For pitchers, correlation
+stayed flat and capture rate bounced non-monotonically across the whole
+grid with no k reliably beating the k=0 baseline - the same conclusion
+`Ceiling_DK_Points` reached for pitchers. **k=1.0 for hitters, k=0.0
+(plain mean) for pitchers** (`config.DFS_BOOM_ADJUSTED_K_HITTER`/
+`_PITCHER`).
+
+Same shipping posture as `Ceiling_DK_Points`: an ADDITIONAL informational
+column, not a default. Pass `--objective boom` to
+`scripts/build_optimal_lineup.py` to build a lineup that maximizes
+`Boom_Adjusted_DK_Points` instead of the plain mean - a genuine middle
+ground between the "mean" and "ceiling" objectives, backed by the
+balance/backtest reasoning above rather than picked arbitrarily.
+
 ## Running
 
 ```

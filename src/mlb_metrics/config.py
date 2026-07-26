@@ -816,13 +816,39 @@ DFS_CEILING_MIN_GAMES = 10
 # from real data rather than guessing one.
 DFS_BOOM_ADJUSTED_K_GRID = [0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0]
 
-# Chosen k per player type (may legitimately differ, or land on 0.0 for a
-# type where no k beat the plain mean - see dfs_ceiling.py's Ceiling_DK_Points
-# precedent, which found real signal for hitters but not pitchers).
-# PLACEHOLDER pending backtest_boom_adjusted_signal's real results - see
-# this comment's continuation once the real backtest has run.
-DFS_BOOM_ADJUSTED_K_HITTER = 0.5
-DFS_BOOM_ADJUSTED_K_PITCHER = 0.5
+# Backtested (dfs_ceiling.backtest_boom_adjusted_signal) against the same
+# 20-date sample as Ceiling_DK_Points's own backtest, same no-lookahead
+# discipline, same correlation/capture-rate metrics, once per k in the
+# grid above:
+#
+#   Hitters (n=5,430, 543 real top-decile days): correlation and capture
+#   rate both rose MONOTONICALLY across the entire tested grid, never
+#   turning over - k=0.0 (plain mean): correlation 0.009, capture 10.1%;
+#   k=1.0: correlation 0.044, capture 12.5%; k=2.0 (grid max): correlation
+#   0.061, capture 13.3%. The grid didn't localize a peak, but the
+#   grid-max k=2.0 was deliberately NOT chosen: at k=2.0 the volatility
+#   term (mean real Upside_Deviation 4.417) OUTWEIGHS the mean term (mean
+#   real DK_Points_Hitter 5.185) by nearly 2:1, which just recreates pure
+#   ceiling-chasing under a different name - directly contrary to the
+#   user's explicit "neither pure boom nor pure mean" request. k=1.0 keeps
+#   the two terms roughly balanced (mean contributes ~54% of a typical
+#   score, deviation ~46%) while still capturing a real, validated
+#   improvement over the plain mean (capture rate +24% relative, from
+#   10.1% to 12.5%). Chosen for that balance, not because it's the
+#   highest-scoring k in the grid.
+#
+#   Pitchers (n=468, 47 real top-decile days): correlation stayed flat
+#   (0.328-0.340) and capture rate bounced non-monotonically (25.5%-29.8%)
+#   across the whole grid, with NO k reliably beating k=0.0's baseline
+#   27.7% - the same conclusion Ceiling_DK_Points's own backtest reached
+#   for pitchers (no clear upside-signal edge). k=0.0 (falls back to the
+#   plain mean projection) is the honest choice, not a guessed nonzero
+#   value chasing sample noise.
+#
+# Re-run this backtest (and update this comment) after any change to
+# DK_Points_Hitter/DK_Points_Pitcher's own formula.
+DFS_BOOM_ADJUSTED_K_HITTER = 1.0
+DFS_BOOM_ADJUSTED_K_PITCHER = 0.0
 
 # --- Optimal Lineup (docs/dfs.html's "Optimal Lineup" tab, roster_positions.py,
 # estimated_salary.py, dfs_optimizer.py, scripts/build_optimal_lineup.py) ---
