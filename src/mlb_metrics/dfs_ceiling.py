@@ -78,7 +78,54 @@ consistency). `k=0` reduces to the plain mean; `backtest_boom_adjusted_signal`
 below grid-searches `k` against real data (same no-lookahead, same
 top-decile "capture rate" methodology as backtest_ceiling_signal) to pick
 a value that's actually validated to help, not guessed - see
-config.DFS_BOOM_ADJUSTED_K's docstring for the chosen value and why."""
+config.DFS_BOOM_ADJUSTED_K's docstring for the chosen value and why.
+
+## Matchup_Boom_Score: WHICH matchups make a boom more likely today
+
+Both `Ceiling_DK_Points` and `Boom_Adjusted_DK_Points` are matchup-blind
+on their volatility side - they measure how much a player has swung in
+the PAST, with no read on whether TODAY's specific opponent makes a boom
+more or less likely. The user's own framing: real winning lineups need "a
+couple players to boom... we need to predict most likely booms for the
+right price based on matchup." That's a genuinely different question -
+P(boom TODAY | this matchup) - not just "has this player ever boomed."
+
+`compute_boom_threshold(history, percentile)` is a single FIXED,
+GROUP-WIDE point value (the percentile pooled across every player's real
+game, not each player's own percentile) - deliberately NOT a per-player
+threshold. A per-player threshold would be tautological here: by
+construction, roughly `100 - percentile` percent of any player's OWN
+games clear their OWN percentile, so every player's "boom rate" against
+their own bar would converge to about the same number regardless of how
+boom-prone they really are. A single shared bar lets `compute_boom_rate`
+measure a real, meaningfully different quantity per player: how often
+THEY, specifically, clear a bar that's hard for the average player to
+clear.
+
+`compute_matchup_boom_score(boom_rate, matchup_ratio)` is
+`boom_rate * matchup_ratio` - `dfs.compute_matchup_adjustment`'s existing
+Matchup_Ratio (today's real opposing pitcher/park-adjusted signal,
+already computed as part of `DK_Points_Hitter`) scales the player's own
+historical boom rate up or down for today's specific matchup. This is
+explicitly a SCORE, not a calibrated probability, despite the name
+"boom" in it - it is not clipped to [0, 1] and has not been fit/validated
+as a real probability, only as a RANKING signal (see the backtest below
+for what was actually validated: relative ordering, not absolute
+calibration).
+
+**Hitters only.** Pitchers have no equivalent "Matchup_Ratio" signal in
+this project (their own mean projection has no separate matchup-ratio
+multiplier the way `compute_hitter_dk_points` does), and the earlier
+Ceiling/Boom-Adjusted backtests already found no real upside-signal edge
+for pitchers - not worth inventing a new pitcher-side signal on a
+foundation that's already shown no signal.
+
+**Small sample size is a real risk here, checked honestly in the
+backtest below, not glossed over**: booms are inherently rare (~10% of
+games by construction at the default percentile), and this signal
+further conditions on matchup context - the real backtest sample sizes
+are reported alongside the results specifically so a reader can judge
+whether they're large enough to trust."""
 
 import numpy as np
 import pandas as pd
@@ -404,3 +451,148 @@ def backtest_boom_adjusted_signal(
             }
 
     return results
+
+
+def compute_boom_threshold(history: pd.DataFrame, percentile: float = config.DFS_CEILING_PERCENTILE) -> float:
+    """A single FIXED, GROUP-WIDE `percentile`-th percentile of every real
+    game in `history` (`history` is one of compute_player_dk_points_history's
+    output frames) - deliberately NOT a per-player threshold (see module
+    docstring for why a per-player bar would be tautological here).
+    Returns float('nan') for empty history."""
+    if history.empty:
+        return float("nan")
+    points = pd.to_numeric(history["Actual_DK_Points_Modeled"])
+    return float(points.quantile(percentile / 100))
+
+
+def compute_boom_rate(
+    history: pd.DataFrame,
+    threshold: float,
+    min_games: int = config.DFS_CEILING_MIN_GAMES,
+) -> pd.DataFrame:
+    """[key_mlbam, Boom_Rate, n_games, Boom_Rate_Source] - per-player
+    fraction of their real historical games that cleared the FIXED
+    `threshold` (from compute_boom_threshold, shared across every player -
+    NOT each player's own percentile). A player with fewer than
+    `min_games` real scored games falls back to the GROUP-WIDE clear-rate
+    (every row in `history`, same threshold) instead of a noisy
+    small-sample per-player rate - `Boom_Rate_Source` marks which
+    applies."""
+    columns = ["key_mlbam", "Boom_Rate", "n_games", "Boom_Rate_Source"]
+    if history.empty or pd.isna(threshold):
+        return pd.DataFrame(columns=columns)
+
+    history = history.copy()
+    history["Actual_DK_Points_Modeled"] = pd.to_numeric(history["Actual_DK_Points_Modeled"])
+    history["_boomed"] = (history["Actual_DK_Points_Modeled"] >= threshold).astype(float)
+
+    group_rate = history["_boomed"].mean()
+
+    grouped = history.groupby("key_mlbam")["_boomed"]
+    result = pd.DataFrame({
+        "key_mlbam": grouped.size().index,
+        "Boom_Rate": grouped.mean().to_numpy(),
+        "n_games": grouped.size().to_numpy(),
+    })
+    result["Boom_Rate_Source"] = "player"
+
+    small_sample = result["n_games"] < min_games
+    result.loc[small_sample, "Boom_Rate"] = group_rate
+    result.loc[small_sample, "Boom_Rate_Source"] = "group_fallback"
+
+    return result[columns]
+
+
+def compute_matchup_boom_score(boom_rate: pd.Series, matchup_ratio: pd.Series) -> pd.Series:
+    """boom_rate * matchup_ratio - a player's own real historical boom
+    FREQUENCY (against a fixed, group-wide bar - see compute_boom_rate),
+    scaled by today's real matchup favorability
+    (dfs.compute_matchup_adjustment's Matchup_Ratio). A ranking/score, NOT
+    a calibrated probability - see module docstring."""
+    return boom_rate * matchup_ratio
+
+
+def backtest_matchup_boom_signal(
+    raw_dir: str = "data/raw",
+    season: int | None = None,
+    days: int = 20,
+    percentile: float = config.DFS_CEILING_PERCENTILE,
+) -> dict:
+    """No-lookahead backtest (same 20-date sample as the other DFS
+    backtests, HITTERS ONLY - see module docstring for why), checking
+    whether Matchup_Boom_Score actually flags real boom days better than
+    Boom_Rate alone (context-free) or the plain mean projection alone
+    (DK_Points_Hitter). For each test date, compute_boom_threshold and
+    compute_boom_rate are computed from ONLY history strictly before that
+    date; "did they boom" is that date's REAL Actual_DK_Points_Modeled
+    clearing that date's (no-lookahead) threshold. Capture rate: of the
+    hitter-days that ACTUALLY boomed, what fraction were in the (pooled
+    across all test dates, same convention backtest_ceiling_signal uses)
+    top decile by each of the three signals.
+
+    Returns a flat metrics dict (not nested by player type - hitters
+    only), or {"n": 0}/{"n": n, "n_actual_booms": 0, ...} when there isn't
+    enough scored data to report anything meaningful."""
+    season = season or config.SEASON_START.year
+    persisted = data.load_persisted_statcast(raw_dir, season)
+    if persisted is None or persisted.empty:
+        return {"n": 0}
+
+    heuristic = dfs_backtest.backtest_dfs_projections(raw_dir, season, days)
+    df = heuristic["hitters"]
+    if df.empty:
+        return {"n": 0}
+
+    rows = []
+    thresholds = []
+    for date, day_df in df.groupby("date"):
+        history = compute_player_dk_points_history(persisted, as_of_date=date)["hitters"]
+        threshold = compute_boom_threshold(history, percentile)
+        if pd.isna(threshold):
+            continue
+        thresholds.append(threshold)
+
+        boom_rate = compute_boom_rate(history, threshold)
+        if boom_rate.empty:
+            continue
+        merged = day_df.merge(boom_rate[["key_mlbam", "Boom_Rate"]], on="key_mlbam", how="inner")
+        if merged.empty:
+            continue
+        merged = merged.copy()
+        merged["_threshold"] = threshold
+        rows.append(merged)
+
+    if not rows:
+        return {"n": 0}
+
+    combined = pd.concat(rows, ignore_index=True)
+    for column in ("DK_Points_Hitter", "Matchup_Ratio", "Actual_DK_Points_Modeled", "Boom_Rate", "_threshold"):
+        combined[column] = pd.to_numeric(combined[column])
+
+    n = len(combined)
+    if n < 2:
+        return {"n": n}
+
+    combined["Matchup_Boom_Score"] = compute_matchup_boom_score(combined["Boom_Rate"], combined["Matchup_Ratio"])
+    combined["_actual_boomed"] = combined["Actual_DK_Points_Modeled"] >= combined["_threshold"]
+
+    avg_threshold = float(sum(thresholds) / len(thresholds))
+    actual_boomed = combined[combined["_actual_boomed"]]
+    n_actual_booms = len(actual_boomed)
+    if n_actual_booms == 0:
+        return {"n": n, "n_actual_booms": 0, "avg_threshold": avg_threshold}
+
+    top_fraction = 1 - percentile / 100
+
+    def _capture_rate(column: str) -> float:
+        cutoff = combined[column].quantile(1 - top_fraction)
+        return float((actual_boomed[column] >= cutoff).mean())
+
+    return {
+        "n": n,
+        "n_actual_booms": n_actual_booms,
+        "avg_threshold": avg_threshold,
+        "matchup_boom_capture_rate": _capture_rate("Matchup_Boom_Score"),
+        "boom_rate_only_capture_rate": _capture_rate("Boom_Rate"),
+        "mean_projection_capture_rate": _capture_rate("DK_Points_Hitter"),
+    }

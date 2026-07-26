@@ -180,7 +180,11 @@ def backtest_dfs_projections(raw_dir: str = "data/raw", season: int | None = Non
     before that date (pipeline.compute_outputs - the same function
     pipeline.run() calls every day), then compares against that date's
     REAL outcomes. Returns {"hitters": DataFrame, "pitchers": DataFrame},
-    one row per (date, player) scored."""
+    one row per (date, player) scored. The hitters frame also carries that
+    date's real Matchup_Ratio (dfs.compute_matchup_adjustment's output,
+    already computed as part of DK_Points_Hitter) - needed by
+    dfs_ceiling.backtest_matchup_boom_signal to test whether today's
+    matchup favorability predicts boom likelihood, not just mean output."""
     season = season or config.SEASON_START.year
     persisted = data.load_persisted_statcast(raw_dir, season)
     if persisted is None:
@@ -202,7 +206,9 @@ def backtest_dfs_projections(raw_dir: str = "data/raw", season: int | None = Non
         if not hitters_scored.empty:
             hitters_scored = hitters_scored.copy()
             hitters_scored["date"] = date
-            hitter_rows.append(hitters_scored[["date", "key_mlbam", "DK_Points_Hitter", "Actual_DK_Points_Modeled"]])
+            hitter_rows.append(
+                hitters_scored[["date", "key_mlbam", "DK_Points_Hitter", "Matchup_Ratio", "Actual_DK_Points_Modeled"]]
+            )
 
         pitchers_scored = day["projected_pitchers"].merge(day["actual_pitchers"], on="key_mlbam", how="inner")
         if not pitchers_scored.empty:

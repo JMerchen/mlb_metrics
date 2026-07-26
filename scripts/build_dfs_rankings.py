@@ -27,15 +27,17 @@ backtest) - a missing/not-yet-trained artifact silently keeps the
 existing heuristic, so this script's behavior never depends on whether
 that weekly training job has run yet.
 
-Also merges in Ceiling_DK_Points and Boom_Adjusted_DK_Points
-(dfs_ceiling.py) - ADDITIONAL informational upside/volatility columns
-alongside the existing mean projection, not a replacement for it (see
-dfs_ceiling.py's module docstring for why). A player with no real scored
-history at all (a true rookie/no games yet) gets
-Ceiling_Source/Upside_Deviation_Source="no_history" and a missing
-Ceiling_DK_Points/Upside_Deviation rather than a faked value;
-Boom_Adjusted_DK_Points falls back to the plain mean projection for that
-player in that case (mean + k*0, since there's no real deviation to add).
+Also merges in Ceiling_DK_Points, Boom_Adjusted_DK_Points, and (hitters
+only) Matchup_Boom_Score (dfs_ceiling.py) - ADDITIONAL informational
+upside/volatility columns alongside the existing mean projection, not a
+replacement for it (see dfs_ceiling.py's module docstring for why). A
+player with no real scored history at all (a true rookie/no games yet)
+gets Ceiling_Source/Upside_Deviation_Source/Boom_Rate_Source="no_history"
+and a missing Ceiling_DK_Points/Upside_Deviation rather than a faked
+value; Boom_Adjusted_DK_Points falls back to the plain mean projection
+for that player in that case (mean + k*0, since there's no real deviation
+to add), and Matchup_Boom_Score falls back to 0 (no real boom-frequency
+evidence to scale by today's matchup).
 
 Usage:
     python scripts/build_dfs_rankings.py
@@ -132,6 +134,21 @@ def main():
     pitchers["Boom_Adjusted_DK_Points"] = dfs_ceiling.compute_boom_adjusted_score(
         pitchers["DK_Points_Pitcher"], pitchers["Upside_Deviation"], config.DFS_BOOM_ADJUSTED_K_PITCHER
     )
+
+    # Matchup_Boom_Score is hitters-only (see dfs_ceiling.py's module
+    # docstring: pitchers have no Matchup_Ratio analog, and the
+    # context-free Ceiling/Boom-Adjusted signals already found no real
+    # edge for pitchers). boom_threshold is a single number pooled across
+    # ALL real hitter history; Boom_Rate columns are merged the same
+    # deliberately-narrow way as Upside_Deviation above to avoid an
+    # n_games column collision.
+    boom_threshold = dfs_ceiling.compute_boom_threshold(points_history["hitters"])
+    boom_rate = dfs_ceiling.compute_boom_rate(points_history["hitters"], boom_threshold)
+    boom_rate_columns = ["key_mlbam", "Boom_Rate", "Boom_Rate_Source"]
+    hitters = hitters.merge(boom_rate[boom_rate_columns], on="key_mlbam", how="left")
+    hitters["Boom_Rate_Source"] = hitters["Boom_Rate_Source"].fillna("no_history")
+    hitters["Boom_Rate"] = hitters["Boom_Rate"].fillna(0)
+    hitters["Matchup_Boom_Score"] = dfs_ceiling.compute_matchup_boom_score(hitters["Boom_Rate"], hitters["Matchup_Ratio"])
 
     os.makedirs(args.data_dir, exist_ok=True)
     hitters.to_csv(os.path.join(args.data_dir, "dfs_hitters.csv"), index=False)

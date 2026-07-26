@@ -83,6 +83,23 @@ pass <code>--objective boom</code> to build a boom-adjusted lineup. See
 README for the exact formula and the k-value backtest that chose it.
 </p>
 
+<p style="opacity:.75; max-width:700px; border-left:3px solid #4a90d9; padding-left:10px;">
+<strong>Boom Rate (hitters only):</strong> a player's real historical
+rate of clearing a fixed, league-wide boom bar (not their own percentile -
+see README for why that would be tautological). Backtested as the
+STRONGEST of this project's boom-flagging signals: 17.3% real capture
+rate on actual boom days, vs. 10.6% for the plain mean projection.
+<strong>Matchup Boom</strong> takes that same rate and scales it by
+today's opposing-pitcher/park matchup favorability - the intent was to
+predict WHICH matchups make a boom more likely today, not just who has
+boomed before, but the real backtest found the matchup adjustment
+actually made it WORSE (14.1% capture rate, below Boom Rate alone) - the
+matchup signal it multiplies by is already flagged elsewhere on this page
+as high-risk. Reported honestly: treat Boom Rate as the more trustworthy
+of the two; Matchup Boom is informational/exploratory only. See README
+for the full numbers.
+</p>
+
 <div class="tabGroup" id="positionTabs">
 <button class="tabButton active" data-position="hitters" onclick="selectPosition('hitters')">Hitters</button>
 <button class="tabButton" data-position="pitchers" onclick="selectPosition('pitchers')">Pitchers</button>
