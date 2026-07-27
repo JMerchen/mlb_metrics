@@ -1,6 +1,8 @@
 date,rank,name,predicted_probability,actual_hit,status
-2026-07-26,1,CJ Abrams,0.7663095708639187,,pending
-2026-07-26,2,Gabriel Moreno,0.7968632697947213,,pending
+2026-07-27,1,Gabriel Moreno,0.809098275142579,,pending
+2026-07-27,2,CJ Abrams,0.7939036170384225,,pending
+2026-07-26,1,CJ Abrams,0.7663095708639187,1.0,hit
+2026-07-26,2,Gabriel Moreno,0.7968632697947213,1.0,hit
 2026-07-25,1,Gabriel Moreno,0.7968632697947213,1.0,hit
 2026-07-24,1,Yordan Álvarez,0.7833919437340153,1.0,hit
 2026-07-23,,,,,no_pick
