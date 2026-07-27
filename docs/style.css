@@ -1,12 +1,62 @@
+:root{
+
+--bg:#0b0d10;
+
+--bg-raised:#14171c;
+
+--bg-card:#1a1e25;
+
+--bg-hover:#20242c;
+
+--border:#262b34;
+
+--border-strong:#3a4150;
+
+--text:#eef1f5;
+
+--text-dim:#9aa1ac;
+
+--accent:#f2a93c;
+
+--accent-strong:#ffc266;
+
+--on-accent:#1a1206;
+
+--success:#3ecf8e;
+
+--danger:#f0554f;
+
+--info:#5c7cfa;
+
+--radius:10px;
+
+--radius-sm:6px;
+
+--font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+
+--font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+
+}
+
+*{
+
+box-sizing:border-box;
+
+}
+
 body{
 
 margin:0;
 
-background:#111;
+background:var(--bg);
 
-color:white;
+background-image:radial-gradient(circle at 15% 0%, rgba(242,169,60,.06), transparent 45%);
 
-font-family:Arial;
+color:var(--text);
+
+font-family:var(--font);
+
+-webkit-font-smoothing:antialiased;
 
 }
 
@@ -16,23 +66,101 @@ max-width:1400px;
 
 margin:auto;
 
-padding:20px;
+padding:20px 20px 60px;
+
+}
+
+a{
+
+color:var(--accent);
+
+}
+
+.siteHeader{
+
+display:flex;
+
+flex-wrap:wrap;
+
+align-items:center;
+
+justify-content:space-between;
+
+gap:16px;
+
+padding:22px 0 18px;
+
+border-bottom:1px solid var(--border);
+
+margin-bottom:20px;
+
+}
+
+.brandRow{
+
+display:flex;
+
+align-items:center;
+
+gap:14px;
+
+}
+
+.brandMark{
+
+width:38px;
+
+height:38px;
+
+flex-shrink:0;
+
+filter:drop-shadow(0 2px 6px rgba(242,169,60,.35));
 
 }
 
 h1{
 
-font-size:42px;
+font-size:30px;
 
-margin-bottom:25px;
+font-weight:700;
+
+letter-spacing:-.01em;
+
+margin:0;
+
+}
+
+h1 .brandAccent{
+
+color:var(--accent);
 
 }
 
 h2{
 
-font-size:20px;
+font-size:19px;
+
+font-weight:600;
+
+margin-bottom:12px;
+
+letter-spacing:-.005em;
+
+}
+
+h3{
+
+font-size:15px;
+
+font-weight:600;
 
 margin-bottom:10px;
+
+color:var(--text-dim);
+
+text-transform:uppercase;
+
+letter-spacing:.04em;
 
 }
 
@@ -74,11 +202,13 @@ overflow-x:scroll;
 
 overflow-y:auto;
 
-background:#181818;
+background:var(--bg-raised);
 
-padding:10px;
+border:1px solid var(--border);
 
-border-radius:10px;
+padding:4px 10px;
+
+border-radius:var(--radius);
 
 box-sizing:border-box;
 
@@ -94,18 +224,56 @@ min-width:100%;
 
 table-layout:auto;
 
+font-variant-numeric:tabular-nums;
+
+}
+
+thead th,
+tr:first-child th{
+
+position:sticky;
+
+top:0;
+
+background:var(--bg-raised);
+
+box-shadow:0 1px 0 var(--border-strong);
+
 }
 
 td,
 th{
 
-padding:8px;
+padding:9px 10px;
 
-border-bottom:1px solid #333;
+border-bottom:1px solid var(--border);
 
-font-size:12px;
+font-size:12.5px;
 
 white-space:nowrap;
+
+text-align:left;
+
+}
+
+th{
+
+color:var(--text-dim);
+
+font-weight:600;
+
+text-transform:uppercase;
+
+font-size:11px;
+
+letter-spacing:.03em;
+
+}
+
+tbody tr:hover,
+table tr:hover{
+
+background:var(--bg-hover);
 
 }
 
@@ -113,21 +281,23 @@ select,
 input,
 button{
 
-padding:10px;
+padding:10px 14px;
 
 margin:5px;
 
-background:#181818;
+background:var(--bg-raised);
 
-color:white;
+color:var(--text);
 
-border:1px solid #333;
+border:1px solid var(--border);
 
-border-radius:6px;
+border-radius:var(--radius-sm);
 
 font-family:inherit;
 
 font-size:14px;
+
+transition:border-color .15s ease, background .15s ease;
 
 }
 
@@ -135,7 +305,7 @@ select:hover,
 input:hover,
 button:hover{
 
-border-color:#5c7cfa;
+border-color:var(--accent);
 
 }
 
@@ -145,7 +315,9 @@ button:focus{
 
 outline:none;
 
-border-color:#5c7cfa;
+border-color:var(--accent);
+
+box-shadow:0 0 0 3px rgba(242,169,60,.18);
 
 }
 
@@ -181,13 +353,13 @@ margin-left:12px;
 
 .tabButton{
 
-background:#181818;
+background:var(--bg-raised);
 
-color:#ccc;
+color:var(--text-dim);
 
-border:1px solid #333;
+border:1px solid var(--border);
 
-border-radius:6px;
+border-radius:var(--radius-sm);
 
 padding:8px 16px;
 
@@ -195,25 +367,27 @@ font-size:14px;
 
 cursor:pointer;
 
+transition:border-color .15s ease, background .15s ease, color .15s ease;
+
 }
 
 .tabButton:hover{
 
-border-color:#5c7cfa;
+border-color:var(--accent);
 
-color:white;
+color:var(--text);
 
 }
 
 .tabButton.active{
 
-background:#5c7cfa;
+background:var(--accent);
 
-border-color:#5c7cfa;
+border-color:var(--accent);
 
-color:white;
+color:var(--on-accent);
 
-font-weight:bold;
+font-weight:700;
 
 }
 
@@ -225,11 +399,17 @@ display:inline-block;
 
 }
 
+.pageTabs{
+
+margin:0;
+
+}
+
 .pageTabs .tabButton{
 
-font-size:17px;
+font-size:14px;
 
-padding:10px 22px;
+padding:9px 18px;
 
 }
 
@@ -237,7 +417,9 @@ hr{
 
 margin:30px 0;
 
-border-color:#333;
+border:none;
+
+border-top:1px solid var(--border);
 
 }
 
@@ -255,11 +437,13 @@ margin-bottom:20px;
 
 .streakStat{
 
-background:#181818;
+background:var(--bg-raised);
 
-border-radius:10px;
+border:1px solid var(--border);
 
-padding:15px 20px;
+border-radius:var(--radius);
+
+padding:16px 22px;
 
 min-width:140px;
 
@@ -271,7 +455,9 @@ text-align:center;
 
 font-size:28px;
 
-font-weight:bold;
+font-weight:700;
+
+color:var(--accent);
 
 }
 
@@ -279,9 +465,13 @@ font-weight:bold;
 
 font-size:12px;
 
-color:#999;
+color:var(--text-dim);
 
 margin-top:4px;
+
+text-transform:uppercase;
+
+letter-spacing:.03em;
 
 }
 
@@ -299,39 +489,41 @@ margin-bottom:10px;
 
 .pickCard{
 
-background:#181818;
+background:var(--bg-raised);
 
-border-radius:10px;
+border:1px solid var(--border);
+
+border-radius:var(--radius);
 
 padding:15px;
 
 min-width:200px;
 
-border-left:4px solid #999;
+border-left:4px solid var(--text-dim);
 
 }
 
 .pickCard.hit{
 
-border-left-color:#4caf50;
+border-left-color:var(--success);
 
 }
 
 .pickCard.miss{
 
-border-left-color:#e53935;
+border-left-color:var(--danger);
 
 }
 
 .pickCard.pending{
 
-border-left-color:#999;
+border-left-color:var(--text-dim);
 
 }
 
 .pickCard.no_game{
 
-border-left-color:#5c7cfa;
+border-left-color:var(--info);
 
 opacity:.7;
 
@@ -339,7 +531,7 @@ opacity:.7;
 
 .pickCard.no_pick{
 
-border-left-color:#999;
+border-left-color:var(--text-dim);
 
 opacity:.7;
 
@@ -347,19 +539,19 @@ opacity:.7;
 
 .pickCard.win{
 
-border-left-color:#4caf50;
+border-left-color:var(--success);
 
 }
 
 .pickCard.loss{
 
-border-left-color:#e53935;
+border-left-color:var(--danger);
 
 }
 
 .pickCard.not_played{
 
-border-left-color:#5c7cfa;
+border-left-color:var(--info);
 
 opacity:.7;
 
@@ -369,7 +561,7 @@ opacity:.7;
 
 font-size:16px;
 
-font-weight:bold;
+font-weight:700;
 
 }
 
@@ -377,7 +569,7 @@ font-weight:bold;
 
 font-size:12px;
 
-color:#999;
+color:var(--text-dim);
 
 margin-top:4px;
 
@@ -385,16 +577,15 @@ margin-top:4px;
 
 .pickStatus{
 
-font-size:12px;
+font-size:11px;
+
+font-weight:600;
 
 text-transform:uppercase;
 
+letter-spacing:.03em;
+
 margin-top:6px;
-
-}
-
-
-background:#1a1a1a;
 
 }
 
@@ -482,11 +673,13 @@ min-width:180px;
 
 padding:10px;
 
-border-radius:8px;
+border-radius:var(--radius-sm);
 
-background:#222;
+background:var(--bg-card);
 
-color:white;
+border:1px solid var(--border);
+
+color:var(--text);
 
 flex-shrink:0;
 
@@ -500,7 +693,7 @@ width:100%;
 
 .removePitcher{
 
-background:#aa3333;
+background:var(--danger);
 
 color:white;
 
@@ -528,7 +721,7 @@ padding:0;
 
 .removePitcher:hover{
 
-background:#dd4444;
+opacity:.85;
 
 }
 
@@ -540,7 +733,7 @@ margin:4px;
 
 button:hover{
 
-opacity:.9;
+opacity:.92;
 
 }
 
@@ -566,9 +759,11 @@ min-width:0;
 
 padding:12px;
 
-border-radius:8px;
+border-radius:var(--radius-sm);
 
-background:#222;
+background:var(--bg-card);
+
+border:1px solid var(--border);
 
 }
 
@@ -589,11 +784,11 @@ border-radius:14px;
 padding:18px;
 
 box-shadow:
-0 2px 8px rgba(
+0 4px 16px rgba(
 0,
 0,
 0,
-.15
+.35
 );
 
 max-width:500px;
@@ -769,7 +964,6 @@ width:50px;
 height:50px;
 
 }
-
 
 .playerHeadshot{
 
