@@ -396,6 +396,42 @@ including the smaller `rank<=2` "recommended" subset (n=11-18 - too small
 to trust on its own, and noisier in the opposite direction on this
 particular window). Revisit once more dates accumulate.
 
+### Hitter hit log (`data/predictions/hitter_hit_log.csv`, data asset - not yet a live signal)
+
+Investigating why Beat the Streak's day-survival rate sits at ~50% found a
+real gap: the only signal with enough logged pick history to test
+(`Game_Hit_Probability`) showed no statistically significant relationship
+with actual hit outcomes, and the sample was tiny (n=64 resolved picks) -
+`predictions.csv` only logs the ~2 hitters/day that ever became an
+official pick, not the full slate. A logistic regression fit against that
+few, gated rows can't give trustworthy coefficients or significance
+levels.
+
+`dfs_backtest.assemble_hitter_hit_log` (run daily via
+`scripts/build_hitter_hit_log.py`) builds the real training table instead:
+one row per hitter per game, for **every** hitter with a game that date
+(not just the ones that cleared the pick gates), with every feature
+computed strictly before that game - `starter_PAVE`, `Bullpen_PAVE`,
+`WAVE`/`WAVE_L`/`WAVE_R`, `Total_PA` (`PA_L + PA_R`),
+`Game_Hit_Probability`, `Matchup_Hit_Probability`, `Park_Factor`, and the
+rest of `dfs_ml.HITTER_FEATURE_COLUMNS` - plus a binary `Got_Hit` label
+(did that batter record at least one hit that date, from real completed
+Statcast events). Same no-lookahead recompute (`dfs_backtest._compute_date_outputs`)
+and the same feature-building function (`dfs_ml.build_hitter_features`)
+already used and tested for the DFS ML models, so this reuses trusted
+machinery rather than hand-rolling a second merge path.
+
+`scripts/build_hitter_hit_log.py` (no `--days` for a one-time full
+historical backfill; `--days 10` for the daily incremental run
+`daily_update.yml` uses) appends and dedupes on `(date, key_mlbam)` -
+keep-last, so a freshly recomputed row always wins over a stale one and
+re-running never creates duplicate rows.
+
+This log is **purely a data asset today** - it feeds nothing live. Fitting
+the actual logistic regression against it (and deciding whether it ever
+replaces or augments `predictions.select_picks`'s probability gate) is a
+follow-up once the log has accumulated real history.
+
 ## Automated Game Picks (dashboard)
 
 A second, independent dashboard section predicts a winner for each of

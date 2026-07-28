@@ -90,6 +90,21 @@ def compute_actual_hitter_dk_points(day_completed_batter_events: pd.DataFrame) -
     return agg.rename(columns={"batter": "key_mlbam", "points": "Actual_DK_Points_Modeled"})
 
 
+def compute_actual_hitter_got_hit(day_completed_batter_events: pd.DataFrame) -> pd.DataFrame:
+    """[key_mlbam, Got_Hit] - binary "did this batter get at least one hit
+    that date" label, for one date's real completed at-bat events, keyed
+    by batter. `.max()`, not `.sum()`/count - one hit already clears the
+    bar, and a double-header's two games are both credited to the same
+    date the same way compute_actual_hitter_dk_points already pools them.
+    Same groupby-max-of-a-hit-indicator shape as
+    hitters.compute_game_hit_probability's own per-game label (hitters.py),
+    just for the label side instead of the historical-rate side."""
+    df = day_completed_batter_events.copy()
+    df["hit"] = helpers.is_hit(df["events"])
+    agg = df.groupby("batter", as_index=False)["hit"].max()
+    return agg.rename(columns={"batter": "key_mlbam", "hit": "Got_Hit"})
+
+
 def compute_actual_pitcher_dk_points(day_completed_pitcher_events: pd.DataFrame) -> pd.DataFrame:
     """[key_mlbam, Actual_IP, Actual_K, Actual_BB, Actual_H,
     Actual_DK_Points_Modeled] - real IP/K/BB/H (the same components
@@ -292,3 +307,60 @@ def assemble_ml_training_rows(raw_dir: str = "data/raw", season: int | None = No
     hitters_result = pd.concat(hitter_rows, ignore_index=True) if hitter_rows else pd.DataFrame()
     pitchers_result = pd.concat(pitcher_rows, ignore_index=True) if pitcher_rows else pd.DataFrame()
     return {"hitters": hitters_result, "pitchers": pitchers_result}
+
+
+def assemble_hitter_hit_log(raw_dir: str = "data/raw", season: int | None = None, days: int | None = None) -> pd.DataFrame:
+    """One row per hitter per game (every hitter with a game that date, not
+    just the handful that ever became an official pick) carrying every
+    dfs_ml.HITTER_FEATURE_COLUMNS feature - starter_PAVE, Bullpen_PAVE, WAVE,
+    Game_Hit_Probability, etc. - computed strictly before that date (same
+    no-lookahead recompute as assemble_ml_training_rows), a Total_PA
+    convenience column, and a binary Got_Hit label for whether they actually
+    got a hit that date. This is a data asset for a future logistic
+    regression on real hit outcomes - it is not itself a model and feeds
+    nothing live.
+
+    `days=None` (the default) replays the full persisted history, matching
+    assemble_ml_training_rows's own default reasoning: a growing historical
+    log benefits from as much real data as possible, while a daily
+    incremental run passes an explicit `days` to stay cheap."""
+    season = season or config.SEASON_START.year
+    persisted = data.load_persisted_statcast(raw_dir, season)
+    if persisted is None:
+        return pd.DataFrame()
+
+    team_schedule = derive_historical_team_schedule(persisted)
+    dates = sorted(team_schedule["date"].unique())
+    if days:
+        dates = dates[-days:]
+
+    name_columns = ["key_mlbam", "name_first", "name_last", "team"]
+    rows = []
+    for date in dates:
+        day = _compute_date_outputs(persisted, team_schedule, date)
+        if day is None:
+            continue
+
+        hitter_features = dfs_ml.build_hitter_features(
+            day["outputs"]["wave"], day["outputs"]["pave"], day["outputs"]["confidence"],
+            day["todays_schedule"], day["matchup_probability"],
+        )
+        hitter_features = hitter_features.merge(day["outputs"]["wave"][name_columns], on="key_mlbam", how="left")
+
+        day_events = persisted[persisted["game_date"] == date]
+        got_hit = compute_actual_hitter_got_hit(
+            data.completed_events(day_events, ["game_date", "batter", "events"])
+        )
+
+        scored = hitter_features.merge(got_hit, on="key_mlbam", how="inner")
+        if scored.empty:
+            continue
+
+        scored = scored.copy()
+        scored["date"] = date
+        scored["Total_PA"] = scored["PA_L"] + scored["PA_R"]
+        rows.append(
+            scored[["date"] + name_columns + dfs_ml.HITTER_FEATURE_COLUMNS + ["Total_PA", "Got_Hit"]]
+        )
+
+    return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()
