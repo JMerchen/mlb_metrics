@@ -44,6 +44,10 @@ jobs:
         run: |
           python scripts/build_dfs_rankings.py
 
+      - name: Build hitter hit log
+        run: |
+          python scripts/build_hitter_hit_log.py --days 10
+
       - name: Build optimal lineup
         run: |
           python scripts/build_optimal_lineup.py --objective value
