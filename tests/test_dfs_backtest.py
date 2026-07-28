@@ -289,6 +289,30 @@ def test_assemble_hitter_hit_log_days_truncates_to_most_recent_dates(tmp_path):
     assert full["date"].nunique() >= truncated["date"].nunique()
 
 
+def test_assemble_hitter_hit_log_doubleheader_produces_one_row_per_hitter(tmp_path):
+    # A real doubleheader (two game_pks, same team, same game_date) makes
+    # derive_historical_team_schedule legitimately emit two schedule rows
+    # for that team/date - build_hitter_features's team/key_mlbam-only
+    # merges then fan those out into a same-key_mlbam cartesian duplicate.
+    # assemble_hitter_hit_log must still emit exactly one row per
+    # (date, key_mlbam) despite that.
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+
+    rows = _multi_game_statcast(n_games=5).to_dict("records")
+    doubleheader_date = pd.Timestamp("2026-05-01") + pd.Timedelta(days=5 * 5)
+    events = ["strikeout"] * 5 + ["field_out"] * 6 + ["walk"] * 3 + ["single"] * 4 + ["double"] * 1 + ["home_run"] * 1
+    rows.extend(_game_rows(101, doubleheader_date, events))
+    rows.extend(_game_rows(102, doubleheader_date, events))
+    pd.DataFrame(rows).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    result = dfs_backtest.assemble_hitter_hit_log(str(raw_dir), season=2026, days=None)
+
+    doubleheader_rows = result[result["date"] == doubleheader_date]
+    assert not doubleheader_rows.empty
+    assert not doubleheader_rows.duplicated(subset="key_mlbam").any()
+
+
 def test_assemble_hitter_hit_log_no_persisted_data_returns_empty(tmp_path):
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()

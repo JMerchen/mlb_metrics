@@ -356,6 +356,17 @@ def assemble_hitter_hit_log(raw_dir: str = "data/raw", season: int | None = None
         if scored.empty:
             continue
 
+        # On a doubleheader date, todays_schedule/matchup_probability each
+        # carry one row per game_pk for the doubleheader team - since
+        # build_hitter_features joins on team/key_mlbam only (not game_pk),
+        # that fans out into a same-key_mlbam cartesian duplicate (one row
+        # per game combination) rather than one row per hitter. The date-
+        # level Got_Hit label already correctly pools both games via
+        # compute_actual_hitter_got_hit's max(); keep just the first
+        # feature-row combination per hitter so this log's own uniqueness
+        # invariant (one row per date, key_mlbam) holds too.
+        scored = scored.drop_duplicates(subset="key_mlbam", keep="first")
+
         scored = scored.copy()
         scored["date"] = date
         scored["Total_PA"] = scored["PA_L"] + scored["PA_R"]
