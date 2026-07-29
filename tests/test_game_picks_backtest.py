@@ -284,3 +284,87 @@ def test_reconstruct_historical_game_picks_from_persisted_no_persisted_data_retu
 
     assert picks.empty
     assert list(picks.columns) == game_predictions.GAME_PREDICTION_COLUMNS
+
+
+def test_assemble_game_pick_log_has_expected_schema_and_no_lookahead(tmp_path, monkeypatch):
+    # Same stubbing approach as the reconstruct_..._from_persisted tests
+    # above - compute_outputs needs live network access, irrelevant to what
+    # this test exercises (the per-date replay/merge wiring).
+    monkeypatch.setattr(game_picks_backtest.pipeline, "compute_outputs", lambda df: _fake_current_outputs())
+
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    # Two days: the first only supplies "prior history" for the second (the
+    # first date has nothing strictly before it, so it must be skipped -
+    # same no-lookahead guarantee as reconstruct_..._from_persisted).
+    rows = _statcast_game(554, pd.Timestamp("2026-05-31"), "NYY", "BOS", 101, 201, 2, 1) + _statcast_game(
+        555, pd.Timestamp("2026-06-01"), "NYY", "BOS", 101, 201, 5, 2
+    )
+    pd.DataFrame(rows).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    log = game_picks_backtest.assemble_game_pick_log(raw_dir=str(raw_dir), season=2026, days=40)
+
+    assert list(log.columns) == game_picks_backtest.GAME_PICK_LOG_COLUMNS
+    assert len(log) == 1  # 05-31 skipped (no prior history), only 06-01 logged
+    row = log.iloc[0]
+    assert row["game_pk"] == 555
+    assert row["home_team"] == "NYY"
+    assert row["away_team"] == "BOS"
+    # NYY (home) really won 5-2 - the real outcome, not derivable from any
+    # of GAME_PICK_FEATURE_COLUMNS (those come from confidence.csv/pave.csv
+    # snapshots computed off history strictly before this date, never the
+    # game's own result).
+    assert row["Home_Won"] == 1
+    # home_win_probability must match what compute_game_win_probabilities
+    # itself would produce off the exact same (confidence, pave, schedule)
+    # inputs - carried through as a tracked comparison column, not
+    # recomputed some other way.
+    outputs = _fake_current_outputs()
+    todays_games = game_picks_backtest.derive_historical_schedule_games(pd.DataFrame(rows))
+    todays_games = todays_games[todays_games["date"] == pd.Timestamp("2026-06-01")]
+    expected = game_picks_backtest.game_picks.compute_game_win_probabilities(
+        outputs["confidence"], outputs["pave"], todays_games
+    )
+    assert row["home_win_probability"] == pytest.approx(expected.iloc[0]["home_win_probability"])
+    for col in game_picks_backtest.game_picks.GAME_PICK_FEATURE_COLUMNS:
+        assert col in log.columns
+
+
+def test_assemble_game_pick_log_home_loss_recorded_correctly(tmp_path, monkeypatch):
+    monkeypatch.setattr(game_picks_backtest.pipeline, "compute_outputs", lambda df: _fake_current_outputs())
+
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    rows = _statcast_game(554, pd.Timestamp("2026-05-31"), "NYY", "BOS", 101, 201, 2, 1) + _statcast_game(
+        555, pd.Timestamp("2026-06-01"), "NYY", "BOS", 101, 201, 1, 6
+    )
+    pd.DataFrame(rows).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    log = game_picks_backtest.assemble_game_pick_log(raw_dir=str(raw_dir), season=2026, days=40)
+
+    assert log.iloc[0]["Home_Won"] == 0
+
+
+def test_assemble_game_pick_log_days_limits_the_replay_window(tmp_path, monkeypatch):
+    monkeypatch.setattr(game_picks_backtest.pipeline, "compute_outputs", lambda df: _fake_current_outputs())
+
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    rows = (
+        _statcast_game(555, pd.Timestamp("2026-06-01"), "NYY", "BOS", 101, 201, 5, 2)
+        + _statcast_game(556, pd.Timestamp("2026-06-02"), "NYY", "BOS", 101, 201, 3, 1)
+        + _statcast_game(557, pd.Timestamp("2026-06-03"), "NYY", "BOS", 101, 201, 4, 0)
+    )
+    pd.DataFrame(rows).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    log = game_picks_backtest.assemble_game_pick_log(raw_dir=str(raw_dir), season=2026, days=1)
+
+    assert len(log) == 1
+    assert log.iloc[0]["game_pk"] == 557
+
+
+def test_assemble_game_pick_log_no_persisted_data_returns_empty(tmp_path):
+    log = game_picks_backtest.assemble_game_pick_log(raw_dir=str(tmp_path / "nonexistent"), season=2026, days=40)
+
+    assert log.empty
+    assert list(log.columns) == game_picks_backtest.GAME_PICK_LOG_COLUMNS

@@ -58,6 +58,64 @@ def test_compute_game_win_probabilities_exact_arithmetic(monkeypatch):
     assert result.iloc[0]["game_pk"] == 100
 
 
+def test_build_game_features_exact_arithmetic():
+    confidence = _confidence([
+        {"team": "NYY", "pyth_Strength": 1.1, "pyth_Confidence": 1.05,
+         "suppression_resistance": 1.0, "true_power": 1.0, "Bullpen_PAVE_PLUS": 0.9},
+        {"team": "BOS", "pyth_Strength": 0.9, "pyth_Confidence": 0.95,
+         "suppression_resistance": 1.0, "true_power": 1.0, "Bullpen_PAVE_PLUS": 1.1},
+    ])
+    pave = pd.DataFrame([
+        {"key_mlbam": 1, "PAVE_PLUS": 0.8},  # NYY probable starter
+        {"key_mlbam": 2, "PAVE_PLUS": 1.2},  # BOS probable starter
+    ])
+    schedule_games = _schedule_games(home_pitcher=1, away_pitcher=2)
+
+    features = game_picks.build_game_features(confidence, pave, schedule_games)
+
+    row = features.iloc[0]
+    assert row["game_pk"] == 100
+    assert row["home_team"] == "NYY"
+    assert row["away_team"] == "BOS"
+    # home_composite = .25*(1.1+1.05+1.0+1.0) = 1.0375; away_composite = .25*(0.9+0.95+1.0+1.0) = .9625
+    assert row["home_composite"] == pytest.approx(1.0375)
+    assert row["away_composite"] == pytest.approx(0.9625)
+    assert row["home_bullpen_pave_plus"] == pytest.approx(0.9)
+    assert row["away_bullpen_pave_plus"] == pytest.approx(1.1)
+    assert row["home_starter_pave_plus"] == pytest.approx(0.8)
+    assert row["away_starter_pave_plus"] == pytest.approx(1.2)
+    assert list(features.columns) == ["game_pk", "date", "home_team", "away_team"] + game_picks.GAME_PICK_FEATURE_COLUMNS
+
+
+def test_build_game_features_missing_power_a_plus_columns_are_all_na():
+    # confidence.csv/pave.csv snapshots from before Power_A_PLUS existed
+    # lack the columns entirely - build_game_features must still return the
+    # full GAME_PICK_FEATURE_COLUMNS shape with NA in those slots, not raise.
+    confidence = pd.DataFrame([
+        {"team": "NYY", "pyth_Strength": 1.0, "pyth_Confidence": 1.0,
+         "suppression_resistance": 1.0, "true_power": 1.0, "Bullpen_PAVE_PLUS": 1.0},
+        {"team": "BOS", "pyth_Strength": 1.0, "pyth_Confidence": 1.0,
+         "suppression_resistance": 1.0, "true_power": 1.0, "Bullpen_PAVE_PLUS": 1.0},
+    ])
+    pave = pd.DataFrame([
+        {"key_mlbam": 1, "PAVE_PLUS": 1.0},
+        {"key_mlbam": 2, "PAVE_PLUS": 1.0},
+    ])
+    schedule_games = _schedule_games(home_pitcher=1, away_pitcher=2)
+
+    features = game_picks.build_game_features(confidence, pave, schedule_games)
+
+    row = features.iloc[0]
+    assert pd.isna(row["home_bullpen_power_a_plus"])
+    assert pd.isna(row["away_bullpen_power_a_plus"])
+    assert pd.isna(row["home_starter_power_a_plus"])
+    assert pd.isna(row["away_starter_power_a_plus"])
+
+    matrix = game_picks.game_feature_matrix(features)
+    assert list(matrix.columns) == game_picks.GAME_PICK_FEATURE_COLUMNS
+    assert matrix.iloc[0]["home_bullpen_power_a_plus"] == 0  # NaN-filled to 0
+
+
 def test_missing_probable_starter_uses_neutral_multiplier():
     confidence = _confidence([
         {"team": "NYY", "pyth_Strength": 1.0, "pyth_Confidence": 1.0,
