@@ -137,6 +137,55 @@ def test_compute_game_hit_probability_blends_game_level_hit_rate():
     assert result.loc[1, "Game_Hit_Probability"] == pytest.approx(expected)
 
 
+def test_compute_current_hit_streaks_counts_trailing_hits_only():
+    # hit, miss, hit, hit (most recent first when read backward) - only the
+    # trailing 2 straight hits count; the miss two games back breaks it, so
+    # the earlier hit before that miss must NOT be added back in.
+    rows = [
+        {"batter": 1, "game_id": 1, "game_date": pd.Timestamp("2026-06-10"), "events": "single"},
+        {"batter": 1, "game_id": 2, "game_date": pd.Timestamp("2026-06-11"), "events": "field_out"},
+        {"batter": 1, "game_id": 3, "game_date": pd.Timestamp("2026-06-12"), "events": "single"},
+        {"batter": 1, "game_id": 4, "game_date": pd.Timestamp("2026-06-13"), "events": "double"},
+    ]
+    result = hitters.compute_current_hit_streaks(pd.DataFrame(rows)).set_index("key_mlbam")
+    assert result.loc[1, "Current_Hit_Streak"] == 2
+
+
+def test_compute_current_hit_streaks_doubleheader_counts_as_two_games():
+    # Two real games (distinct game_id) sharing the SAME game_date (a
+    # doubleheader) must count as two separate games toward the streak,
+    # not get conflated by date-only grouping (data.assign_game_ids's
+    # documented failure mode).
+    rows = [
+        {"batter": 1, "game_id": 1, "game_date": pd.Timestamp("2026-06-01"), "events": "single"},
+        {"batter": 1, "game_id": 2, "game_date": pd.Timestamp("2026-06-05"), "events": "single"},
+        {"batter": 1, "game_id": 3, "game_date": pd.Timestamp("2026-06-05"), "events": "double"},
+    ]
+    result = hitters.compute_current_hit_streaks(pd.DataFrame(rows)).set_index("key_mlbam")
+    assert result.loc[1, "Current_Hit_Streak"] == 3
+
+
+def test_compute_current_hit_streaks_excludes_stale_batters():
+    rows = [
+        # Batter 1: last game is the global latest date - stays in the result.
+        {"batter": 1, "game_id": 1, "game_date": pd.Timestamp("2026-06-15"), "events": "single"},
+        # Batter 2: last game is 30 days before the global latest - excluded
+        # entirely (default HIT_STREAK_RECENT_DAYS=5), not shown with a
+        # stale frozen streak.
+        {"batter": 2, "game_id": 2, "game_date": pd.Timestamp("2026-05-16"), "events": "single"},
+    ]
+    result = hitters.compute_current_hit_streaks(pd.DataFrame(rows))
+    assert set(result["key_mlbam"]) == {1}
+
+
+def test_compute_current_hit_streaks_zero_streak_still_included():
+    # Recently active but the most recent game was a miss - streak is 0,
+    # but the batter is still returned (caller decides what's "on a streak").
+    rows = [{"batter": 1, "game_id": 1, "game_date": pd.Timestamp("2026-06-15"), "events": "field_out"}]
+    result = hitters.compute_current_hit_streaks(pd.DataFrame(rows)).set_index("key_mlbam")
+    assert result.loc[1, "Current_Hit_Streak"] == 0
+
+
 def test_assemble_hitters_output_columns_and_derived_fields():
     dt = pd.DataFrame(_at_bats(1, "R", [("2026-06-15", "single"), ("2026-06-16", "field_out")]))
     data_with_game_id = pd.DataFrame([

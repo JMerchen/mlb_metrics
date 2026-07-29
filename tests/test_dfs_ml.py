@@ -242,3 +242,51 @@ def test_apply_ml_overrides_clips_negative_predictions_to_zero(tmp_path, monkeyp
     out_hitters, _ = dfs_ml.apply_ml_overrides(hitters_df, hitter_features, pitchers_df)
 
     assert out_hitters.loc[0, "DK_Points_Hitter"] == 0
+
+
+class _ConstantProbaModel:
+    """Minimal stand-in for a fitted sklearn classifier - always predicts a
+    fixed positive-class probability, mirroring _ConstantModel above but for
+    predict_proba's [n_samples, 2] shape."""
+
+    def __init__(self, positive_proba):
+        self.positive_proba = positive_proba
+
+    def predict_proba(self, X):
+        import numpy as np
+        return np.column_stack([1 - np.full(len(X), self.positive_proba), np.full(len(X), self.positive_proba)])
+
+
+def test_predict_hitter_hit_probability_no_model_returns_empty(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "HITTER_HIT_PROBABILITY_MODEL_PATH", str(tmp_path / "missing.joblib"))
+
+    hitter_features = dfs_ml.build_hitter_features(
+        pd.DataFrame([_wave_row(1, "BOS")]),
+        pd.DataFrame([{"key_mlbam": 99, "PAVE": 0.24}]),
+        pd.DataFrame([{"team": "NYY", "Bullpen_PAVE": 0.26, "Park_Factor": 1.05}]),
+        pd.DataFrame([{"team": "BOS", "opponent": "NYY", "is_home": True, "probable_pitcher_key_mlbam": 99}]),
+        pd.DataFrame([{"key_mlbam": 1, "Matchup_Hit_Probability": 0.72}]),
+    )
+
+    result = dfs_ml.predict_hitter_hit_probability(hitter_features)
+
+    assert result.empty
+    assert list(result.columns) == ["key_mlbam", "Model_Hit_Probability"]
+
+
+def test_predict_hitter_hit_probability_with_model_returns_probability(tmp_path, monkeypatch):
+    model_path = str(tmp_path / "hit_probability.joblib")
+    ml_models.save_model(_ConstantProbaModel(0.63), model_path)
+    monkeypatch.setattr(config, "HITTER_HIT_PROBABILITY_MODEL_PATH", model_path)
+
+    hitter_features = dfs_ml.build_hitter_features(
+        pd.DataFrame([_wave_row(1, "BOS")]),
+        pd.DataFrame([{"key_mlbam": 99, "PAVE": 0.24}]),
+        pd.DataFrame([{"team": "NYY", "Bullpen_PAVE": 0.26, "Park_Factor": 1.05}]),
+        pd.DataFrame([{"team": "BOS", "opponent": "NYY", "is_home": True, "probable_pitcher_key_mlbam": 99}]),
+        pd.DataFrame([{"key_mlbam": 1, "Matchup_Hit_Probability": 0.72}]),
+    )
+
+    result = dfs_ml.predict_hitter_hit_probability(hitter_features).set_index("key_mlbam")
+
+    assert result.loc[1, "Model_Hit_Probability"] == pytest.approx(0.63)

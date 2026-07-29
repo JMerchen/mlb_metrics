@@ -262,6 +262,51 @@ def compute_game_hit_probability(data_with_game_id: pd.DataFrame) -> pd.DataFram
     return result.rename(columns={"batter": "key_mlbam"})
 
 
+def compute_current_hit_streaks(
+    data_with_game_id: pd.DataFrame, recent_days: int = config.HIT_STREAK_RECENT_DAYS
+) -> pd.DataFrame:
+    """[key_mlbam, Current_Hit_Streak, last_game_date] - each recently-active
+    batter's real current consecutive-games-with-a-hit streak, counted
+    backward from their own most recent game. Same per-game hit indicator
+    compute_game_hit_probability builds - grouped by (batter, game_id,
+    game_date), NOT game_date alone (see data.assign_game_ids's docstring:
+    date-only grouping fragments a doubleheader's two games and has already
+    been a real bug here) - just walked in game_id order per batter instead
+    of aggregated into a rate.
+
+    A batter whose most recent game is more than `recent_days` before the
+    latest game_date in the data is excluded entirely - a streak frozen by
+    weeks of inactivity isn't a real "current" one. Batters within that
+    window are still included even at Current_Hit_Streak=0 (their last game
+    was a miss); it's the caller's job to decide what counts as "on a
+    streak" for display purposes."""
+    completed = data_with_game_id[data_with_game_id["events"].isin(config.COUNTED_EVENTS)][
+        ["game_date", "batter", "events", "game_id"]
+    ].copy()
+    completed["had_hit"] = helpers.is_hit(completed["events"])
+
+    game_hits = completed.groupby(["batter", "game_id", "game_date"], as_index=False)["had_hit"].max()
+    if game_hits.empty:
+        return pd.DataFrame(columns=["key_mlbam", "Current_Hit_Streak", "last_game_date"])
+
+    latest = game_hits["game_date"].max()
+    game_hits = game_hits.sort_values("game_id")
+
+    rows = []
+    for batter, group in game_hits.groupby("batter", sort=False):
+        last_game_date = group["game_date"].iloc[-1]
+        if (latest - last_game_date).days > recent_days:
+            continue
+        streak = 0
+        for had_hit in group["had_hit"].iloc[::-1]:
+            if not had_hit:
+                break
+            streak += 1
+        rows.append({"key_mlbam": batter, "Current_Hit_Streak": streak, "last_game_date": last_game_date})
+
+    return pd.DataFrame(rows, columns=["key_mlbam", "Current_Hit_Streak", "last_game_date"])
+
+
 def assemble_hitters(
     dt: pd.DataFrame,
     data_with_game_id: pd.DataFrame,

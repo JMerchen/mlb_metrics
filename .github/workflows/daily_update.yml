@@ -44,6 +44,14 @@ jobs:
         run: |
           python scripts/build_dfs_rankings.py
 
+      - name: Build hit streaks
+        run: |
+          python scripts/build_hit_streaks.py
+
+      - name: Build hitter hit predictions
+        run: |
+          python scripts/build_hitter_hit_predictions.py
+
       - name: Build hitter hit log
         run: |
           python scripts/build_hitter_hit_log.py --days 10

@@ -53,6 +53,13 @@ GAME_HIT_PROB_WINDOWS = [
     (10, 0.325),
 ]
 
+# hitters.compute_current_hit_streaks: a batter whose most recent game is
+# more than this many days before the latest game_date in the data is
+# excluded from the "current streak" leaderboard - generous enough for a
+# team's occasional single off-day, tight enough to exclude anyone not
+# currently playing.
+HIT_STREAK_RECENT_DAYS = 5
+
 # WHOPS/RC and WTB share the same window scheme: full/7d/30d/15d.
 WHOPS_WTB_WINDOWS = [
     (None, 0.175),

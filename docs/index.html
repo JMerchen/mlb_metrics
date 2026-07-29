@@ -46,6 +46,14 @@ href="./style.css">
 Beat the Streak Tracker
 </h2>
 
+<div class="tabGroup" id="btsTabs">
+<button class="tabButton active" data-view="ourPicks" onclick="selectBtsView('ourPicks')">Our Picks</button>
+<button class="tabButton" data-view="hitStreaks" onclick="selectBtsView('hitStreaks')">Hit Streaks</button>
+<button class="tabButton" data-view="modelOdds" onclick="selectBtsView('modelOdds')">Model Odds</button>
+</div>
+
+<div id="ourPicksSection">
+
 <div
 class="streakStats"
 id="streakStats">
@@ -75,6 +83,32 @@ class="scrollbox"
 id="streakHistoryTable">
 
 Loading...
+
+</div>
+
+</div>
+
+<div id="hitStreaksSection" style="display:none;">
+
+<div
+class="scrollbox"
+id="hitStreaksTable">
+
+Loading...
+
+</div>
+
+</div>
+
+<div id="modelOddsSection" style="display:none;">
+
+<div
+class="scrollbox"
+id="modelOddsTable">
+
+Loading...
+
+</div>
 
 </div>
 
