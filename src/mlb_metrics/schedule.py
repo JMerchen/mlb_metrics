@@ -26,7 +26,25 @@ way (a `Debug statsapi` run against a known past date) before trusting
 Automated Game Picks' resolution in production.
 """
 
+import datetime
+from zoneinfo import ZoneInfo
+
 import pandas as pd
+
+# The dashboard's audience is in Arizona, which does not observe DST (fixed
+# UTC-7 year-round) - "today" must be Arizona's calendar day, not the
+# running machine's own local time (UTC on GitHub Actions runners). A
+# workflow_dispatch run late in the evening AZ time (e.g. 8:45pm AZ =
+# 3:45am UTC, already past UTC midnight) would otherwise compute "today" as
+# tomorrow by naive datetime.date.today(), publishing a day-ahead slate.
+LOCAL_TIMEZONE = ZoneInfo("America/Phoenix")
+
+
+def today_local() -> datetime.date:
+    """Today's calendar date in Arizona time - see LOCAL_TIMEZONE above for
+    why this isn't plain datetime.date.today()."""
+    return datetime.datetime.now(LOCAL_TIMEZONE).date()
+
 
 # Ported from docs/app.js's teamLogo() table (already validated against
 # Statcast's own home_team/away_team abbreviations) and inverted. Joining on

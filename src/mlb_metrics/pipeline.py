@@ -274,7 +274,7 @@ def main():
     args = parser.parse_args()
 
     as_of_date = (
-        datetime.date.fromisoformat(args.as_of_date) if args.as_of_date else datetime.date.today()
+        datetime.date.fromisoformat(args.as_of_date) if args.as_of_date else schedule.today_local()
     )
     run(
         as_of_date,

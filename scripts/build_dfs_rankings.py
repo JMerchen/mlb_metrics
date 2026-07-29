@@ -64,7 +64,7 @@ def main():
     parser.add_argument("--raw-dir", default="data/raw")
     parser.add_argument("--data-dir", default="docs/data")
     parser.add_argument("--season", type=int, default=config.SEASON_START.year)
-    parser.add_argument("--as-of-date", type=datetime.date.fromisoformat, default=datetime.date.today())
+    parser.add_argument("--as-of-date", type=datetime.date.fromisoformat, default=schedule.today_local())
     args = parser.parse_args()
 
     wave_path = os.path.join(args.data_dir, "wave.csv")
