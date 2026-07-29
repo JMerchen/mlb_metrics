@@ -4,5 +4,6 @@ pybaseball
 pyarrow
 MLB-StatsAPI
 scikit-learn
+statsmodels
 joblib
 pulp

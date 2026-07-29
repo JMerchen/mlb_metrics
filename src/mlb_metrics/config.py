@@ -628,6 +628,7 @@ DFS_HITTER_MODEL_PATH = "data/models/dfs_hitter_model.joblib"
 DFS_PITCHER_H_ALLOWED_MODEL_PATH = "data/models/dfs_pitcher_h_allowed_model.joblib"
 DFS_PITCHER_BB_MODEL_PATH = "data/models/dfs_pitcher_bb_model.joblib"
 AGE_CURVE_HR9_MODEL_PATH = "data/models/age_curve_hr9_model.joblib"
+HITTER_HIT_PROBABILITY_MODEL_PATH = "data/models/hitter_hit_probability_model.joblib"
 
 # Deliberately narrow grids (1-2 hyperparameters, <10 combinations) given
 # the modest walk-forward fold count on the DFS side (~116 dates -> ~6-8
@@ -645,6 +646,13 @@ DFS_HITTER_GBM_PARAM_GRID = {
     "min_samples_leaf": [50, 200],
 }
 DFS_PITCHER_RIDGE_ALPHA_GRID = [0.1, 0.3, 1, 3, 10, 30, 100]
+
+# LogisticRegression's C (inverse regularization strength) grid for the
+# hitter hit-probability model (scripts/train_hitter_hit_model.py) - same
+# narrow-grid caution as above, same walk-forward date-grain as the DFS
+# hitter model (ML_WALK_FORWARD_MIN_TRAIN_DATES_HITTER/_TEST_BLOCK_DATES_HITTER
+# above, reused rather than duplicated).
+HITTER_HIT_LOGIT_C_GRID = [0.01, 0.03, 0.1, 0.3, 1, 3, 10]
 
 # Age Curves HR9's year-blocked CV (age_curve_ml.YearBlockedSplit) trains
 # only on seasons strictly before AGE_CURVE_HR9_TEST_YEAR_START (a

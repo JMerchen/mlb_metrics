@@ -77,6 +77,51 @@ def test_evaluate_predictions_empty_returns_nan_not_crash():
     assert pd.isna(result["correlation"])
 
 
+def test_evaluate_classifier_predictions_exact_arithmetic():
+    import math
+
+    actual = pd.Series([0, 0, 1, 1])
+    predicted_proba = pd.Series([0.1, 0.4, 0.6, 0.9])  # every prediction on the correct side of 0.5
+
+    result = ml_models.evaluate_classifier_predictions(actual, predicted_proba)
+
+    assert result["n"] == 4
+    assert result["accuracy"] == pytest.approx(1.0)
+    assert result["roc_auc"] == pytest.approx(1.0)  # perfect rank separation
+
+    expected_log_loss = -sum([
+        math.log(1 - 0.1), math.log(1 - 0.4), math.log(0.6), math.log(0.9),
+    ]) / 4
+    assert result["log_loss"] == pytest.approx(expected_log_loss)
+
+    expected_brier = ((0.1 - 0) ** 2 + (0.4 - 0) ** 2 + (0.6 - 1) ** 2 + (0.9 - 1) ** 2) / 4
+    assert result["brier_score"] == pytest.approx(expected_brier)
+
+    # base rate = 0.5 -> always predicting 0.5 gives -log(0.5) per row regardless of actual
+    assert result["baseline_log_loss"] == pytest.approx(-math.log(0.5))
+
+
+def test_evaluate_classifier_predictions_single_class_auc_is_nan_not_raise():
+    actual = pd.Series([1, 1, 1])
+    predicted_proba = pd.Series([0.6, 0.7, 0.8])
+
+    result = ml_models.evaluate_classifier_predictions(actual, predicted_proba)
+
+    assert result["n"] == 3
+    assert pd.isna(result["roc_auc"])
+    assert result["accuracy"] == pytest.approx(1.0)
+
+
+def test_evaluate_classifier_predictions_empty_returns_nan_not_crash():
+    result = ml_models.evaluate_classifier_predictions(pd.Series([], dtype=float), pd.Series([], dtype=float))
+    assert result["n"] == 0
+    assert pd.isna(result["accuracy"])
+    assert pd.isna(result["log_loss"])
+    assert pd.isna(result["brier_score"])
+    assert pd.isna(result["roc_auc"])
+    assert pd.isna(result["baseline_log_loss"])
+
+
 def test_save_and_load_model_round_trips(tmp_path):
     model = Ridge(alpha=5.0).fit([[1], [2], [3]], [2, 4, 6])
     path = str(tmp_path / "nested" / "model.joblib")

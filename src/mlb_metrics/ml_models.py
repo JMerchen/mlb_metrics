@@ -21,6 +21,7 @@ import os
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.metrics import accuracy_score, brier_score_loss, log_loss, roc_auc_score
 from sklearn.model_selection import GridSearchCV
 
 
@@ -102,6 +103,36 @@ def evaluate_predictions(actual: pd.Series, predicted: pd.Series) -> dict:
     baseline_mae = (actual - actual.mean()).abs().mean()
     correlation = actual.corr(predicted) if n > 1 else float("nan")
     return {"mae": mae, "baseline_mae": baseline_mae, "correlation": correlation, "n": n}
+
+
+def evaluate_classifier_predictions(actual: pd.Series, predicted_proba: pd.Series) -> dict:
+    """accuracy (@0.5 threshold), log_loss, brier_score, roc_auc,
+    baseline_log_loss (always predict actual's own base rate), and n - the
+    classification analog of evaluate_predictions, for a binary label and a
+    predicted probability in [0, 1]. roc_auc is NaN (not raised) when
+    `actual` is single-class, the same "can't compute, don't crash" stance
+    evaluate_predictions takes on an empty input."""
+    actual = pd.Series(actual).reset_index(drop=True)
+    predicted_proba = pd.Series(predicted_proba).reset_index(drop=True)
+    n = len(actual)
+    if n == 0:
+        return {
+            "accuracy": float("nan"), "log_loss": float("nan"), "brier_score": float("nan"),
+            "roc_auc": float("nan"), "baseline_log_loss": float("nan"), "n": 0,
+        }
+
+    base_rate = actual.mean()
+    predicted_class = (predicted_proba >= 0.5).astype(int)
+    baseline_proba = pd.Series(base_rate, index=actual.index)
+
+    return {
+        "accuracy": accuracy_score(actual, predicted_class),
+        "log_loss": log_loss(actual, predicted_proba, labels=[0, 1]),
+        "brier_score": brier_score_loss(actual, predicted_proba),
+        "roc_auc": roc_auc_score(actual, predicted_proba) if actual.nunique() > 1 else float("nan"),
+        "baseline_log_loss": log_loss(actual, baseline_proba, labels=[0, 1]),
+        "n": n,
+    }
 
 
 def save_model(model, path: str) -> None:
