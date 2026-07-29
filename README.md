@@ -604,6 +604,51 @@ This is a first-pass, unvalidated blend (see `game_picks.py`'s module
 docstring), meant to be watched and compared against reality before being
 trusted, not treated as ground truth.
 
+### Game-pick logistic regression (`scripts/train_game_pick_model.py`, fit + report only)
+
+Same two-phase pattern as the hitter-side model above, applied to the
+team-level heuristic: `game_picks.build_game_features` exposes the ten raw,
+unblended per-team/matchup ingredients (`home_composite`, `away_composite`,
+`home`/`away_bullpen_pave_plus`, `home`/`away_bullpen_power_a_plus`,
+`home`/`away_starter_pave_plus`, `home`/`away_starter_power_a_plus`) that
+`compute_game_win_probabilities` combines into `home_win_probability`,
+instead of only ever returning the already-blended ratio -
+`compute_game_win_probabilities` itself is refactored to build on top of
+`build_game_features` (a behavior-preserving change; all pre-existing
+`test_game_picks.py` tests pass unmodified).
+`game_picks_backtest.assemble_game_pick_log` replays every historical game
+(no-lookahead, one row per `game_pk`, reusing the same as-of-date
+`pipeline.compute_outputs` recompute `reconstruct_historical_game_picks_from_persisted`
+uses) into a training table of those ten features, the heuristic's own
+`home_win_probability` (carried through as a comparison column, not fed to
+the model), and the real `Home_Won` outcome.
+
+**Real numbers (2026-07-29, full persisted history, n=1,595 games across
+121 dates)**: individually, only `home_starter_pave_plus` (p=0.0256) and
+`home_starter_power_a_plus` (p=0.0335) are significant at p<0.05 -
+`home_bullpen_pave_plus`/`home_bullpen_power_a_plus` are marginal
+(p≈0.06); `home_composite`, `away_composite`, and all four away-side
+pitching features are not significant. In the combined multivariate model
+nothing clears p<0.05. On a 20-date holdout (n=264), the walk-forward
+`LogisticRegression` essentially ties a coin flip (accuracy 0.500, ROC AUC
+0.5035, log_loss 0.6937) and does not even beat the naive baseline
+(0.6929), let alone the existing `home_win_probability` heuristic (log_loss
+0.6874, ROC AUC 0.5603, clearly the stronger signal here) - **not saved**,
+reported honestly per the same bar the hitter-side model had to clear.
+Unlike the hitter side, this fit-and-report phase found no edge to
+capture: the composite/bullpen signals `game_picks.py` already blends
+carry real information the raw per-team features alone don't obviously
+improve on with this data volume, at least not via a plain logistic
+regression on today's feature set.
+
+**Scope**: fit and report only, same as the hitter-side script - no
+artifact was produced this run, and even if a future re-run (as more
+history accumulates) does clear the bar, the design for actually using it
+(nudging the heuristic's favored team's probability slightly toward the
+model's pick, calibrated via its own backtest, mirroring how
+`GAME_PICK_SUSCEPTIBILITY_WEIGHT` and `GAME_PICK_MIN_PROBABILITY` were both
+calibrated rather than guessed) remains a separate, later decision.
+
 ## Probable Pitchers (dashboard)
 
 A small daily list of today's games with each probable starter, their
