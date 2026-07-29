@@ -174,6 +174,22 @@ pitch, too late for the pipeline's 8am ET run regardless of data source, and
 would need a second later run plus a decision about revising an
 already-logged morning pick.
 
+- **Recently-played eligibility** (`hitters.compute_last_game_dates`,
+  `config.HITTER_MAX_DAYS_SINCE_LAST_GAME`, default 5 days) - a hitter's
+  career-long PA total and season-long WAVE/Game_Hit_Probability rates stay
+  high even after a week or more hurt/benched, so without this an inactive
+  player could still surface as an official pick. `predictions.select_picks`
+  excludes any hitter whose most recent completed game is more than the
+  threshold before the pick date (column-gated, so old wave.csv snapshots
+  without `Last_Game_Date` are unaffected). This is an eligibility/data-
+  hygiene gate, not a new predictive signal - it doesn't touch ranking, only
+  who's eligible to be ranked at all - so unlike the trained hit-probability
+  model (still explicitly NOT wired into live picks) it didn't need its own
+  backtest, the same reasoning that applies to the batting-order/lineup
+  gates above. Real-data check on 2026-07-28 excluded 213 of 602 hitters
+  (season-long stragglers - traded, released, injured) while correctly
+  keeping actually-active players eligible.
+
 ## Pick qualification: probability vs. Game_Hit_Probability
 
 `hitters.py` computes two independent estimates of "will this batter get a

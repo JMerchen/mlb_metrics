@@ -135,6 +135,16 @@ BACKTEST_TOP_N = 5
 # reducing pick coverage (still >=1 pick on all 42 backtested days).
 HITTER_MIN_PROBABILITY = 0.7
 
+# predictions.select_picks excludes a hitter whose most recent completed
+# game (hitters.compute_last_game_dates's Last_Game_Date) is more than this
+# many days before the pick date - a career-long PA total and season-long
+# WAVE/Game_Hit_Probability rate stay high even if a hitter has been hurt/
+# benched for a week, so without this an inactive player could still be
+# pick-eligible. A dedicated constant, not reused from
+# HIT_STREAK_RECENT_DAYS (the Hit Streaks dashboard leaderboard's own
+# recency window) - independently tunable even though both start at 5.
+HITTER_MAX_DAYS_SINCE_LAST_GAME = 5
+
 # Stamped onto every hitter pick logged (predictions.select_picks) so
 # evaluation.py/the dashboard can segment stats by which selection-logic
 # version actually produced a given row, instead of silently blending old

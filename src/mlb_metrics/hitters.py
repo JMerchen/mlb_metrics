@@ -262,6 +262,24 @@ def compute_game_hit_probability(data_with_game_id: pd.DataFrame) -> pd.DataFram
     return result.rename(columns={"batter": "key_mlbam"})
 
 
+def compute_last_game_dates(data_with_game_id: pd.DataFrame) -> pd.DataFrame:
+    """[key_mlbam, Last_Game_Date] - the most recent date each batter
+    recorded a completed plate appearance. Unlike compute_current_hit_streaks's
+    walk, finding the single most recent date doesn't need the game_id-safe
+    chronological ordering (a doubleheader's two games share one game_date
+    either way) - a plain per-batter max is correct.
+
+    Feeds assemble_hitters's Last_Game_Date column, which
+    predictions.select_picks gates official picks on (a hitter who hasn't
+    played recently shouldn't be pick-eligible just because their
+    season-long rates are still high)."""
+    completed = data_with_game_id[data_with_game_id["events"].isin(config.COUNTED_EVENTS)][
+        ["game_date", "batter"]
+    ]
+    result = completed.groupby("batter", as_index=False)["game_date"].max()
+    return result.rename(columns={"batter": "key_mlbam", "game_date": "Last_Game_Date"})
+
+
 def compute_current_hit_streaks(
     data_with_game_id: pd.DataFrame, recent_days: int = config.HIT_STREAK_RECENT_DAYS
 ) -> pd.DataFrame:
@@ -328,6 +346,7 @@ def assemble_hitters(
     wtb = compute_wtb(dt)
     extended_dk_rates = compute_extended_dk_rates(dt)
     game_hit_prob = compute_game_hit_probability(data_with_game_id)
+    last_game = compute_last_game_dates(data_with_game_id)
 
     hitters = wave.merge(
         wtb[["key_mlbam", "pa_lfull", "pa_rfull", "Expected_Bases"]], on="key_mlbam", how="left"
@@ -349,6 +368,14 @@ def assemble_hitters(
             "Expected_BB", "Expected_HBP", "Expected_RBI",
         ]
     ].fillna(0)
+
+    # Merged AFTER the fillna(0) block above (like lineup_consistency below)
+    # rather than before - a missing/NaT Last_Game_Date must stay NaT, not
+    # get coerced to 0 by that blanket fillna, since predictions.select_picks's
+    # recency gate relies on NaT correctly failing the comparison (same
+    # "null loses, isn't filled to a value that would wrongly pass"
+    # precedent avg_batting_order already established).
+    hitters = hitters.merge(last_game, on="key_mlbam", how="left")
 
     if lineup_consistency is not None:
         hitters = hitters.merge(lineup_consistency, on="key_mlbam", how="left")

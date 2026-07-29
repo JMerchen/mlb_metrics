@@ -201,12 +201,40 @@ def test_assemble_hitters_output_columns_and_derived_fields():
         "key_mlbam", "name_first", "name_last", "team", "PA_L", "PA_R",
         "WAVE", "WAVE_L", "WAVE_R", "probability_L", "probability_R", "probability",
         "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
-        "Expected_BB", "Expected_HBP", "Expected_RBI",
+        "Expected_BB", "Expected_HBP", "Expected_RBI", "Last_Game_Date",
     ]
     row = result.iloc[0]
     assert row["name_last"] == "Player"
     assert row["Consistency"] == pytest.approx(row["Game_Hit_Probability"] - row["probability"])
     assert row["Approach"] == pytest.approx(row["Game_Hit_Probability"] * row["probability"])
+    assert row["Last_Game_Date"] == pd.Timestamp("2026-06-16")
+
+
+def test_compute_last_game_dates_most_recent_completed_event():
+    rows = [
+        {"batter": 1, "game_date": pd.Timestamp("2026-06-10"), "events": "single"},
+        {"batter": 1, "game_date": pd.Timestamp("2026-06-15"), "events": "field_out"},
+        {"batter": 2, "game_date": pd.Timestamp("2026-06-12"), "events": "double"},
+    ]
+    result = hitters.compute_last_game_dates(pd.DataFrame(rows)).set_index("key_mlbam")
+    assert result.loc[1, "Last_Game_Date"] == pd.Timestamp("2026-06-15")
+    assert result.loc[2, "Last_Game_Date"] == pd.Timestamp("2026-06-12")
+
+
+def test_assemble_hitters_last_game_date_is_nat_not_dropped_for_zero_events():
+    # A batter present in `dt` (has WAVE at-bats) but with no completed
+    # event at all in data_with_game_id (an edge case, e.g. a
+    # not-yet-completed at-bat) must get Last_Game_Date=NaT, not be
+    # silently dropped from the output or coerced to a real-looking date.
+    dt = pd.DataFrame(_at_bats(1, "R", [("2026-06-15", "single"), ("2026-06-16", "field_out")]))
+    data_with_game_id = pd.DataFrame(columns=["batter", "game_id", "game_date", "events"])
+    names = pd.DataFrame([{"key_mlbam": 1, "name_first": "Test", "name_last": "Player"}])
+    latest_team = pd.DataFrame([{"key_mlbam": 1, "team": "NYY"}])
+
+    result = hitters.assemble_hitters(dt, data_with_game_id, names, latest_team)
+
+    assert len(result) == 1
+    assert pd.isna(result.iloc[0]["Last_Game_Date"])
 
 
 def test_assemble_hitters_merges_lineup_consistency_when_provided():
