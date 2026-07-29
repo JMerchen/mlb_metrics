@@ -150,6 +150,77 @@ def reconstruct_historical_game_picks(
     return pd.concat(all_picks, ignore_index=True)
 
 
+GAME_PICK_LOG_COLUMNS = (
+    ["game_pk", "date", "home_team", "away_team"]
+    + game_picks.GAME_PICK_FEATURE_COLUMNS
+    + ["home_win_probability", "Home_Won"]
+)
+
+
+def assemble_game_pick_log(
+    raw_dir: str = "data/raw",
+    season: int | None = None,
+    days: int = 20,
+) -> pd.DataFrame:
+    """Training log for scripts/train_game_pick_model.py: one row per
+    historical game with [game_pk, date, home_team, away_team] +
+    game_picks.GAME_PICK_FEATURE_COLUMNS (the raw, unblended per-team
+    ingredients) + home_win_probability (the existing heuristic's pick,
+    carried through as a tracked comparison column - not fed to the model,
+    used only to compare against on holdout) + Home_Won (the real outcome,
+    derived from the actual final score).
+
+    Same no-lookahead per-date replay shape as
+    reconstruct_historical_game_picks_from_persisted (recomputes
+    pipeline.compute_outputs off only the Statcast rows strictly before
+    each replayed date), but calls game_picks.build_game_features/
+    compute_game_win_probabilities directly instead of going through
+    game_predictions.select_game_picks - this is a training log, not a
+    picks log, so every scheduled game is a row regardless of whether the
+    heuristic would have favored home or away. One row per game_pk - no
+    doubleheader-dedup step needed (unlike assemble_hitter_hit_log), since
+    games are already keyed one row per game_pk, not per team."""
+    season = season or config.SEASON_START.year
+
+    persisted = data.load_persisted_statcast(raw_dir, season)
+    if persisted is None:
+        return pd.DataFrame(columns=GAME_PICK_LOG_COLUMNS)
+    schedule_games = derive_historical_schedule_games(persisted)
+
+    dates = sorted(schedule_games["date"].unique())
+    if days:
+        dates = dates[-days:]
+
+    all_rows = []
+    for date in dates:
+        history = persisted[persisted["game_date"] < date]
+        if history.empty:
+            continue
+
+        todays_games = schedule_games[schedule_games["date"] == date]
+        if todays_games.empty:
+            continue
+
+        outputs = pipeline.compute_outputs(history)
+        features = game_picks.build_game_features(outputs["confidence"], outputs["pave"], todays_games)
+        win_probabilities = game_picks.compute_game_win_probabilities(
+            outputs["confidence"], outputs["pave"], todays_games
+        )
+        rows = features.merge(
+            win_probabilities[["game_pk", "home_win_probability"]], on="game_pk", how="left"
+        )
+
+        results = todays_games[["game_pk", "home_score", "away_score"]]
+        rows = rows.merge(results, on="game_pk", how="left")
+        rows["Home_Won"] = (rows["home_score"] > rows["away_score"]).astype(int)
+
+        all_rows.append(rows[GAME_PICK_LOG_COLUMNS])
+
+    if not all_rows:
+        return pd.DataFrame(columns=GAME_PICK_LOG_COLUMNS)
+    return pd.concat(all_rows, ignore_index=True)
+
+
 def reconstruct_historical_game_picks_from_persisted(
     raw_dir: str = "data/raw",
     season: int | None = None,

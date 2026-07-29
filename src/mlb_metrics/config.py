@@ -671,6 +671,18 @@ DFS_PITCHER_RIDGE_ALPHA_GRID = [0.1, 0.3, 1, 3, 10, 30, 100]
 # above, reused rather than duplicated).
 HITTER_HIT_LOGIT_C_GRID = [0.01, 0.03, 0.1, 0.3, 1, 3, 10]
 
+# Game-pick win-probability model (scripts/train_game_pick_model.py) - fit +
+# report phase only, mirrors the hitter-side model above but not wired into
+# live picks. One row per game per date (~15 games/day in a full slate, not
+# thousands of hitter-rows/date), so both the train/test block sizing below
+# is smaller than the hitter side's - closer to the DFS pitcher-side
+# constants than the hitter ones. ML_FINAL_HOLDOUT_DATES above is reused
+# directly for the holdout split, no separate constant.
+GAME_PICK_WIN_PROBABILITY_MODEL_PATH = "data/models/game_pick_win_probability_model.joblib"
+GAME_PICK_LOGIT_C_GRID = [0.01, 0.03, 0.1, 0.3, 1, 3, 10]
+GAME_PICK_ML_WALK_FORWARD_MIN_TRAIN_DATES = 40
+GAME_PICK_ML_WALK_FORWARD_TEST_BLOCK_DATES = 15
+
 # Age Curves HR9's year-blocked CV (age_curve_ml.YearBlockedSplit) trains
 # only on seasons strictly before AGE_CURVE_HR9_TEST_YEAR_START (a
 # conservative, no-lookahead choice for a single GLOBAL regression model -

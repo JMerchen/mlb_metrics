@@ -39,6 +39,19 @@ import pandas as pd
 
 from mlb_metrics import config, matchup
 
+GAME_PICK_FEATURE_COLUMNS = [
+    "home_composite",
+    "away_composite",
+    "home_bullpen_pave_plus",
+    "home_bullpen_power_a_plus",
+    "away_bullpen_pave_plus",
+    "away_bullpen_power_a_plus",
+    "home_starter_pave_plus",
+    "home_starter_power_a_plus",
+    "away_starter_pave_plus",
+    "away_starter_power_a_plus",
+]
+
 
 def _team_composite(confidence: pd.DataFrame) -> pd.DataFrame:
     """One row per team: [team, composite] - the equal-weighted blend of
@@ -69,28 +82,17 @@ def _blend_pitching_quality(pave_quality: pd.Series, power_a_quality: pd.Series)
     return (1 - weight) * pave_quality + weight * power_a_quality
 
 
-def compute_game_win_probabilities(
+def build_game_features(
     confidence: pd.DataFrame,
     pave: pd.DataFrame,
     schedule_games_df: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Returns [game_pk, date, home_team, away_team, home_win_probability] -
-    one row per game in `schedule_games_df` (see schedule.normalize_schedule_games).
-
-    Each team's rating is its own offensive composite multiplied by the
-    OPPOSING team's pitching-weakness multiplier (probable starter's
-    PAVE_PLUS blended with that team's Bullpen_PAVE_PLUS, via
-    matchup.clip_and_blend_pitching_quality - the same reasoning as the
-    batter-level matchup blend, applied at the team level: a higher
-    opposing PAVE_PLUS means easier pitching to score against, so it boosts
-    this team's rating). home_win_probability is a simple ratio of the two
-    teams' ratings, not a log5-style formula - these composites aren't
-    calibrated win percentages, so a ratio is the honestly-explainable
-    choice rather than borrowing false precision from a formula built for a
-    different kind of input. Both ratings are floored to
-    config.GAME_PICK_RATING_FLOOR before dividing, purely as a
-    degenerate-input guard.
-    """
+    """Returns [game_pk, date, home_team, away_team] + GAME_PICK_FEATURE_COLUMNS
+    - the raw, unblended per-team/matchup ingredients
+    compute_game_win_probabilities combines into home_win_probability,
+    exposed separately so a model can learn its own combination instead of
+    inheriting the ratio assumption (same reasoning as
+    dfs_ml.build_hitter_features)."""
     composite = _team_composite(confidence)
     # Bullpen_PAVE_PLUS/Bullpen_Power_A_PLUS were added to confidence.csv at
     # different points in this project's history (see matchup.py,
@@ -143,6 +145,38 @@ def compute_game_win_probabilities(
         }),
         on="away_probable_pitcher_key_mlbam", how="left",
     )
+
+    return games[["game_pk", "date", "home_team", "away_team"] + GAME_PICK_FEATURE_COLUMNS]
+
+
+def game_feature_matrix(features_df: pd.DataFrame) -> pd.DataFrame:
+    """Numeric X matrix, NaN-filled to 0 - mirrors dfs_ml.hitter_feature_matrix."""
+    return features_df.reindex(columns=GAME_PICK_FEATURE_COLUMNS).copy().fillna(0)
+
+
+def compute_game_win_probabilities(
+    confidence: pd.DataFrame,
+    pave: pd.DataFrame,
+    schedule_games_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Returns [game_pk, date, home_team, away_team, home_win_probability] -
+    one row per game in `schedule_games_df` (see schedule.normalize_schedule_games).
+
+    Each team's rating is its own offensive composite multiplied by the
+    OPPOSING team's pitching-weakness multiplier (probable starter's
+    PAVE_PLUS blended with that team's Bullpen_PAVE_PLUS, via
+    matchup.clip_and_blend_pitching_quality - the same reasoning as the
+    batter-level matchup blend, applied at the team level: a higher
+    opposing PAVE_PLUS means easier pitching to score against, so it boosts
+    this team's rating). home_win_probability is a simple ratio of the two
+    teams' ratings, not a log5-style formula - these composites aren't
+    calibrated win percentages, so a ratio is the honestly-explainable
+    choice rather than borrowing false precision from a formula built for a
+    different kind of input. Both ratings are floored to
+    config.GAME_PICK_RATING_FLOOR before dividing, purely as a
+    degenerate-input guard.
+    """
+    games = build_game_features(confidence, pave, schedule_games_df)
 
     # Home team faces the AWAY team's pitching, and vice versa.
     home_pave_quality = matchup.clip_and_blend_pitching_quality(
