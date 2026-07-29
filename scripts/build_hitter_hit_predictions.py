@@ -33,7 +33,7 @@ from mlb_metrics import config, dfs_ml, matchup, schedule
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--data-dir", default="docs/data")
-    parser.add_argument("--as-of-date", type=datetime.date.fromisoformat, default=datetime.date.today())
+    parser.add_argument("--as-of-date", type=datetime.date.fromisoformat, default=schedule.today_local())
     args = parser.parse_args()
 
     wave_path = os.path.join(args.data_dir, "wave.csv")

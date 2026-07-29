@@ -1514,6 +1514,15 @@ never be computed from a game that hasn't happened yet (or is still in
 progress) - this is also what lets the pipeline be re-run against any past
 date once enough raw history has accumulated in `data/raw/`.
 
+When `--as-of-date` isn't passed, "today" is `schedule.today_local()` -
+Arizona time (fixed UTC-7, no DST), not the running machine's own local
+time. `daily_update.yml`'s GitHub Actions runner is UTC, so a manual
+`workflow_dispatch` run late in the Arizona evening (e.g. 8:45pm AZ =
+3:45am UTC, already past UTC midnight) would otherwise publish tomorrow's
+slate a day early for an Arizona audience. Same reasoning applies to
+`scripts/build_dfs_rankings.py`/`build_hitter_hit_predictions.py`'s own
+`--as-of-date` defaults.
+
 ## Tests
 
 ```

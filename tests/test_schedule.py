@@ -1,7 +1,40 @@
+import datetime
+
 import pandas as pd
 import pytest
 
 from mlb_metrics import schedule
+
+
+def test_today_local_uses_arizona_time_not_utc(monkeypatch):
+    # 3:45am UTC on July 29 is still 8:45pm July 28 in Arizona (fixed
+    # UTC-7, no DST) - the exact scenario a late-evening workflow_dispatch
+    # run hit: naive datetime.date.today() on the GitHub Actions runner
+    # (UTC) already reads July 29, publishing a day-ahead slate to an
+    # Arizona audience for whom it's still July 28.
+    class FakeDateTime(datetime.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            utc_now = datetime.datetime(2026, 7, 29, 3, 45, tzinfo=datetime.timezone.utc)
+            return utc_now.astimezone(tz) if tz else utc_now
+
+    monkeypatch.setattr(schedule.datetime, "datetime", FakeDateTime)
+
+    assert schedule.today_local() == datetime.date(2026, 7, 28)
+
+
+def test_today_local_after_arizonas_own_midnight(monkeypatch):
+    # 8:00am UTC = 1:00am Arizona - past Arizona's own midnight, so "today"
+    # has genuinely rolled over there too.
+    class FakeDateTime(datetime.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            utc_now = datetime.datetime(2026, 7, 29, 8, 0, tzinfo=datetime.timezone.utc)
+            return utc_now.astimezone(tz) if tz else utc_now
+
+    monkeypatch.setattr(schedule.datetime, "datetime", FakeDateTime)
+
+    assert schedule.today_local() == datetime.date(2026, 7, 29)
 
 
 def test_team_id_to_abbrev_has_30_teams_and_matches_docs_app_js():
