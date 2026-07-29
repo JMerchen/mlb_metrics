@@ -8,24 +8,33 @@ def _win_probabilities(rows):
     return pd.DataFrame(rows)
 
 
-def test_select_game_picks_threshold_gating_and_home_favored():
+def test_select_game_picks_logs_every_game_and_flags_above_threshold():
     win_probs = _win_probabilities([
         {"game_pk": 1, "date": pd.Timestamp("2026-07-22"), "home_team": "NYY", "away_team": "BOS",
          "home_win_probability": 0.65},  # clears threshold, home favored
         {"game_pk": 2, "date": pd.Timestamp("2026-07-22"), "home_team": "LAD", "away_team": "SF",
-         "home_win_probability": 0.55},  # below threshold - not picked
+         "home_win_probability": 0.55},  # below threshold - still logged, just flagged False
     ])
 
     picks = game_predictions.select_game_picks(win_probs, pd.Timestamp("2026-07-22"))
 
-    assert len(picks) == 1
-    assert picks.iloc[0]["game_pk"] == 1
-    assert picks.iloc[0]["predicted_winner"] == "NYY"
-    assert picks.iloc[0]["predicted_probability"] == 0.65
-    assert picks.iloc[0]["metric"] == "GamePick_Win_Probability"
-    assert pd.isna(picks.iloc[0]["actual_winner"])
-    assert pd.isna(picks.iloc[0]["game_played"])
-    assert picks.iloc[0]["model_version"] == config.GAME_PICK_MODEL_VERSION
+    # Every scheduled game is logged now, not just the ones clearing the
+    # threshold - the dashboard publishes the complete slate and highlights
+    # the flagged ones instead of hiding the rest.
+    assert len(picks) == 2
+    assert set(picks["game_pk"]) == {1, 2}
+
+    game1 = picks[picks["game_pk"] == 1].iloc[0]
+    assert game1["predicted_winner"] == "NYY"
+    assert game1["predicted_probability"] == 0.65
+    assert game1["above_threshold"] == True  # noqa: E712
+    assert game1["metric"] == "GamePick_Win_Probability"
+    assert pd.isna(game1["actual_winner"])
+    assert pd.isna(game1["game_played"])
+    assert game1["model_version"] == config.GAME_PICK_MODEL_VERSION
+
+    game2 = picks[picks["game_pk"] == 2].iloc[0]
+    assert game2["above_threshold"] == False  # noqa: E712
 
 
 def test_append_game_predictions_migrates_a_log_written_before_model_version_existed(tmp_path):
@@ -50,6 +59,32 @@ def test_append_game_predictions_migrates_a_log_written_before_model_version_exi
     assert row2["model_version"] == config.GAME_PICK_MODEL_VERSION
 
 
+def test_append_game_predictions_migrates_a_log_written_before_above_threshold_existed(tmp_path):
+    log_path = str(tmp_path / "game_predictions.csv")
+    legacy_log = pd.DataFrame([{
+        "date": pd.Timestamp("2026-07-19"), "game_pk": 1, "home_team": "NYY", "away_team": "BOS",
+        "predicted_winner": "NYY", "predicted_probability": 0.65, "metric": "GamePick_Win_Probability",
+        "actual_winner": "NYY", "game_played": 1, "model_version": "v1",
+    }])
+    legacy_log.to_csv(log_path, index=False)
+    assert "above_threshold" not in legacy_log.columns
+
+    new_pick = game_predictions.select_game_picks(
+        _win_probabilities([{"game_pk": 2, "date": pd.Timestamp("2026-07-20"), "home_team": "LAD",
+                              "away_team": "SF", "home_win_probability": 0.52}]),
+        pd.Timestamp("2026-07-20"),
+    )
+    combined = game_predictions.append_game_predictions(new_pick, log_path)
+
+    # The legacy row already cleared the old hard filter by definition
+    # (it's a real logged row from before above_threshold existed) - True
+    # is the factually correct backfill, not an arbitrary default.
+    row1 = combined[combined["game_pk"] == 1].iloc[0]
+    assert row1["above_threshold"] == True  # noqa: E712
+    row2 = combined[combined["game_pk"] == 2].iloc[0]
+    assert row2["above_threshold"] == False  # noqa: E712
+
+
 def test_select_game_picks_away_favored():
     win_probs = _win_probabilities([
         {"game_pk": 1, "date": pd.Timestamp("2026-07-22"), "home_team": "NYY", "away_team": "BOS",
@@ -62,7 +97,7 @@ def test_select_game_picks_away_favored():
     assert picks.iloc[0]["predicted_probability"] == 0.7
 
 
-def test_select_game_picks_returns_empty_when_nothing_clears_threshold():
+def test_select_game_picks_still_logs_a_game_that_clears_no_threshold():
     win_probs = _win_probabilities([
         {"game_pk": 1, "date": pd.Timestamp("2026-07-22"), "home_team": "NYY", "away_team": "BOS",
          "home_win_probability": 0.52},
@@ -70,7 +105,8 @@ def test_select_game_picks_returns_empty_when_nothing_clears_threshold():
 
     picks = game_predictions.select_game_picks(win_probs, pd.Timestamp("2026-07-22"))
 
-    assert picks.empty
+    assert len(picks) == 1
+    assert picks.iloc[0]["above_threshold"] == False  # noqa: E712
 
 
 def test_append_game_predictions_dedupes_keeping_existing_resolved_row(tmp_path):

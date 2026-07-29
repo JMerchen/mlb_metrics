@@ -15,7 +15,7 @@ from mlb_metrics import config
 
 GAME_PREDICTION_COLUMNS = [
     "date", "game_pk", "home_team", "away_team", "predicted_winner",
-    "predicted_probability", "metric", "actual_winner", "game_played", "model_version",
+    "predicted_probability", "above_threshold", "metric", "actual_winner", "game_played", "model_version",
 ]
 
 # Same purpose as predictions.LEGACY_MODEL_VERSION - tagged onto any row
@@ -32,21 +32,26 @@ def select_game_picks(
     model_version: str = config.GAME_PICK_MODEL_VERSION,
 ) -> pd.DataFrame:
     """Turn game_picks.compute_game_win_probabilities' output into the
-    day's picked games: only games where the favored side's win probability
-    clears `min_probability` ("real separation between the two teams") - a
-    day can have 0 or more picks, never padded to a fixed count.
-    `predicted_winner` is whichever side (home_team/away_team) has the
-    higher probability; `predicted_probability` is that side's probability
-    (always >= 0.5). `model_version` (see config.GAME_PICK_MODEL_VERSION) is
-    stamped onto every row so game_evaluation.py/the dashboard can segment
-    accuracy by which win-probability logic actually produced a pick - same
-    reasoning as predictions.select_picks' own model_version."""
+    day's logged games - EVERY scheduled game, not just the ones that clear
+    `min_probability`. `above_threshold` flags whether the favored side's
+    win probability clears `min_probability` ("real separation between the
+    two teams") - the dashboard publishes the complete slate and highlights
+    the flagged games, while game_evaluation.build_game_picks_export's
+    accuracy/streak scoring stays scoped to `above_threshold` rows only,
+    same as before this change. `predicted_winner` is whichever side
+    (home_team/away_team) has the higher probability; `predicted_probability`
+    is that side's probability (always >= 0.5). `model_version` (see
+    config.GAME_PICK_MODEL_VERSION) is stamped onto every row so
+    game_evaluation.py/the dashboard can segment accuracy by which
+    win-probability logic actually produced a pick - same reasoning as
+    predictions.select_picks' own model_version."""
     df = win_probabilities.copy()
     favors_home = df["home_win_probability"] >= 0.5
     df["predicted_winner"] = df["home_team"].where(favors_home, df["away_team"])
     df["predicted_probability"] = df["home_win_probability"].where(favors_home, 1 - df["home_win_probability"])
+    df["above_threshold"] = df["predicted_probability"] >= min_probability
 
-    picks = df[df["predicted_probability"] >= min_probability].copy()
+    picks = df.copy()
     picks["date"] = pd.Timestamp(date)
     picks["metric"] = metric
     picks["actual_winner"] = pd.NA
@@ -67,6 +72,11 @@ def append_game_predictions(picks: pd.DataFrame, log_path: str) -> pd.DataFrame:
         existing = pd.read_csv(log_path, parse_dates=["date"])
         if "model_version" not in existing.columns:
             existing["model_version"] = LEGACY_MODEL_VERSION  # migrate a log written before model_version existed
+        if "above_threshold" not in existing.columns:
+            # Every row logged before this column existed already cleared
+            # the old hard filter select_game_picks used to apply - True is
+            # the factually correct backfill, not an arbitrary default.
+            existing["above_threshold"] = True
         combined = pd.concat([picks, existing], ignore_index=True)
     else:
         combined = picks
@@ -107,6 +117,8 @@ def resolve_game_predictions(log_path: str, fetch_results_fn, as_of_date) -> pd.
         log["game_played"] = pd.NA  # migrate a log written before game_played existed
     if "model_version" not in log.columns:
         log["model_version"] = LEGACY_MODEL_VERSION  # migrate a log written before model_version existed
+    if "above_threshold" not in log.columns:
+        log["above_threshold"] = True  # migrate a log written before above_threshold existed (see append_game_predictions)
     # A log with no resolved games yet round-trips actual_winner as an
     # all-null float64 column (empty strings -> NaN on read) - cast back to
     # object so assigning a team abbreviation string into it doesn't raise.

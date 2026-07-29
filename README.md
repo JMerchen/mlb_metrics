@@ -549,12 +549,16 @@ blend) controls the split, empirically validated via a 35-day
 persisted-Statcast backtest: the 0.5/0.5 blend beat pure `PAVE_PLUS` on both
 accuracy (56.3% vs 54.3%) and Brier score (0.2493 vs 0.2517).
 
-- A game is only "picked" if the favored side's win probability clears
+- Every scheduled game is published (`game_predictions.select_game_picks`),
+  flagged `above_threshold` if the favored side's win probability clears
   `GAME_PICK_MIN_PROBABILITY` (config.py, default 0.58 - much lower than the
   hitter picks' 0.77, since single-game MLB win probabilities are
-  compressed near 50/50 even for real favorites) - a day can surface 0 or
-  more picks depending on how much separation the model sees, never a
-  forced pick every game.
+  compressed near 50/50 even for real favorites) - the dashboard highlights
+  the flagged games in Today's Picks rather than only ever showing them.
+  `game_evaluation.build_game_picks_export`'s accuracy/streak numbers stay
+  scoped to the `above_threshold` subset only - a below-threshold game's
+  real outcome never moves those, exactly as before this change; only what
+  gets *published* got broader.
 - `home_win_probability = home_rating / (home_rating + away_rating)`, where
   each team's rating is its own offensive composite (equal-weighted blend
   of the four signals above, `GAME_PICK_COMPOSITE_WEIGHTS`) multiplied by
