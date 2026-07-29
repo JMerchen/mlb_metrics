@@ -432,6 +432,54 @@ the actual logistic regression against it (and deciding whether it ever
 replaces or augments `predictions.select_picks`'s probability gate) is a
 follow-up once the log has accumulated real history.
 
+### Fitting the logistic regression (`scripts/train_hitter_hit_model.py`)
+
+Real answers to the "why is survival only ~50%, and which features are
+actually significant" question, now that the hit log above fixes the
+sample-size problem (n=26,955 hitter-games, PA-qualified, vs. the n=64
+resolved picks the earlier ad hoc analysis had to work with). Two
+deliverables from one script, both fit on rows filtered to
+`Total_PA >= config.BACKTEST_MIN_PLATE_APPEARANCES` (the same gate
+`predictions.select_picks` already applies before a hitter can be a pick
+candidate - a handful of career plate appearances gives a mostly-noise
+`WAVE`/`Game_Hit_Probability`, and letting that noise into the fit would
+just drag down real coefficients):
+
+**Significance report** (`statsmodels.Logit`, full history, real numbers
+from 2026-07-29): individually (one univariate model per feature),
+`WAVE`, `WAVE_L`/`WAVE_R`, `PA_L`/`PA_R`, `probability`,
+`Game_Hit_Probability`, `Consistency`, `Approach`, `Expected_Bases`,
+`Expected_RBI`, `Park_Factor`, and `Matchup_Hit_Probability` are all
+significant (p<0.001) - notably including `Game_Hit_Probability` itself
+(coef 0.2201, p<0.0001), the OPPOSITE of the earlier n=64 finding. That
+earlier result wasn't wrong given its data - it was underpowered; a
+64-pick sample simply can't reliably detect an effect of this size.
+`Expected_BB`, `Expected_HBP`, `starter_PAVE`, `Bullpen_PAVE`, and
+`is_home` are not individually significant. In the combined (multivariate)
+model, `probability`, `Game_Hit_Probability`, and `Consistency` show
+enormous standard errors (~300,000+) and are unusable there - real,
+expected multicollinearity, since `Consistency` (`Game_Hit_Probability -
+probability`) and `Approach` (`Game_Hit_Probability * probability`) are
+algebraically derived from those same two columns. `WAVE_L`, `WAVE_R`,
+`PA_R`, and `Park_Factor` remain significant once the others are
+controlled for.
+
+**Walk-forward-validated predictive model** (sklearn `LogisticRegression`,
+same `ml_models.py` machinery and nested-holdout discipline as the three
+live DFS ML models): on a 20-date untouched holdout (n=5,048), the model
+beats BOTH bars it has to clear - log_loss 0.6757 vs. naive-baseline
+0.6815 vs. the existing `Game_Hit_Probability` heuristic's 0.6901 (ROC AUC
+0.575 vs. 0.564 for the heuristic alone) - a modest but real edge, not a
+dramatic one. Saved to `config.HITTER_HIT_PROBABILITY_MODEL_PATH`
+(`data/models/hitter_hit_probability_model.joblib`) as an **artifact
+only** - it is NOT wired into `dfs_ml.apply_ml_overrides` or
+`predictions.select_picks`. Whether/how it ever feeds live Beat the
+Streak picks (a promising design: use this model's probability as an
+additional gate to narrow the field, then rank survivors by the existing
+`Approach`/`Matchup_Approach` metric - reusing the tuned heuristic for
+fine-grained ordering rather than replacing it outright) is a separate,
+later decision, to be validated with its own backtest before going live.
+
 ## Automated Game Picks (dashboard)
 
 A second, independent dashboard section predicts a winner for each of
