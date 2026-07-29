@@ -1685,11 +1685,12 @@ function renderTodaysGamePicks(picks){
 
 const el = document.getElementById("todaysGamePicks")
 
-// Only days with at least one game clearing GAME_PICK_MIN_PROBABILITY
-// appear in `picks` at all - a day with zero picks is simply absent, not
-// a blank row - so this naturally shows the most recent day that had one.
+// Every scheduled game is published now, not just ones clearing
+// GAME_PICK_MIN_PROBABILITY (see game_predictions.select_game_picks) - the
+// confident ones are highlighted via the "recommended" class below instead
+// of being the only ones shown.
 if(!picks.length){
-el.innerHTML = "No confident picks recommended yet"
+el.innerHTML = "No game picks published yet"
 return
 }
 
@@ -1703,7 +1704,7 @@ const todays = picks
 .sort((a,b)=>Number(b.predicted_probability) - Number(a.predicted_probability))
 
 if(!todays.length){
-el.innerHTML = "No confident picks today"
+el.innerHTML = "No games today"
 return
 }
 
@@ -1722,8 +1723,10 @@ p.predicted_probability && p.predicted_probability !== ""
 ? (Number(p.predicted_probability) * 100).toFixed(1) + "% predicted"
 : ""
 
+const recommended = p.above_threshold === "True" || p.above_threshold === "true"
+
 return `
-<div class="pickCard ${p.status}">
+<div class="pickCard ${p.status}${recommended ? " recommended" : ""}">
 <div class="pickName">${p.predicted_winner} (${p.away_team} @ ${p.home_team})</div>
 <div class="pickProb">${prob}</div>
 <div class="pickStatus">${statusLabels[p.status] || p.status}</div>

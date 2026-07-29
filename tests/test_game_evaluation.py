@@ -67,13 +67,45 @@ def test_build_game_picks_export_streak_is_plain_consecutive_count():
     assert summary.loc[0, "best_streak"] == 1
 
 
-def test_build_game_picks_export_min_probability_filters_at_export_time():
+def test_build_game_picks_export_min_probability_flags_but_does_not_drop():
     preds = _predictions()
     picks, summary = game_evaluation.build_game_picks_export(preds, min_probability=0.63)
 
-    # Only games with predicted_probability >= .63 survive: 0.65 and 0.7.
-    assert set(picks["game_pk"]) == {1, 3}
+    # Every game is still published, not just the ones clearing .63 - only
+    # 0.65 (pk 1) and 0.7 (pk 3) are flagged above_threshold.
+    assert set(picks["game_pk"]) == {1, 2, 3, 4, 5}
+    by_pk = picks.set_index("game_pk")
+    assert by_pk.loc[1, "above_threshold"] == True  # noqa: E712
+    assert by_pk.loc[3, "above_threshold"] == True  # noqa: E712
+    assert by_pk.loc[2, "above_threshold"] == False  # noqa: E712
+    assert by_pk.loc[4, "above_threshold"] == False  # noqa: E712
+    assert by_pk.loc[5, "above_threshold"] == False  # noqa: E712
+
+    # Scoring stays scoped to the above_threshold subset only: pk 1 (win)
+    # and pk 3 (win) are both resolved and both correct - pk 2's real loss
+    # must not drag the numbers down since it's below threshold.
     assert summary.loc[0, "n_games_resolved"] == 2
+    assert summary.loc[0, "accuracy"] == pytest.approx(1.0)
+
+
+def test_build_game_picks_export_below_threshold_outcome_does_not_affect_scoring():
+    # A below-threshold game that actually LOSES must not move accuracy or
+    # break the streak - only above_threshold games count toward scoring.
+    rows = [
+        _pick("2026-07-18", 1, "NYY", "BOS", "NYY", 0.90, "NYY", 1),  # above threshold, win
+        _pick("2026-07-19", 2, "LAD", "SF", "LAD", 0.50, "SF", 1),  # below threshold, loss
+        _pick("2026-07-20", 3, "HOU", "SEA", "HOU", 0.85, "HOU", 1),  # above threshold, win
+    ]
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+
+    picks, summary = game_evaluation.build_game_picks_export(df, min_probability=0.58)
+
+    assert set(picks["game_pk"]) == {1, 2, 3}  # published regardless
+    assert summary.loc[0, "n_games_resolved"] == 2  # pk 2 excluded from scoring
+    assert summary.loc[0, "accuracy"] == pytest.approx(1.0)
+    assert summary.loc[0, "current_streak"] == 2
+    assert summary.loc[0, "best_streak"] == 2
 
 
 def test_build_game_picks_export_ignores_other_metrics():
