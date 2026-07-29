@@ -40,13 +40,24 @@ function selectPosition(position){
 document.querySelectorAll("#positionTabs .tabButton").forEach(btn=>{
 btn.classList.toggle("active", btn.dataset.position === position)
 })
-document.getElementById("hittersTable").style.display = position === "hitters" ? "" : "none"
+document.getElementById("hittersSection").style.display = position === "hitters" ? "" : "none"
 document.getElementById("pitchersTable").style.display = position === "pitchers" ? "" : "none"
 document.getElementById("optimalLineupSection").style.display = position === "optimal" ? "" : "none"
 }
 
+function selectHitterPosition(position){
+document.querySelectorAll("#hitterPositionTabs .tabButton").forEach(btn=>{
+btn.classList.toggle("active", btn.dataset.hitterPosition === position)
+})
+renderHitters()
+}
+
 function renderHitters(){
-const rows = dfsHitters.map(p=>({
+const activeBtn = document.querySelector("#hitterPositionTabs .tabButton.active")
+const position = activeBtn ? activeBtn.dataset.hitterPosition : "all"
+const filtered = position === "all" ? dfsHitters : dfsHitters.filter(p=>p.dk_slot === position)
+const rows = filtered.map(p=>({
+"Pos": p.dk_slot && p.dk_slot !== "" ? p.dk_slot : "-",
 "Player": `${p.name_first} ${p.name_last}`,
 "Team": p.team,
 "Opp": `${p.is_home === "True" || p.is_home === "true" ? "vs" : "@"} ${p.opponent}`,

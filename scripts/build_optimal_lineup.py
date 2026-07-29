@@ -94,6 +94,12 @@ def main():
 
     hitters = pd.read_csv(hitters_path)
     pitchers = pd.read_csv(pitchers_path)
+    # dfs_hitters.csv now carries its own dk_slot (build_dfs_rankings.py,
+    # for the dashboard's per-position subtabs) - drop it before
+    # build_player_pool does its own independent eligibility fetch/merge
+    # below, which would otherwise collide and get silently suffixed to
+    # dk_slot_x/dk_slot_y.
+    hitters = hitters.drop(columns=["dk_slot"], errors="ignore")
 
     if hitters.empty:
         print("No qualified hitters today - leaving yesterday's optimal_lineup.csv in place, if any.")
