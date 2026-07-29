@@ -1,6 +1,4 @@
 date,rank,name,predicted_probability,actual_hit,status
-2026-07-29,1,Jeremy Peña,0.8988455551712211,,pending
-2026-07-29,2,CJ Abrams,0.7604405473686864,,pending
 2026-07-28,1,Jeremy Peña,0.8988455551712211,,pending
 2026-07-28,2,CJ Abrams,0.7604405473686864,,pending
 2026-07-27,1,Gabriel Moreno,0.809098275142579,0.0,miss
