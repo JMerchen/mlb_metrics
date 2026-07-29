@@ -42,6 +42,7 @@ def select_picks(
     min_probability: float = config.HITTER_MIN_PROBABILITY,
     max_avg_batting_order: float = config.LINEUP_TOP_HALF_MAX_SLOT,
     min_start_rate: float = config.LINEUP_MIN_START_RATE,
+    max_days_since_last_game: int = config.HITTER_MAX_DAYS_SINCE_LAST_GAME,
     teams_playing_today: set[str] | None = None,
     model_version: str = config.HITTER_MODEL_VERSION,
 ) -> pd.DataFrame:
@@ -70,6 +71,15 @@ def select_picks(
     much as the other two. Column-gated like the lineup qualifiers, so a
     missing column is simply skipped, not a required 0.
 
+    `max_days_since_last_game` excludes a hitter whose most recent completed
+    game (`hitters.compute_last_game_dates`'s `Last_Game_Date`) is more than
+    this many days before `date` - column-gated like the lineup qualifiers
+    (a missing `Last_Game_Date` column is a no-op, so old wave.csv snapshots
+    from before this feature existed are unaffected), and a NaT (a batter
+    with zero completed events at all) correctly fails the comparison, same
+    "null loses, isn't filled to a value that would wrongly pass" precedent
+    `avg_batting_order` already established.
+
     `teams_playing_today`, if given, additionally requires a batter's team
     to be in the set - unlike the lineup qualifiers this isn't column-gated
     (whether a team is playing today isn't a property of the hitters table
@@ -96,6 +106,9 @@ def select_picks(
         qualified = qualified[qualified["avg_batting_order"] <= max_avg_batting_order]
     if "start_rate" in qualified.columns:
         qualified = qualified[qualified["start_rate"] >= min_start_rate]
+    if "Last_Game_Date" in qualified.columns:
+        days_since_last_game = (pd.Timestamp(date) - qualified["Last_Game_Date"]).dt.days
+        qualified = qualified[days_since_last_game <= max_days_since_last_game]
     if teams_playing_today is not None:
         qualified = qualified[qualified["team"].isin(teams_playing_today)]
     for gate_column in JOINT_PROBABILITY_GATE_COLUMNS:

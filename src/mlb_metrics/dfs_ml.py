@@ -211,3 +211,23 @@ def apply_ml_overrides(
     pitchers_df = pitchers_df.sort_values("DK_Points_Pitcher", ascending=False)
 
     return hitters_df, pitchers_df
+
+
+def predict_hitter_hit_probability(hitter_features: pd.DataFrame) -> pd.DataFrame:
+    """[key_mlbam, Model_Hit_Probability] - the trained hit-probability
+    classifier's (config.HITTER_HIT_PROBABILITY_MODEL_PATH,
+    scripts/train_hitter_hit_model.py) predicted probability for each row
+    in `hitter_features` (build_hitter_features's own output - same
+    train/serve feature parity apply_ml_overrides relies on). Returns an
+    EMPTY frame (never raises) if the model artifact is missing/corrupt/a
+    version mismatch - same ml_models.load_model fallback discipline as
+    apply_ml_overrides, so a caller can print/skip rather than crash. This
+    model is a classifier, so `.predict_proba(X)[:, 1]` (probability of the
+    positive class), not apply_ml_overrides's regression-style `.predict()`."""
+    model = ml_models.load_model(config.HITTER_HIT_PROBABILITY_MODEL_PATH)
+    if model is None or hitter_features.empty:
+        return pd.DataFrame(columns=["key_mlbam", "Model_Hit_Probability"])
+
+    X = hitter_feature_matrix(hitter_features)
+    predicted = model.predict_proba(X)[:, 1]
+    return pd.DataFrame({"key_mlbam": hitter_features["key_mlbam"].values, "Model_Hit_Probability": predicted})

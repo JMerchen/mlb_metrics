@@ -1432,6 +1432,15 @@ loadTeamExplorer()
 
 }
 
+function selectBtsView(view){
+document.querySelectorAll("#btsTabs .tabButton").forEach(btn=>{
+btn.classList.toggle("active", btn.dataset.view === view)
+})
+document.getElementById("ourPicksSection").style.display = view === "ourPicks" ? "" : "none"
+document.getElementById("hitStreaksSection").style.display = view === "hitStreaks" ? "" : "none"
+document.getElementById("modelOddsSection").style.display = view === "modelOdds" ? "" : "none"
+}
+
 async function loadBeatTheStreak(){
 
 let summary = []
@@ -1548,6 +1557,77 @@ sorted,
 "streakHistoryTable",
 100
 )
+
+}
+
+async function loadHitStreaks(){
+
+let streaks = []
+
+try{
+streaks = await loadCSV("./data/hit_streaks.csv")
+}catch(e){
+console.log("no hit_streaks.csv yet", e)
+}
+
+renderHitStreaks(streaks)
+
+}
+
+function renderHitStreaks(streaks){
+
+if(!streaks.length){
+document.getElementById("hitStreaksTable").innerHTML = "No hit streak data yet"
+return
+}
+
+const top = streaks
+.slice()
+.sort((a,b)=>Number(b.Current_Hit_Streak) - Number(a.Current_Hit_Streak))
+.slice(0, 10)
+.map(p=>({
+"Player": `${p.name_first} ${p.name_last}`,
+"Team": p.team,
+"Current Streak": p.Current_Hit_Streak,
+}))
+
+buildTable(top, "hitStreaksTable")
+
+}
+
+async function loadModelOdds(){
+
+let predictions = []
+
+try{
+predictions = await loadCSV("./data/hitter_hit_predictions.csv")
+}catch(e){
+console.log("no hitter_hit_predictions.csv yet", e)
+}
+
+renderModelOdds(predictions)
+
+}
+
+function renderModelOdds(predictions){
+
+if(!predictions.length){
+document.getElementById("modelOddsTable").innerHTML = "No model odds published yet"
+return
+}
+
+const top = predictions
+.slice()
+.sort((a,b)=>Number(b.Model_Hit_Probability) - Number(a.Model_Hit_Probability))
+.slice(0, 10)
+.map(p=>({
+"Player": `${p.name_first} ${p.name_last}`,
+"Team": p.team,
+"Opp": `${p.is_home === "True" || p.is_home === "true" ? "vs" : "@"} ${p.opponent}`,
+"Model Odds": `${(Number(p.Model_Hit_Probability) * 100).toFixed(1)}%`,
+}))
+
+buildTable(top, "modelOddsTable")
 
 }
 
@@ -1707,6 +1787,10 @@ formatted,
 loadAll()
 
 loadBeatTheStreak()
+
+loadHitStreaks()
+
+loadModelOdds()
 
 loadGamePicks()
 

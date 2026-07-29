@@ -113,6 +113,43 @@ def test_select_picks_lineup_qualifiers_are_noop_without_columns():
     assert list(picks["key_mlbam"]) == [1]
 
 
+def test_select_picks_excludes_hitter_who_has_not_played_recently():
+    hitters = _hitters([
+        (1, 0, 40, 0.90),  # played 2 days before the pick date -> qualifies
+        (2, 0, 40, 0.85),  # played 10 days before the pick date -> excluded
+    ])
+    hitters["Last_Game_Date"] = [pd.Timestamp("2026-06-18"), pd.Timestamp("2026-06-10")]
+
+    picks = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30)
+
+    assert list(picks["key_mlbam"]) == [1]
+
+
+def test_select_picks_recency_gate_is_noop_without_last_game_date_column():
+    # A batter who would fail the recency gate if it applied must still be
+    # picked when the column simply isn't present (old wave.csv snapshots
+    # from before this feature existed).
+    hitters = _hitters([(1, 0, 40, 0.90)])
+    assert "Last_Game_Date" not in hitters.columns
+
+    picks = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30)
+
+    assert list(picks["key_mlbam"]) == [1]
+
+
+def test_select_picks_max_days_since_last_game_is_configurable():
+    hitters = _hitters([(1, 0, 40, 0.90)])
+    hitters["Last_Game_Date"] = [pd.Timestamp("2026-06-10")]  # 10 days before the pick date
+
+    excluded = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30)
+    assert excluded.empty
+
+    included = predictions.select_picks(
+        hitters, "2026-06-20", top_n=5, min_plate_appearances=30, max_days_since_last_game=10
+    )
+    assert list(included["key_mlbam"]) == [1]
+
+
 def test_select_picks_requires_both_probability_and_game_hit_probability_above_threshold():
     hitters = _hitters([
         (1, 0, 40, 0.90),  # both signals strong -> qualifies

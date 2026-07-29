@@ -174,6 +174,22 @@ pitch, too late for the pipeline's 8am ET run regardless of data source, and
 would need a second later run plus a decision about revising an
 already-logged morning pick.
 
+- **Recently-played eligibility** (`hitters.compute_last_game_dates`,
+  `config.HITTER_MAX_DAYS_SINCE_LAST_GAME`, default 5 days) - a hitter's
+  career-long PA total and season-long WAVE/Game_Hit_Probability rates stay
+  high even after a week or more hurt/benched, so without this an inactive
+  player could still surface as an official pick. `predictions.select_picks`
+  excludes any hitter whose most recent completed game is more than the
+  threshold before the pick date (column-gated, so old wave.csv snapshots
+  without `Last_Game_Date` are unaffected). This is an eligibility/data-
+  hygiene gate, not a new predictive signal - it doesn't touch ranking, only
+  who's eligible to be ranked at all - so unlike the trained hit-probability
+  model (still explicitly NOT wired into live picks) it didn't need its own
+  backtest, the same reasoning that applies to the batting-order/lineup
+  gates above. Real-data check on 2026-07-28 excluded 213 of 602 hitters
+  (season-long stragglers - traded, released, injured) while correctly
+  keeping actually-active players eligible.
+
 ## Pick qualification: probability vs. Game_Hit_Probability
 
 `hitters.py` computes two independent estimates of "will this batter get a
@@ -479,6 +495,35 @@ additional gate to narrow the field, then rank survivors by the existing
 `Approach`/`Matchup_Approach` metric - reusing the tuned heuristic for
 fine-grained ordering rather than replacing it outright) is a separate,
 later decision, to be validated with its own backtest before going live.
+
+### Dashboard: Hit Streaks and Model Odds (the model's first live use)
+
+The Beat the Streak section of the dashboard now has three subtabs:
+**Our Picks** (unchanged - the official picks above, still driven entirely
+by `predictions.select_picks`'s `Approach`/`Matchup_Approach` heuristic),
+**Hit Streaks**, and **Model Odds**. The latter two are new, purely
+**informational** views - neither touches `predictions.select_picks`,
+`pipeline.run`, or what gets logged to `predictions.csv`; they're an
+additional, independent lens alongside the official picks, not a
+replacement for them.
+
+- **Hit Streaks** (`hitters.compute_current_hit_streaks`,
+  `scripts/build_hit_streaks.py` → `docs/data/hit_streaks.csv`): each
+  recently-active batter's real current consecutive-games-with-a-hit
+  streak, counted from real completed Statcast events. A batter whose most
+  recent game is more than `config.HIT_STREAK_RECENT_DAYS` (5) days old is
+  excluded entirely, so an inactive/injured player's frozen streak doesn't
+  crowd out who's actually hot right now.
+- **Model Odds** (`dfs_ml.predict_hitter_hit_probability`,
+  `scripts/build_hitter_hit_predictions.py` → `docs/data/hitter_hit_predictions.csv`):
+  today's PA-qualified hitters ranked by the trained hit-probability
+  model's own predicted probability - the model's first live use, run
+  daily alongside the DFS rankings.
+
+Both scripts follow `build_dfs_rankings.py`'s resilience conventions
+(missing input/model/failed schedule fetch leaves yesterday's output in
+place rather than crashing or overwriting with nothing) and are wired into
+`daily_update.yml` right after "Build DFS rankings."
 
 ## Automated Game Picks (dashboard)
 
