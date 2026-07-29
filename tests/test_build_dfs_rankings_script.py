@@ -169,6 +169,127 @@ def test_build_dfs_rankings_empty_schedule_leaves_existing_files_untouched(tmp_p
     assert (data_dir / "dfs_hitters.csv").read_text() == "stale,data\n1,2\n"
 
 
+def test_build_dfs_rankings_merges_dk_slot_from_position_eligibility(tmp_path, monkeypatch):
+    module = _load_build_dfs_rankings_module()
+
+    raw_dir = tmp_path / "raw"
+    data_dir = tmp_path / "data"
+    raw_dir.mkdir()
+    data_dir.mkdir()
+    _write_daily_csvs(data_dir)
+    _write_persisted_statcast(raw_dir, n_starts=4)
+
+    monkeypatch.setattr(module.schedule, "fetch_probable_pitchers", lambda date: _schedule_df())
+    monkeypatch.setattr(
+        module.roster_positions, "fetch_position_eligibility",
+        lambda key_mlbams: pd.DataFrame([{"key_mlbam": 1, "primary_position": "SS", "dk_slot": "SS"}]),
+    )
+
+    sys.argv = [
+        "build_dfs_rankings.py", "--raw-dir", str(raw_dir), "--data-dir", str(data_dir),
+        "--season", "2026", "--as-of-date", "2026-06-20",
+    ]
+    module.main()
+
+    hitters = pd.read_csv(data_dir / "dfs_hitters.csv")
+    assert hitters.iloc[0]["dk_slot"] == "SS"
+
+
+def test_build_dfs_rankings_failed_position_fetch_still_writes_hitters(tmp_path, monkeypatch):
+    # Unlike a failed schedule fetch (which blocks the whole file), a
+    # failed position-eligibility fetch is purely informational - today's
+    # rankings should still publish, just without a usable dk_slot column.
+    module = _load_build_dfs_rankings_module()
+
+    raw_dir = tmp_path / "raw"
+    data_dir = tmp_path / "data"
+    raw_dir.mkdir()
+    data_dir.mkdir()
+    _write_daily_csvs(data_dir)
+    _write_persisted_statcast(raw_dir, n_starts=4)
+
+    monkeypatch.setattr(module.schedule, "fetch_probable_pitchers", lambda date: _schedule_df())
+
+    def _boom(key_mlbams):
+        raise RuntimeError("statsapi is down")
+
+    monkeypatch.setattr(module.roster_positions, "fetch_position_eligibility", _boom)
+
+    sys.argv = [
+        "build_dfs_rankings.py", "--raw-dir", str(raw_dir), "--data-dir", str(data_dir),
+        "--season", "2026", "--as-of-date", "2026-06-20",
+    ]
+    module.main()
+
+    hitters = pd.read_csv(data_dir / "dfs_hitters.csv")
+    assert len(hitters) == 1
+    assert pd.isna(hitters.iloc[0]["dk_slot"])
+
+
+def test_build_dfs_rankings_excludes_hitter_who_has_not_played_recently(tmp_path, monkeypatch):
+    # A season-long injured-list stay (e.g. Dansby Swanson) leaves
+    # season-to-date PA/rates looking qualified, but the hitter hasn't
+    # actually played in months - must be excluded from dfs_hitters.csv
+    # (and therefore from the optimizer, which reads this file directly).
+    module = _load_build_dfs_rankings_module()
+
+    raw_dir = tmp_path / "raw"
+    data_dir = tmp_path / "data"
+    raw_dir.mkdir()
+    data_dir.mkdir()
+    _write_daily_csvs(data_dir)
+    # Only 1 "start" - last (and only) game_date is 2026-06-01, 19 days
+    # before the 2026-06-20 as-of-date used below - well past
+    # HITTER_MAX_DAYS_SINCE_LAST_GAME (5).
+    _write_persisted_statcast(raw_dir, n_starts=1)
+
+    monkeypatch.setattr(module.schedule, "fetch_probable_pitchers", lambda date: _schedule_df())
+
+    sys.argv = [
+        "build_dfs_rankings.py", "--raw-dir", str(raw_dir), "--data-dir", str(data_dir),
+        "--season", "2026", "--as-of-date", "2026-06-20",
+    ]
+    module.main()
+
+    hitters = pd.read_csv(data_dir / "dfs_hitters.csv")
+    assert hitters.empty
+
+
+def test_build_dfs_rankings_keeps_hitter_within_recency_window(tmp_path, monkeypatch):
+    # Boundary check: exactly at the 5-day cutoff must still be included
+    # (predictions.select_picks's own gate uses the same <= semantics).
+    module = _load_build_dfs_rankings_module()
+
+    raw_dir = tmp_path / "raw"
+    data_dir = tmp_path / "data"
+    raw_dir.mkdir()
+    data_dir.mkdir()
+    _write_daily_csvs(data_dir)
+
+    rows = []
+    events = ["strikeout"] * 20 + ["field_out"] * 10 + ["walk"] * 5 + ["single"] * 10
+    for i, e in enumerate(events):
+        rows.append({
+            "game_pk": 1, "game_date": pd.Timestamp("2026-06-15"),  # exactly 5 days before as-of-date
+            "pitcher": 99, "batter": 1, "events": e, "p_throws": "R",
+            "inning_topbot": "Top", "home_team": "NYY", "away_team": "BOS",
+            "at_bat_number": i + 1, "pitch_number": 1,
+            "bat_score": 0, "post_bat_score": 0,
+        })
+    pd.DataFrame(rows).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    monkeypatch.setattr(module.schedule, "fetch_probable_pitchers", lambda date: _schedule_df())
+
+    sys.argv = [
+        "build_dfs_rankings.py", "--raw-dir", str(raw_dir), "--data-dir", str(data_dir),
+        "--season", "2026", "--as-of-date", "2026-06-20",
+    ]
+    module.main()
+
+    hitters = pd.read_csv(data_dir / "dfs_hitters.csv")
+    assert len(hitters) == 1
+
+
 def test_build_dfs_rankings_below_min_starts_excludes_pitcher(tmp_path, monkeypatch):
     module = _load_build_dfs_rankings_module()
 

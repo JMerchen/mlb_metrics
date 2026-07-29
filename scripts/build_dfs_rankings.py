@@ -43,6 +43,23 @@ k*0, since there's no real deviation to add), and Matchup_Boom_Score
 falls back to 0 (no real boom-frequency evidence to scale by today's
 matchup).
 
+Two more hitter-side additions:
+
+- **Recency exclusion**: a hitter whose most recent completed plate
+  appearance (hitters.compute_last_game_dates, off persisted Statcast) is
+  more than config.HITTER_MAX_DAYS_SINCE_LAST_GAME days before
+  --as-of-date is dropped entirely, even though a season-long injured-list
+  stay leaves their season rates looking fine. Same gate
+  predictions.select_picks already applies to Beat the Streak picks - a
+  real, live gap this closed: the optimizer (build_optimal_lineup.py reads
+  this file's output directly) kept selecting a player out for months.
+- **dk_slot** (DK Classic fielding-slot eligibility, roster_positions.py):
+  merged in for the dashboard's per-position Hitters subtabs. A failed
+  fetch doesn't block the whole file - unlike the schedule fetch above,
+  this is purely informational, so it degrades to a blank dk_slot column
+  (no subtab filtering that day) rather than leaving yesterday's entire
+  file in place.
+
 Usage:
     python scripts/build_dfs_rankings.py
 """
@@ -56,7 +73,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import pandas as pd
 
-from mlb_metrics import config, data, dfs, dfs_ceiling, dfs_ml, matchup, pitcher_form, pipeline, schedule
+from mlb_metrics import config, data, dfs, dfs_ceiling, dfs_ml, matchup, pitcher_form, pipeline, roster_positions, schedule
+from mlb_metrics import hitters as hitters_module
 
 
 def main():
@@ -103,6 +121,34 @@ def main():
 
     hitters = dfs.compute_hitter_dk_points(wave, matchup_probability, schedule_df)
     pitchers = dfs.compute_pitcher_dk_points(pave, pitcher_form_df, schedule_df)
+
+    # Exclude hitters who haven't played recently (e.g. a season-long
+    # injured-list stay) even though their season rates still qualify them
+    # on PA alone - same gate predictions.select_picks already applies to
+    # Beat the Streak picks, reused directly rather than duplicated. A
+    # hitter with no completed event at all (Last_Game_Date NaT) is kept,
+    # not excluded - can't be stale if they've never played, though in
+    # practice compute_hitter_dk_points's own PA floor already means every
+    # remaining row has a real game history.
+    last_game = hitters_module.compute_last_game_dates(data_with_game_id)
+    hitters = hitters.merge(last_game, on="key_mlbam", how="left")
+    days_since_last_game = (pd.Timestamp(args.as_of_date) - hitters["Last_Game_Date"]).dt.days
+    hitters = hitters[
+        hitters["Last_Game_Date"].isna() | (days_since_last_game <= config.HITTER_MAX_DAYS_SINCE_LAST_GAME)
+    ].drop(columns=["Last_Game_Date"])
+
+    # DK Classic fielding-slot eligibility (roster_positions.py), so the
+    # dashboard can split the Hitters tab into per-position subtabs.
+    # Informational only - unlike the recency gate above, a failed fetch
+    # shouldn't block publishing today's rankings, so this degrades to an
+    # empty dk_slot column (no subtab filtering that day) instead of
+    # leaving yesterday's whole file in place.
+    try:
+        eligibility = roster_positions.fetch_position_eligibility(hitters["key_mlbam"].tolist())
+        hitters = hitters.merge(eligibility[["key_mlbam", "dk_slot"]], on="key_mlbam", how="left")
+    except Exception as exc:
+        print(f"WARNING: failed to fetch today's position eligibility ({exc}); dk_slot will be blank today.")
+        hitters["dk_slot"] = pd.NA
 
     hitter_features = dfs_ml.build_hitter_features(wave, pave, confidence, schedule_df, matchup_probability)
     hitters, pitchers = dfs_ml.apply_ml_overrides(hitters, hitter_features, pitchers)

@@ -57,7 +57,21 @@ for the full methodology, known limitations, and backtest numbers.
 <button class="tabButton" data-position="optimal" onclick="selectPosition('optimal')">Optimal Lineup</button>
 </div>
 
+<div id="hittersSection">
+
+<div class="tabGroup" id="hitterPositionTabs">
+<button class="tabButton active" data-hitter-position="all" onclick="selectHitterPosition('all')">All</button>
+<button class="tabButton" data-hitter-position="C" onclick="selectHitterPosition('C')">C</button>
+<button class="tabButton" data-hitter-position="1B" onclick="selectHitterPosition('1B')">1B</button>
+<button class="tabButton" data-hitter-position="2B" onclick="selectHitterPosition('2B')">2B</button>
+<button class="tabButton" data-hitter-position="3B" onclick="selectHitterPosition('3B')">3B</button>
+<button class="tabButton" data-hitter-position="SS" onclick="selectHitterPosition('SS')">SS</button>
+<button class="tabButton" data-hitter-position="OF" onclick="selectHitterPosition('OF')">OF</button>
+</div>
+
 <div class="scrollbox" id="hittersTable">
+</div>
+
 </div>
 
 <div class="scrollbox" id="pitchersTable" style="display:none;">

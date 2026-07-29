@@ -217,6 +217,34 @@ def test_build_optimal_lineup_value_objective_spends_near_min_salary_floor(tmp_p
     assert value_lineup["Estimated_Salary"].sum() >= min_salary
 
 
+def test_build_optimal_lineup_drops_pre_existing_dk_slot_before_own_merge(tmp_path, monkeypatch):
+    # dfs_hitters.csv now carries its own dk_slot column
+    # (build_dfs_rankings.py, for the dashboard's position subtabs) - if
+    # this script's own independent eligibility merge doesn't drop it
+    # first, pandas would suffix both to dk_slot_x/dk_slot_y and
+    # solve_optimal_lineup's plain pool["dk_slot"] lookup would KeyError.
+    module = _load_build_optimal_lineup_module()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    hitters, pitchers, slot_by_key = _full_slate()
+    # Deliberately WRONG dk_slot values baked into the input file - if the
+    # fix works, the optimizer's own fresh eligibility fetch (the real
+    # slot_by_key below) wins, not this stale column.
+    hitters["dk_slot"] = "WRONG_SLOT"
+    _write_daily_csvs(data_dir, hitters, pitchers)
+
+    monkeypatch.setattr(module.roster_positions, "fetch_position_eligibility", _eligibility_fetcher(slot_by_key))
+
+    sys.argv = ["build_optimal_lineup.py", "--data-dir", str(data_dir)]
+    module.main()
+
+    lineup = pd.read_csv(data_dir / "optimal_lineup.csv")
+    pool = pd.read_csv(data_dir / "dfs_salary_pool.csv")
+    assert len(lineup) == 10
+    assert "WRONG_SLOT" not in pool["dk_slot"].tolist()
+    assert set(pool[pool["key_mlbam"] < 900]["dk_slot"]) == set(slot_by_key.values())
+
+
 def test_build_optimal_lineup_missing_daily_csvs_writes_nothing(tmp_path):
     module = _load_build_optimal_lineup_module()
     data_dir = tmp_path / "data"

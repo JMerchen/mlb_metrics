@@ -899,6 +899,23 @@ v1.1).
 learning follow-up" below for the numbers and why the ML model, not this
 heuristic, is what's actually live.
 
+**Recency exclusion and position subtabs (2026-07-29)**: `scripts/build_dfs_rankings.py`
+now drops any hitter whose most recent completed plate appearance
+(`hitters.compute_last_game_dates`) is more than
+`config.HITTER_MAX_DAYS_SINCE_LAST_GAME` (5) days before `--as-of-date` -
+the same gate `predictions.select_picks` already applies to Beat the
+Streak picks, reused directly. Without it, a hitter on a season-long
+injured-list stay could still qualify on PA alone and keep getting
+selected by the Optimal Lineup optimizer below (a real, live bug: Dansby
+Swanson, injured for months, kept appearing). It also merges in each
+hitter's DK Classic fielding slot (`dk_slot`, `roster_positions.py` - the
+same eligibility lookup the optimizer already used) so the dashboard's
+Hitters tab can offer per-position subtabs (All/C/1B/2B/3B/SS/OF)
+alongside the existing full ranked list. A failed position-eligibility
+fetch is non-fatal here (unlike a failed schedule fetch) - today's
+rankings still publish, just with a blank `dk_slot` column and no
+per-position filtering that day.
+
 ### Pitchers
 
 Needed one new signal this project didn't have: `pitcher_form.py`'s
@@ -1178,6 +1195,17 @@ pitcher fetch already documents) - `scripts/debug_statsapi_positions.py`
 (run through the `Debug statsapi` GitHub Actions workflow, real network
 access) is the same bootstrapping step `schedule.py`'s own field paths
 went through before being trusted in production.
+
+**Injured/inactive hitters (2026-07-29)**: the optimizer's input,
+`docs/data/dfs_hitters.csv`, now excludes any hitter who hasn't played
+recently (see "Recency exclusion" under DFS Player Rankings' Hitters
+section above) - previously nothing here checked *current* activity, only
+season-long PA/rates, so a hitter on a long injured-list stay kept getting
+optimally selected (a real, live bug: Dansby Swanson). `dfs_hitters.csv`
+also now carries its own `dk_slot` column (for the dashboard's Hitters
+position subtabs) - `scripts/build_optimal_lineup.py` drops it on read,
+before `build_player_pool`'s own independent eligibility fetch/merge runs,
+so the two don't collide into `dk_slot_x`/`dk_slot_y`.
 
 **The optimizer** (`dfs_optimizer.py`): an exact MILP (mixed-integer
 linear program), solved via [PuLP](https://github.com/coin-or/pulp)'s
