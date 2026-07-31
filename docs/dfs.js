@@ -86,6 +86,7 @@ const rows = dfsPitchers.map(p=>({
 "BB9": p.BB9 && p.BB9 !== "" ? Number(p.BB9).toFixed(1) : "-",
 "HR9": p.HR9 && p.HR9 !== "" ? Number(p.HR9).toFixed(1) : "-",
 "Exp IP": p.Expected_IP && p.Expected_IP !== "" ? Number(p.Expected_IP).toFixed(1) : "-",
+"Opp Offense": p.Opponent_Offense_Ratio && p.Opponent_Offense_Ratio !== "" ? Number(p.Opponent_Offense_Ratio).toFixed(2) : "-",
 "DK Pts": p.DK_Points_Pitcher && p.DK_Points_Pitcher !== "" ? Number(p.DK_Points_Pitcher).toFixed(2) : "-",
 "Ceiling (P90)": p.Ceiling_DK_Points && p.Ceiling_DK_Points !== "" ? Number(p.Ceiling_DK_Points).toFixed(2) : "-",
 "Boom-Adjusted": p.Boom_Adjusted_DK_Points && p.Boom_Adjusted_DK_Points !== "" ? Number(p.Boom_Adjusted_DK_Points).toFixed(2) : "-",

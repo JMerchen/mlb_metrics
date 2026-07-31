@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import numpy as np
 
-from mlb_metrics import config, dfs_backtest
+from mlb_metrics import config, dfs_backtest, pitcher_matchup
 
 
 def _report(label: str, projected, actual) -> None:
@@ -32,7 +32,12 @@ def _report(label: str, projected, actual) -> None:
         print(f"{label}: not enough scored rows ({len(projected)}) to report MAE/correlation.")
         return
     mae = (projected - actual).abs().mean()
-    correlation = float(np.corrcoef(projected, actual)[0, 1])
+    # Actual_DK_Points_Modeled can come back as an object-dtype Series (real
+    # Python floats, but pd.concat across many per-date frames doesn't
+    # always coerce it back to float64) - np.corrcoef crashes on an
+    # object-dtype array with a real dataset at scale, so cast explicitly
+    # rather than relying on pandas' own dtype.
+    correlation = float(np.corrcoef(projected.to_numpy(dtype=float), actual.to_numpy(dtype=float))[0, 1])
     baseline_mae = (actual - actual.mean()).abs().mean()
     print(f"{label}: MAE {mae:.4f} vs. naive-baseline MAE {baseline_mae:.4f}, correlation {correlation:.3f} (n={len(projected)})")
 
@@ -42,6 +47,12 @@ def main():
     parser.add_argument("--raw-dir", default="data/raw")
     parser.add_argument("--season", type=int, default=config.SEASON_START.year)
     parser.add_argument("--days", type=int, default=20)
+    parser.add_argument(
+        "--pitcher-matchup", action="store_true",
+        help="Also report pitcher_matchup.py's opponent-offense-adjustment grid search "
+             "(correlation/MAE per weight in config.PITCHER_MATCHUP_WEIGHT_GRID, vs. the "
+             "weight=0.0 unadjusted baseline) - see pitcher_matchup.py's module docstring.",
+    )
     args = parser.parse_args()
 
     result = dfs_backtest.backtest_dfs_projections(args.raw_dir, args.season, args.days)
@@ -64,6 +75,24 @@ def main():
         _report("Expected_H_Allowed vs. Actual_H", pitchers["Expected_H_Allowed"], pitchers["Actual_H"])
         print()
         _report("DK_Points_Pitcher (combined, ER estimate on both sides)", pitchers["DK_Points_Pitcher"], pitchers["Actual_DK_Points_Modeled"])
+
+    if args.pitcher_matchup:
+        print(f"\n=== Opponent offense adjustment (pitcher_matchup.py) - Expected_H_Allowed/Expected_ER scaled by "
+              f"opponent's team_bases_pg vs. league average, per weight in config.PITCHER_MATCHUP_WEIGHT_GRID ===")
+        matchup_result = pitcher_matchup.backtest_pitcher_matchup_signal(args.raw_dir, args.season, args.days)
+        n = matchup_result.get("n", 0)
+        if n < 2 or "by_weight" not in matchup_result:
+            print(f"Not enough scored pitcher-days (n={n}) to report a weight grid.")
+        else:
+            baseline = matchup_result["by_weight"].get(0.0, matchup_result["by_weight"].get(0))
+            print(f"n={n} pitcher-days scored")
+            for weight, metrics in matchup_result["by_weight"].items():
+                marker = " (baseline, weight=0.0)" if weight == 0.0 else ""
+                print(f"  weight={weight}: correlation {metrics['correlation']}, MAE {metrics['mae']:.4f}{marker}")
+            if baseline is not None:
+                best_weight = min(matchup_result["by_weight"], key=lambda w: matchup_result["by_weight"][w]["mae"])
+                print(f"Lowest-MAE weight in grid: {best_weight} "
+                      f"(baseline weight=0.0 MAE {baseline['mae']:.4f})")
 
 
 if __name__ == "__main__":

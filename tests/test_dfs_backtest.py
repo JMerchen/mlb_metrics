@@ -200,6 +200,98 @@ def _multi_game_statcast(n_games=6, gap_days=5):
     return pd.DataFrame(rows)
 
 
+def _two_sided_game_rows(game_pk, date, away_events, home_events, away_pitcher, home_pitcher, home_team, away_team):
+    # Unlike _game_rows above (Top-half only - fine for tests that never
+    # touch team-level confidence data), this emits BOTH halves so
+    # teams.compute_offensive_edge/compute_home_run_stats get real
+    # bases-for AND bases-against data for both teams - needed by any test
+    # that reads Opponent_Bases_PG/team_bases_pg off the confidence table.
+    rows = []
+    away_runs = 0
+    home_runs = 0
+    for i, e in enumerate(away_events):
+        pre = away_runs
+        if e in ("home_run", "single"):
+            away_runs += 1
+        rows.append({
+            "game_pk": game_pk, "game_date": date, "pitcher": home_pitcher, "batter": 1,
+            "events": e, "p_throws": "R", "inning_topbot": "Top",
+            "home_team": home_team, "away_team": away_team,
+            "at_bat_number": i + 1, "pitch_number": 1,
+            "home_score": home_runs, "away_score": pre,
+            "post_home_score": home_runs, "post_away_score": away_runs,
+            "bat_score": pre, "post_bat_score": away_runs,
+        })
+    for i, e in enumerate(home_events):
+        pre = home_runs
+        if e in ("home_run", "single"):
+            home_runs += 1
+        rows.append({
+            "game_pk": game_pk, "game_date": date, "pitcher": away_pitcher, "batter": 2,
+            "events": e, "p_throws": "R", "inning_topbot": "Bot",
+            "home_team": home_team, "away_team": away_team,
+            "at_bat_number": len(away_events) + i + 1, "pitch_number": 1,
+            "home_score": pre, "away_score": away_runs,
+            "post_home_score": home_runs, "post_away_score": away_runs,
+            "bat_score": pre, "post_bat_score": home_runs,
+        })
+    return rows
+
+
+def _multi_game_statcast_two_sided(n_games=8, gap_days=5):
+    # Just two teams (BOS strong offense, NYY weak-but-nonzero offense),
+    # alternating who's home each game - real dispersion in team_bases_pg
+    # is needed for the opponent-offense ratio to do anything at all, and
+    # BOTH teams need to appear as home team at least once (teams.
+    # compute_home_run_stats' "sus" half is keyed by home_team only) and
+    # score at least one run at some point (teams.compute_home_run_stats'
+    # "for_merge" half drops any team with zero score-changing events) for
+    # teams.assemble_team_metrics' inner joins to keep both teams at all.
+    # Pitchers are CONSTANT per team (a fresh pitcher_id every game would
+    # never accumulate config.DFS_PITCHER_MIN_STARTS worth of starts).
+    strong_offense = ["home_run"] * 3 + ["single"] * 4 + ["field_out"] * 3
+    # Needs at least one real home_run (not just a single) - teams.
+    # compute_home_run_stats' homer_per_game/game_homer_rate ingredients
+    # are built from an INNER join keyed on "ever hit a home run", so a
+    # team with zero home runs in the whole sample is silently dropped
+    # from the confidence table entirely (never happens with real
+    # multi-week MLB data, but a real gap in this synthetic fixture).
+    weak_offense = ["home_run"] * 1 + ["strikeout"] * 7 + ["field_out"] * 2
+    rows = []
+    for i in range(n_games):
+        date = pd.Timestamp("2026-05-01") + pd.Timedelta(days=i * gap_days)
+        if i % 2 == 0:
+            away_team, away_events, away_pitcher = "BOS", strong_offense, 981
+            home_team, home_events, home_pitcher = "NYY", weak_offense, 991
+        else:
+            away_team, away_events, away_pitcher = "NYY", weak_offense, 991
+            home_team, home_events, home_pitcher = "BOS", strong_offense, 981
+        rows.extend(_two_sided_game_rows(
+            i + 1, date, away_events, home_events, away_pitcher=away_pitcher, home_pitcher=home_pitcher,
+            home_team=home_team, away_team=away_team,
+        ))
+    return pd.DataFrame(rows)
+
+
+def test_backtest_dfs_projections_pitchers_carry_opponent_offense_ingredients(tmp_path):
+    # pitcher_matchup.backtest_pitcher_matchup_signal needs Opponent_Bases_PG/
+    # League_Bases_PG/Expected_ER on this frame to grid-search a weight
+    # without recomputing history itself - see dfs_backtest.py's
+    # _compute_date_outputs and backtest_dfs_projections docstrings.
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    _multi_game_statcast_two_sided(n_games=8).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    result = dfs_backtest.backtest_dfs_projections(str(raw_dir), season=2026, days=6)
+    pitchers = result["pitchers"]
+
+    assert not pitchers.empty
+    for column in ("opponent", "Expected_ER", "Opponent_Bases_PG", "League_Bases_PG"):
+        assert column in pitchers.columns
+    assert pitchers["Opponent_Bases_PG"].notna().all()
+    assert pitchers["League_Bases_PG"].notna().all()
+
+
 def test_assemble_ml_training_rows_full_history_has_expected_schema_and_no_leakage(tmp_path):
     raw_dir = tmp_path / "raw"
     raw_dir.mkdir()

@@ -928,6 +928,65 @@ DFS_BOOM_ADJUSTED_K_PITCHER = 0.0
 # backtest (and update this comment) after any change to
 # dfs.compute_matchup_adjustment's formula.
 
+# --- Opponent offense adjustment (pitcher_matchup.py, pitchers only) ---
+#
+# Unlike hitters (Matchup_Ratio/Matchup_Hit_Probability/Matchup_Boom_Score
+# above), dfs.compute_pitcher_dk_points had NO opponent-quality signal
+# anywhere - not even in the base mean projection - before this module.
+# K9/BB9/HR9/IP_per_start are all windowed averages of the PITCHER'S OWN
+# recent form; nothing scaled Expected_H_Allowed/Expected_ER by how good
+# the opposing offense actually is today (a real, user-observed gap: a
+# pitcher with a great price-adjusted boom profile projects the same
+# whether they're facing a last-place offense or a first-place one).
+#
+# pitcher_matchup.compute_opponent_offense_ratio blends the opponent's
+# real team_bases_pg (teams.compute_offensive_edge's pure-offense half,
+# before that function's own opponent subtraction - see its docstring for
+# why the already-existing offensive_edge/true_power are NOT reusable here,
+# both contaminated by netting out a STALE opponent, not today's) against
+# the league average, clipped to PITCHER_MATCHUP_OFFENSE_CLIP so one
+# extreme-outlier offense can't blow up a projection. weight=0.0 is the
+# built-in null hypothesis - it returns exactly 1.0 (today's unadjusted
+# heuristic), not an approximation of it - so the grid search below always
+# includes an honest no-adjustment baseline to beat, not just a range of
+# nonzero guesses.
+PITCHER_MATCHUP_OFFENSE_CLIP = (0.85, 1.15)
+PITCHER_MATCHUP_WEIGHT_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
+
+# Backtested (pitcher_matchup.backtest_pitcher_matchup_signal, real
+# persisted Statcast, --days 90 - pitcher sample size is much smaller than
+# the hitter-side backtests above, dozens of probable starters per date vs.
+# thousands of plate appearances, so this needed a longer window than the
+# 20-date default used elsewhere in this project to get a reportable
+# sample). n=2,081 real pitcher-days, correlation and MAE of the adjusted
+# DK_Points_Pitcher against that date's REAL Actual_DK_Points_Modeled, per
+# weight in PITCHER_MATCHUP_WEIGHT_GRID:
+#
+#   weight=0.00 (baseline, no adjustment): correlation 0.3397, MAE 6.6736
+#   weight=0.25:                            correlation 0.3407, MAE 6.6658
+#   weight=0.50:                            correlation 0.3414, MAE 6.6612
+#   weight=0.75:                            correlation 0.3416, MAE 6.6605
+#   weight=1.00 (full, unblended ratio):    correlation 0.3417, MAE 6.6600
+#
+# Honest result: the direction is right (correlation rises and MAE falls
+# monotonically as weight increases, and the win is FULLY monotonic across
+# the whole grid, unlike Matchup_Boom_Score's own backtest which went
+# backwards) - but the MAGNITUDE is tiny. Weight=1.0 vs. weight=0.0 is only
+# a 0.6% relative correlation improvement and a 0.2% relative MAE
+# improvement, nowhere near the real margins that justified this project's
+# other nonzero defaults (e.g. Boom_Adjusted_DK_Points' k=1.0 needed a 24%
+# relative capture-rate improvement over k=0.0 to be chosen). At n=2,081
+# this small a gap isn't distinguishable from noise with any real
+# confidence. PITCHER_MATCHUP_OFFENSE_WEIGHT stays 0.0 (today's unadjusted
+# heuristic) for exactly that reason - Opponent_Offense_Ratio still ships
+# as an informational-only column (see docs/dfs.js's pitcher table) rather
+# than being silently dropped, since the DIRECTION is real evidence a user
+# may still want to see, even though the MAGNITUDE doesn't clear this
+# project's bar for changing the live default. Re-run this backtest (and
+# update this comment) after any change to dfs.compute_pitcher_dk_points'
+# formula or to teams.compute_offensive_edge's team_bases_pg.
+PITCHER_MATCHUP_OFFENSE_WEIGHT = 0.0
+
 # --- Value_Score (dfs_optimizer.py, "stars not superstars" roster construction) ---
 #
 # Real evidence from an actual DK contest: this project's own mean/

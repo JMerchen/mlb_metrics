@@ -170,6 +170,22 @@ def _compute_date_outputs(persisted: pd.DataFrame, team_schedule: pd.DataFrame, 
     projected_hitters = dfs.compute_hitter_dk_points(outputs["wave"], matchup_probability, todays_schedule)
     projected_pitchers = dfs.compute_pitcher_dk_points(outputs["pave"], pitcher_form_df, todays_schedule)
 
+    # Raw opponent-offense ingredients (not a blended ratio yet - that's
+    # computed per weight by pitcher_matchup.backtest_pitcher_matchup_signal,
+    # which reuses this frame's Opponent_Bases_PG/League_Bases_PG rather
+    # than recomputing history per weight). league_bases_pg is this
+    # no-lookahead date's own confidence table average, not a single
+    # sample-wide constant - see teams.compute_offensive_edge's docstring
+    # for why team_bases_pg (not offensive_edge/true_power) is the right
+    # opponent-quality building block.
+    league_bases_pg = outputs["confidence"]["team_bases_pg"].mean()
+    opponent_bases = outputs["confidence"][["team", "team_bases_pg"]].rename(
+        columns={"team": "opponent", "team_bases_pg": "Opponent_Bases_PG"}
+    )
+    projected_pitchers = projected_pitchers.merge(opponent_bases, on="opponent", how="left")
+    projected_pitchers["Opponent_Bases_PG"] = projected_pitchers["Opponent_Bases_PG"].fillna(league_bases_pg)
+    projected_pitchers["League_Bases_PG"] = league_bases_pg
+
     day_events = persisted[persisted["game_date"] == date]
     actual_hitters = compute_actual_hitter_dk_points(
         data.completed_events(day_events, ["game_date", "batter", "events", "bat_score", "post_bat_score"])
@@ -199,7 +215,12 @@ def backtest_dfs_projections(raw_dir: str = "data/raw", season: int | None = Non
     date's real Matchup_Ratio (dfs.compute_matchup_adjustment's output,
     already computed as part of DK_Points_Hitter) - needed by
     dfs_ceiling.backtest_matchup_boom_signal to test whether today's
-    matchup favorability predicts boom likelihood, not just mean output."""
+    matchup favorability predicts boom likelihood, not just mean output.
+    The pitchers frame likewise carries Opponent_Bases_PG/League_Bases_PG
+    (that date's own no-lookahead opponent-offense ingredients) and
+    Expected_ER - needed by pitcher_matchup.backtest_pitcher_matchup_signal
+    to grid-search an opponent-offense adjustment weight without
+    recomputing history per weight."""
     season = season or config.SEASON_START.year
     persisted = data.load_persisted_statcast(raw_dir, season)
     if persisted is None:
@@ -232,9 +253,10 @@ def backtest_dfs_projections(raw_dir: str = "data/raw", season: int | None = Non
             pitcher_rows.append(
                 pitchers_scored[
                     [
-                        "date", "key_mlbam", "DK_Points_Pitcher", "Actual_DK_Points_Modeled",
+                        "date", "key_mlbam", "opponent", "DK_Points_Pitcher", "Actual_DK_Points_Modeled",
                         "Expected_IP", "Actual_IP", "Expected_K", "Actual_K",
                         "Expected_BB", "Actual_BB", "Expected_H_Allowed", "Actual_H",
+                        "Expected_ER", "Opponent_Bases_PG", "League_Bases_PG",
                     ]
                 ]
             )
