@@ -1235,6 +1235,64 @@ immediately after `scripts/build_dfs_rankings.py`), writing
 `docs/data/dfs_salary_pool.csv` (every eligible player considered, for
 transparency into what the optimizer actually saw).
 
+### Slate filtering (client-side, `docs/dfs_solver.js`, 2026-07-31)
+
+Real DraftKings contests split today's full slate into sub-contests by
+game start time (early/main/night) - the daily batch lineup above always
+optimizes across every game today, so it's never actually the optimal
+lineup for any single real contest. The Optimal Lineup tab now lets a
+user pick which games are in their contest (checkboxes, sorted by start
+time) and click Analyze to re-solve the lineup for just those games -
+entirely in the browser, using `docs/data/dfs_salary_pool.csv` (already
+published daily), no new backend or network call.
+
+**Why a hand-rolled JS solver, not a WASM/JS MILP library**: PapaParse is
+the only third-party JS dependency anywhere on this site, matching its
+no-build-step philosophy. `dfs_optimizer.py`'s own module docstring
+already argues the problem is exactly solvable without PuLP: since every
+pool row has exactly one `dk_slot`, the DraftKings roster slots are
+disjoint groups, so this is a bounded multiple-choice knapsack per slot
+merged over one shared salary budget - and since `Estimated_Salary` is
+always a multiple of $100 (`config.DFS_ESTIMATED_SALARY_ROUND_TO`), the
+budget dimension has only 501 discrete states at the $50,000 cap. A
+per-slot dynamic-programming table (exact, not a heuristic - see
+`docs/dfs_solver.js`'s own module docstring for the full algorithm)
+merged via a knapsack-of-knapsacks solves a real slate in single-digit
+milliseconds. Verified exact against the Python MILP directly: a randomized parity fuzz
+test (`tests/test_dfs_solver_js.py`, 31 cases: 20 random pools, 10 with a
+`min_salary` floor, 1 with a two-way-player collision) compares
+`docs/dfs_solver.js`'s `solveOptimalLineupDP` against
+`dfs_optimizer.solve_optimal_lineup` on the same random pools (including a
+`min_salary` floor and a two-way-player collision) and asserts the two
+exact solvers agree on both feasibility and the achievable objective
+total - plus a direct production check: "select every game, objective
+mean" reproduces the real `optimal_lineup.csv` exactly on live data.
+
+The one thing the DP can't express natively is `dfs_optimizer.py`'s
+cross-group "at most once per player" constraint for a true two-way
+player (present in both the hitter and pitcher pools). Handled by solving
+once per combination of "which single role stays available" when
+duplicates exist (still exact, since each combination is itself an exact
+solve and the real pool essentially never has more than one two-way
+player) - more than 3 simultaneous duplicates (should not happen in
+practice) falls back to keeping each duplicated player's higher-value row
+and flags the result as approximate rather than an exponential blow-up.
+**Known v1 limitation, matching `roster_positions.py`'s own documented
+gap**: this DP depends on the disjoint-slot-groups property - if this
+project ever implements real DraftKings multi-position eligibility (a
+player legally fillable at more than one slot), the Python MILP already
+generalizes to that case for free, while this DP would need to be
+revisited.
+
+Each game's real start time (`game_datetime`, threaded from
+`schedule.normalize_schedule` through `dfs.py`'s
+`HITTER_DFS_COLUMNS`/`PITCHER_DFS_COLUMNS` into `dfs_salary_pool.csv`) is
+the raw statsapi `gameDate` field - confirmed live via the `Debug
+statsapi` GitHub Actions workflow (run 30661418977, 2026-07-31): a bare,
+unconditional sibling key of `gamePk`/`teams`/`status` on every raw game
+dict, no extra hydrate needed, same as every other field path
+`schedule.py` already trusts in production.
+
 ### Ceiling / volatility signal (`dfs_ceiling.py`)
 
 GPP (tournament) DFS lineups are won by boom/spike-game players, not
@@ -1454,6 +1512,86 @@ optimizer's `--objective` flag either (a full-lineup objective needs a
 value for every roster slot including pitchers, which this doesn't
 have) - it's a pure informational column for identifying which hitters to
 prioritize, matching how it was actually asked for.
+
+### Opponent offense adjustment (`Opponent_Offense_Ratio`, pitchers only, `pitcher_matchup.py`, 2026-07-31)
+
+A second, distinct matchup gap, this one user-observed rather than
+backtest-discovered: "matchup doesn't seem to be taken into account as
+much as I'd like. It's choosing the same players for the most part
+despite who they're facing. Does [a pitcher] have great boom potential
+for the price? Yes. Will he boom off of [a tough offense]? Almost
+certainly no." Checking the actual code confirmed the gap was real and,
+unlike `Matchup_Boom_Score` above, genuinely untested: `dfs.
+compute_pitcher_dk_points` had **no opponent-quality signal anywhere**,
+not even in the base mean projection - `K9`/`BB9`/`HR9`/`IP_per_start`
+are all windowed averages of the pitcher's OWN recent form. A pitcher's
+projection was identical whether facing a last-place offense or a
+first-place one.
+
+`teams.compute_offensive_edge` already computes real, rolling
+bases-scored-per-game per team (`team_bases_pg`), but its own
+`offensive_edge`/`true_power` outputs net that out against whichever
+opponent a team's OWN most recent game happened to be against - not
+today's actual matchup - so both are contaminated for this use.
+`team_bases_pg` itself has no opponent term at all and is now exposed
+directly from `compute_offensive_edge` as the correct building block.
+
+`pitcher_matchup.py`:
+
+- `compute_opponent_offense_ratio`: today's opponent's `team_bases_pg`
+  divided by the league average, blended toward a neutral 1.0 by a
+  `weight` and clipped to `config.PITCHER_MATCHUP_OFFENSE_CLIP` (so one
+  extreme-outlier offense can't blow up a projection). `weight=0.0`
+  returns exactly 1.0 for every row - the built-in null hypothesis that
+  reproduces today's unadjusted heuristic exactly, not an approximation
+  of it.
+- `attach_opponent_offense` / `compute_opponent_adjusted_pitcher_points`:
+  scales `Expected_H_Allowed`/`Expected_ER` by the ratio and recomputes
+  `DK_Points_Pitcher` from the scaled components. `Expected_K`/
+  `Expected_BB`/`Expected_IP` are left unadjusted for v1 - a tougher
+  offense plausibly affects those too, but there's no existing
+  per-opponent signal for either yet, and scaling the two categories a
+  bases-scored rate most directly predicts is the smallest, most
+  defensible first step.
+
+**Backtested** (`pitcher_matchup.backtest_pitcher_matchup_signal`, real
+persisted Statcast, `--days 90` - the pitcher sample is much smaller than
+the hitter-side backtests above, dozens of probable starters per date vs.
+thousands of plate appearances, so this needed a longer window than the
+20-date default used elsewhere in this project). n=2,081 real
+pitcher-days, correlation and MAE of the adjusted `DK_Points_Pitcher`
+against that date's REAL `Actual_DK_Points_Modeled`, per weight in
+`config.PITCHER_MATCHUP_WEIGHT_GRID`:
+
+| weight | correlation | MAE |
+|---|---|---|
+| 0.00 (baseline, no adjustment) | 0.3397 | 6.6736 |
+| 0.25 | 0.3407 | 6.6658 |
+| 0.50 | 0.3414 | 6.6612 |
+| 0.75 | 0.3416 | 6.6605 |
+| 1.00 (full, unblended ratio) | **0.3417** | **6.6600** |
+
+**Honest result: the right direction, too small a magnitude.** Unlike
+`Matchup_Boom_Score` above (which went backwards), this improves
+correlation and lowers MAE monotonically across the entire grid - genuine
+evidence the adjustment points the right way. But the size of the win is
+tiny: weight=1.0 vs. weight=0.0 is only a 0.6% relative correlation
+improvement and a 0.2% relative MAE improvement, nowhere near the real
+margins that justified this project's other nonzero defaults (e.g.
+`Boom_Adjusted_DK_Points`' `k=1.0` needed a 24% relative capture-rate
+improvement over `k=0.0` to be chosen). At n=2,081 this small a gap isn't
+distinguishable from noise with real confidence.
+
+`config.PITCHER_MATCHUP_OFFENSE_WEIGHT` stays **0.0** for exactly that
+reason - `DK_Points_Pitcher` is unchanged from before this module.
+`Opponent_Offense_Ratio` still ships as an **informational-only column**
+on the pitcher table (`scripts/build_dfs_rankings.py` calls
+`attach_opponent_offense` with the weight-0.0 default, which is a no-op
+ratio of exactly 1.0 today, but keeps the mechanism ready to flip on
+without a code change if a future, larger-sample backtest clears the
+bar) rather than being silently dropped - the DIRECTION is real evidence
+worth showing, even though the MAGNITUDE doesn't clear this project's
+bar for changing the live projection.
 
 ### Value_Score: "stars, not superstars" (`dfs_optimizer.py --objective value`)
 

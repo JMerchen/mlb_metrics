@@ -117,7 +117,8 @@ class _ConstantModel:
 def _hitter_output_row(key_mlbam):
     return {
         "key_mlbam": key_mlbam, "name_first": "Test", "name_last": "Hitter", "team": "BOS",
-        "opponent": "NYY", "is_home": True, "PA_L": 20, "PA_R": 40, "Expected_Bases": 1.5,
+        "opponent": "NYY", "is_home": True, "game_pk": 824651, "game_datetime": "2026-07-31T18:20:00Z",
+        "PA_L": 20, "PA_R": 40, "Expected_Bases": 1.5,
         "Expected_BB": 0.3, "Expected_HBP": 0.1, "Expected_RBI": 0.4,
         "Game_Hit_Probability": 0.70, "Matchup_Hit_Probability": 0.72, "Matchup_Ratio": 1.03,
         "Adjusted_Expected_Bases": 1.545, "DK_Points_Hitter_HitType": 3.09, "DK_Points_Hitter": 4.17,

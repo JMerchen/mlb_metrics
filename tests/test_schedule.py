@@ -46,11 +46,13 @@ def test_team_id_to_abbrev_has_30_teams_and_matches_docs_app_js():
     assert schedule.TEAM_ID_TO_ABBREV[147] == "NYY"
 
 
-def _raw_schedule(games, game_pks=None, statuses=None, scores=None):
+def _raw_schedule(games, game_pks=None, statuses=None, scores=None, game_datetimes=None):
     """games: list of (date, home_id, away_id, home_probable_id, away_probable_id).
-    game_pks/statuses/scores: optional parallel lists (same length as
-    games), each entry a game_pk int / detailedState string / (home,away)
-    score tuple - used by the normalize_schedule_games tests."""
+    game_pks/statuses/scores/game_datetimes: optional parallel lists (same
+    length as games), each entry a game_pk int / detailedState string /
+    (home,away) score tuple / gameDate ISO string - used by the
+    normalize_schedule_games tests (and, for game_datetimes, by
+    normalize_schedule's own game_datetime tests)."""
     by_date = {}
     for i, (date, home_id, away_id, home_probable, away_probable) in enumerate(games):
         entry = by_date.setdefault(date, {"date": date, "games": []})
@@ -74,6 +76,8 @@ def _raw_schedule(games, game_pks=None, statuses=None, scores=None):
                 game["teams"]["home"]["score"] = home_score
             if away_score is not None:
                 game["teams"]["away"]["score"] = away_score
+        if game_datetimes is not None:
+            game["gameDate"] = game_datetimes[i]
         entry["games"].append(game)
     return {"dates": list(by_date.values())}
 
@@ -122,6 +126,28 @@ def test_normalize_schedule_carries_game_pk_and_is_home():
     assert bool(result.loc["NYY", "is_home"]) is True
     assert result.loc["BOS", "game_pk"] == 824409
     assert bool(result.loc["BOS", "is_home"]) is False
+
+
+def test_normalize_schedule_carries_game_datetime():
+    raw = _raw_schedule(
+        [("2026-07-21", 147, 111, 592789, None)],
+        game_datetimes=["2026-07-21T23:05:00Z"],
+    )
+
+    result = schedule.normalize_schedule(raw).set_index("team")
+
+    assert result.loc["NYY", "game_datetime"] == "2026-07-21T23:05:00Z"
+    assert result.loc["BOS", "game_datetime"] == "2026-07-21T23:05:00Z"
+
+
+def test_normalize_schedule_game_datetime_is_none_not_a_crash_when_absent():
+    # gameDate isn't yet live-confirmed (see module docstring) - a raw
+    # response missing it entirely must degrade to null, never raise.
+    raw = _raw_schedule([("2026-07-21", 147, 111, 592789, None)])
+
+    result = schedule.normalize_schedule(raw).set_index("team")
+
+    assert pd.isna(result.loc["NYY", "game_datetime"])
 
 
 def test_normalize_schedule_games_one_row_per_game_with_status_and_scores():

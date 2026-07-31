@@ -86,7 +86,8 @@ import pulp
 from mlb_metrics import config, dfs_ceiling, estimated_salary
 
 POOL_COLUMNS = [
-    "key_mlbam", "name_first", "name_last", "team", "opponent", "dk_slot",
+    "key_mlbam", "name_first", "name_last", "team", "opponent", "is_home", "dk_slot",
+    "game_pk", "game_datetime",
     "DK_Points", "Ceiling_DK_Points", "Boom_Adjusted_DK_Points", "Value_Score", "Estimated_Salary",
 ]
 
@@ -136,6 +137,17 @@ def build_player_pool(hitters: pd.DataFrame, pitchers: pd.DataFrame, eligibility
         pitchers["DK_Points_Pitcher"], pitcher_upside_deviation, config.DFS_VALUE_BOOM_K_PITCHER
     )
     pitchers["Value_Score"] = pitcher_value_points / (pitchers["Estimated_Salary"] / 1000)
+
+    # is_home/game_pk/game_datetime feed the dashboard's slate-filtering
+    # optimizer UI (which game is each pool row in?) and the Optimal
+    # Lineup table's home/away rendering - a hitters/pitchers frame built
+    # by hand (e.g. in tests, or an older dfs_hitters.csv/dfs_pitchers.csv
+    # snapshot) that lacks them degrades to NA rather than a KeyError on
+    # the POOL_COLUMNS selection below.
+    for frame in (hitters, pitchers):
+        for column in ("is_home", "game_pk", "game_datetime"):
+            if column not in frame.columns:
+                frame[column] = pd.NA
 
     return pd.concat([hitters[POOL_COLUMNS], pitchers[POOL_COLUMNS]], ignore_index=True)
 

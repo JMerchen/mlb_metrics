@@ -36,6 +36,34 @@ def test_build_player_pool_joins_eligibility_and_computes_salary():
     assert list(pool.reset_index().columns) == dfs_optimizer.POOL_COLUMNS
 
 
+def test_build_player_pool_carries_game_pk_and_game_datetime():
+    hitters = pd.DataFrame([{**_hitter_row(1, 4.0), "game_pk": 824651, "game_datetime": "2026-07-31T18:20:00Z"}])
+    pitchers = pd.DataFrame([{**_pitcher_row(99, 15.0), "game_pk": 824651, "game_datetime": "2026-07-31T18:20:00Z"}])
+    eligibility = pd.DataFrame([{"key_mlbam": 1, "primary_position": "SS", "dk_slot": "SS"}])
+
+    pool = dfs_optimizer.build_player_pool(hitters, pitchers, eligibility).set_index("key_mlbam")
+
+    assert pool.loc[1, "game_pk"] == 824651
+    assert pool.loc[1, "game_datetime"] == "2026-07-31T18:20:00Z"
+    assert pool.loc[99, "game_pk"] == 824651
+    assert bool(pool.loc[1, "is_home"]) is True
+    assert bool(pool.loc[99, "is_home"]) is False
+
+
+def test_build_player_pool_missing_game_pk_column_is_na_not_a_crash():
+    # An older dfs_hitters.csv/dfs_pitchers.csv snapshot (or a hand-built
+    # test frame) that predates game_pk/game_datetime must degrade to NA
+    # on the POOL_COLUMNS selection, not KeyError.
+    hitters = pd.DataFrame([_hitter_row(1, 4.0)])
+    pitchers = pd.DataFrame([_pitcher_row(99, 15.0)])
+    eligibility = pd.DataFrame([{"key_mlbam": 1, "primary_position": "SS", "dk_slot": "SS"}])
+
+    pool = dfs_optimizer.build_player_pool(hitters, pitchers, eligibility).set_index("key_mlbam")
+
+    assert pd.isna(pool.loc[1, "game_pk"])
+    assert pd.isna(pool.loc[99, "game_datetime"])
+
+
 def test_build_player_pool_ceiling_falls_back_to_dk_points_when_missing():
     # No Ceiling_DK_Points column at all in the input (an older CSV, or a
     # player with no real scored history yet) - must default to the mean

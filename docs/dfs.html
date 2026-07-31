@@ -79,6 +79,38 @@ for the full methodology, known limitations, and backtest numbers.
 
 <div id="optimalLineupSection" style="display:none;">
 
+<div id="slateControls">
+
+<p style="opacity:.75; max-width:700px;">
+Real DraftKings contests split today's games into slates by start time
+(early/main/night), so the full-slate lineup below is never actually
+what any single contest could use. Pick the games in your contest and
+click Analyze to re-solve the lineup for just those games, entirely in
+your browser. Estimated_Salary is a MODELED price, not a real DraftKings
+salary - see the README for the full disclaimer.
+</p>
+
+<label>Optimize for
+<select id="objectiveSelect">
+<option value="mean">Mean (default)</option>
+<option value="ceiling">Ceiling (P90 upside)</option>
+<option value="boom">Boom-adjusted</option>
+<option value="value">Value (points per $1000)</option>
+</select>
+</label>
+
+<button onclick="selectAllGames(true)">Select all</button>
+<button onclick="selectAllGames(false)">Select none</button>
+<button id="analyzeButton" onclick="analyzeSlate()">Analyze</button>
+<button onclick="resetToFullSlate()">Reset to today's full slate</button>
+
+<div class="scrollbox" id="gameCheckboxes">
+</div>
+
+<div id="slateStatus"></div>
+
+</div>
+
 <div class="scrollbox" id="optimalLineupTable">
 </div>
 
@@ -87,6 +119,8 @@ for the full methodology, known limitations, and backtest numbers.
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<script src="./dfs_solver.js"></script>
 
 <script src="./dfs.js"></script>
 

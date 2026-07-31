@@ -39,8 +39,8 @@ def _write_daily_csvs(data_dir):
         "Expected_Hits": 1.0, "Expected_Bases": 1.5, "Expected_HRs": 0.1,
     }])
     confidence = pd.DataFrame([
-        {"team": "BOS", "Bullpen_PAVE": 0.25, "Park_Factor": 1.0},
-        {"team": "NYY", "Bullpen_PAVE": 0.25, "Park_Factor": 1.0},
+        {"team": "BOS", "Bullpen_PAVE": 0.25, "Park_Factor": 1.0, "team_bases_pg": 5.0},
+        {"team": "NYY", "Bullpen_PAVE": 0.25, "Park_Factor": 1.0, "team_bases_pg": 5.0},
     ])
     wave.to_csv(data_dir / "wave.csv", index=False)
     pave.to_csv(data_dir / "pave.csv", index=False)

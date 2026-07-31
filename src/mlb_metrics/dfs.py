@@ -156,6 +156,7 @@ from mlb_metrics import config
 
 HITTER_DFS_COLUMNS = [
     "key_mlbam", "name_first", "name_last", "team", "opponent", "is_home",
+    "game_pk", "game_datetime",
     "PA_L", "PA_R", "Expected_Bases", "Expected_BB", "Expected_HBP", "Expected_RBI",
     "Game_Hit_Probability", "Matchup_Hit_Probability", "Matchup_Ratio",
     "Adjusted_Expected_Bases", "DK_Points_Hitter_HitType", "DK_Points_Hitter",
@@ -163,6 +164,7 @@ HITTER_DFS_COLUMNS = [
 
 PITCHER_DFS_COLUMNS = [
     "key_mlbam", "name_first", "name_last", "team", "opponent", "is_home",
+    "game_pk", "game_datetime",
     "starts", "K9", "BB9", "HR9", "IP_per_start", "Expected_IP",
     "Expected_K", "Expected_BB", "Expected_H_Allowed", "FIP_Windowed",
     "Expected_ER", "DK_Points_Pitcher",
@@ -201,7 +203,9 @@ def compute_hitter_dk_points(
     DK_Points_Hitter descending."""
     qualified = wave[(wave["PA_L"] + wave["PA_R"]) >= min_plate_appearances].copy()
 
-    schedule_columns = [c for c in ("team", "opponent", "is_home") if c in schedule_df.columns]
+    schedule_columns = [
+        c for c in ("team", "opponent", "is_home", "game_pk", "game_datetime") if c in schedule_df.columns
+    ]
     scheduled = qualified.merge(schedule_df[schedule_columns], on="team", how="inner")
     scheduled = scheduled.merge(
         matchup_probability[["key_mlbam", "Matchup_Hit_Probability"]], on="key_mlbam", how="inner"
@@ -218,6 +222,14 @@ def compute_hitter_dk_points(
         + scheduled["Expected_HBP"] * config.DFS_DK_HITTER_HBP_POINTS
         + scheduled["Expected_RBI"] * config.DFS_DK_HITTER_RBI_POINTS
     )
+
+    # game_pk/game_datetime feed the dashboard's slate-filtering optimizer
+    # (dfs_optimizer.py) - a schedule_df that lacks them (older fixtures,
+    # historical backtest replays) degrades to NA rather than a KeyError on
+    # the HITTER_DFS_COLUMNS selection below.
+    for column in ("game_pk", "game_datetime"):
+        if column not in scheduled.columns:
+            scheduled[column] = pd.NA
 
     return scheduled[HITTER_DFS_COLUMNS].sort_values("DK_Points_Hitter", ascending=False)
 
@@ -262,5 +274,11 @@ def compute_pitcher_dk_points(
         + merged["Expected_H_Allowed"] * config.DFS_DK_PITCHER_H_POINTS
         + merged["Expected_ER"] * config.DFS_DK_PITCHER_ER_POINTS
     )
+
+    # See compute_hitter_dk_points's identical guard - a schedule_df
+    # missing game_pk/game_datetime degrades to NA, not a KeyError.
+    for column in ("game_pk", "game_datetime"):
+        if column not in merged.columns:
+            merged[column] = pd.NA
 
     return merged[PITCHER_DFS_COLUMNS].sort_values("DK_Points_Pitcher", ascending=False)

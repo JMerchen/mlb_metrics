@@ -99,8 +99,16 @@ def compute_home_run_stats(data: pd.DataFrame):
 
 
 def compute_offensive_edge(data: pd.DataFrame) -> pd.DataFrame:
-    """Rolling bases-scored-per-game minus the upcoming opponent's rolling
-    bases-allowed-per-game, blended across OFFENSIVE_EDGE_WINDOWS."""
+    """Returns [team, offensive_edge, team_bases_pg]. offensive_edge is
+    rolling bases-scored-per-game minus the upcoming opponent's rolling
+    bases-allowed-per-game, blended across OFFENSIVE_EDGE_WINDOWS.
+    team_bases_pg (the pure offense half, before that opponent subtraction)
+    is exposed separately for pitcher_matchup.py - offensive_edge itself
+    nets out whichever opponent this team's OWN most recent game happened
+    to be against, not today's actual matchup, so it's contaminated for
+    that use; team_bases_pg has no opponent term at all and is the correct
+    building block for "how good is the offense a given pitcher faces
+    today," looked up by that pitcher's own opponent."""
 
     def bases_value(events: pd.Series) -> pd.Series:
         return events.map(_OFFENSIVE_EDGE_BASES_BY_EVENT).fillna(0).astype(int)
@@ -152,7 +160,7 @@ def compute_offensive_edge(data: pd.DataFrame) -> pd.DataFrame:
     full_bases["offensive_edge"] = full_bases["team_bases_pg"] - full_bases["opp_bases_allowed_pg"]
 
     latest_game = full_bases.groupby("team", as_index=False)["game_id"].max()
-    return latest_game.merge(full_bases, on=["team", "game_id"])[["team", "offensive_edge"]]
+    return latest_game.merge(full_bases, on=["team", "game_id"])[["team", "offensive_edge", "team_bases_pg"]]
 
 
 def compute_park_factors(data: pd.DataFrame) -> pd.DataFrame:
@@ -383,7 +391,7 @@ def assemble_team_metrics(data: pd.DataFrame, bullpen_pave: pd.DataFrame | None 
     output_columns = [
         "team", "current", "Strength", "pyth_Strength", "SOS", "pyth_SOS",
         "Confidence", "pyth_Confidence", "Confidence_Delta", "true_power",
-        "offensive_edge", "suppression_resistance", "home_run_reliance",
+        "offensive_edge", "team_bases_pg", "suppression_resistance", "home_run_reliance",
         "homer_per_game", "game_homer_rate", "team_home_run_rate", "away_hr_rate",
         "Park_Factor",
     ]

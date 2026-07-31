@@ -73,7 +73,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import pandas as pd
 
-from mlb_metrics import config, data, dfs, dfs_ceiling, dfs_ml, matchup, pitcher_form, pipeline, roster_positions, schedule
+from mlb_metrics import config, data, dfs, dfs_ceiling, dfs_ml, matchup, pitcher_form, pitcher_matchup, pipeline, roster_positions, schedule
 from mlb_metrics import hitters as hitters_module
 
 
@@ -152,6 +152,19 @@ def main():
 
     hitter_features = dfs_ml.build_hitter_features(wave, pave, confidence, schedule_df, matchup_probability)
     hitters, pitchers = dfs_ml.apply_ml_overrides(hitters, hitter_features, pitchers)
+
+    # Opponent_Offense_Ratio (pitcher_matchup.py) - informational only, NOT
+    # applied to DK_Points_Pitcher. Real backtest (n=2,081 real pitcher-
+    # days) found the right DIRECTION but too small a MAGNITUDE to clear
+    # this project's bar for a live default - see
+    # config.PITCHER_MATCHUP_OFFENSE_WEIGHT's docstring for the real
+    # numbers. config.PITCHER_MATCHUP_OFFENSE_WEIGHT stays 0.0, which makes
+    # this call a no-op ratio of exactly 1.0 for every row today, but keeps
+    # the mechanism ready to flip on without a code change if a future,
+    # larger-sample backtest clears the bar. Placed AFTER apply_ml_overrides
+    # (not before) since that call recomputes DK_Points_Pitcher from its own
+    # components and would otherwise need to run again to stay consistent.
+    pitchers = pitcher_matchup.attach_opponent_offense(pitchers, confidence, config.PITCHER_MATCHUP_OFFENSE_WEIGHT)
 
     points_history = dfs_ceiling.compute_player_dk_points_history(persisted)
     hitter_ceiling = dfs_ceiling.compute_ceiling_percentiles(points_history["hitters"])

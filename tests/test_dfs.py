@@ -78,6 +78,34 @@ def test_compute_hitter_dk_points_excludes_below_min_plate_appearances():
     assert result.empty
 
 
+def test_compute_hitter_dk_points_carries_game_pk_and_game_datetime():
+    wave = pd.DataFrame([_wave_row(1, "BOS", 20, 20, 1.5, 0.70)])
+    matchup_probability = pd.DataFrame([{"key_mlbam": 1, "Matchup_Hit_Probability": 0.84}])
+    schedule_df = pd.DataFrame([{
+        "team": "BOS", "opponent": "NYY", "is_home": True,
+        "game_pk": 824651, "game_datetime": "2026-07-31T18:20:00Z",
+    }])
+
+    result = dfs.compute_hitter_dk_points(wave, matchup_probability, schedule_df).set_index("key_mlbam")
+
+    assert result.loc[1, "game_pk"] == 824651
+    assert result.loc[1, "game_datetime"] == "2026-07-31T18:20:00Z"
+
+
+def test_compute_hitter_dk_points_missing_game_pk_column_is_na_not_a_crash():
+    # A schedule_df without game_pk/game_datetime at all (older fixtures,
+    # historical backtest replays) must degrade to NA, not KeyError on the
+    # HITTER_DFS_COLUMNS selection.
+    wave = pd.DataFrame([_wave_row(1, "BOS", 20, 20, 1.5, 0.70)])
+    matchup_probability = pd.DataFrame([{"key_mlbam": 1, "Matchup_Hit_Probability": 0.84}])
+    schedule_df = pd.DataFrame([{"team": "BOS", "opponent": "NYY", "is_home": True}])
+
+    result = dfs.compute_hitter_dk_points(wave, matchup_probability, schedule_df).set_index("key_mlbam")
+
+    assert pd.isna(result.loc[1, "game_pk"])
+    assert pd.isna(result.loc[1, "game_datetime"])
+
+
 def test_compute_hitter_dk_points_excludes_team_with_no_game_today():
     wave = pd.DataFrame([_wave_row(1, "BOS", 20, 20, 1.5, 0.70)])
     matchup_probability = pd.DataFrame([{"key_mlbam": 1, "Matchup_Hit_Probability": 0.84}])
@@ -136,6 +164,31 @@ def test_compute_pitcher_dk_points_negative_windowed_fip_clipped_to_zero_er():
     raw_fip = (13 * 0 + 3 * 0 - 2 * 15.0) / 9 + config.FIP_CONSTANT
     assert raw_fip < 0  # confirms this fixture actually exercises the clip
     assert result.loc[99, "Expected_ER"] == 0
+
+
+def test_compute_pitcher_dk_points_carries_game_pk_and_game_datetime():
+    pave = pd.DataFrame([{"key_mlbam": 99, "name_first": "Test", "name_last": "Pitcher", "PAVE": 0.24}])
+    pitcher_form_df = pd.DataFrame([_pitcher_form_row(99, starts=5, ip=30, k9=9.0, bb9=3.0, hr9=1.2, ip_per_start=6.0)])
+    schedule_df = pd.DataFrame([{
+        "team": "NYY", "opponent": "BOS", "is_home": False, "probable_pitcher_key_mlbam": 99,
+        "game_pk": 824651, "game_datetime": "2026-07-31T18:20:00Z",
+    }])
+
+    result = dfs.compute_pitcher_dk_points(pave, pitcher_form_df, schedule_df).set_index("key_mlbam")
+
+    assert result.loc[99, "game_pk"] == 824651
+    assert result.loc[99, "game_datetime"] == "2026-07-31T18:20:00Z"
+
+
+def test_compute_pitcher_dk_points_missing_game_pk_column_is_na_not_a_crash():
+    pave = pd.DataFrame([{"key_mlbam": 99, "name_first": "Test", "name_last": "Pitcher", "PAVE": 0.24}])
+    pitcher_form_df = pd.DataFrame([_pitcher_form_row(99, starts=5, ip=30, k9=9.0, bb9=3.0, hr9=1.2, ip_per_start=6.0)])
+    schedule_df = pd.DataFrame([{"team": "NYY", "opponent": "BOS", "is_home": False, "probable_pitcher_key_mlbam": 99}])
+
+    result = dfs.compute_pitcher_dk_points(pave, pitcher_form_df, schedule_df).set_index("key_mlbam")
+
+    assert pd.isna(result.loc[99, "game_pk"])
+    assert pd.isna(result.loc[99, "game_datetime"])
 
 
 def test_compute_pitcher_dk_points_excludes_below_min_starts():

@@ -68,6 +68,42 @@ def test_compute_park_factors_uses_final_combined_score_not_every_pitch():
     assert park_factors.loc["B", "Park_Factor"] == pytest.approx(1.0)
 
 
+def test_compute_offensive_edge_exposes_team_bases_pg_alongside_offensive_edge():
+    # Four teams so the opponent's bases-allowed comes from a THIRD team,
+    # not a mirror of the row's own team - a two-team fixture would make
+    # offensive_edge trivially cancel to 0 regardless of correctness. Every
+    # team's only prior game means every rolling window (weights sum to
+    # 1.0) collapses to that single shifted value, so both team_bases_pg
+    # and offensive_edge are hand-verifiable exactly.
+    data = pd.DataFrame([
+        # game 1: A (away) hits a single (1 base); B (home) hits a double (2 bases).
+        {"game_id": 1, "inning_topbot": "Top", "away_team": "A", "home_team": "B", "events": "single"},
+        {"game_id": 1, "inning_topbot": "Bot", "away_team": "A", "home_team": "B", "events": "double"},
+        # game 2: C (away) hits a single (1 base); D (home) hits a triple (3 bases) -
+        # so C's only prior game shows C allowed 3 bases.
+        {"game_id": 2, "inning_topbot": "Top", "away_team": "C", "home_team": "D", "events": "single"},
+        {"game_id": 2, "inning_topbot": "Bot", "away_team": "C", "home_team": "D", "events": "triple"},
+        # game 3: A's next game, now against C (their prior-game stats from
+        # games 1/2 carry in via the shift; today's own events don't matter).
+        {"game_id": 3, "inning_topbot": "Top", "away_team": "A", "home_team": "C", "events": "field_out"},
+        {"game_id": 3, "inning_topbot": "Bot", "away_team": "A", "home_team": "C", "events": "field_out"},
+    ])
+
+    result = teams.compute_offensive_edge(data).set_index("team")
+
+    assert list(teams.compute_offensive_edge(data).columns) == ["team", "offensive_edge", "team_bases_pg"]
+    # A's only prior game (game 1) gave A 1 base (single).
+    assert result.loc["A", "team_bases_pg"] == pytest.approx(1.0)
+    # C's only prior game (game 2) gave C 1 base (single).
+    assert result.loc["C", "team_bases_pg"] == pytest.approx(1.0)
+    # offensive_edge(A, game 3) = team_bases_pg(A) - opponent C's own
+    # bases-allowed-per-game (C allowed 3 bases, the triple, in game 2).
+    assert result.loc["A", "offensive_edge"] == pytest.approx(1.0 - 3.0)
+    # offensive_edge(C, game 3) = team_bases_pg(C) - opponent A's own
+    # bases-allowed-per-game (A allowed 2 bases, the double, in game 1).
+    assert result.loc["C", "offensive_edge"] == pytest.approx(1.0 - 2.0)
+
+
 def test_compute_home_run_stats_no_home_runs_yet_does_not_crash():
     # Regression test: early in a season (or any short as-of-date history
     # slice - see dfs_backtest.assemble_ml_training_rows, which replays
