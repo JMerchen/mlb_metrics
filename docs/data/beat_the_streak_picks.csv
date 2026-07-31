@@ -1,5 +1,7 @@
 date,rank,name,predicted_probability,actual_hit,status
-2026-07-30,1,Nick Gonzales,0.8387634209023416,,pending
+2026-07-31,1,Jeremy Peña,0.9018132662901226,,pending
+2026-07-31,2,Nick Gonzales,0.8502861990950226,,pending
+2026-07-30,1,Nick Gonzales,0.8387634209023416,1.0,hit
 2026-07-29,1,Jeremy Peña,0.9003571428571429,1.0,hit
 2026-07-29,2,CJ Abrams,0.7762453826186793,0.0,miss
 2026-07-28,1,Jeremy Peña,0.8988455551712211,1.0,hit
