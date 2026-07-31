@@ -18,7 +18,14 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          # nfl_data_py 0.3.3 pins pandas<2.0, which has no prebuilt wheel
+          # for 3.12 - pip falls back to building the pandas 1.5.3 sdist
+          # from source, which fails on a modern setuptools/pip toolchain
+          # (ModuleNotFoundError: pkg_resources during the build). 3.11 has
+          # a real prebuilt pandas 1.5.3 wheel, so this sidesteps the build
+          # entirely - diagnostic-only choice, does not affect the main
+          # pipeline's Python 3.12 requirement anywhere else.
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
