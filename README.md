@@ -1235,6 +1235,64 @@ immediately after `scripts/build_dfs_rankings.py`), writing
 `docs/data/dfs_salary_pool.csv` (every eligible player considered, for
 transparency into what the optimizer actually saw).
 
+### Slate filtering (client-side, `docs/dfs_solver.js`, 2026-07-31)
+
+Real DraftKings contests split today's full slate into sub-contests by
+game start time (early/main/night) - the daily batch lineup above always
+optimizes across every game today, so it's never actually the optimal
+lineup for any single real contest. The Optimal Lineup tab now lets a
+user pick which games are in their contest (checkboxes, sorted by start
+time) and click Analyze to re-solve the lineup for just those games -
+entirely in the browser, using `docs/data/dfs_salary_pool.csv` (already
+published daily), no new backend or network call.
+
+**Why a hand-rolled JS solver, not a WASM/JS MILP library**: PapaParse is
+the only third-party JS dependency anywhere on this site, matching its
+no-build-step philosophy. `dfs_optimizer.py`'s own module docstring
+already argues the problem is exactly solvable without PuLP: since every
+pool row has exactly one `dk_slot`, the DraftKings roster slots are
+disjoint groups, so this is a bounded multiple-choice knapsack per slot
+merged over one shared salary budget - and since `Estimated_Salary` is
+always a multiple of $100 (`config.DFS_ESTIMATED_SALARY_ROUND_TO`), the
+budget dimension has only 501 discrete states at the $50,000 cap. A
+per-slot dynamic-programming table (exact, not a heuristic - see
+`docs/dfs_solver.js`'s own module docstring for the full algorithm)
+merged via a knapsack-of-knapsacks solves a real slate in single-digit
+milliseconds. Verified exact against the Python MILP directly: a randomized parity fuzz
+test (`tests/test_dfs_solver_js.py`, 31 cases: 20 random pools, 10 with a
+`min_salary` floor, 1 with a two-way-player collision) compares
+`docs/dfs_solver.js`'s `solveOptimalLineupDP` against
+`dfs_optimizer.solve_optimal_lineup` on the same random pools (including a
+`min_salary` floor and a two-way-player collision) and asserts the two
+exact solvers agree on both feasibility and the achievable objective
+total - plus a direct production check: "select every game, objective
+mean" reproduces the real `optimal_lineup.csv` exactly on live data.
+
+The one thing the DP can't express natively is `dfs_optimizer.py`'s
+cross-group "at most once per player" constraint for a true two-way
+player (present in both the hitter and pitcher pools). Handled by solving
+once per combination of "which single role stays available" when
+duplicates exist (still exact, since each combination is itself an exact
+solve and the real pool essentially never has more than one two-way
+player) - more than 3 simultaneous duplicates (should not happen in
+practice) falls back to keeping each duplicated player's higher-value row
+and flags the result as approximate rather than an exponential blow-up.
+**Known v1 limitation, matching `roster_positions.py`'s own documented
+gap**: this DP depends on the disjoint-slot-groups property - if this
+project ever implements real DraftKings multi-position eligibility (a
+player legally fillable at more than one slot), the Python MILP already
+generalizes to that case for free, while this DP would need to be
+revisited.
+
+Each game's real start time (`game_datetime`, threaded from
+`schedule.normalize_schedule` through `dfs.py`'s
+`HITTER_DFS_COLUMNS`/`PITCHER_DFS_COLUMNS` into `dfs_salary_pool.csv`) is
+the raw statsapi `gameDate` field - confirmed live via the `Debug
+statsapi` GitHub Actions workflow (run 30661418977, 2026-07-31): a bare,
+unconditional sibling key of `gamePk`/`teams`/`status` on every raw game
+dict, no extra hydrate needed, same as every other field path
+`schedule.py` already trusts in production.
+
 ### Ceiling / volatility signal (`dfs_ceiling.py`)
 
 GPP (tournament) DFS lineups are won by boom/spike-game players, not

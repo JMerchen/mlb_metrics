@@ -24,6 +24,16 @@ a completed one, so `normalize_schedule_games`'s "Final" status handling is
 a reasonable extrapolation, not itself live-confirmed. Verify it the same
 way (a `Debug statsapi` run against a known past date) before trusting
 Automated Game Picks' resolution in production.
+
+`normalize_schedule`'s `game_datetime` field (each game's real start time,
+for the dashboard's slate-filtering feature - see dfs_optimizer.py's
+module docstring) is confirmed via a live run of `scripts/debug_statsapi.py`
+(the `Debug statsapi` GitHub Actions workflow, run 30661418977, 2026-07-31):
+the raw game dict's `gameDate` field ("2026-07-31T18:20:00Z") is a bare,
+unconditional sibling key of `gamePk`/`teams`/`status` - no extra
+`hydrate` parameter needed. Still defensively `.get()` rather than
+subscripted (returns `None`, never raises, if a future response ever
+omits it).
 """
 
 import datetime
@@ -64,12 +74,18 @@ TEAM_ID_TO_ABBREV = {
 def normalize_schedule(raw: dict, fallback_date=None) -> pd.DataFrame:
     """Parse a raw `statsapi.get("schedule", ...)` response into one row per
     team per game: [date, team, opponent, probable_pitcher_key_mlbam,
-    game_pk, is_home]. `probable_pitcher_key_mlbam` is null if not yet
-    announced. Games for a team whose numeric ID isn't in TEAM_ID_TO_ABBREV
-    are skipped rather than guessed at. V1 simplification: a doubleheader
-    only keeps a team's first game of the day, not both - for a game-level
-    view that keeps every game (needed to resolve Automated Game Picks),
-    see normalize_schedule_games instead.
+    game_pk, game_datetime, is_home]. `probable_pitcher_key_mlbam` is null
+    if not yet announced. `game_datetime` is the raw `gameDate` ISO-8601
+    string as-is (NOT parsed into a pd.Timestamp - a tz-aware Timestamp
+    round-trips through CSV as "2026-07-31 23:05:00+00:00", which isn't
+    reliably parseable by JS `new Date()`, while the raw API string is) -
+    see this module's docstring for why this field isn't yet live-confirmed
+    like the others here, and null if absent, never raising. Games for a
+    team whose numeric ID isn't in TEAM_ID_TO_ABBREV are skipped rather
+    than guessed at. V1 simplification: a doubleheader only keeps a team's
+    first game of the day, not both - for a game-level view that keeps
+    every game (needed to resolve Automated Game Picks), see
+    normalize_schedule_games instead.
     """
     rows = []
     seen_teams = set()
@@ -100,12 +116,16 @@ def normalize_schedule(raw: dict, fallback_date=None) -> pd.DataFrame:
                         "opponent": opponent_abbrev,
                         "probable_pitcher_key_mlbam": probable.get("id"),
                         "game_pk": game.get("gamePk"),
+                        "game_datetime": game.get("gameDate"),
                         "is_home": is_home,
                     }
                 )
 
     return pd.DataFrame(
-        rows, columns=["date", "team", "opponent", "probable_pitcher_key_mlbam", "game_pk", "is_home"]
+        rows,
+        columns=[
+            "date", "team", "opponent", "probable_pitcher_key_mlbam", "game_pk", "game_datetime", "is_home",
+        ],
     )
 
 
