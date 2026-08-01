@@ -1357,3 +1357,57 @@ NFL_DFS_SALARY_CAP = 50000
 # (reused unmodified, not re-implemented - see nfl_dfs_optimizer.py's
 # module docstring).
 NFL_DFS_ROSTER_SLOTS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "FLEX": 1, "DST": 1}
+
+# --- NFL DFS: Backtesting (nfl_dfs_backtest.py) ---
+#
+# Real no-lookahead backtest (nfl_dfs_backtest.backtest_nfl_dfs_projections,
+# scripts/backtest_nfl_dfs_rankings.py) against the FULL real backfilled
+# history (config.NFL_HISTORICAL_SEASONS, 2016-2025, data/raw/nfl/) - MAE
+# and correlation of each projection against that week's REAL realized DK
+# points, vs. a naive "always predict this whole sample's own mean"
+# baseline (same go/no-go bar every other signal in this project uses:
+# beat naive baseline AND a simpler heuristic by a real margin):
+#
+#   QB:    MAE 6.6609 vs. naive-baseline MAE 7.8183 (14.8% better), correlation 0.514 (n=6,358)
+#   Skill: MAE 4.6839 vs. naive-baseline MAE 6.1814 (24.2% better), correlation 0.585 (n=50,988)
+#   DST:   MAE 4.7188 vs. naive-baseline MAE 4.6271 (2.0% WORSE),  correlation 0.101 (n=5,490)
+#
+# QB/Skill also beat a simpler "flat, unweighted full-season-average"
+# heuristic (config.NFL_QB_WINDOWS/NFL_SKILL_WINDOWS temporarily set to
+# [(None, 1.0)] for the comparison run): QB correlation 0.499 vs. flat's
+# 0.485 (MAE 6.6365 vs. 6.7259); Skill correlation 0.596 vs. flat's 0.578
+# (MAE 4.5122 vs. 4.6339) - real but modest margins, confirming the
+# RECENCY-WEIGHTING mechanism itself (not just "having any player-form
+# signal at all") adds real value, on top of already beating the naive
+# baseline by a wide margin. This validates the MECHANISM (Phase 2's
+# rolling-window blend genuinely predicts real outcomes better than
+# guessing or a flat average) - it does NOT validate the specific
+# NFL_QB_WINDOWS/NFL_SKILL_WINDOWS weight VALUES (0.20/0.30/0.50), which
+# remain an unrecalibrated first-pass placeholder (see those constants'
+# own docstrings) - no full grid search over weight combinations has been
+# run.
+#
+# DST is an honest NEGATIVE result: neither the windowed blend nor the
+# flat heuristic (DST flat: correlation 0.049, MAE 4.5429 - also worse
+# than naive) beats simply guessing the sample mean. nfl_dst.py's
+# points-allowed-bucket-via-windowed-mean approximation (see that
+# module's own docstring) is the most likely culprit - DST scoring is
+# dominated by the highly game-specific, high-variance points-allowed
+# category, which a multi-week rolling average of a notoriously noisy
+# stat doesn't predict well. DST_Points ships (the optimizer/roster need
+# a DST scoring column to function structurally) but should be treated
+# as UNVALIDATED/weak, not a trustworthy signal - flagged here and in
+# README rather than hidden, same "report honestly either way" standard
+# every other backtest in this project holds to.
+#
+# NFL_MATCHUP_WEIGHT is NOT exercised by this backtest at all -
+# nfl_matchup.py's opponent-adjustment ratio is not wired into
+# nfl_dfs.compute_qb_dk_points/compute_skill_dk_points's formula (stays a
+# separate, standalone, informational-only module - see nfl_matchup.py's
+# own docstring), so there is nothing to grid-search yet; it already
+# ships at 0.0 regardless, per the "ship conservatively" reasoning in
+# that module's docstring.
+#
+# Reproduce: `python scripts/backtest_nfl_dfs_rankings.py` (needs
+# data/raw/nfl/{weekly,team_stats,schedules}_<season>.parquet - see
+# scripts/fetch_nfl_historical.py).

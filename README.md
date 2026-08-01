@@ -1768,8 +1768,33 @@ by-construction optimum (`tests/test_nfl_dfs_optimizer.py` and
 `docs/nfl_dfs_solver.test.js`), wired into CI alongside the MLB solver's
 own Node tests.
 
-Not yet built: backtesting, the weekly-cadence pipeline/workflows, or
-the `docs/nfl.html` dashboard page itself.
+**Real backtest results** (`nfl_dfs_backtest.py`, `scripts/backtest_nfl_dfs_rankings.py`,
+no-lookahead, against the full real backfilled 2016-2025 history in
+`data/raw/nfl/`): reported honestly either way, same standard every other
+signal in this project is held to.
+
+- **QB**: MAE 6.66 vs. a naive "always predict the sample mean" baseline's
+  7.82 (14.8% better), correlation 0.514, n=6,358.
+- **Skill (RB/WR/TE)**: MAE 4.68 vs. naive baseline's 6.18 (24.2% better),
+  correlation 0.585, n=50,988.
+- **DST**: MAE 4.72 vs. naive baseline's 4.63 - **worse than naive**,
+  correlation 0.101 (essentially no signal), n=5,490.
+
+QB/Skill also beat a simpler "flat, unweighted season-average" heuristic
+(real but modest margins) - real evidence the RECENCY-WEIGHTING mechanism
+itself adds value, not just "having a player-form signal at all." This
+validates Phase 2's windowing MECHANISM; it does NOT validate the
+specific window weight VALUES (still an unrecalibrated placeholder - see
+`config.NFL_QB_WINDOWS`'s docstring).
+
+**DST is an honest negative result** - `nfl_dst.py`'s points-allowed-
+bucket-via-windowed-mean approximation doesn't beat guessing. `DST_Points`
+still ships (the optimizer/roster need it structurally), but should be
+treated as unvalidated/weak, not a trustworthy signal - see
+`config.py`'s NFL Backtesting section for the full numbers and reasoning.
+
+Not yet built: the weekly-cadence pipeline/workflows, or the
+`docs/nfl.html` dashboard page itself.
 
 ## Running
 
