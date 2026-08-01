@@ -1699,9 +1699,23 @@ calendar-count window the wrong shape). **Window weights are an
 unvalidated first-pass placeholder** - no NFL backtest exists yet to
 calibrate them against (see the Backtesting phase below, not yet built).
 
-Not yet built: matchup adjustment, DK scoring/DST/estimated salary, the
-FLEX-slot optimizer, backtesting, the weekly-cadence pipeline/workflows,
-or the `docs/nfl.html` dashboard page itself.
+Matchup adjustment (`nfl_teams.py`/`nfl_matchup.py`) is a direct
+structural port of `pitcher_matchup.py`'s opponent-offense ratio, applied
+in the opposite direction: a QB/RB/WR/TE's projection is scaled by the
+opponent DEFENSE's real recent pass/rush-yards-allowed rate
+(`nfl_teams.compute_defense_rolling_rates`, derived from `weekly`'s own
+`opponent_team` column - no separate schedule join needed for "what was
+allowed"), looked up via that player's **upcoming** opponent from the
+current week's schedule (`nfl_matchup.attach_matchup_adjustment`) -
+never a defense's own last-played opponent, the same leakage bug class
+`teams.compute_offensive_edge` had to be split apart to avoid for MLB.
+Like `PITCHER_MATCHUP_OFFENSE_WEIGHT`, `config.NFL_MATCHUP_WEIGHT`
+**defaults to 0.0** (informational-only) until a real NFL backtest earns
+a nonzero live weight.
+
+Not yet built: DK scoring/DST/estimated salary, the FLEX-slot optimizer,
+backtesting, the weekly-cadence pipeline/workflows, or the
+`docs/nfl.html` dashboard page itself.
 
 ## Running
 

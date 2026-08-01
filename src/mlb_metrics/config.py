@@ -1223,3 +1223,40 @@ NFL_SKILL_WINDOWS = [
 # already uses for DFS_PITCHER_MIN_STARTS.
 NFL_QB_MIN_GAMES = 3
 NFL_SKILL_MIN_GAMES = 3
+
+# --- NFL DFS: Team Defense & Matchup (nfl_teams.py, nfl_matchup.py) ---
+#
+# Games-back windows for nfl_teams.compute_defense_rolling_rates - same
+# "games-back, not day-count" reasoning as NFL_QB_WINDOWS/NFL_SKILL_WINDOWS
+# above. PLACEHOLDER WEIGHTS, not yet backtested (see those constants'
+# docstring - same caveat applies here).
+NFL_DEFENSE_WINDOWS = [
+    (None, 0.20),
+    (8, 0.30),
+    (4, 0.50),
+]
+
+# nfl_matchup.compute_opponent_adjustment_ratio's clip range, mirroring
+# PITCHER_MATCHUP_OFFENSE_CLIP - keeps one extreme-outlier defense (a
+# 2-game sample allowing an absurd amount) from blowing up an offensive
+# player's projection. NFL_MATCHUP_DEFENSE_CLIP is the mirror-image clip
+# for the OTHER adjustment direction - a DST's own projected points,
+# scaled by how good the OPPOSING OFFENSE is (nfl_dst.py, Phase 4) - not
+# consumed yet, defined here alongside its sibling since both are the
+# same "matchup ratio" concept applied in opposite directions.
+NFL_MATCHUP_OFFENSE_CLIP = (0.85, 1.15)
+NFL_MATCHUP_DEFENSE_CLIP = (0.85, 1.15)
+
+# Mirrors PITCHER_MATCHUP_WEIGHT_GRID - grid searched by a future
+# nfl_dfs_backtest.py go/no-go run (Phase 7), not yet run for NFL.
+NFL_MATCHUP_WEIGHT_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
+
+# Ships at 0.0 (informational-only, exactly reproduces the unadjusted
+# heuristic) for the live 2026 season regardless of what a historical-
+# seasons backtest shows, same "ship conservatively" reasoning as
+# PITCHER_MATCHUP_OFFENSE_WEIGHT - NFL's smaller in-season sample and
+# real year-over-year discontinuity (coaching/scheme/roster turnover)
+# make this an even harder bar to clear than pitcher matchup's already-
+# marginal real result. Revisit only after nfl_dfs_backtest.py
+# (Phase 7) reports a real, non-noise margin over weight=0.0.
+NFL_MATCHUP_WEIGHT = 0.0
