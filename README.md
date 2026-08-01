@@ -1743,6 +1743,13 @@ $100-round-to approach, same "never a real DraftKings price, always
 guessed (see `config.py`'s NFL Estimated Salary section for the exact
 numbers).
 
+`nfl_roster_positions.py` maps `position` directly to a DK Classic slot
+(QB/RB/WR/TE) - simpler than MLB's `roster_positions.py`, which needs its
+own MLB Stats API fetch since Statcast carries no fielding-position data
+at all; nflreadpy's tables already carry `position` directly. Every
+RB/WR/TE gets TWO eligibility rows (their own slot AND `"FLEX"`) so
+Phase 6's optimizer can handle FLEX with zero new constraint types.
+
 Not yet built: the FLEX-slot optimizer, backtesting, the weekly-cadence
 pipeline/workflows, or the `docs/nfl.html` dashboard page itself.
 
