@@ -1260,3 +1260,91 @@ NFL_MATCHUP_WEIGHT_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
 # marginal real result. Revisit only after nfl_dfs_backtest.py
 # (Phase 7) reports a real, non-noise margin over weight=0.0.
 NFL_MATCHUP_WEIGHT = 0.0
+
+# --- NFL DFS: DK Scoring (nfl_dfs.py) ---
+#
+# DraftKings NFL Classic scoring, confirmed live via web search against
+# DraftKings' own real rules (not from memory) - see README's NFL DFS
+# section for the citation. Unlike this project's MLB scoring, which had
+# to approximate hit-type value from a linear signal, DK's real NFL
+# categories map directly onto the per-game rate stats nfl_passing.py/
+# nfl_rush_rec.py already compute - the actual risk here is entirely
+# upstream in those windowed projections, not in this formula.
+NFL_DK_PASS_YARD_POINTS = 0.04  # 1 point per 25 passing yards
+NFL_DK_PASS_TD_POINTS = 4
+NFL_DK_INTERCEPTION_POINTS = -1  # interception thrown
+NFL_DK_RUSH_YARD_POINTS = 0.1  # 1 point per 10 rushing yards
+NFL_DK_RUSH_TD_POINTS = 6
+NFL_DK_RECEIVING_YARD_POINTS = 0.1  # 1 point per 10 receiving yards
+NFL_DK_RECEIVING_TD_POINTS = 6
+NFL_DK_RECEPTION_POINTS = 1  # full PPR
+NFL_DK_FUMBLE_LOST_POINTS = -1
+NFL_DK_2PT_POINTS = 2  # 2-point conversion, pass/run/catch all score the same
+NFL_DK_100_YARD_BONUS = 3  # 100+ rushing OR receiving yards in a game (each counted separately)
+NFL_DK_300_PASS_YARD_BONUS = 3  # 300+ passing yards in a game
+
+# --- NFL DFS: DST Scoring (nfl_dst.py) ---
+#
+# Also confirmed live via web search - see README's NFL DFS section.
+NFL_DK_DST_SACK_POINTS = 1
+NFL_DK_DST_INT_POINTS = 2
+NFL_DK_DST_FUMBLE_REC_POINTS = 2
+NFL_DK_DST_TD_POINTS = 6  # defensive/return TD of any kind - see nfl_dst.py for which real columns feed this
+NFL_DK_DST_SAFETY_POINTS = 2
+NFL_DK_DST_BLOCKED_KICK_POINTS = 2
+
+# Points-allowed bucket table: list of (upper_bound_inclusive, dk_points),
+# checked in order, last entry's upper_bound is None ("and above"). Real
+# DK rule: points allowed only counts points surrendered while the DST
+# unit is on the field (a pick-six is charged to the DEFENSE that allowed
+# it, not this team's own DST) - nflreadpy's per-game final score (used
+# by nfl_dst.compute_points_allowed) doesn't make that distinction, a
+# known, documented v1 simplification (the same category of approximation
+# as nfl_dst.py's windowed-mean-through-the-bucket-table choice below).
+NFL_DK_DST_POINTS_ALLOWED_BUCKETS = [
+    (0, 10),
+    (6, 7),
+    (13, 4),
+    (20, 1),
+    (27, 0),
+    (34, -1),
+    (None, -4),
+]
+
+# --- NFL DFS: Estimated Salary (nfl_estimated_salary.py) ---
+#
+# Direct structural port of DFS_ESTIMATED_SALARY_*/DFS_REFERENCE_*_POINTS
+# - see estimated_salary.py's module docstring for the full "why a shared
+# reference range, not per-position" reasoning (equally true here: QB and
+# skill-position DK scoring span very different raw point ranges, so a
+# per-position-group scale would misprice a point the same way the old
+# MLB hitter/pitcher split did).
+#
+# Reference range computed from REAL 2025 season DK_Points_QB/
+# DK_Points_Skill/DK_Points_DST (nfl_dfs.compute_qb_dk_points/
+# compute_skill_dk_points, nfl_dst.compute_dst_dk_points, run against
+# nflreadpy's real load_player_stats/load_team_stats/load_schedules([2025])
+# - full-season blended rates, not a single week's snapshot), pooling all
+# three position groups together, real min/max (not a percentile) - same
+# convention DFS_REFERENCE_MIN/MAX_POINTS used. QB: -0.33 to 24.52
+# (n=81). Skill (RB/WR/TE): -0.05 to 27.89 (n=530). DST: -1.51 to 12.33
+# (n=32). Unlike the MLB reference range, this one includes real negative
+# values (a low-efficiency QB's interceptions, or a DST's worst
+# points-allowed bucket, can both go net negative) - compute_estimated_salary's
+# linear scaling handles that fine, same as any other range.
+NFL_DFS_REFERENCE_MIN_POINTS = -1.5066
+NFL_DFS_REFERENCE_MAX_POINTS = 27.8924
+# DraftKings NFL Classic salary cap is $50,000 and $100 increments -
+# confirmed live via web search (README's NFL DFS section has the
+# citation), same real cap MLB Classic uses. The FLOOR is NOT an
+# official DK table (DraftKings doesn't publish one - prices float
+# algorithmically), same honesty caveat DFS_ESTIMATED_SALARY_FLOOR's own
+# docstring makes for its ceiling: this is an estimate informed by real
+# evidence (live search found real Week 1 2026 DST salaries topping out
+# at $3,500, suggesting a real floor at or below $3,000), reusing MLB's
+# own $2,000-$11,000 range as the defensible starting point since NFL's
+# real floor/ceiling aren't independently confirmed.
+NFL_DFS_ESTIMATED_SALARY_FLOOR = 2000
+NFL_DFS_ESTIMATED_SALARY_CEILING = 11000
+NFL_DFS_ESTIMATED_SALARY_ROUND_TO = 100
+NFL_DFS_SALARY_CAP = 50000

@@ -1713,9 +1713,38 @@ Like `PITCHER_MATCHUP_OFFENSE_WEIGHT`, `config.NFL_MATCHUP_WEIGHT`
 **defaults to 0.0** (informational-only) until a real NFL backtest earns
 a nonzero live weight.
 
-Not yet built: DK scoring/DST/estimated salary, the FLEX-slot optimizer,
-backtesting, the weekly-cadence pipeline/workflows, or the
-`docs/nfl.html` dashboard page itself.
+DK scoring (`nfl_dfs.py` for QB/RB/WR/TE, `nfl_dst.py` for DST) uses
+DraftKings' real NFL Classic scoring rules, confirmed live via web
+search against DraftKings' own published rules (not from memory):
+0.04 pt/passing yard, 4 pts/passing TD, -1 pt/interception thrown, 0.1
+pt/rushing or receiving yard, 6 pts/rushing or receiving TD, 1 pt/
+reception (full PPR), -1 pt/fumble lost, 2 pts/2-point conversion, +3
+bonus for 100+ rushing OR receiving yards in a game (scored separately -
+a player can clear both), +3 bonus for 300+ passing yards in a game.
+DST: 1 pt/sack, 2 pts/interception, 2 pts/fumble recovery, 2 pts/safety,
+2 pts/blocked kick, 6 pts/defensive or return TD, plus a real non-linear
+points-allowed bucket table (0 pts allowed = +10, down to 35+ pts
+allowed = -4). DK NFL Classic uses a 9-slot roster (QB/RB/RB/WR/WR/WR/
+TE/FLEX/DST) and a $50,000 salary cap - same real cap MLB Classic uses,
+confirmed independently, not assumed just because MLB happens to match.
+
+The 100+/300+ yardage bonuses are step functions, not linear in a
+windowed mean - v1 scores them as an expected value (each player's own
+historical rate of clearing the threshold, blended across the same
+games-back windows as the rest of their projection), the same pattern
+`hitters.compute_wave` already uses to turn a hit rate into a
+probability. Flagged unvalidated pending a real NFL backtest (Phase 7).
+
+`nfl_estimated_salary.py` is a direct structural port of
+`estimated_salary.py` - same shared reference-point-range/floor/ceiling/
+$100-round-to approach, same "never a real DraftKings price, always
+`Estimated_Salary`" disclaimer. Reference range is computed from real
+2025-season DK_Points_QB/DK_Points_Skill/DK_Points_DST output, not
+guessed (see `config.py`'s NFL Estimated Salary section for the exact
+numbers).
+
+Not yet built: the FLEX-slot optimizer, backtesting, the weekly-cadence
+pipeline/workflows, or the `docs/nfl.html` dashboard page itself.
 
 ## Running
 
