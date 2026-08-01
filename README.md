@@ -1690,10 +1690,18 @@ stats, so an append-and-dedupe pattern isn't safe), while completed
 historical seasons are fetched once via `scripts/fetch_nfl_historical.py`
 (`config.NFL_HISTORICAL_SEASONS`) and left alone.
 
-Not yet built: rolling-window player form, matchup adjustment, DK
-scoring/DST/estimated salary, the FLEX-slot optimizer, backtesting, the
-weekly-cadence pipeline/workflows, or the `docs/nfl.html` dashboard page
-itself.
+Player form is a **games-back rolling blend** (`nfl_passing.py` for QBs,
+`nfl_rush_rec.py` for RB/WR/TE together, since both share DK's FLEX pool)
+across `config.NFL_QB_WINDOWS`/`NFL_SKILL_WINDOWS` - games-back, not
+day-count, unlike the MLB pipeline's `WAVE_WINDOWS` (see
+`config.NFL_QB_WINDOWS`'s docstring for why NFL's bye weeks make a
+calendar-count window the wrong shape). **Window weights are an
+unvalidated first-pass placeholder** - no NFL backtest exists yet to
+calibrate them against (see the Backtesting phase below, not yet built).
+
+Not yet built: matchup adjustment, DK scoring/DST/estimated salary, the
+FLEX-slot optimizer, backtesting, the weekly-cadence pipeline/workflows,
+or the `docs/nfl.html` dashboard page itself.
 
 ## Running
 

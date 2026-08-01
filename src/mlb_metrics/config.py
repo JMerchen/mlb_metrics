@@ -1187,3 +1187,39 @@ NFL_SEASON = 2026
 NFL_HISTORICAL_SEASONS = list(range(2016, 2026))
 
 NFL_RAW_DATA_DIR = "data/raw/nfl"
+
+# --- NFL DFS: Rolling-Window Player Form (nfl_passing.py, nfl_rush_rec.py) ---
+#
+# Games-back windows, NOT day-count ones like MLB's WAVE_WINDOWS - NFL's
+# weekly cadence and bye weeks make a calendar-count window silently
+# under-sample (see the plan's "windows are game-count, not
+# calendar-count" guiding principle, and config.LINEUP_WINDOW_GAMES's own
+# precedent for the same reasoning). nfl_data.fetch_weekly_stats already
+# omits any week a player didn't play, so ranking a player's own rows by
+# recency and slicing the most recent N naturally skips byes/inactives
+# without extra detection logic.
+#
+# PLACEHOLDER WEIGHTS - unlike WAVE_WINDOWS, these have NOT been
+# backtested yet (no NFL backtest exists until Phase 7). Shaped the same
+# way (heavier weight on the most recent window, a full-history anchor
+# for stability) as a reasonable starting point only - expect these to
+# change once nfl_dfs_backtest.py runs for real.
+NFL_QB_WINDOWS = [
+    (None, 0.20),
+    (8, 0.30),
+    (4, 0.50),
+]
+NFL_SKILL_WINDOWS = [
+    (None, 0.20),
+    (8, 0.30),
+    (4, 0.50),
+]
+
+# Small-sample qualifiers, same role as DFS_PITCHER_MIN_STARTS - a QB/
+# skill player with only 1-2 games of history has per-game rates that are
+# close to pure noise (especially anything TD-rate-based). Gating on
+# these is left to the DK-scoring consumer (nfl_dfs.py, Phase 4), same
+# "expose the count, let the caller qualify" pattern pitcher_form.py
+# already uses for DFS_PITCHER_MIN_STARTS.
+NFL_QB_MIN_GAMES = 3
+NFL_SKILL_MIN_GAMES = 3
