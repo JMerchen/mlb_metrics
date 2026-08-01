@@ -23,7 +23,14 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install nflreadpy pandas
+          # pyarrow is needed for polars' .to_pandas() (nflreadpy returns
+          # Polars DataFrames by default) - confirmed via real run
+          # 30674712701, which got as far as printing
+          # get_current_season()/get_current_week() before failing on the
+          # first .to_pandas() call. Already a top-level dependency in
+          # requirements.txt for Statcast persistence, so no new package
+          # family for the eventual nfl_data.py module either.
+          pip install nflreadpy pandas pyarrow
 
       - name: Print nflreadpy response shapes
         run: |
