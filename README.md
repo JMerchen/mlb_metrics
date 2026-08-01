@@ -1667,6 +1667,34 @@ showing the broken behavior even after building the fix.
 `"DK_Points"` (mean) for library/test backward compatibility - only the
 daily workflow's invocation changed.
 
+## NFL DFS (`docs/nfl.html`, in progress)
+
+An NFL analog of the MLB DFS pipeline above, mirroring its two core
+ideas - rolling windows (not season averages) for player form, and
+matchup analysis (opponent defense quality) - adapted for DraftKings NFL
+Classic contests. Built incrementally; this section fills in with real
+numbers/behavior as each phase lands.
+
+Data source is `nflreadpy` (the actively-maintained nflverse successor to
+the now-deprecated `nfl_data_py` - see its GitHub README for the
+deprecation notice). Real field names/shapes referenced anywhere in this
+project's NFL modules are confirmed live via
+`scripts/debug_nfl_data.py`/`.github/workflows/debug_nfl_data.yml`, not
+assumed - see `nfl_data.py`'s module docstring for the specific run cited.
+
+Raw per-season tables (`weekly`, `schedules`, `injuries`,
+`rosters_weekly`, `team_stats`) persist to `data/raw/nfl/*.parquet` via
+`nfl_data.py`, one file per table per season - the current season's file
+is overwritten wholesale on each fetch (nflverse retroactively corrects
+stats, so an append-and-dedupe pattern isn't safe), while completed
+historical seasons are fetched once via `scripts/fetch_nfl_historical.py`
+(`config.NFL_HISTORICAL_SEASONS`) and left alone.
+
+Not yet built: rolling-window player form, matchup adjustment, DK
+scoring/DST/estimated salary, the FLEX-slot optimizer, backtesting, the
+weekly-cadence pipeline/workflows, or the `docs/nfl.html` dashboard page
+itself.
+
 ## Running
 
 ```

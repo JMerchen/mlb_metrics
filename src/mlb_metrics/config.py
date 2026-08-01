@@ -1160,3 +1160,30 @@ COUNTED_EVENTS = [
     "walk",
     "hit_by_pitch",
 ]
+
+# --- NFL DFS: Data & Season Boundaries (nfl_data.py) ---
+#
+# The season this pipeline targets for live use. As of this build
+# (2026-08-01), the 2026 NFL season has not started yet (kickoff is early
+# September) - `nflreadpy.get_current_season()` itself confirmed live as
+# returning 2025 (the last real completed season) with
+# `get_current_week()` returning 22, i.e. the whole 2025 season including
+# playoffs is done and there is no "upcoming week" to compute at all
+# during the offseason. This is a real, expected gap for
+# nfl_schedule.py's later "determine the upcoming week" logic to handle
+# honestly, not a bug to engineer around here.
+NFL_SEASON = 2026
+
+# Real seasons backfilled by scripts/fetch_nfl_historical.py so
+# nfl_dfs_backtest.py has real fuel immediately rather than waiting on
+# the live season to slowly accumulate weeks - confirmed live that
+# nflreadpy's real usable historical depth goes back to at least 1999
+# (a 1999 load_player_stats call returned 16,839 real rows). Deliberately
+# NOT that entire depth for this list - modern-era seasons (roster
+# construction, offensive scheme, injury-report practices) are more
+# representative of what a live 2026 projection will actually face than
+# 1999-era football is, and a 10-season window already gives Phase 7's
+# backtest a real sample in the tens of thousands of player-weeks.
+NFL_HISTORICAL_SEASONS = list(range(2016, 2026))
+
+NFL_RAW_DATA_DIR = "data/raw/nfl"
