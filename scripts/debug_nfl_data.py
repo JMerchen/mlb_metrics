@@ -39,7 +39,11 @@ def _print_frame(label, df, n_rows=1):
 
 
 def main():
-    season = int(sys.argv[1]) if len(sys.argv) > 1 else datetime.date.today().year - 1
+    # The workflow always passes the season input as an argument, an empty
+    # string when the workflow_dispatch field is left blank - not simply
+    # absent - so a truthiness check is needed, not just len(sys.argv).
+    arg = sys.argv[1] if len(sys.argv) > 1 else ""
+    season = int(arg) if arg else datetime.date.today().year - 1
 
     import nflreadpy as nfl
 
