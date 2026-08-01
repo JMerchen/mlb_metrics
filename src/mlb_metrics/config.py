@@ -1348,3 +1348,12 @@ NFL_DFS_ESTIMATED_SALARY_FLOOR = 2000
 NFL_DFS_ESTIMATED_SALARY_CEILING = 11000
 NFL_DFS_ESTIMATED_SALARY_ROUND_TO = 100
 NFL_DFS_SALARY_CAP = 50000
+
+# --- NFL DFS: Optimizer (nfl_dfs_optimizer.py) ---
+#
+# DK Classic's real 9-slot roster - confirmed live via web search
+# alongside the salary cap above (README's NFL DFS section has the
+# citation). Sums to 9. Passed directly to dfs_optimizer.solve_optimal_lineup
+# (reused unmodified, not re-implemented - see nfl_dfs_optimizer.py's
+# module docstring).
+NFL_DFS_ROSTER_SLOTS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "FLEX": 1, "DST": 1}

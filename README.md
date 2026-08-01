@@ -1750,8 +1750,26 @@ at all; nflreadpy's tables already carry `position` directly. Every
 RB/WR/TE gets TWO eligibility rows (their own slot AND `"FLEX"`) so
 Phase 6's optimizer can handle FLEX with zero new constraint types.
 
-Not yet built: the FLEX-slot optimizer, backtesting, the weekly-cadence
-pipeline/workflows, or the `docs/nfl.html` dashboard page itself.
+The FLEX-slot optimizer needs almost no new logic. `nfl_dfs_optimizer.py`
+reuses `dfs_optimizer.solve_optimal_lineup` UNMODIFIED - its existing
+"cap any duplicated `key_mlbam` group at <= 1 selected row" MILP
+constraint (originally built for the rare MLB two-way-player edge case)
+now handles FLEX for real, since every RB/WR/TE gets two pool rows (own
+slot + `"FLEX"`, same identity) from `nfl_roster_positions.py`. The
+client-side `docs/nfl_dfs_solver.js` (a JS dynamic-programming
+re-implementation, mirroring `docs/dfs_solver.js`) can't express that
+same cross-group constraint directly, so it instead solves the ordinary
+NO-FLEX problem exactly 3 times - once per hypothesis of which position
+absorbs the extra slot (`{RB:3,WR:3,TE:1}` / `{RB:2,WR:4,TE:1}` /
+`{RB:2,WR:3,TE:2}`) - and keeps the best, an exact (not approximate)
+reduction since DK scores a FLEX RB identically to an RB-slot RB. Both
+solvers verified against the same hand-constructed pool with a known-
+by-construction optimum (`tests/test_nfl_dfs_optimizer.py` and
+`docs/nfl_dfs_solver.test.js`), wired into CI alongside the MLB solver's
+own Node tests.
+
+Not yet built: backtesting, the weekly-cadence pipeline/workflows, or
+the `docs/nfl.html` dashboard page itself.
 
 ## Running
 

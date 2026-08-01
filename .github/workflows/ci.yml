@@ -24,6 +24,9 @@ jobs:
       - name: Run dfs_solver.js unit tests
         run: node --test docs/dfs_solver.test.js
 
+      - name: Run nfl_dfs_solver.js unit tests
+        run: node --test docs/nfl_dfs_solver.test.js
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
