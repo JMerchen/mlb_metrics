@@ -1,4 +1,4 @@
-name: Debug nfl_data_py
+name: Debug nflreadpy
 
 on:
   workflow_dispatch:
@@ -23,8 +23,8 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install nfl_data_py pandas
+          pip install nflreadpy pandas
 
-      - name: Print nfl_data_py response shapes
+      - name: Print nflreadpy response shapes
         run: |
           python scripts/debug_nfl_data.py "${{ inputs.season }}"
