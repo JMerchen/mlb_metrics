@@ -135,6 +135,19 @@ BACKTEST_TOP_N = 5
 # reducing pick coverage (still >=1 pick on all 42 backtested days).
 HITTER_MIN_PROBABILITY = 0.7
 
+# Gate applied INSTEAD OF the three-column JOINT_PROBABILITY_GATE_COLUMNS
+# bar above, on any day predictions.select_picks ranks by the validated
+# hit-probability model (config.HITTER_HIT_PROBABILITY_MODEL_PATH,
+# pipeline.run's top rank_metric tier) rather than the Approach/
+# Matchup_Approach heuristic - see select_picks's own docstring for why
+# this REPLACES rather than adds to the three-column gate (Model_Hit_
+# Probability is a learned function of those same three signals plus more
+# raw ingredients, so requiring all four independently would be circular).
+# PLACEHOLDER - to be replaced with the real value derived from
+# scripts/backtest_selection_rule.py's selection-level backtest (see that
+# script's docstring) before this ships live.
+HITTER_MIN_MODEL_PROBABILITY = 0.5
+
 # predictions.select_picks excludes a hitter whose most recent completed
 # game (hitters.compute_last_game_dates's Last_Game_Date) is more than this
 # many days before the pick date - a career-long PA total and season-long
@@ -153,7 +166,22 @@ HITTER_MAX_DAYS_SINCE_LAST_GAME = 5
 # work" stats, rather than being diluted by history logged under old logic
 # forever. Bump this string whenever select_picks' qualifier or ranking
 # logic meaningfully changes.
-HITTER_MODEL_VERSION = "v2-matchup-qualifier"
+#
+# v3: pipeline.run() gained a new top rank_metric tier, Model_Hit_Probability
+# (the validated logistic regression - see dfs_ml.py's module docstring),
+# used whenever the model artifact loads AND schedule/matchup data is
+# available; falls back to v2's Matchup_Approach, then Approach, exactly
+# as before. Fixes a real bug: Approach/Matchup_Approach are both heavily
+# recency-weighted toward a batter's last 10-30 days (GAME_HIT_PROB_WINDOWS/
+# WAVE_WINDOWS), so a currently-hot batter dominated the ranking regardless
+# of today's actual matchup - Matchup_Hit_Probability's multiplicative
+# adjustment wasn't a big enough swing to overturn that. Model_Hit_Probability
+# treats matchup ingredients (starter_PAVE, Bullpen_PAVE, Park_Factor,
+# platoon-adjusted WAVE) as independent learned features instead. Also
+# replaces (not adds to) the probability gate on days this tier is active -
+# see HITTER_MIN_MODEL_PROBABILITY. Real selection-level backtest numbers:
+# see that constant's own docstring.
+HITTER_MODEL_VERSION = "v3-model-primary"
 
 # Beat the Streak Tracker (dashboard): a batter is only "recommended" if
 # evaluation._combined_probability (the mean of whichever of

@@ -158,6 +158,11 @@ def _minimal_outputs():
             "key_mlbam": 1, "name_first": "Test", "name_last": "PlayerOne", "team": "NYY",
             "PA_L": 0, "PA_R": 40, "WAVE": 0.33, "probability_L": 0, "probability_R": 0.9, "probability": 0.9,
             "Game_Hit_Probability": 0.85, "Consistency": -0.1, "Approach": 0.72, "Expected_Bases": 1.5,
+            # dfs_ml.build_hitter_features (pipeline.run's Model_Hit_Probability
+            # tier) requires every dfs_ml.HITTER_FEATURE_COLUMNS column to
+            # exist on wave - a real outputs["wave"] always carries these
+            # (hitters.compute_extended_dk_rates), so this fixture must too.
+            "Expected_BB": 0.3, "Expected_HBP": 0.05, "Expected_RBI": 0.5,
         },
     ])
     # PAVE/PAVE_PLUS chosen so this fixture's Matchup_Hit_Probability clears
@@ -190,6 +195,11 @@ def test_run_logs_matchup_probability_when_schedule_fetch_succeeds(monkeypatch, 
     monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", lambda date: schedule_df)
     # Scoped to hitter-pick metrics only - game picks get their own tests below.
     monkeypatch.setattr(pipeline.schedule, "fetch_todays_games", lambda date: pd.DataFrame())
+    # This test is scoped to the Matchup_Approach tier specifically (its
+    # own docstring/name), not the Model_Hit_Probability tier - force the
+    # fallback so it stays deterministic rather than depending on the real
+    # committed model artifact's arbitrary output on this tiny fixture.
+    monkeypatch.setattr(pipeline.dfs_ml, "predict_hitter_hit_probability", lambda features: pd.DataFrame(columns=["key_mlbam", "Model_Hit_Probability"]))
 
     predictions_dir = str(tmp_path / "predictions")
     pipeline.run(
@@ -243,6 +253,11 @@ def test_run_excludes_pick_with_a_bad_matchup_even_with_strong_probability_and_g
     }])
     monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", lambda date: schedule_df)
     monkeypatch.setattr(pipeline.schedule, "fetch_todays_games", lambda date: pd.DataFrame())
+    # Scoped to the Matchup_Approach tier specifically (its own docstring/
+    # name) - force the fallback so it stays deterministic rather than
+    # depending on the real committed model artifact's arbitrary output on
+    # this tiny fixture.
+    monkeypatch.setattr(pipeline.dfs_ml, "predict_hitter_hit_probability", lambda features: pd.DataFrame(columns=["key_mlbam", "Model_Hit_Probability"]))
 
     predictions_dir = str(tmp_path / "predictions")
     pipeline.run(
@@ -255,6 +270,46 @@ def test_run_excludes_pick_with_a_bad_matchup_even_with_strong_probability_and_g
 
     logged = pd.read_csv(f"{predictions_dir}/predictions.csv")
     assert logged.empty
+
+
+def test_run_ranks_by_model_hit_probability_when_model_predicts(monkeypatch, tmp_path):
+    """When dfs_ml.predict_hitter_hit_probability returns a real (non-empty)
+    prediction, pipeline.run's top rank_metric tier is Model_Hit_Probability -
+    the logged pick carries a real Model_Hit_Probability value and the
+    current (bumped) model_version, and predicted_probability/metric still
+    report Game_Hit_Probability regardless of which tier ranked the day."""
+    monkeypatch.setattr(pipeline.data, "fetch_statcast_range", lambda start, end: pd.DataFrame({
+        "game_date": pd.to_datetime([]), "batter": [], "events": [],
+    }))
+    monkeypatch.setattr(pipeline.data, "persist_raw_statcast", lambda df, raw_dir, season: df)
+    monkeypatch.setattr(pipeline, "compute_outputs", lambda df: _minimal_outputs())
+    monkeypatch.setattr(
+        pipeline.dfs_ml, "predict_hitter_hit_probability",
+        lambda features: pd.DataFrame({"key_mlbam": features["key_mlbam"], "Model_Hit_Probability": [0.9] * len(features)}),
+    )
+
+    schedule_df = pd.DataFrame([{
+        "date": pd.Timestamp("2026-06-20"), "team": "NYY", "opponent": "BOS",
+        "probable_pitcher_key_mlbam": 999, "is_home": True,
+    }])
+    monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", lambda date: schedule_df)
+    monkeypatch.setattr(pipeline.schedule, "fetch_todays_games", lambda date: pd.DataFrame())
+
+    predictions_dir = str(tmp_path / "predictions")
+    pipeline.run(
+        datetime.date(2026, 6, 20),
+        raw_dir=str(tmp_path / "raw"),
+        output_dir=str(tmp_path / "out"),
+        predictions_dir=predictions_dir,
+        persist_raw=False,
+    )
+
+    logged = pd.read_csv(f"{predictions_dir}/predictions.csv")
+    assert len(logged) == 1
+    assert logged.loc[0, "Model_Hit_Probability"] == pytest.approx(0.9)
+    assert logged.loc[0, "predicted_probability"] == pytest.approx(0.85)  # still Game_Hit_Probability
+    assert logged.loc[0, "metric"] == "Game_Hit_Probability"
+    assert logged.loc[0, "model_version"] == pipeline.config.HITTER_MODEL_VERSION
 
 
 def test_run_continues_without_matchup_when_schedule_fetch_fails(monkeypatch, tmp_path):

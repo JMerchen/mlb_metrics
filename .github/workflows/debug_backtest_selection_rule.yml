@@ -1,0 +1,42 @@
+name: Debug backtest_selection_rule
+
+# One-off runner for scripts/backtest_selection_rule.py against real
+# persisted Statcast + the real committed model artifact. Exists because
+# the interactive dev sandbox's egress policy blocks github.com, which
+# pybaseball's chadwick_register() (data.get_name_register(), needed by
+# pipeline.compute_outputs) fetches from - this workflow runner has normal
+# internet access, mirroring the debug_statsapi.yml/debug_nfl_data.yml
+# precedent for exactly this situation.
+
+on:
+  workflow_dispatch:
+    inputs:
+      holdout_dates:
+        description: "Number of trailing dates to backtest (defaults to config.ML_FINAL_HOLDOUT_DATES)"
+        required: false
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run selection-rule backtest
+        run: |
+          if [ -n "${{ inputs.holdout_dates }}" ]; then
+            python scripts/backtest_selection_rule.py --holdout-dates "${{ inputs.holdout_dates }}"
+          else
+            python scripts/backtest_selection_rule.py
+          fi

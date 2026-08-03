@@ -487,25 +487,73 @@ beats BOTH bars it has to clear - log_loss 0.6757 vs. naive-baseline
 0.6815 vs. the existing `Game_Hit_Probability` heuristic's 0.6901 (ROC AUC
 0.575 vs. 0.564 for the heuristic alone) - a modest but real edge, not a
 dramatic one. Saved to `config.HITTER_HIT_PROBABILITY_MODEL_PATH`
-(`data/models/hitter_hit_probability_model.joblib`) as an **artifact
-only** - it is NOT wired into `dfs_ml.apply_ml_overrides` or
-`predictions.select_picks`. Whether/how it ever feeds live Beat the
-Streak picks (a promising design: use this model's probability as an
-additional gate to narrow the field, then rank survivors by the existing
-`Approach`/`Matchup_Approach` metric - reusing the tuned heuristic for
-fine-grained ordering rather than replacing it outright) is a separate,
-later decision, to be validated with its own backtest before going live.
+(`data/models/hitter_hit_probability_model.joblib`).
 
-### Dashboard: Hit Streaks and Model Odds (the model's first live use)
+This model is now the PRIMARY ranking/gating signal for the official Beat
+the Streak picks (`predictions.select_picks`, see the next section) -
+`Approach`/`Matchup_Approach` are matchup-blind to a batter's own recent
+hot/cold form dominating the ranking (both `Game_Hit_Probability` and
+`probability` are recency-weighted ~32.5%/27.5% toward the last 10/30
+days), while this model treats the same matchup ingredients
+(`starter_PAVE`, `Bullpen_PAVE`, `Park_Factor`, platoon-adjusted
+`WAVE_L`/`WAVE_R`) as independent learned features rather than one
+hand-picked multiplier on top of a recency-heavy base rate. It replaces
+the old design floated here (using the model as an extra gate ahead of an
+unchanged `Approach`/`Matchup_Approach` ranking) - once the model
+independently learns from the same raw ingredients, ranking by
+`Approach`/`Matchup_Approach` on top of it would just reintroduce the same
+recency bias downstream.
+`.github/workflows/ml_training_update.yml`'s weekly retrain job now
+includes `scripts/train_hitter_hit_model.py` alongside the three DFS/
+age-curve models, so this artifact stays current instead of being frozen
+at its original training date.
 
-The Beat the Streak section of the dashboard now has three subtabs:
-**Our Picks** (unchanged - the official picks above, still driven entirely
-by `predictions.select_picks`'s `Approach`/`Matchup_Approach` heuristic),
-**Hit Streaks**, and **Model Odds**. The latter two are new, purely
-**informational** views - neither touches `predictions.select_picks`,
-`pipeline.run`, or what gets logged to `predictions.csv`; they're an
-additional, independent lens alongside the official picks, not a
-replacement for them.
+### Wiring the model into Our Picks (`pipeline.py`, `predictions.py`)
+
+`pipeline.run()` now resolves `predictions.select_picks`'s `rank_metric`
+through a three-tier fallback, computed once per day right after
+`Matchup_Approach`:
+
+1. **`Model_Hit_Probability`** - the model artifact loads and produces a
+   real prediction for today's schedule (`dfs_ml.predict_hitter_hit_probability`
+   returns non-empty).
+2. **`Matchup_Approach`** - schedule/matchup data is available but the
+   model didn't load/predict (today's prior behavior).
+3. **`Approach`** - no schedule at all (today's prior behavior, unchanged).
+
+On a `Model_Hit_Probability` day, `select_picks`'s gate REPLACES the old
+three-column `probability`/`Game_Hit_Probability`/`Matchup_Hit_Probability`
+gate rather than adding to it (`config.HITTER_MIN_MODEL_PROBABILITY`) -
+since the model is a learned function of those same three signals plus 14
+more raw ingredients, requiring all four to independently clear the same
+bar would be circular. `predicted_probability`/`probability`/
+`Matchup_Hit_Probability`/`Model_Hit_Probability` are all still logged to
+`predictions.csv` on every pick regardless of which tier ranked it, so
+downstream evaluation/backtesting can always see the full picture. See
+`config.HITTER_MIN_MODEL_PROBABILITY`'s own docstring for the real
+selection-level backtest (`scripts/backtest_selection_rule.py`) that
+derived its value - a genuinely different question from the calibration
+numbers above, since it asks whether ranking-and-gating by the model at
+the top-N granularity `select_picks` actually uses beats
+`Matchup_Approach`, not just whether the model is well-calibrated on
+average.
+
+Deliberately NOT bundled into this change: `evaluation.py`'s separate
+"recommended" gate (`_combined_probability`/`config.DAILY_PICK_MIN_PROBABILITY`,
+which decides which of the top-ranked candidates become the 0-2 picks
+shown as "Our Picks" on the dashboard) still runs unchanged on top of
+whichever tier ranked the pool - a deliberate fast-follow, not part of
+this change (landing two new uncalibrated thresholds in one change would
+make a good or bad outcome hard to attribute to either).
+
+### Dashboard: Hit Streaks and Model Odds
+
+The Beat the Streak section of the dashboard has three subtabs: **Our
+Picks** (the official picks above - now driven by the model on days it's
+available, per the wiring above, falling back to
+`Approach`/`Matchup_Approach` otherwise), **Hit Streaks**, and **Model
+Odds**. The latter two remain purely **informational** views alongside the
+official picks.
 
 - **Hit Streaks** (`hitters.compute_current_hit_streaks`,
   `scripts/build_hit_streaks.py` → `docs/data/hit_streaks.csv`): each
@@ -513,12 +561,14 @@ replacement for them.
   streak, counted from real completed Statcast events. A batter whose most
   recent game is more than `config.HIT_STREAK_RECENT_DAYS` (5) days old is
   excluded entirely, so an inactive/injured player's frozen streak doesn't
-  crowd out who's actually hot right now.
+  crowd out who's actually hot right now. Never consulted by
+  `predictions.select_picks` - informational only, same as before.
 - **Model Odds** (`dfs_ml.predict_hitter_hit_probability`,
   `scripts/build_hitter_hit_predictions.py` → `docs/data/hitter_hit_predictions.csv`):
   today's PA-qualified hitters ranked by the trained hit-probability
-  model's own predicted probability - the model's first live use, run
-  daily alongside the DFS rankings.
+  model's own predicted probability - the same model now driving Our
+  Picks on days it's available, shown here independently for anyone who
+  wants to see the model's own full ranking rather than just its top pick.
 
 Both scripts follow `build_dfs_rankings.py`'s resilience conventions
 (missing input/model/failed schedule fetch leaves yesterday's output in

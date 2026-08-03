@@ -17,7 +17,7 @@ from mlb_metrics import config, helpers
 
 PREDICTION_COLUMNS = [
     "date", "key_mlbam", "name", "rank", "predicted_probability", "metric",
-    "probability", "Matchup_Hit_Probability", "actual_hit", "at_bats", "model_version",
+    "probability", "Matchup_Hit_Probability", "Model_Hit_Probability", "actual_hit", "at_bats", "model_version",
 ]
 
 # Tag applied (via the migration guards in append_predictions/resolve_predictions)
@@ -40,6 +40,7 @@ def select_picks(
     metric: str = "Game_Hit_Probability",
     rank_metric: str | None = None,
     min_probability: float = config.HITTER_MIN_PROBABILITY,
+    min_model_probability: float = config.HITTER_MIN_MODEL_PROBABILITY,
     max_avg_batting_order: float = config.LINEUP_TOP_HALF_MAX_SLOT,
     min_start_rate: float = config.LINEUP_MIN_START_RATE,
     max_days_since_last_game: int = config.HITTER_MAX_DAYS_SINCE_LAST_GAME,
@@ -70,6 +71,19 @@ def select_picks(
     merged in too (see pipeline.run), a good matchup is required just as
     much as the other two. Column-gated like the lineup qualifiers, so a
     missing column is simply skipped, not a required 0.
+
+    If `Model_Hit_Probability` is present on `hitters` (see pipeline.run's
+    top ranking tier), it REPLACES the JOINT_PROBABILITY_GATE_COLUMNS gate
+    entirely rather than being added as a fourth required column - it's a
+    learned function OF `probability`/`Game_Hit_Probability`/
+    `Matchup_Hit_Probability` (plus more raw ingredients, see
+    dfs_ml.HITTER_FEATURE_COLUMNS), so requiring all four to independently
+    clear the same bar would be circular, unlike the original three-column
+    gate where each genuinely captures a different failure mode. Gated on
+    `min_model_probability` (config.HITTER_MIN_MODEL_PROBABILITY) instead -
+    a separately-derived threshold, since Model_Hit_Probability's
+    calibrated scale doesn't match `HITTER_MIN_PROBABILITY`'s (see that
+    constant's own docstring for the real backtest behind it).
 
     `max_days_since_last_game` excludes a hitter whose most recent completed
     game (`hitters.compute_last_game_dates`'s `Last_Game_Date`) is more than
@@ -111,9 +125,12 @@ def select_picks(
         qualified = qualified[days_since_last_game <= max_days_since_last_game]
     if teams_playing_today is not None:
         qualified = qualified[qualified["team"].isin(teams_playing_today)]
-    for gate_column in JOINT_PROBABILITY_GATE_COLUMNS:
-        if gate_column in qualified.columns:
-            qualified = qualified[qualified[gate_column] >= min_probability]
+    if "Model_Hit_Probability" in qualified.columns:
+        qualified = qualified[qualified["Model_Hit_Probability"] >= min_model_probability]
+    else:
+        for gate_column in JOINT_PROBABILITY_GATE_COLUMNS:
+            if gate_column in qualified.columns:
+                qualified = qualified[qualified[gate_column] >= min_probability]
 
     picks = qualified.sort_values(rank_metric or metric, ascending=False).head(top_n).reset_index(drop=True)
 
@@ -122,7 +139,7 @@ def select_picks(
     picks["name"] = picks["name_first"].fillna("").astype(str) + " " + picks["name_last"].fillna("").astype(str)
     picks["predicted_probability"] = picks[metric]
     picks["metric"] = metric
-    for optional_column in ("probability", "Matchup_Hit_Probability"):
+    for optional_column in ("probability", "Matchup_Hit_Probability", "Model_Hit_Probability"):
         if optional_column not in picks.columns:
             picks[optional_column] = pd.NA
     picks["actual_hit"] = pd.NA

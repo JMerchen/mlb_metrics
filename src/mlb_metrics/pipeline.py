@@ -19,7 +19,7 @@ import os
 import pandas as pd
 
 from mlb_metrics import (
-    config, data, evaluation, game_evaluation, game_picks, game_predictions,
+    config, data, dfs_ml, evaluation, game_evaluation, game_picks, game_predictions,
     hitters, lineup, matchup, pitchers, predictions, schedule, teams,
 )
 
@@ -207,16 +207,19 @@ def run(
         # (fetch succeeded, zero games today) correctly excludes every pick.
         teams_playing_today = set(schedule_df["team"]) if schedule_df is not None else None
 
-        # On a normal day (schedule fetch succeeded), pick from a table that
-        # also carries Matchup_Hit_Probability - select_picks' joint gate
-        # then requires a good matchup just as much as probability/
-        # Game_Hit_Probability, and rank_metric="Matchup_Approach" (the
-        # three-way product) ranks the qualified pool by all three signals
-        # combined. Falls back to Approach-only ranking (no matchup
-        # qualifier at all) when schedule/matchup data isn't available -
-        # same resilience pattern as the schedule_df fetch itself.
-        # predicted_probability/metric logged still reflect Game_Hit_Probability
-        # either way, so DAILY_PICK_MIN_PROBABILITY's calibration is unaffected.
+        # Three-tier rank_metric, best available first: Model_Hit_Probability
+        # (the validated logistic regression, config.HITTER_HIT_PROBABILITY_MODEL_PATH -
+        # treats matchup ingredients as independent learned features instead
+        # of one hand-picked multiplier, see dfs_ml.py's module docstring) >
+        # Matchup_Approach (Approach * Matchup_Hit_Probability, today's
+        # previous top tier) > Approach (own-form-only, no schedule at all).
+        # Each tier falls back to the next on a missing input - a failed
+        # schedule fetch, or a model artifact that hasn't been trained/fails
+        # to load (dfs_ml.predict_hitter_hit_probability's own "return empty,
+        # never raise" contract) - same resilience pattern as the schedule_df
+        # fetch itself. predicted_probability/metric logged still reflect
+        # Game_Hit_Probability regardless of tier, so DAILY_PICK_MIN_PROBABILITY's
+        # calibration is unaffected by which tier ranked a given day.
         pick_pool = outputs["wave"]
         rank_metric = "Approach"
         if schedule_df is not None and not schedule_df.empty:
@@ -226,6 +229,19 @@ def run(
             pick_pool = outputs["wave"].merge(matchup_probability, on="key_mlbam", how="inner")
             pick_pool["Matchup_Approach"] = pick_pool["Approach"] * pick_pool["Matchup_Hit_Probability"]
             rank_metric = "Matchup_Approach"
+
+            hitter_features = dfs_ml.build_hitter_features(
+                outputs["wave"], outputs["pave"], outputs["confidence"], schedule_df, matchup_probability
+            )
+            model_predictions = dfs_ml.predict_hitter_hit_probability(hitter_features)
+            if not model_predictions.empty:
+                # Guard on non-empty BEFORE merging: select_picks' gate is
+                # column-gated, so merging in an all-NaN Model_Hit_Probability
+                # column on a day the model fails to load would make every
+                # row fail the gate instead of correctly falling back to the
+                # Matchup_Approach tier above.
+                pick_pool = pick_pool.merge(model_predictions, on="key_mlbam", how="left")
+                rank_metric = "Model_Hit_Probability"
 
             write_probable_pitchers_export(schedule_df, outputs["pave"], output_dir)
 
