@@ -1,6 +1,8 @@
 date,rank,name,predicted_probability,actual_hit,status
-2026-08-03,1,Jeremy Peña,0.909344362745098,,pending
-2026-08-03,2,Freddie Freeman,0.8374530481318974,,pending
+2026-08-04,1,Jeremy Peña,0.9115054390054388,,pending
+2026-08-04,2,Freddie Freeman,0.8378763175230566,,pending
+2026-08-03,1,Jeremy Peña,0.909344362745098,1.0,hit
+2026-08-03,2,Freddie Freeman,0.8374530481318974,1.0,hit
 2026-08-02,1,Jeremy Peña,0.9070263364779874,1.0,hit
 2026-08-02,2,Freddie Freeman,0.8370219404186796,1.0,hit
 2026-08-01,1,Jeremy Peña,0.9045264681555004,1.0,hit
