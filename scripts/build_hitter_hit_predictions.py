@@ -4,9 +4,14 @@ ranked by dfs_ml's trained hit-probability model
 for the dashboard's Beat the Streak "Model Odds" subtab.
 
 Purely informational - this is an ADDITIONAL, independent view alongside
-the official Beat the Streak picks (predictions.select_picks's
-Approach/Matchup_Approach heuristic, unchanged). It does not gate, filter,
-or replace anything in the live pick-selection path.
+the official Beat the Streak picks. It does not gate, filter, or replace
+anything in the live pick-selection path.
+
+Excludes hitters who haven't played within config.HITTER_MAX_DAYS_SINCE_
+LAST_GAME days (same gate predictions.select_picks/build_dfs_rankings.py
+already apply) - a season-long injured-list stay can leave season-to-date
+rates looking strong even though the hitter hasn't actually played in
+weeks, and this tab has no other way to notice that.
 
 Mirrors scripts/build_dfs_rankings.py's resilience shape exactly (same
 wave.csv/pave.csv/confidence.csv + schedule-fetch dependency, same
@@ -44,6 +49,9 @@ def main():
         return
 
     wave = pd.read_csv(wave_path)
+    # pd.read_csv doesn't auto-parse dates - needed as a real datetime below
+    # for the days-since-last-game recency check, not a plain string.
+    wave["Last_Game_Date"] = pd.to_datetime(wave["Last_Game_Date"])
     pave = pd.read_csv(pave_path)
     confidence = pd.read_csv(confidence_path)
 
@@ -60,11 +68,28 @@ def main():
 
     matchup_probability = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df)
     hitter_features = dfs_ml.build_hitter_features(wave, pave, confidence, schedule_df, matchup_probability)
-    hitter_features = hitter_features.merge(wave[["key_mlbam", "name_first", "name_last", "team"]], on="key_mlbam", how="left")
+    hitter_features = hitter_features.merge(
+        wave[["key_mlbam", "name_first", "name_last", "team", "Last_Game_Date"]], on="key_mlbam", how="left"
+    )
     hitter_features = hitter_features.merge(schedule_df[["team", "opponent"]].drop_duplicates(), on="team", how="left")
 
     hitter_features["Total_PA"] = hitter_features["PA_L"] + hitter_features["PA_R"]
     qualified = hitter_features[hitter_features["Total_PA"] >= config.BACKTEST_MIN_PLATE_APPEARANCES].copy()
+
+    # Exclude hitters who haven't played recently (e.g. a season-long
+    # injured-list stay) even though their season rates still qualify them
+    # on PA alone - same gate predictions.select_picks/build_dfs_rankings.py
+    # already apply, reused via the same config constant rather than
+    # duplicated. A hitter with no completed event at all (Last_Game_Date
+    # NaT) is kept, not excluded - can't be stale if they've never played,
+    # though in practice the PA floor above already means every remaining
+    # row has a real game history. Without this, a long-injured hitter
+    # whose season-long WAVE/Game_Hit_Probability still looks strong could
+    # top the Model Odds tab despite not having played in weeks.
+    days_since_last_game = (pd.Timestamp(args.as_of_date) - qualified["Last_Game_Date"]).dt.days
+    qualified = qualified[
+        qualified["Last_Game_Date"].isna() | (days_since_last_game <= config.HITTER_MAX_DAYS_SINCE_LAST_GAME)
+    ].drop(columns=["Last_Game_Date"])
 
     predictions = dfs_ml.predict_hitter_hit_probability(qualified)
     if predictions.empty:
