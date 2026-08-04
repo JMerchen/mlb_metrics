@@ -1,1 +1,2 @@
-
+- `debug_nfl_data.py` - one-off diagnostic for nflreadpy's real response shapes (bootstrapping tool, see its own docstring for its delete-once-confirmed lifecycle).
+- `fetch_nfl_historical.py` - one-time/manual backfill of complete past NFL seasons to `data/raw/nfl/*.parquet` (see `config.NFL_HISTORICAL_SEASONS`).

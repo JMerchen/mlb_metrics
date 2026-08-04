@@ -135,6 +135,19 @@ BACKTEST_TOP_N = 5
 # reducing pick coverage (still >=1 pick on all 42 backtested days).
 HITTER_MIN_PROBABILITY = 0.7
 
+# Gate applied INSTEAD OF the three-column JOINT_PROBABILITY_GATE_COLUMNS
+# bar above, on any day predictions.select_picks ranks by the validated
+# hit-probability model (config.HITTER_HIT_PROBABILITY_MODEL_PATH,
+# pipeline.run's top rank_metric tier) rather than the Approach/
+# Matchup_Approach heuristic - see select_picks's own docstring for why
+# this REPLACES rather than adds to the three-column gate (Model_Hit_
+# Probability is a learned function of those same three signals plus more
+# raw ingredients, so requiring all four independently would be circular).
+# PLACEHOLDER - to be replaced with the real value derived from
+# scripts/backtest_selection_rule.py's selection-level backtest (see that
+# script's docstring) before this ships live.
+HITTER_MIN_MODEL_PROBABILITY = 0.5
+
 # predictions.select_picks excludes a hitter whose most recent completed
 # game (hitters.compute_last_game_dates's Last_Game_Date) is more than this
 # many days before the pick date - a career-long PA total and season-long
@@ -153,7 +166,22 @@ HITTER_MAX_DAYS_SINCE_LAST_GAME = 5
 # work" stats, rather than being diluted by history logged under old logic
 # forever. Bump this string whenever select_picks' qualifier or ranking
 # logic meaningfully changes.
-HITTER_MODEL_VERSION = "v2-matchup-qualifier"
+#
+# v3: pipeline.run() gained a new top rank_metric tier, Model_Hit_Probability
+# (the validated logistic regression - see dfs_ml.py's module docstring),
+# used whenever the model artifact loads AND schedule/matchup data is
+# available; falls back to v2's Matchup_Approach, then Approach, exactly
+# as before. Fixes a real bug: Approach/Matchup_Approach are both heavily
+# recency-weighted toward a batter's last 10-30 days (GAME_HIT_PROB_WINDOWS/
+# WAVE_WINDOWS), so a currently-hot batter dominated the ranking regardless
+# of today's actual matchup - Matchup_Hit_Probability's multiplicative
+# adjustment wasn't a big enough swing to overturn that. Model_Hit_Probability
+# treats matchup ingredients (starter_PAVE, Bullpen_PAVE, Park_Factor,
+# platoon-adjusted WAVE) as independent learned features instead. Also
+# replaces (not adds to) the probability gate on days this tier is active -
+# see HITTER_MIN_MODEL_PROBABILITY. Real selection-level backtest numbers:
+# see that constant's own docstring.
+HITTER_MODEL_VERSION = "v3-model-primary"
 
 # Beat the Streak Tracker (dashboard): a batter is only "recommended" if
 # evaluation._combined_probability (the mean of whichever of
@@ -1160,3 +1188,254 @@ COUNTED_EVENTS = [
     "walk",
     "hit_by_pitch",
 ]
+
+# --- NFL DFS: Data & Season Boundaries (nfl_data.py) ---
+#
+# The season this pipeline targets for live use. As of this build
+# (2026-08-01), the 2026 NFL season has not started yet (kickoff is early
+# September) - `nflreadpy.get_current_season()` itself confirmed live as
+# returning 2025 (the last real completed season) with
+# `get_current_week()` returning 22, i.e. the whole 2025 season including
+# playoffs is done and there is no "upcoming week" to compute at all
+# during the offseason. This is a real, expected gap for
+# nfl_schedule.py's later "determine the upcoming week" logic to handle
+# honestly, not a bug to engineer around here.
+NFL_SEASON = 2026
+
+# Real seasons backfilled by scripts/fetch_nfl_historical.py so
+# nfl_dfs_backtest.py has real fuel immediately rather than waiting on
+# the live season to slowly accumulate weeks - confirmed live that
+# nflreadpy's real usable historical depth goes back to at least 1999
+# (a 1999 load_player_stats call returned 16,839 real rows). Deliberately
+# NOT that entire depth for this list - modern-era seasons (roster
+# construction, offensive scheme, injury-report practices) are more
+# representative of what a live 2026 projection will actually face than
+# 1999-era football is, and a 10-season window already gives Phase 7's
+# backtest a real sample in the tens of thousands of player-weeks.
+NFL_HISTORICAL_SEASONS = list(range(2016, 2026))
+
+NFL_RAW_DATA_DIR = "data/raw/nfl"
+
+# --- NFL DFS: Rolling-Window Player Form (nfl_passing.py, nfl_rush_rec.py) ---
+#
+# Games-back windows, NOT day-count ones like MLB's WAVE_WINDOWS - NFL's
+# weekly cadence and bye weeks make a calendar-count window silently
+# under-sample (see the plan's "windows are game-count, not
+# calendar-count" guiding principle, and config.LINEUP_WINDOW_GAMES's own
+# precedent for the same reasoning). nfl_data.fetch_weekly_stats already
+# omits any week a player didn't play, so ranking a player's own rows by
+# recency and slicing the most recent N naturally skips byes/inactives
+# without extra detection logic.
+#
+# PLACEHOLDER WEIGHTS - unlike WAVE_WINDOWS, these have NOT been
+# backtested yet (no NFL backtest exists until Phase 7). Shaped the same
+# way (heavier weight on the most recent window, a full-history anchor
+# for stability) as a reasonable starting point only - expect these to
+# change once nfl_dfs_backtest.py runs for real.
+NFL_QB_WINDOWS = [
+    (None, 0.20),
+    (8, 0.30),
+    (4, 0.50),
+]
+NFL_SKILL_WINDOWS = [
+    (None, 0.20),
+    (8, 0.30),
+    (4, 0.50),
+]
+
+# Small-sample qualifiers, same role as DFS_PITCHER_MIN_STARTS - a QB/
+# skill player with only 1-2 games of history has per-game rates that are
+# close to pure noise (especially anything TD-rate-based). Gating on
+# these is left to the DK-scoring consumer (nfl_dfs.py, Phase 4), same
+# "expose the count, let the caller qualify" pattern pitcher_form.py
+# already uses for DFS_PITCHER_MIN_STARTS.
+NFL_QB_MIN_GAMES = 3
+NFL_SKILL_MIN_GAMES = 3
+
+# --- NFL DFS: Team Defense & Matchup (nfl_teams.py, nfl_matchup.py) ---
+#
+# Games-back windows for nfl_teams.compute_defense_rolling_rates - same
+# "games-back, not day-count" reasoning as NFL_QB_WINDOWS/NFL_SKILL_WINDOWS
+# above. PLACEHOLDER WEIGHTS, not yet backtested (see those constants'
+# docstring - same caveat applies here).
+NFL_DEFENSE_WINDOWS = [
+    (None, 0.20),
+    (8, 0.30),
+    (4, 0.50),
+]
+
+# nfl_matchup.compute_opponent_adjustment_ratio's clip range, mirroring
+# PITCHER_MATCHUP_OFFENSE_CLIP - keeps one extreme-outlier defense (a
+# 2-game sample allowing an absurd amount) from blowing up an offensive
+# player's projection. NFL_MATCHUP_DEFENSE_CLIP is the mirror-image clip
+# for the OTHER adjustment direction - a DST's own projected points,
+# scaled by how good the OPPOSING OFFENSE is (nfl_dst.py, Phase 4) - not
+# consumed yet, defined here alongside its sibling since both are the
+# same "matchup ratio" concept applied in opposite directions.
+NFL_MATCHUP_OFFENSE_CLIP = (0.85, 1.15)
+NFL_MATCHUP_DEFENSE_CLIP = (0.85, 1.15)
+
+# Mirrors PITCHER_MATCHUP_WEIGHT_GRID - grid searched by a future
+# nfl_dfs_backtest.py go/no-go run (Phase 7), not yet run for NFL.
+NFL_MATCHUP_WEIGHT_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
+
+# Ships at 0.0 (informational-only, exactly reproduces the unadjusted
+# heuristic) for the live 2026 season regardless of what a historical-
+# seasons backtest shows, same "ship conservatively" reasoning as
+# PITCHER_MATCHUP_OFFENSE_WEIGHT - NFL's smaller in-season sample and
+# real year-over-year discontinuity (coaching/scheme/roster turnover)
+# make this an even harder bar to clear than pitcher matchup's already-
+# marginal real result. Revisit only after nfl_dfs_backtest.py
+# (Phase 7) reports a real, non-noise margin over weight=0.0.
+NFL_MATCHUP_WEIGHT = 0.0
+
+# --- NFL DFS: DK Scoring (nfl_dfs.py) ---
+#
+# DraftKings NFL Classic scoring, confirmed live via web search against
+# DraftKings' own real rules (not from memory) - see README's NFL DFS
+# section for the citation. Unlike this project's MLB scoring, which had
+# to approximate hit-type value from a linear signal, DK's real NFL
+# categories map directly onto the per-game rate stats nfl_passing.py/
+# nfl_rush_rec.py already compute - the actual risk here is entirely
+# upstream in those windowed projections, not in this formula.
+NFL_DK_PASS_YARD_POINTS = 0.04  # 1 point per 25 passing yards
+NFL_DK_PASS_TD_POINTS = 4
+NFL_DK_INTERCEPTION_POINTS = -1  # interception thrown
+NFL_DK_RUSH_YARD_POINTS = 0.1  # 1 point per 10 rushing yards
+NFL_DK_RUSH_TD_POINTS = 6
+NFL_DK_RECEIVING_YARD_POINTS = 0.1  # 1 point per 10 receiving yards
+NFL_DK_RECEIVING_TD_POINTS = 6
+NFL_DK_RECEPTION_POINTS = 1  # full PPR
+NFL_DK_FUMBLE_LOST_POINTS = -1
+NFL_DK_2PT_POINTS = 2  # 2-point conversion, pass/run/catch all score the same
+NFL_DK_100_YARD_BONUS = 3  # 100+ rushing OR receiving yards in a game (each counted separately)
+NFL_DK_300_PASS_YARD_BONUS = 3  # 300+ passing yards in a game
+
+# --- NFL DFS: DST Scoring (nfl_dst.py) ---
+#
+# Also confirmed live via web search - see README's NFL DFS section.
+NFL_DK_DST_SACK_POINTS = 1
+NFL_DK_DST_INT_POINTS = 2
+NFL_DK_DST_FUMBLE_REC_POINTS = 2
+NFL_DK_DST_TD_POINTS = 6  # defensive/return TD of any kind - see nfl_dst.py for which real columns feed this
+NFL_DK_DST_SAFETY_POINTS = 2
+NFL_DK_DST_BLOCKED_KICK_POINTS = 2
+
+# Points-allowed bucket table: list of (upper_bound_inclusive, dk_points),
+# checked in order, last entry's upper_bound is None ("and above"). Real
+# DK rule: points allowed only counts points surrendered while the DST
+# unit is on the field (a pick-six is charged to the DEFENSE that allowed
+# it, not this team's own DST) - nflreadpy's per-game final score (used
+# by nfl_dst.compute_points_allowed) doesn't make that distinction, a
+# known, documented v1 simplification (the same category of approximation
+# as nfl_dst.py's windowed-mean-through-the-bucket-table choice below).
+NFL_DK_DST_POINTS_ALLOWED_BUCKETS = [
+    (0, 10),
+    (6, 7),
+    (13, 4),
+    (20, 1),
+    (27, 0),
+    (34, -1),
+    (None, -4),
+]
+
+# --- NFL DFS: Estimated Salary (nfl_estimated_salary.py) ---
+#
+# Direct structural port of DFS_ESTIMATED_SALARY_*/DFS_REFERENCE_*_POINTS
+# - see estimated_salary.py's module docstring for the full "why a shared
+# reference range, not per-position" reasoning (equally true here: QB and
+# skill-position DK scoring span very different raw point ranges, so a
+# per-position-group scale would misprice a point the same way the old
+# MLB hitter/pitcher split did).
+#
+# Reference range computed from REAL 2025 season DK_Points_QB/
+# DK_Points_Skill/DK_Points_DST (nfl_dfs.compute_qb_dk_points/
+# compute_skill_dk_points, nfl_dst.compute_dst_dk_points, run against
+# nflreadpy's real load_player_stats/load_team_stats/load_schedules([2025])
+# - full-season blended rates, not a single week's snapshot), pooling all
+# three position groups together, real min/max (not a percentile) - same
+# convention DFS_REFERENCE_MIN/MAX_POINTS used. QB: -0.33 to 24.52
+# (n=81). Skill (RB/WR/TE): -0.05 to 27.89 (n=530). DST: -1.51 to 12.33
+# (n=32). Unlike the MLB reference range, this one includes real negative
+# values (a low-efficiency QB's interceptions, or a DST's worst
+# points-allowed bucket, can both go net negative) - compute_estimated_salary's
+# linear scaling handles that fine, same as any other range.
+NFL_DFS_REFERENCE_MIN_POINTS = -1.5066
+NFL_DFS_REFERENCE_MAX_POINTS = 27.8924
+# DraftKings NFL Classic salary cap is $50,000 and $100 increments -
+# confirmed live via web search (README's NFL DFS section has the
+# citation), same real cap MLB Classic uses. The FLOOR is NOT an
+# official DK table (DraftKings doesn't publish one - prices float
+# algorithmically), same honesty caveat DFS_ESTIMATED_SALARY_FLOOR's own
+# docstring makes for its ceiling: this is an estimate informed by real
+# evidence (live search found real Week 1 2026 DST salaries topping out
+# at $3,500, suggesting a real floor at or below $3,000), reusing MLB's
+# own $2,000-$11,000 range as the defensible starting point since NFL's
+# real floor/ceiling aren't independently confirmed.
+NFL_DFS_ESTIMATED_SALARY_FLOOR = 2000
+NFL_DFS_ESTIMATED_SALARY_CEILING = 11000
+NFL_DFS_ESTIMATED_SALARY_ROUND_TO = 100
+NFL_DFS_SALARY_CAP = 50000
+
+# --- NFL DFS: Optimizer (nfl_dfs_optimizer.py) ---
+#
+# DK Classic's real 9-slot roster - confirmed live via web search
+# alongside the salary cap above (README's NFL DFS section has the
+# citation). Sums to 9. Passed directly to dfs_optimizer.solve_optimal_lineup
+# (reused unmodified, not re-implemented - see nfl_dfs_optimizer.py's
+# module docstring).
+NFL_DFS_ROSTER_SLOTS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "FLEX": 1, "DST": 1}
+
+# --- NFL DFS: Backtesting (nfl_dfs_backtest.py) ---
+#
+# Real no-lookahead backtest (nfl_dfs_backtest.backtest_nfl_dfs_projections,
+# scripts/backtest_nfl_dfs_rankings.py) against the FULL real backfilled
+# history (config.NFL_HISTORICAL_SEASONS, 2016-2025, data/raw/nfl/) - MAE
+# and correlation of each projection against that week's REAL realized DK
+# points, vs. a naive "always predict this whole sample's own mean"
+# baseline (same go/no-go bar every other signal in this project uses:
+# beat naive baseline AND a simpler heuristic by a real margin):
+#
+#   QB:    MAE 6.6609 vs. naive-baseline MAE 7.8183 (14.8% better), correlation 0.514 (n=6,358)
+#   Skill: MAE 4.6839 vs. naive-baseline MAE 6.1814 (24.2% better), correlation 0.585 (n=50,988)
+#   DST:   MAE 4.7188 vs. naive-baseline MAE 4.6271 (2.0% WORSE),  correlation 0.101 (n=5,490)
+#
+# QB/Skill also beat a simpler "flat, unweighted full-season-average"
+# heuristic (config.NFL_QB_WINDOWS/NFL_SKILL_WINDOWS temporarily set to
+# [(None, 1.0)] for the comparison run): QB correlation 0.499 vs. flat's
+# 0.485 (MAE 6.6365 vs. 6.7259); Skill correlation 0.596 vs. flat's 0.578
+# (MAE 4.5122 vs. 4.6339) - real but modest margins, confirming the
+# RECENCY-WEIGHTING mechanism itself (not just "having any player-form
+# signal at all") adds real value, on top of already beating the naive
+# baseline by a wide margin. This validates the MECHANISM (Phase 2's
+# rolling-window blend genuinely predicts real outcomes better than
+# guessing or a flat average) - it does NOT validate the specific
+# NFL_QB_WINDOWS/NFL_SKILL_WINDOWS weight VALUES (0.20/0.30/0.50), which
+# remain an unrecalibrated first-pass placeholder (see those constants'
+# own docstrings) - no full grid search over weight combinations has been
+# run.
+#
+# DST is an honest NEGATIVE result: neither the windowed blend nor the
+# flat heuristic (DST flat: correlation 0.049, MAE 4.5429 - also worse
+# than naive) beats simply guessing the sample mean. nfl_dst.py's
+# points-allowed-bucket-via-windowed-mean approximation (see that
+# module's own docstring) is the most likely culprit - DST scoring is
+# dominated by the highly game-specific, high-variance points-allowed
+# category, which a multi-week rolling average of a notoriously noisy
+# stat doesn't predict well. DST_Points ships (the optimizer/roster need
+# a DST scoring column to function structurally) but should be treated
+# as UNVALIDATED/weak, not a trustworthy signal - flagged here and in
+# README rather than hidden, same "report honestly either way" standard
+# every other backtest in this project holds to.
+#
+# NFL_MATCHUP_WEIGHT is NOT exercised by this backtest at all -
+# nfl_matchup.py's opponent-adjustment ratio is not wired into
+# nfl_dfs.compute_qb_dk_points/compute_skill_dk_points's formula (stays a
+# separate, standalone, informational-only module - see nfl_matchup.py's
+# own docstring), so there is nothing to grid-search yet; it already
+# ships at 0.0 regardless, per the "ship conservatively" reasoning in
+# that module's docstring.
+#
+# Reproduce: `python scripts/backtest_nfl_dfs_rankings.py` (needs
+# data/raw/nfl/{weekly,team_stats,schedules}_<season>.parquet - see
+# scripts/fetch_nfl_historical.py).

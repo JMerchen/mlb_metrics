@@ -176,6 +176,99 @@ def test_select_picks_min_probability_is_configurable():
     assert list(included["key_mlbam"]) == [1]
 
 
+def test_select_picks_model_hit_probability_gate_replaces_joint_gate_not_adds_to_it():
+    # Player 1 would FAIL the old three-column JOINT_PROBABILITY_GATE_COLUMNS
+    # gate (probability/Game_Hit_Probability both far below HITTER_MIN_PROBABILITY),
+    # but has a strong Model_Hit_Probability - proving the model gate REPLACES
+    # the old one when present, rather than requiring both.
+    hitters = _hitters([(1, 0, 40, 0.2)])
+    hitters["Model_Hit_Probability"] = 0.9
+
+    picks = predictions.select_picks(
+        hitters, "2026-06-20", top_n=5, min_plate_appearances=30, min_model_probability=0.7
+    )
+
+    assert list(picks["key_mlbam"]) == [1]
+
+
+def test_select_picks_model_hit_probability_below_threshold_excludes():
+    hitters = _hitters([(1, 0, 40, 0.99)])  # would pass every OTHER gate easily
+    hitters["Model_Hit_Probability"] = 0.4
+
+    picks = predictions.select_picks(
+        hitters, "2026-06-20", top_n=5, min_plate_appearances=30, min_model_probability=0.7
+    )
+
+    assert picks.empty
+
+
+def test_select_picks_model_hit_probability_null_is_excluded_not_treated_as_zero():
+    hitters = _hitters([(1, 0, 40, 0.9), (2, 0, 40, 0.9)])
+    hitters["Model_Hit_Probability"] = [float("nan"), 0.9]
+
+    picks = predictions.select_picks(
+        hitters, "2026-06-20", top_n=5, min_plate_appearances=30, min_model_probability=0.7
+    )
+
+    assert list(picks["key_mlbam"]) == [2]
+
+
+def test_select_picks_model_hit_probability_absent_leaves_old_gate_unchanged():
+    # Regression test: without a Model_Hit_Probability column at all, the
+    # original three-column joint gate behaves exactly as before.
+    hitters = _hitters([
+        (1, 0, 40, 0.90),  # both signals strong -> qualifies
+        (2, 0, 40, 0.85),  # divergent low probability -> excluded
+    ])
+    hitters.loc[hitters["key_mlbam"] == 2, "probability"] = 0.5
+
+    picks = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30)
+
+    assert list(picks["key_mlbam"]) == [1]
+
+
+def test_select_picks_ranks_by_model_hit_probability():
+    # Player 2 has the higher Game_Hit_Probability/Approach, but player 1
+    # has the higher Model_Hit_Probability - rank_metric="Model_Hit_Probability"
+    # must pick player 1, while predicted_probability/metric still report
+    # Game_Hit_Probability (same "rank differently than report" contract
+    # rank_metric already has for Approach/Matchup_Approach).
+    hitters = _hitters([(1, 0, 40, 0.80), (2, 0, 40, 0.82)])
+    hitters["Model_Hit_Probability"] = [0.95, 0.72]
+
+    picks = predictions.select_picks(
+        hitters, "2026-06-20", top_n=1, min_plate_appearances=30,
+        rank_metric="Model_Hit_Probability", min_model_probability=0.0,
+    )
+
+    assert list(picks["key_mlbam"]) == [1]
+    assert picks.iloc[0]["predicted_probability"] == 0.80  # still Game_Hit_Probability
+    assert picks.iloc[0]["metric"] == "Game_Hit_Probability"
+    assert picks.iloc[0]["Model_Hit_Probability"] == 0.95
+
+
+def test_select_picks_model_hit_probability_logged_and_defaults_to_na():
+    with_model = _hitters([(1, 0, 40, 0.9)])
+    with_model["Model_Hit_Probability"] = 0.8
+    picks_with = predictions.select_picks(with_model, "2026-06-20", top_n=1, min_plate_appearances=30, min_model_probability=0.0)
+    assert picks_with.iloc[0]["Model_Hit_Probability"] == 0.8
+
+    without_model = _hitters([(1, 0, 40, 0.9)])
+    picks_without = predictions.select_picks(without_model, "2026-06-20", top_n=1, min_plate_appearances=30)
+    assert pd.isna(picks_without.iloc[0]["Model_Hit_Probability"])
+
+
+def test_select_picks_min_model_probability_is_configurable():
+    hitters = _hitters([(1, 0, 40, 0.9)])
+    hitters["Model_Hit_Probability"] = 0.6  # below the default 0.5 placeholder floor's neighbors, exercise both directions
+
+    excluded = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30, min_model_probability=0.7)
+    assert excluded.empty
+
+    included = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30, min_model_probability=0.5)
+    assert list(included["key_mlbam"]) == [1]
+
+
 def test_select_picks_rank_metric_chooses_differently_than_metric_but_reports_metric():
     # Player 2 has the higher Game_Hit_Probability, but player 1 has the
     # higher Approach (Game_Hit_Probability * probability) once ranked on a
