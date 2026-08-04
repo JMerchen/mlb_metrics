@@ -313,9 +313,13 @@ def test_append_predictions_dedupes_and_prefers_existing_row(tmp_path):
     day1 = predictions.select_picks(_hitters([(1, 0, 40, 0.9)]), "2026-06-19", top_n=1, min_plate_appearances=30)
     predictions.append_predictions(day1, log_path)
 
-    # Simulate resolution: mark the 06-19 pick as a hit directly in the log.
+    # Simulate resolution: mark the 06-19 pick as a hit directly in the log
+    # (real resolve_predictions always sets at_bats alongside actual_hit -
+    # matched here since append_predictions's same-date-supersede logic
+    # keys off at_bats, not actual_hit, to detect an already-resolved date).
     resolved = pd.read_csv(log_path, parse_dates=["date"])
     resolved.loc[0, "actual_hit"] = 1
+    resolved.loc[0, "at_bats"] = 1
     resolved.to_csv(log_path, index=False)
 
     # Re-logging the same (date, key_mlbam, metric) should NOT clobber the
@@ -330,6 +334,49 @@ def test_append_predictions_dedupes_and_prefers_existing_row(tmp_path):
     assert row_19["actual_hit"] == 1
     row_20 = combined[combined["date"] == "2026-06-20"].iloc[0]
     assert pd.isna(row_20["actual_hit"])
+
+
+def test_append_predictions_supersedes_a_still_pending_dates_stale_rows(tmp_path):
+    # Real incident, 2026-08-04: two Daily Update runs landed either side
+    # of a mid-day merge, and select_picks' top-N candidate SET changed
+    # between them (a different rank_metric tier) - the second run's
+    # hitters didn't share key_mlbam with the first run's, so per-key
+    # dedup alone left both runs' picks sitting in the log side by side,
+    # and evaluation.py's _combined_probability (which decides the
+    # displayed "recommended" pick) picked the stale run's hitter over the
+    # fresh one. Since nothing for that date has resolved yet, the fresh
+    # batch must fully replace the stale one, not merely upsert by player.
+    log_path = str(tmp_path / "predictions.csv")
+
+    stale_pick = predictions.select_picks(_hitters([(1, 0, 40, 0.9)]), "2026-08-04", top_n=1, min_plate_appearances=30)
+    predictions.append_predictions(stale_pick, log_path)
+
+    fresh_pick = predictions.select_picks(_hitters([(2, 0, 40, 0.9)]), "2026-08-04", top_n=1, min_plate_appearances=30)
+    combined = predictions.append_predictions(fresh_pick, log_path)
+
+    assert list(combined["key_mlbam"]) == [2]
+
+
+def test_append_predictions_does_not_supersede_a_dates_rows_once_any_resolved(tmp_path):
+    # Once even one row for a date has resolved (real games happened),
+    # a same-date rerun must fall back to the old safe per-key upsert -
+    # never bulk-dropping a date's already-resolved backtest history.
+    log_path = str(tmp_path / "predictions.csv")
+
+    stale_pick = predictions.select_picks(_hitters([(1, 0, 40, 0.9)]), "2026-08-04", top_n=1, min_plate_appearances=30)
+    predictions.append_predictions(stale_pick, log_path)
+
+    resolved = pd.read_csv(log_path, parse_dates=["date"])
+    resolved.loc[0, "actual_hit"] = 1
+    resolved.loc[0, "at_bats"] = 1
+    resolved.to_csv(log_path, index=False)
+
+    fresh_pick = predictions.select_picks(_hitters([(2, 0, 40, 0.9)]), "2026-08-04", top_n=1, min_plate_appearances=30)
+    combined = predictions.append_predictions(fresh_pick, log_path)
+
+    assert set(combined["key_mlbam"]) == {1, 2}
+    row_1 = combined[combined["key_mlbam"] == 1].iloc[0]
+    assert row_1["actual_hit"] == 1
 
 
 def test_append_predictions_dedupes_within_a_single_fresh_batch(tmp_path):

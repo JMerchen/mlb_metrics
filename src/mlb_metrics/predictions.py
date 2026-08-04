@@ -155,13 +155,37 @@ def append_predictions(picks: pd.DataFrame, log_path: str) -> pd.DataFrame:
     batch that already contains duplicates itself, e.g. from git history
     replaying the same date via more than one commit - doesn't create
     duplicate log entries. Existing rows (including already-resolved
-    actual_hit values) always win over a re-logged pick for the same key."""
+    actual_hit values) always win over a re-logged pick for the same key.
+
+    That per-key dedup alone isn't enough when a rerun's TOP-N candidate
+    SET changes for a date that's already logged, though - e.g. a mid-day
+    code/model deploy between two same-day pipeline runs (real incident:
+    2026-08-04, a Daily Update run before a merge landing v3-model-primary
+    logged one set of hitters, a second run after the merge logged a
+    mostly-disjoint set). Since the two runs' picks don't share key_mlbam
+    values, per-key dedup leaves BOTH sets sitting in the log side by
+    side, and evaluation.py's _combined_probability (which decides the
+    actual displayed "recommended" pick) has no way to know one set is
+    stale - it just picks whichever row scores higher, which is exactly
+    backwards if the old run happens to score better on the old heuristic
+    signals. So: for any date in the new `picks` batch that has NOT yet
+    resolved any row in the existing log (every existing row for that
+    date still has a null at_bats, matching resolve_predictions's own
+    "still pending" definition), the ENTIRE date's existing rows are
+    dropped before the new batch is appended - a full resupersede, not a
+    per-player upsert. A date with even one resolved row is never touched
+    this way; only the per-key dedup below applies there, preserving
+    already-resolved backtest history exactly as before."""
     os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
 
     if os.path.exists(log_path):
         existing = pd.read_csv(log_path, parse_dates=["date"])
         if "model_version" not in existing.columns:
             existing["model_version"] = LEGACY_MODEL_VERSION  # migrate a log written before model_version existed
+        fresh_dates = set(picks["date"])
+        resolved_dates = set(existing.loc[existing["at_bats"].notna(), "date"])
+        supersede_dates = fresh_dates - resolved_dates
+        existing = existing[~existing["date"].isin(supersede_dates)]
         combined = pd.concat([picks, existing], ignore_index=True)
     else:
         combined = picks
