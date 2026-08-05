@@ -272,12 +272,16 @@ def test_run_excludes_pick_with_a_bad_matchup_even_with_strong_probability_and_g
     assert logged.empty
 
 
-def test_run_ranks_by_model_hit_probability_when_model_predicts(monkeypatch, tmp_path):
+def test_run_logs_model_hit_probability_when_model_predicts(monkeypatch, tmp_path):
     """When dfs_ml.predict_hitter_hit_probability returns a real (non-empty)
-    prediction, pipeline.run's top rank_metric tier is Model_Hit_Probability -
-    the logged pick carries a real Model_Hit_Probability value and the
-    current (bumped) model_version, and predicted_probability/metric still
-    report Game_Hit_Probability regardless of which tier ranked the day."""
+    prediction, Model_Hit_Probability gets merged onto the pick pool and
+    logged on the resulting pick, with the current (bumped) model_version -
+    predicted_probability/metric still report Game_Hit_Probability
+    regardless. This fixture has only 1 hitter, so it can't exercise the
+    model-shortlist truncation itself (see
+    test_run_model_shortlist_excludes_heuristic_favorite_outside_model_top_n
+    below for that) - it's just a smoke test that the column reaches the
+    log at all."""
     monkeypatch.setattr(pipeline.data, "fetch_statcast_range", lambda start, end: pd.DataFrame({
         "game_date": pd.to_datetime([]), "batter": [], "events": [],
     }))
@@ -310,6 +314,87 @@ def test_run_ranks_by_model_hit_probability_when_model_predicts(monkeypatch, tmp
     assert logged.loc[0, "predicted_probability"] == pytest.approx(0.85)  # still Game_Hit_Probability
     assert logged.loc[0, "metric"] == "Game_Hit_Probability"
     assert logged.loc[0, "model_version"] == pipeline.config.HITTER_MODEL_VERSION
+
+
+def test_run_model_shortlist_excludes_heuristic_favorite_outside_model_top_n(monkeypatch, tmp_path):
+    """Integration-level proof of the model-shortlist-then-heuristic design
+    through pipeline.run() itself, not just predictions.select_picks in
+    isolation: real feedback after v3 shipped live (2026-08-05, "bts is
+    just picking Freddie... get the top ten from the model and then use
+    our method... to narrow that down to two"). 11 hitters; one
+    (key_mlbam=99) has by far the best Approach/Matchup_Approach but the
+    model rates it worst of all 11 - it must be excluded from the logged
+    pick even though it would win a pure-heuristic ranking."""
+    monkeypatch.setattr(pipeline.data, "fetch_statcast_range", lambda start, end: pd.DataFrame({
+        "game_date": pd.to_datetime([]), "batter": [], "events": [],
+    }))
+    monkeypatch.setattr(pipeline.data, "persist_raw_statcast", lambda df, raw_dir, season: df)
+
+    def _outputs_with_many_hitters(df):
+        rows = [
+            {
+                "key_mlbam": key, "name_first": f"F{key}", "name_last": f"L{key}", "team": "NYY",
+                "PA_L": 0, "PA_R": 40, "WAVE": 0.30, "probability_L": 0, "probability_R": 0.60, "probability": 0.60,
+                "Game_Hit_Probability": 0.60, "Consistency": 0.0, "Approach": 0.36, "Expected_Bases": 1.0,
+                "Expected_BB": 0.3, "Expected_HBP": 0.05, "Expected_RBI": 0.5,
+            }
+            for key in range(1, 11)
+        ]
+        rows.append({
+            "key_mlbam": 99, "name_first": "Heuristic", "name_last": "Favorite", "team": "NYY",
+            "PA_L": 0, "PA_R": 40, "WAVE": 0.40, "probability_L": 0, "probability_R": 0.95, "probability": 0.95,
+            "Game_Hit_Probability": 0.95, "Consistency": 0.0, "Approach": 0.9025, "Expected_Bases": 1.5,
+            "Expected_BB": 0.3, "Expected_HBP": 0.05, "Expected_RBI": 0.5,
+        })
+        wave = pd.DataFrame(rows)
+        pave = pd.DataFrame([{
+            "key_mlbam": 999, "name_first": "Probable", "name_last": "Starter",
+            "PAVE": 0.25, "PAVE_PLUS": 0.9, "Power_A_PLUS": 0.9,
+        }])
+        confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.28, "Bullpen_PAVE_PLUS": 1.0}])
+        return {"wave": wave, "pave": pave, "confidence": confidence}
+
+    monkeypatch.setattr(pipeline, "compute_outputs", _outputs_with_many_hitters)
+
+    schedule_df = pd.DataFrame([{
+        "date": pd.Timestamp("2026-06-20"), "team": "NYY", "opponent": "BOS",
+        "probable_pitcher_key_mlbam": 999, "is_home": True,
+    }])
+    monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", lambda date: schedule_df)
+    monkeypatch.setattr(pipeline.schedule, "fetch_todays_games", lambda date: pd.DataFrame())
+
+    # Same Matchup_Hit_Probability for everyone (clears HITTER_MIN_PROBABILITY,
+    # not the point of this test) - controlled directly so this test doesn't
+    # depend on tuning realistic PAVE/confidence inputs for 11 hitters.
+    monkeypatch.setattr(
+        pipeline.matchup, "compute_matchup_hit_probability",
+        lambda wave, pave, confidence, schedule_df: pd.DataFrame(
+            {"key_mlbam": wave["key_mlbam"], "Matchup_Hit_Probability": 0.75}
+        ),
+    )
+    # The model rates the heuristic favorite (99) WORST of all 11.
+    model_scores = {key: 0.60 + key * 0.01 for key in range(1, 11)}
+    model_scores[99] = 0.1
+    monkeypatch.setattr(
+        pipeline.dfs_ml, "predict_hitter_hit_probability",
+        lambda features: pd.DataFrame({
+            "key_mlbam": features["key_mlbam"],
+            "Model_Hit_Probability": features["key_mlbam"].map(model_scores),
+        }),
+    )
+
+    predictions_dir = str(tmp_path / "predictions")
+    pipeline.run(
+        datetime.date(2026, 6, 20),
+        raw_dir=str(tmp_path / "raw"),
+        output_dir=str(tmp_path / "out"),
+        predictions_dir=predictions_dir,
+        persist_raw=False,
+    )
+
+    logged = pd.read_csv(f"{predictions_dir}/predictions.csv")
+    assert not logged.empty
+    assert 99 not in set(logged["key_mlbam"])
 
 
 def test_run_continues_without_matchup_when_schedule_fetch_fails(monkeypatch, tmp_path):

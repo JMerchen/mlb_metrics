@@ -40,7 +40,7 @@ def select_picks(
     metric: str = "Game_Hit_Probability",
     rank_metric: str | None = None,
     min_probability: float = config.HITTER_MIN_PROBABILITY,
-    min_model_probability: float = config.HITTER_MIN_MODEL_PROBABILITY,
+    model_shortlist_size: int = config.HITTER_MODEL_SHORTLIST_SIZE,
     max_avg_batting_order: float = config.LINEUP_TOP_HALF_MAX_SLOT,
     min_start_rate: float = config.LINEUP_MIN_START_RATE,
     max_days_since_last_game: int = config.HITTER_MAX_DAYS_SINCE_LAST_GAME,
@@ -72,18 +72,35 @@ def select_picks(
     much as the other two. Column-gated like the lineup qualifiers, so a
     missing column is simply skipped, not a required 0.
 
-    If `Model_Hit_Probability` is present on `hitters` (see pipeline.run's
-    top ranking tier), it REPLACES the JOINT_PROBABILITY_GATE_COLUMNS gate
-    entirely rather than being added as a fourth required column - it's a
-    learned function OF `probability`/`Game_Hit_Probability`/
-    `Matchup_Hit_Probability` (plus more raw ingredients, see
-    dfs_ml.HITTER_FEATURE_COLUMNS), so requiring all four to independently
-    clear the same bar would be circular, unlike the original three-column
-    gate where each genuinely captures a different failure mode. Gated on
-    `min_model_probability` (config.HITTER_MIN_MODEL_PROBABILITY) instead -
-    a separately-derived threshold, since Model_Hit_Probability's
-    calibrated scale doesn't match `HITTER_MIN_PROBABILITY`'s (see that
-    constant's own docstring for the real backtest behind it).
+    If `Model_Hit_Probability` is present on `hitters` (see pipeline.run),
+    it's used as a BROAD QUALITY FILTER, not the final ranker: the
+    qualified pool is narrowed to its top `model_shortlist_size` (or fewer,
+    never padded, if fewer survive the qualifiers above) by
+    `Model_Hit_Probability`, and `rank_metric` then decides the final order
+    among THAT shortlist - same as it would across the whole qualified pool
+    on a day the model isn't available. This REPLACES the
+    JOINT_PROBABILITY_GATE_COLUMNS gate entirely rather than being added as
+    a fourth required column - it's a learned function OF `probability`/
+    `Game_Hit_Probability`/`Matchup_Hit_Probability` (plus more raw
+    ingredients, see dfs_ml.HITTER_FEATURE_COLUMNS), so requiring all four
+    to independently clear the same bar would be circular, unlike the
+    original three-column gate where each genuinely captures a different
+    failure mode. A null `Model_Hit_Probability` sorts last (pandas'
+    default) and is excluded exactly like a real low score, same "null
+    loses" precedent as `avg_batting_order`/`Last_Game_Date` below.
+
+    This is a deliberate reversal of an earlier design (v3,
+    `HITTER_MODEL_VERSION`) that let the model rank the WHOLE pool
+    directly, gated on a probability threshold
+    (`HITTER_MIN_MODEL_PROBABILITY`, now removed) - real live feedback
+    surfaced a day that dropped a hitter batting high in the lineup in
+    favor of the model's single favorite, since the model doesn't see
+    lineup-order/everyday-player signals directly the way
+    `Approach`/`Matchup_Approach` implicitly do (via the
+    `avg_batting_order`/`start_rate` qualifiers below). Keeping the model
+    as a broad shortlist gate still kills pure hot-streak outliers (the
+    model's original purpose) while handing the final call back to the
+    heuristic signal that captures what the model doesn't.
 
     `max_days_since_last_game` excludes a hitter whose most recent completed
     game (`hitters.compute_last_game_dates`'s `Last_Game_Date`) is more than
@@ -126,7 +143,15 @@ def select_picks(
     if teams_playing_today is not None:
         qualified = qualified[qualified["team"].isin(teams_playing_today)]
     if "Model_Hit_Probability" in qualified.columns:
-        qualified = qualified[qualified["Model_Hit_Probability"] >= min_model_probability]
+        # Broad quality filter, not the final ranker: top model_shortlist_size
+        # (or fewer, never padded, if the qualified pool is smaller) by
+        # Model_Hit_Probability - excludes anyone the model doesn't rate at
+        # all, but rank_metric (below) still decides the final order among
+        # survivors. Replaces (not adds to) JOINT_PROBABILITY_GATE_COLUMNS,
+        # same reasoning as the old threshold gate this replaced. A NaN
+        # Model_Hit_Probability sorts last (pandas' default na_position) and
+        # is therefore excluded exactly like a real low score.
+        qualified = qualified.sort_values("Model_Hit_Probability", ascending=False).head(model_shortlist_size)
     else:
         for gate_column in JOINT_PROBABILITY_GATE_COLUMNS:
             if gate_column in qualified.columns:

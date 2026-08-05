@@ -510,50 +510,65 @@ at its original training date.
 
 ### Wiring the model into Our Picks (`pipeline.py`, `predictions.py`)
 
-`pipeline.run()` now resolves `predictions.select_picks`'s `rank_metric`
-through a three-tier fallback, computed once per day right after
-`Matchup_Approach`:
+`pipeline.run()` resolves `predictions.select_picks`'s `rank_metric`
+through a two-tier fallback, computed once per day: `Matchup_Approach`
+(schedule/matchup data available) or `Approach` (no schedule at all).
+Separately - independent of `rank_metric` - whenever the model artifact
+loads and produces a real prediction for today's schedule
+(`dfs_ml.predict_hitter_hit_probability` returns non-empty), its
+`Model_Hit_Probability` column gets merged onto the pick pool and
+`select_picks` uses that column's mere presence to narrow the
+already-qualified pool down to a broad **shortlist** - its top
+`config.HITTER_MODEL_SHORTLIST_SIZE` (10) candidates by
+`Model_Hit_Probability` - BEFORE `rank_metric` ranks among that shortlist
+and picks the final `top_n`. The model is a gate, not the ranker.
 
-1. **`Model_Hit_Probability`** - the model artifact loads and produces a
-   real prediction for today's schedule (`dfs_ml.predict_hitter_hit_probability`
-   returns non-empty).
-2. **`Matchup_Approach`** - schedule/matchup data is available but the
-   model didn't load/predict (today's prior behavior).
-3. **`Approach`** - no schedule at all (today's prior behavior, unchanged).
+**This is a reversal of an earlier design (v3, `config.HITTER_MODEL_VERSION`)**
+that let `Model_Hit_Probability` rank the WHOLE qualified pool directly,
+gated on a probability threshold (`HITTER_MIN_MODEL_PROBABILITY`, since
+removed). Real feedback after v3 shipped live (2026-08-05): a day it
+surfaced a single hitter as the lone recommended pick and dropped another
+hitter the user explicitly wanted, "because of their place in the
+lineup" - a signal `Approach`/`Matchup_Approach` implicitly captures via
+the `avg_batting_order`/`start_rate` qualifiers (a hitter who bats high
+in an everyday lineup) that `Model_Hit_Probability` doesn't see directly
+(it's not one of `dfs_ml.HITTER_FEATURE_COLUMNS`). The current design
+(v4, `"v4-model-shortlist"`) keeps the model's original purpose - killing
+pure hot-streak outliers by requiring a real matchup-aware model score at
+all - while handing the final call back to the heuristic signal the model
+doesn't capture. It also sidesteps `HITTER_MIN_MODEL_PROBABILITY`'s
+calibration problem entirely: a rank-based cutoff needs no probability
+threshold to derive or backtest.
 
-On a `Model_Hit_Probability` day, `select_picks`'s gate REPLACES the old
-three-column `probability`/`Game_Hit_Probability`/`Matchup_Hit_Probability`
-gate rather than adding to it (`config.HITTER_MIN_MODEL_PROBABILITY`) -
-since the model is a learned function of those same three signals plus 14
-more raw ingredients, requiring all four to independently clear the same
-bar would be circular. `predicted_probability`/`probability`/
-`Matchup_Hit_Probability`/`Model_Hit_Probability` are all still logged to
-`predictions.csv` on every pick regardless of which tier ranked it, so
-downstream evaluation/backtesting can always see the full picture. See
-`config.HITTER_MIN_MODEL_PROBABILITY`'s own docstring for the real
-selection-level backtest (`scripts/backtest_selection_rule.py`) that
-derived its value - a genuinely different question from the calibration
-numbers above, since it asks whether ranking-and-gating by the model at
-the top-N granularity `select_picks` actually uses beats
-`Matchup_Approach`, not just whether the model is well-calibrated on
-average.
+`config.HITTER_MODEL_SHORTLIST_SIZE = 10` is an explicit user-specified
+value, not backtest-derived like almost everything else in this file -
+`scripts/backtest_selection_rule.py` (extended for this design, comparing
+`heuristic_only` vs. `model_shortlist` variants head to head) should still
+validate or inform retuning it, reported honestly either way, once that
+real run is unblocked (see the script's own docstring for the sandbox
+network limitation blocking it so far).
 
-Deliberately NOT bundled into this change: `evaluation.py`'s separate
-"recommended" gate (`_combined_probability`/`config.DAILY_PICK_MIN_PROBABILITY`,
-which decides which of the top-ranked candidates become the 0-2 picks
-shown as "Our Picks" on the dashboard) still runs unchanged on top of
-whichever tier ranked the pool - a deliberate fast-follow, not part of
-this change (landing two new uncalibrated thresholds in one change would
-make a good or bad outcome hard to attribute to either).
+`predicted_probability`/`probability`/`Matchup_Hit_Probability`/
+`Model_Hit_Probability` are all still logged to `predictions.csv` on
+every pick regardless of whether the shortlist engaged that day, so
+downstream evaluation/backtesting can always see the full picture.
+
+Deliberately NOT bundled into this change (still, in v4 as in v3):
+`evaluation.py`'s separate "recommended" gate
+(`_combined_probability`/`config.DAILY_PICK_MIN_PROBABILITY`, which
+decides which of the top-ranked candidates become the 0-2 picks shown as
+"Our Picks" on the dashboard) still runs unchanged on top of whatever
+`select_picks` returns - a deliberate fast-follow, not part of this
+change (landing two new uncalibrated thresholds in one change would make
+a good or bad outcome hard to attribute to either).
 
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our
-Picks** (the official picks above - now driven by the model on days it's
-available, per the wiring above, falling back to
-`Approach`/`Matchup_Approach` otherwise), **Hit Streaks**, and **Model
-Odds**. The latter two remain purely **informational** views alongside the
-official picks.
+Picks** (the official picks above - the model shortlists on days it's
+available, per the wiring above, then `Approach`/`Matchup_Approach` picks
+the final order), **Hit Streaks**, and **Model Odds**. The latter two
+remain purely **informational** views alongside the official picks.
 
 - **Hit Streaks** (`hitters.compute_current_hit_streaks`,
   `scripts/build_hit_streaks.py` → `docs/data/hit_streaks.csv`): each
@@ -566,9 +581,10 @@ official picks.
 - **Model Odds** (`dfs_ml.predict_hitter_hit_probability`,
   `scripts/build_hitter_hit_predictions.py` → `docs/data/hitter_hit_predictions.csv`):
   today's PA-qualified hitters ranked by the trained hit-probability
-  model's own predicted probability - the same model now driving Our
-  Picks on days it's available, shown here independently for anyone who
-  wants to see the model's own full ranking rather than just its top pick.
+  model's own predicted probability - the same model that gates the
+  shortlist for Our Picks on days it's available, shown here
+  independently for anyone who wants to see the model's own full ranking
+  rather than just who it shortlisted.
 
 Both scripts follow `build_dfs_rankings.py`'s resilience conventions
 (missing input/model/failed schedule fetch leaves yesterday's output in
