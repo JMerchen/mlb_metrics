@@ -207,19 +207,28 @@ def run(
         # (fetch succeeded, zero games today) correctly excludes every pick.
         teams_playing_today = set(schedule_df["team"]) if schedule_df is not None else None
 
-        # Three-tier rank_metric, best available first: Model_Hit_Probability
-        # (the validated logistic regression, config.HITTER_HIT_PROBABILITY_MODEL_PATH -
+        # Two-tier rank_metric, best available first: Matchup_Approach
+        # (Approach * Matchup_Hit_Probability, today's schedule/matchup
+        # available) > Approach (own-form-only, no schedule at all) - falls
+        # back on a failed schedule fetch, same resilience pattern as
+        # schedule_df itself. Separately, independent of rank_metric: when
+        # the validated logistic regression (config.HITTER_HIT_PROBABILITY_MODEL_PATH,
         # treats matchup ingredients as independent learned features instead
-        # of one hand-picked multiplier, see dfs_ml.py's module docstring) >
-        # Matchup_Approach (Approach * Matchup_Hit_Probability, today's
-        # previous top tier) > Approach (own-form-only, no schedule at all).
-        # Each tier falls back to the next on a missing input - a failed
-        # schedule fetch, or a model artifact that hasn't been trained/fails
-        # to load (dfs_ml.predict_hitter_hit_probability's own "return empty,
-        # never raise" contract) - same resilience pattern as the schedule_df
-        # fetch itself. predicted_probability/metric logged still reflect
-        # Game_Hit_Probability regardless of tier, so DAILY_PICK_MIN_PROBABILITY's
-        # calibration is unaffected by which tier ranked a given day.
+        # of one hand-picked multiplier, see dfs_ml.py's module docstring)
+        # loads and predicts for today's schedule, its Model_Hit_Probability
+        # column gets merged onto pick_pool - select_picks then uses that
+        # column's mere PRESENCE (not rank_metric) to narrow the qualified
+        # pool to a broad model-approved shortlist BEFORE rank_metric picks
+        # the final order among survivors (see select_picks's own docstring
+        # for why the model shortlists rather than ranks directly - a
+        # deliberate reversal of an earlier design, HITTER_MODEL_VERSION's
+        # v3, that let it rank the whole pool). A model artifact that hasn't
+        # been trained/fails to load (dfs_ml.predict_hitter_hit_probability's
+        # own "return empty, never raise" contract) just means the shortlist
+        # step never engages that day - rank_metric alone decides, same as
+        # before this model existed at all. predicted_probability/metric
+        # logged still reflect Game_Hit_Probability regardless of any of
+        # this, so DAILY_PICK_MIN_PROBABILITY's calibration is unaffected.
         pick_pool = outputs["wave"]
         rank_metric = "Approach"
         if schedule_df is not None and not schedule_df.empty:
@@ -235,13 +244,12 @@ def run(
             )
             model_predictions = dfs_ml.predict_hitter_hit_probability(hitter_features)
             if not model_predictions.empty:
-                # Guard on non-empty BEFORE merging: select_picks' gate is
-                # column-gated, so merging in an all-NaN Model_Hit_Probability
-                # column on a day the model fails to load would make every
-                # row fail the gate instead of correctly falling back to the
-                # Matchup_Approach tier above.
+                # Guard on non-empty BEFORE merging: select_picks' shortlist
+                # step is column-gated, so merging in an all-NaN
+                # Model_Hit_Probability column on a day the model fails to
+                # load would make every row sort last instead of correctly
+                # skipping the shortlist step entirely.
                 pick_pool = pick_pool.merge(model_predictions, on="key_mlbam", how="left")
-                rank_metric = "Model_Hit_Probability"
 
             write_probable_pitchers_export(schedule_df, outputs["pave"], output_dir)
 

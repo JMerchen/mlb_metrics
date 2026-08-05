@@ -176,41 +176,96 @@ def test_select_picks_min_probability_is_configurable():
     assert list(included["key_mlbam"]) == [1]
 
 
-def test_select_picks_model_hit_probability_gate_replaces_joint_gate_not_adds_to_it():
+def test_select_picks_model_shortlist_replaces_joint_gate_not_adds_to_it():
     # Player 1 would FAIL the old three-column JOINT_PROBABILITY_GATE_COLUMNS
     # gate (probability/Game_Hit_Probability both far below HITTER_MIN_PROBABILITY),
-    # but has a strong Model_Hit_Probability - proving the model gate REPLACES
-    # the old one when present, rather than requiring both.
-    hitters = _hitters([(1, 0, 40, 0.2)])
-    hitters["Model_Hit_Probability"] = 0.9
+    # but has a strong Model_Hit_Probability. 11 total rows (>model_shortlist_size,
+    # so the shortlist step is genuinely engaged, not a no-op) and top_n
+    # covering the whole shortlist, so player 1's presence proves the model
+    # shortlist REPLACES the old gate rather than requiring both, independent
+    # of where Approach ranks them within the shortlist.
+    rows = [(1, 0, 40, 0.2)] + [(i, 0, 40, 0.9) for i in range(2, 12)]
+    hitters = _hitters(rows)
+    hitters["Model_Hit_Probability"] = [0.99] + [0.5] * 10  # player 1 clears the shortlist easily
 
     picks = predictions.select_picks(
-        hitters, "2026-06-20", top_n=5, min_plate_appearances=30, min_model_probability=0.7
+        hitters, "2026-06-20", top_n=10, min_plate_appearances=30, rank_metric="Approach"
     )
 
-    assert list(picks["key_mlbam"]) == [1]
+    assert 1 in list(picks["key_mlbam"])
 
 
-def test_select_picks_model_hit_probability_below_threshold_excludes():
-    hitters = _hitters([(1, 0, 40, 0.99)])  # would pass every OTHER gate easily
-    hitters["Model_Hit_Probability"] = 0.4
+def test_select_picks_model_shortlist_excludes_heuristic_favorite_outside_model_top_n():
+    # 11 qualified hitters. Player 99 has the single best Approach by far,
+    # but the WORST Model_Hit_Probability (last of 11, outside the
+    # default top-10 shortlist) - must be excluded even though it would win
+    # a pure-heuristic ranking, proving the model shortlist is a real gate.
+    rows = [(i, 0, 40, 0.5) for i in range(1, 11)] + [(99, 0, 40, 0.95)]
+    hitters = _hitters(rows)
+    hitters["Model_Hit_Probability"] = [0.60 + i * 0.01 for i in range(10)] + [0.1]
 
     picks = predictions.select_picks(
-        hitters, "2026-06-20", top_n=5, min_plate_appearances=30, min_model_probability=0.7
+        hitters, "2026-06-20", top_n=5, min_plate_appearances=30, rank_metric="Approach"
     )
 
-    assert picks.empty
+    assert 99 not in list(picks["key_mlbam"])
 
 
-def test_select_picks_model_hit_probability_null_is_excluded_not_treated_as_zero():
-    hitters = _hitters([(1, 0, 40, 0.9), (2, 0, 40, 0.9)])
-    hitters["Model_Hit_Probability"] = [float("nan"), 0.9]
+def test_select_picks_model_shortlist_ranks_survivors_by_heuristic_not_model():
+    # 11 qualified hitters (the 11th has the worst model score and gets
+    # shortlisted out). Among the 10 survivors, player 1 has the HIGHEST
+    # Model_Hit_Probability but a LOWER Approach than player 2 - the final
+    # pick must be player 2, proving the two-stage design genuinely
+    # re-ranks by the heuristic rather than just keeping the model's order.
+    rows = [(1, 0, 40, 0.60), (2, 0, 40, 0.90)] + [(i, 0, 40, 0.50) for i in range(3, 12)]
+    hitters = _hitters(rows)
+    hitters["Model_Hit_Probability"] = [0.95, 0.80] + [0.70] * 8 + [0.10]
 
     picks = predictions.select_picks(
-        hitters, "2026-06-20", top_n=5, min_plate_appearances=30, min_model_probability=0.7
+        hitters, "2026-06-20", top_n=1, min_plate_appearances=30, rank_metric="Approach"
     )
 
     assert list(picks["key_mlbam"]) == [2]
+
+
+def test_select_picks_model_shortlist_size_is_configurable():
+    hitters = _hitters([(1, 0, 40, 0.9), (2, 0, 40, 0.8), (3, 0, 40, 0.7), (4, 0, 40, 0.6), (5, 0, 40, 0.5)])
+    hitters["Model_Hit_Probability"] = [0.9, 0.8, 0.7, 0.6, 0.5]
+
+    picks = predictions.select_picks(
+        hitters, "2026-06-20", top_n=5, min_plate_appearances=30,
+        rank_metric="Approach", model_shortlist_size=2,
+    )
+
+    assert list(picks["key_mlbam"]) == [1, 2]  # only the top-2-by-model ever eligible
+
+
+def test_select_picks_model_shortlist_smaller_pool_uses_whole_pool_unpadded():
+    hitters = _hitters([(1, 0, 40, 0.6), (2, 0, 40, 0.9), (3, 0, 40, 0.7)])
+    hitters["Model_Hit_Probability"] = [0.5, 0.6, 0.55]  # default shortlist_size=10 > 3 rows, no truncation
+
+    picks = predictions.select_picks(
+        hitters, "2026-06-20", top_n=5, min_plate_appearances=30, rank_metric="Approach"
+    )
+
+    assert list(picks["key_mlbam"]) == [2, 3, 1]  # ranked by Approach (0.81, 0.49, 0.36), all 3 present
+
+
+def test_select_picks_model_shortlist_null_model_probability_sorts_last_and_is_excluded():
+    # A null Model_Hit_Probability must sort LAST (not be treated as 0 or
+    # excluded specially) - with 11 qualified rows and the default
+    # shortlist size of 10, the one null-scored hitter is the one that gets
+    # truncated out.
+    rows = [(1, 0, 40, 0.9)] + [(i, 0, 40, 0.9) for i in range(2, 12)]
+    hitters = _hitters(rows)
+    hitters["Model_Hit_Probability"] = [float("nan")] + [0.5] * 10
+
+    picks = predictions.select_picks(
+        hitters, "2026-06-20", top_n=10, min_plate_appearances=30, rank_metric="Approach"
+    )
+
+    assert 1 not in list(picks["key_mlbam"])
+    assert len(picks) == 10
 
 
 def test_select_picks_model_hit_probability_absent_leaves_old_gate_unchanged():
@@ -227,46 +282,15 @@ def test_select_picks_model_hit_probability_absent_leaves_old_gate_unchanged():
     assert list(picks["key_mlbam"]) == [1]
 
 
-def test_select_picks_ranks_by_model_hit_probability():
-    # Player 2 has the higher Game_Hit_Probability/Approach, but player 1
-    # has the higher Model_Hit_Probability - rank_metric="Model_Hit_Probability"
-    # must pick player 1, while predicted_probability/metric still report
-    # Game_Hit_Probability (same "rank differently than report" contract
-    # rank_metric already has for Approach/Matchup_Approach).
-    hitters = _hitters([(1, 0, 40, 0.80), (2, 0, 40, 0.82)])
-    hitters["Model_Hit_Probability"] = [0.95, 0.72]
-
-    picks = predictions.select_picks(
-        hitters, "2026-06-20", top_n=1, min_plate_appearances=30,
-        rank_metric="Model_Hit_Probability", min_model_probability=0.0,
-    )
-
-    assert list(picks["key_mlbam"]) == [1]
-    assert picks.iloc[0]["predicted_probability"] == 0.80  # still Game_Hit_Probability
-    assert picks.iloc[0]["metric"] == "Game_Hit_Probability"
-    assert picks.iloc[0]["Model_Hit_Probability"] == 0.95
-
-
 def test_select_picks_model_hit_probability_logged_and_defaults_to_na():
     with_model = _hitters([(1, 0, 40, 0.9)])
     with_model["Model_Hit_Probability"] = 0.8
-    picks_with = predictions.select_picks(with_model, "2026-06-20", top_n=1, min_plate_appearances=30, min_model_probability=0.0)
+    picks_with = predictions.select_picks(with_model, "2026-06-20", top_n=1, min_plate_appearances=30)
     assert picks_with.iloc[0]["Model_Hit_Probability"] == 0.8
 
     without_model = _hitters([(1, 0, 40, 0.9)])
     picks_without = predictions.select_picks(without_model, "2026-06-20", top_n=1, min_plate_appearances=30)
     assert pd.isna(picks_without.iloc[0]["Model_Hit_Probability"])
-
-
-def test_select_picks_min_model_probability_is_configurable():
-    hitters = _hitters([(1, 0, 40, 0.9)])
-    hitters["Model_Hit_Probability"] = 0.6  # below the default 0.5 placeholder floor's neighbors, exercise both directions
-
-    excluded = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30, min_model_probability=0.7)
-    assert excluded.empty
-
-    included = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30, min_model_probability=0.5)
-    assert list(included["key_mlbam"]) == [1]
 
 
 def test_select_picks_rank_metric_chooses_differently_than_metric_but_reports_metric():

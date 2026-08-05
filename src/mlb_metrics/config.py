@@ -135,18 +135,46 @@ BACKTEST_TOP_N = 5
 # reducing pick coverage (still >=1 pick on all 42 backtested days).
 HITTER_MIN_PROBABILITY = 0.7
 
-# Gate applied INSTEAD OF the three-column JOINT_PROBABILITY_GATE_COLUMNS
-# bar above, on any day predictions.select_picks ranks by the validated
-# hit-probability model (config.HITTER_HIT_PROBABILITY_MODEL_PATH,
-# pipeline.run's top rank_metric tier) rather than the Approach/
-# Matchup_Approach heuristic - see select_picks's own docstring for why
-# this REPLACES rather than adds to the three-column gate (Model_Hit_
-# Probability is a learned function of those same three signals plus more
-# raw ingredients, so requiring all four independently would be circular).
-# PLACEHOLDER - to be replaced with the real value derived from
-# scripts/backtest_selection_rule.py's selection-level backtest (see that
-# script's docstring) before this ships live.
-HITTER_MIN_MODEL_PROBABILITY = 0.5
+# REMOVED (v4, HITTER_MODEL_VERSION) - a probability-threshold gate on
+# Model_Hit_Probability, used when the model directly ranked the whole
+# qualified pool (v3). v4 replaced that with a rank-based shortlist
+# (see HITTER_MODEL_SHORTLIST_SIZE below) instead of a probability
+# threshold, which needs no calibrated bar to derive/backtest at all - so
+# this constant (which had never gotten past an unvalidated 0.5 placeholder,
+# since the real backtest that was meant to derive it was blocked by this
+# project's dev sandbox's network policy) is gone rather than migrated.
+
+# The model's role in predictions.select_picks is a BROAD QUALITY FILTER,
+# not the final ranker: on any day Model_Hit_Probability is available, the
+# already-qualified pool is narrowed to its top HITTER_MODEL_SHORTLIST_SIZE
+# candidates by Model_Hit_Probability BEFORE the heuristic (Matchup_Approach/
+# Approach, via rank_metric) ranks among survivors and picks the final
+# top_n. This is a deliberate reversal of v3 (HITTER_MODEL_VERSION), which
+# let the model rank the WHOLE pool directly, gated only by the now-removed
+# HITTER_MIN_MODEL_PROBABILITY - real live feedback after v3 shipped: a day
+# it surfaced Freddie Freeman as the lone recommended pick and dropped
+# Jeremy Peña, even though the user explicitly values hitters like Peña/
+# Freeman "because of their place in the lineup" - a signal Approach/
+# Matchup_Approach implicitly captures via the avg_batting_order/start_rate
+# qualifiers (see LINEUP_TOP_HALF_MAX_SLOT/LINEUP_MIN_START_RATE) that
+# Model_Hit_Probability doesn't see directly (not one of
+# dfs_ml.HITTER_FEATURE_COLUMNS). Keeping the model as a broad shortlist
+# gate still kills pure hot-streak outliers (the model's original purpose,
+# see HITTER_MODEL_VERSION's v3 paragraph) while handing the final call
+# back to the heuristic signal the model doesn't capture.
+#
+# 10 is an explicit user-specified value, not backtest-derived like almost
+# everything else in this file - it should still be validated via a real
+# run of scripts/backtest_selection_rule.py (comparing this shortlist
+# design against the plain Matchup_Approach heuristic) before being trusted
+# or retuned, reported honestly either way. That real run is currently
+# blocked in the interactive dev sandbox this was built in (github.com
+# egress policy blocks the fetch pipeline.compute_outputs/
+# data.get_name_register needs for player name lookups) - dispatch
+# .github/workflows/debug_backtest_selection_rule.yml on a real GitHub
+# Actions runner post-merge, same deferred-validation path v3 itself never
+# completed either.
+HITTER_MODEL_SHORTLIST_SIZE = 10
 
 # predictions.select_picks excludes a hitter whose most recent completed
 # game (hitters.compute_last_game_dates's Last_Game_Date) is more than this
@@ -179,9 +207,23 @@ HITTER_MAX_DAYS_SINCE_LAST_GAME = 5
 # treats matchup ingredients (starter_PAVE, Bullpen_PAVE, Park_Factor,
 # platoon-adjusted WAVE) as independent learned features instead. Also
 # replaces (not adds to) the probability gate on days this tier is active -
-# see HITTER_MIN_MODEL_PROBABILITY. Real selection-level backtest numbers:
-# see that constant's own docstring.
-HITTER_MODEL_VERSION = "v3-model-primary"
+# see (removed in v4) HITTER_MIN_MODEL_PROBABILITY.
+#
+# v4: reverses v3's "model ranks the whole pool" design. Real feedback
+# after v3 shipped live: on a day the model surfaced Freddie Freeman as the
+# LONE recommended pick and dropped Jeremy Peña, even though the user
+# explicitly values hitters like Peña/Freeman "because of their place in
+# the lineup" - the model doesn't see lineup-order/everyday-player signals
+# directly, while Approach/Matchup_Approach implicitly do via the
+# avg_batting_order/start_rate qualifiers. v4 keeps Model_Hit_Probability
+# as a BROAD quality gate (top HITTER_MODEL_SHORTLIST_SIZE candidates by
+# model score) but hands the FINAL narrowing back to Matchup_Approach/
+# Approach, so a pure hot-streak outlier the model doesn't rate can't win,
+# but a legitimate lineup-order signal the model doesn't capture can still
+# decide among the model's own shortlisted favorites. Also drops the
+# min_model_probability threshold entirely (see HITTER_MODEL_SHORTLIST_SIZE)
+# - a rank-based cutoff needs no probability bar to calibrate.
+HITTER_MODEL_VERSION = "v4-model-shortlist"
 
 # Beat the Streak Tracker (dashboard): a batter is only "recommended" if
 # evaluation._combined_probability (the mean of whichever of

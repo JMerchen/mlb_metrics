@@ -48,41 +48,58 @@ def test_select_and_resolve_matchup_approach_ranks_by_approach_product():
         }
     ]
 
-    heuristic_picks = module.select_and_resolve(pools, "Matchup_Approach", top_n=1, min_plate_appearances=30)
+    heuristic_picks = module.select_and_resolve(
+        pools, "Matchup_Approach", variant="heuristic_only", top_n=1, min_plate_appearances=30
+    )
     assert list(heuristic_picks["key_mlbam"]) == [2]  # higher Matchup_Approach (0.504 > 0.459)
     assert heuristic_picks.iloc[0]["actual_hit"] == 0
     assert heuristic_picks.iloc[0]["at_bats"] == 1
 
-    model_picks = module.select_and_resolve(
-        pools, "Model_Hit_Probability", top_n=1, min_plate_appearances=30, min_model_probability=0.0
+    # With only 2 rows (well under HITTER_MODEL_SHORTLIST_SIZE, 10), the
+    # model-shortlist step is a genuine no-op - both variants must pick
+    # identically, ranked by Matchup_Approach either way.
+    model_shortlist_picks = module.select_and_resolve(
+        pools, "Matchup_Approach", variant="model_shortlist", top_n=1, min_plate_appearances=30
     )
-    assert list(model_picks["key_mlbam"]) == [2]  # higher Model_Hit_Probability (0.92 > 0.55)
+    assert list(model_shortlist_picks["key_mlbam"]) == [2]
 
 
-def test_select_and_resolve_model_hit_probability_picks_differently_from_matchup_approach():
+def test_select_and_resolve_model_shortlist_can_pick_differently_from_heuristic_only():
     module = _load_backtest_selection_rule_module()
+    # 11 rows so the model shortlist (top HITTER_MODEL_SHORTLIST_SIZE=10) is
+    # genuinely engaged. Player 1 has the single best Matchup_Approach but
+    # the WORST Model_Hit_Probability - the model shortlist excludes it,
+    # leaving player 2 (best Matchup_Approach among the 10 survivors) as the
+    # model-shortlist pick, while the heuristic-only variant (no shortlist)
+    # still picks player 1 directly.
+    rows = [
+        # Matchup_Hit_Probability=0.75 clears HITTER_MIN_PROBABILITY's 0.7
+        # gate for the (unused, since Model_Hit_Probability is present)
+        # fallback path.
+        _pick_pool_row(1, "A", 0.85, 0.95, 0.8075, 0.75, 0.605625, 0.10),  # worst model score
+        _pick_pool_row(2, "B", 0.72, 0.75, 0.5400, 0.75, 0.500000, 0.60),  # best Matchup_Approach among survivors
+    ] + [
+        _pick_pool_row(key, f"F{key}", 0.65, 0.70, 0.455, 0.75, 0.405000, 0.61 + key * 0.01)
+        for key in range(3, 12)
+    ]
     pools = [
         {
             "date": "2026-06-20",
-            "pick_pool": pd.DataFrame([
-                # Player A: HIGHEST Matchup_Approach, but LOWEST Model_Hit_Probability.
-                # (Matchup_Hit_Probability=0.75 clears HITTER_MIN_PROBABILITY's 0.7 gate.)
-                _pick_pool_row(1, "A", 0.85, 0.95, 0.8075, 0.75, 0.605625, 0.30),
-                # Player B: lower Matchup_Approach, but HIGHEST Model_Hit_Probability.
-                _pick_pool_row(2, "B", 0.72, 0.75, 0.5400, 0.75, 0.405000, 0.90),
-            ]),
+            "pick_pool": pd.DataFrame(rows),
             "got_hit": pd.DataFrame([{"key_mlbam": 1, "Got_Hit": 0}, {"key_mlbam": 2, "Got_Hit": 1}]),
             "has_model": True,
         }
     ]
 
-    heuristic_picks = module.select_and_resolve(pools, "Matchup_Approach", top_n=1, min_plate_appearances=30)
+    heuristic_picks = module.select_and_resolve(
+        pools, "Matchup_Approach", variant="heuristic_only", top_n=1, min_plate_appearances=30
+    )
     assert list(heuristic_picks["key_mlbam"]) == [1]
 
-    model_picks = module.select_and_resolve(
-        pools, "Model_Hit_Probability", top_n=1, min_plate_appearances=30, min_model_probability=0.0
+    model_shortlist_picks = module.select_and_resolve(
+        pools, "Matchup_Approach", variant="model_shortlist", top_n=1, min_plate_appearances=30
     )
-    assert list(model_picks["key_mlbam"]) == [2]  # proves the two rules genuinely diverge
+    assert list(model_shortlist_picks["key_mlbam"]) == [2]  # proves the two variants genuinely diverge
 
 
 def test_select_and_resolve_skips_dates_with_no_usable_model_prediction():
@@ -96,13 +113,15 @@ def test_select_and_resolve_skips_dates_with_no_usable_model_prediction():
         }
     ]
 
-    model_picks = module.select_and_resolve(
-        pools, "Model_Hit_Probability", top_n=1, min_plate_appearances=30, min_model_probability=0.0
+    model_shortlist_picks = module.select_and_resolve(
+        pools, "Matchup_Approach", variant="model_shortlist", top_n=1, min_plate_appearances=30
     )
-    assert model_picks.empty
+    assert model_shortlist_picks.empty
 
-    heuristic_picks = module.select_and_resolve(pools, "Matchup_Approach", top_n=1, min_plate_appearances=30)
-    assert list(heuristic_picks["key_mlbam"]) == [1]  # heuristic tier is unaffected by has_model
+    heuristic_picks = module.select_and_resolve(
+        pools, "Matchup_Approach", variant="heuristic_only", top_n=1, min_plate_appearances=30
+    )
+    assert list(heuristic_picks["key_mlbam"]) == [1]  # heuristic_only is unaffected by has_model
 
 
 def test_select_and_resolve_missing_from_got_hit_table_means_no_game():
