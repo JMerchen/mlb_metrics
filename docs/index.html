@@ -115,6 +115,62 @@ Loading...
 <hr>
 
 <h2>
+Player Search
+</h2>
+
+<select id="playerType">
+
+<option value="wave">
+
+Hitter (WAVE)
+
+</option>
+
+<option value="pave">
+
+Pitcher (PAVE)
+
+</option>
+
+</select>
+
+<input
+id="playerSearch"
+placeholder="Search player">
+
+<button onclick="searchPlayer()">
+
+Search
+
+</button>
+
+<div id="playerChoices">
+
+</div>
+
+<br>
+
+<div id="playerResult">
+
+</div>
+
+<hr>
+
+<h2>
+Probable Pitchers
+</h2>
+
+<div
+class="scrollbox"
+id="probablePitchersTable">
+
+Loading...
+
+</div>
+
+<hr>
+
+<h2>
 Automated Game Picks
 </h2>
 
@@ -145,18 +201,6 @@ Pick History
 <div
 class="scrollbox"
 id="gamePickHistoryTable">
-
-Loading...
-
-</div>
-
-<h2>
-Probable Pitchers
-</h2>
-
-<div
-class="scrollbox"
-id="probablePitchersTable">
 
 Loading...
 
@@ -197,48 +241,6 @@ Loading...
 </div>
 
 </div>
-
-</div>
-
-<hr>
-
-<h2>
-Player Search
-</h2>
-
-<select id="playerType">
-
-<option value="wave">
-
-Hitter (WAVE)
-
-</option>
-
-<option value="pave">
-
-Pitcher (PAVE)
-
-</option>
-
-</select>
-
-<input
-id="playerSearch"
-placeholder="Search player">
-
-<button onclick="searchPlayer()">
-
-Search
-
-</button>
-
-<div id="playerChoices">
-
-</div>
-
-<br>
-
-<div id="playerResult">
 
 </div>
 
