@@ -1,5 +1,6 @@
 date,rank,name,predicted_probability,actual_hit,status
 2026-08-05,1,Freddie Freeman,0.841552830003917,,pending
+2026-08-05,2,Ceddanne Rafaela,0.8523173241852489,,pending
 2026-08-04,2,Freddie Freeman,0.8378763175230566,1.0,hit
 2026-08-03,1,Jeremy Peña,0.909344362745098,1.0,hit
 2026-08-03,2,Freddie Freeman,0.8374530481318974,1.0,hit
