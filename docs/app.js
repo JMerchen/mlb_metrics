@@ -4,6 +4,8 @@ let pave = []
 
 let confidence = []
 
+let hitterHitPredictions = []
+
 let playerMatches = []
 
 let selectedTeams =
@@ -265,6 +267,15 @@ const playerId =
 
 player.key_mlbam
 
+const modelPrediction =
+
+hitterHitPredictions.find(
+p=>
+p.key_mlbam
+===
+playerId
+)
+
 const isPave =
 
 document
@@ -462,7 +473,7 @@ ${player.at_bats}
 
 <div>
 
-Probability
+Heuristic
 
 </div>
 
@@ -470,7 +481,7 @@ Probability
 
 ${(
 Number(
-player.probability
+player.Approach
 ||
 0
 )
@@ -485,15 +496,18 @@ player.probability
 
 <div>
 
-Game Hit
+Model Odds
 
 </div>
 
 <div>
 
-${(
+${
+modelPrediction
+?
+(
 Number(
-player.Game_Hit_Probability
+modelPrediction.Model_Hit_Probability
 ||
 0
 )
@@ -502,7 +516,10 @@ player.Game_Hit_Probability
 )
 .toFixed(
 1
-)}%
+)+"%"
+:
+"-"
+}
 
 </div>
 
@@ -1597,15 +1614,13 @@ buildTable(top, "hitStreaksTable")
 
 async function loadModelOdds(){
 
-let predictions = []
-
 try{
-predictions = await loadCSV("./data/hitter_hit_predictions.csv")
+hitterHitPredictions = await loadCSV("./data/hitter_hit_predictions.csv")
 }catch(e){
 console.log("no hitter_hit_predictions.csv yet", e)
 }
 
-renderModelOdds(predictions)
+renderModelOdds(hitterHitPredictions)
 
 }
 
