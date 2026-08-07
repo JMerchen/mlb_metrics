@@ -64,6 +64,12 @@ def test_build_nfl_bestball_rankings_writes_csv_with_prior_season(tmp_path):
     assert result.iloc[0]["player_id"] == "qb1"
     assert result.iloc[0]["games_missed_prior_season"] == 1
 
+    scarcity = pd.read_csv(data_dir / "nfl_position_scarcity.csv")
+    assert set(scarcity["position"]) == {"QB", "RB", "WR", "TE"}
+    qb_row = scarcity.set_index("position").loc["QB"]
+    assert qb_row["total_players"] == 1
+    assert qb_row["qualified_players"] == 0  # 1 game played, below the default min_games qualifier
+
 
 def test_build_nfl_bestball_rankings_missing_season_data_writes_nothing(tmp_path):
     module = _load_module()
@@ -75,6 +81,7 @@ def test_build_nfl_bestball_rankings_missing_season_data_writes_nothing(tmp_path
     module.main()
 
     assert not (data_dir / "nfl_bestball_rankings.csv").exists()
+    assert not (data_dir / "nfl_position_scarcity.csv").exists()
 
 
 def test_build_nfl_bestball_rankings_missing_prior_season_still_writes_without_that_column(tmp_path):

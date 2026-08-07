@@ -166,3 +166,88 @@ def test_build_bestball_rankings_prior_season_column_added_only_when_given():
         weekly, schedules, 2025, prior_season=2024, prior_weekly_df=prior_weekly, prior_schedules_df=prior_schedules
     )
     assert with_prior.set_index("player_id").loc["qb1", "games_missed_prior_season"] == 1
+
+
+def _rankings_row(player_id, position, games_played, dk_points_total):
+    return {"player_id": player_id, "position": position, "games_played": games_played, "dk_points_total": dk_points_total}
+
+
+def test_compute_position_scarcity_counts_total_vs_qualified_players():
+    # 3 real WRs total, but only 2 clear the games threshold.
+    rankings = pd.DataFrame([
+        _rankings_row("wr1", "WR", 17, 200),
+        _rankings_row("wr2", "WR", 15, 150),
+        _rankings_row("wr3", "WR", 2, 30),  # below threshold - counted in total, not qualified
+    ])
+
+    result = nfl_bestball.compute_position_scarcity(rankings, min_games=8).set_index("position")
+
+    assert result.loc["WR", "total_players"] == 3
+    assert result.loc["WR", "qualified_players"] == 2
+
+
+def test_compute_position_scarcity_mean_and_std_match_hand_computation():
+    # Qualified points: 100, 200, 300 -> mean 200, population std (ddof=0)
+    # is sqrt(((100)^2+(0)^2+(100)^2)/3) = sqrt(20000/3).
+    rankings = pd.DataFrame([
+        _rankings_row("rb1", "RB", 17, 100),
+        _rankings_row("rb2", "RB", 17, 200),
+        _rankings_row("rb3", "RB", 17, 300),
+    ])
+
+    result = nfl_bestball.compute_position_scarcity(rankings, min_games=8).set_index("position")
+
+    assert result.loc["RB", "mean_dk_points"] == pytest.approx(200.0)
+    assert result.loc["RB", "std_dk_points"] == pytest.approx((20000 / 3) ** 0.5)
+
+
+def test_compute_position_scarcity_buckets_players_by_standard_deviation():
+    # mean=200, std=100 (population) with these 5 values -> z-scores of
+    # roughly -1.41, -0.71, 0, 0.71, 1.41, all landing "within_1sd" except
+    # the two extremes which fall just short of +/-2sd, still within_1sd
+    # too (|z|<1.5). Use a wider, cleaner spread instead so buckets are
+    # unambiguous by construction: exact z-scores of -3, -1, 0, 1, 3 via a
+    # constructed mean/std.
+    values = [0, 100, 150, 200, 300]  # mean=150, population std=100 (by construction below)
+    rankings = pd.DataFrame([_rankings_row(f"qb{i}", "QB", 17, v) for i, v in enumerate(values)])
+    mean = sum(values) / len(values)
+    std = (sum((v - mean) ** 2 for v in values) / len(values)) ** 0.5
+    assert mean == pytest.approx(150.0)
+    assert std == pytest.approx(100.0)
+    # z-scores: 0 -> -1.5, 100 -> -0.5, 150 -> 0, 200 -> 0.5, 300 -> 1.5
+
+    result = nfl_bestball.compute_position_scarcity(rankings, min_games=8).set_index("position")
+
+    row = result.loc["QB"]
+    assert row["-2sd_to_-1sd"] == 1  # z=-1.5
+    assert row["within_1sd"] == 3  # z=-0.5, 0, 0.5
+    assert row["1sd_to_2sd"] == 1  # z=1.5
+    assert sum(row[label] for label in nfl_bestball.SCARCITY_BUCKET_LABELS) == 5
+
+
+def test_compute_position_scarcity_handles_fewer_than_two_qualified_players():
+    rankings = pd.DataFrame([_rankings_row("te1", "TE", 17, 100)])
+
+    result = nfl_bestball.compute_position_scarcity(rankings, min_games=8).set_index("position")
+
+    row = result.loc["TE"]
+    assert row["qualified_players"] == 1
+    assert pd.isna(row["mean_dk_points"]) is False  # a single qualified player still has a real mean
+    assert pd.isna(row["std_dk_points"])  # but no real std with only one data point
+    assert sum(row[label] for label in nfl_bestball.SCARCITY_BUCKET_LABELS) == 0
+
+
+def test_compute_position_scarcity_handles_zero_variance_without_crashing():
+    # Every qualified player tied on points - std is exactly 0, so a
+    # z-score is undefined; must not divide by zero.
+    rankings = pd.DataFrame([
+        _rankings_row("wr1", "WR", 17, 100),
+        _rankings_row("wr2", "WR", 17, 100),
+    ])
+
+    result = nfl_bestball.compute_position_scarcity(rankings, min_games=8).set_index("position")
+
+    row = result.loc["WR"]
+    assert row["mean_dk_points"] == pytest.approx(100.0)
+    assert row["std_dk_points"] == pytest.approx(0.0)
+    assert sum(row[label] for label in nfl_bestball.SCARCITY_BUCKET_LABELS) == 0

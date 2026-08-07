@@ -1892,6 +1892,37 @@ only) - a manual/one-time build, not a daily/weekly cron, since real
 last-season stats don't change and this isn't meant to be a live-updated
 feed.
 
+**Position Scarcity** (`docs/data/nfl_position_scarcity.csv`,
+`nfl_bestball.compute_position_scarcity`): a "how many difference-makers
+exist at this position, and how many replacement-level guys" read for
+draft strategy, not just a flat rank list. Per position (QB/RB/WR/TE):
+the real total player pool size, how many of those players cleared a
+real games-played qualifier (`config.NFL_BESTBALL_SCARCITY_MIN_GAMES =
+8`, roughly half a real season - a simple, honest, not-backtest-derived
+first-pass default meant to exclude tiny-sample cameo performances from
+skewing what "typical production" looks like), the real mean/std of
+`dk_points_total` among those qualified players (population std, not
+sample - this describes the actual observed shape of this real,
+complete season's qualified population, not an estimate of some larger
+population), and a bell-curve breakdown of those qualified players by
+how many standard deviations they sit from their own position's mean
+(the standard empirical-rule bands: within 1 SD, 1-2 SD, 2-3 SD, beyond
+3 SD, in both directions). A position with more of its qualified players
+bunched within 1 SD of the mean is the deeper position (more
+replaceable value, safer to wait on in a draft); a position where the
+mean/std themselves are already low relative to other positions, or
+where few players separate from the pack, is the scarcer one.
+
+Real 2025 numbers as of this writing (via `python
+scripts/build_nfl_bestball_rankings.py`):
+
+| Position | Total players | Qualified (8+ games) | Mean DK pts | Std DK pts |
+|---|---|---|---|---|
+| QB | 81 | 37 | 232.7 | 87.1 |
+| RB | 151 | 97 | 121.5 | 102.4 |
+| WR | 240 | 162 | 99.2 | 83.1 |
+| TE | 136 | 87 | 80.6 | 62.9 |
+
 **Preseason Notes** (`docs/data/nfl_draft_notes.csv`): a one-time,
 hand-curated list of real training-camp storylines specifically for
 players drafted in the April 2026 NFL Draft (depth-chart battles,

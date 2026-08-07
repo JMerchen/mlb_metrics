@@ -1481,3 +1481,24 @@ NFL_DFS_ROSTER_SLOTS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "FLEX": 1, "DST": 1}
 # Reproduce: `python scripts/backtest_nfl_dfs_rankings.py` (needs
 # data/raw/nfl/{weekly,team_stats,schedules}_<season>.parquet - see
 # scripts/fetch_nfl_historical.py).
+
+# --- NFL Bestball: Position Scarcity (nfl_bestball.compute_position_scarcity) ---
+#
+# A real games-played qualifier before a player's dk_points_total counts
+# toward a position's mean/std - a handful of huge-rate, tiny-sample games
+# (e.g. a Week 17 injury replacement's one big game) would otherwise skew
+# the "typical starter" distribution the bell-curve buckets are meant to
+# describe. 8 is a simple, honest first-pass default (roughly half of a
+# real 17-game season, "played enough of the year to be read as a real
+# starter/lead role, not a cameo") - not backtest-derived, easy to
+# override via the build script's own flag if a different bar turns out
+# to matter more.
+NFL_BESTBALL_SCARCITY_MIN_GAMES = 8
+
+# Which nfl_bestball_rankings.csv column the bell-curve buckets and
+# mean/std are computed over. dk_points_total (real realized season
+# value), not dk_points_per_game - bestball drafting is about the whole
+# season's production, and rate stats alone would erase exactly the
+# playing-time/opportunity signal that makes a position scarce or deep in
+# the first place.
+NFL_BESTBALL_SCARCITY_VALUE_COLUMN = "dk_points_total"

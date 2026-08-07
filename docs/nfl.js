@@ -32,6 +32,7 @@ el.innerHTML = html
 }
 
 let nflBestball = []
+let nflPositionScarcity = []
 let nflDraftNotes = []
 
 function selectNflTab(tab){
@@ -65,6 +66,30 @@ const rows = filtered.map(p=>({
 buildTable(rows, "bestballTable")
 }
 
+function renderPositionScarcity(){
+const bucketColumns = [
+["below_-3sd", "< -3 SD"],
+["-3sd_to_-2sd", "-3 to -2 SD"],
+["-2sd_to_-1sd", "-2 to -1 SD"],
+["within_1sd", "Within 1 SD"],
+["1sd_to_2sd", "+1 to +2 SD"],
+["2sd_to_3sd", "+2 to +3 SD"],
+["above_3sd", "> +3 SD"],
+]
+const rows = nflPositionScarcity.map(p=>{
+const row = {
+"Pos": p.position,
+"Total Players": p.total_players,
+"Qualified": p.qualified_players,
+"Mean": p.mean_dk_points && p.mean_dk_points !== "" ? Number(p.mean_dk_points).toFixed(1) : "-",
+"Std": p.std_dk_points && p.std_dk_points !== "" ? Number(p.std_dk_points).toFixed(1) : "-",
+}
+bucketColumns.forEach(([key, label])=>{ row[label] = p[key] !== undefined && p[key] !== "" ? p[key] : "0" })
+return row
+})
+buildTable(rows, "positionScarcityTable")
+}
+
 function renderDraftNotes(){
 const rows = nflDraftNotes.map(n=>({
 "Player / Topic": n.player_or_topic,
@@ -83,6 +108,12 @@ console.log("no nfl_bestball_rankings.csv yet", e)
 }
 
 try{
+nflPositionScarcity = await loadCSV("./data/nfl_position_scarcity.csv")
+}catch(e){
+console.log("no nfl_position_scarcity.csv yet", e)
+}
+
+try{
 nflDraftNotes = await loadCSV("./data/nfl_draft_notes.csv")
 }catch(e){
 console.log("no nfl_draft_notes.csv yet", e)
@@ -93,6 +124,13 @@ document.getElementById("bestballTable").innerHTML =
 "No bestball rankings published yet - this page needs scripts/build_nfl_bestball_rankings.py to have been run at least once."
 }else{
 renderBestball()
+}
+
+if(!nflPositionScarcity.length){
+document.getElementById("positionScarcityTable").innerHTML =
+"No position scarcity data published yet - this page needs scripts/build_nfl_bestball_rankings.py to have been run at least once."
+}else{
+renderPositionScarcity()
 }
 
 if(!nflDraftNotes.length){
