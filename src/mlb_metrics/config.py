@@ -1484,16 +1484,26 @@ NFL_DFS_ROSTER_SLOTS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "FLEX": 1, "DST": 1}
 
 # --- NFL Bestball: Position Scarcity (nfl_bestball.compute_position_scarcity) ---
 #
-# A real games-played qualifier before a player's dk_points_total counts
-# toward a position's mean/std - a handful of huge-rate, tiny-sample games
-# (e.g. a Week 17 injury replacement's one big game) would otherwise skew
-# the "typical starter" distribution the bell-curve buckets are meant to
-# describe. 8 is a simple, honest first-pass default (roughly half of a
-# real 17-game season, "played enough of the year to be read as a real
-# starter/lead role, not a cameo") - not backtest-derived, easy to
-# override via the build script's own flag if a different bar turns out
-# to matter more.
-NFL_BESTBALL_SCARCITY_MIN_GAMES = 8
+# NFL_BESTBALL_SCARCITY_MIN_GAMES (a real games_played >= 8 qualifier) was
+# removed after real 2025 data showed it let in players with almost no real
+# offensive role - e.g. a real return specialist with games_played=11 but
+# exactly 1 real offensive snap all season. games_played only requires ANY
+# real stat row that week (even a single special-teams play), not a
+# meaningful offensive role. Replaced by NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE
+# below - see nfl_bestball.compute_position_scarcity's own docstring for the
+# full reasoning. games_played/games_missed are untouched everywhere else
+# (the rankings table, the injury-history proxy) - only this qualifier
+# changed.
+#
+# A player's real average share of their team's offensive snaps
+# (nfl_bestball.compute_player_snap_share, from nfl_data.fetch_snap_counts)
+# across games with a real snap-count row that season, required to clear
+# this bar before their dk_points_total counts toward a position's mean/std.
+# 0.5 (50%) is a simple, honest first-pass default ("played the majority of
+# your team's offensive snaps when active - a real role player, not a
+# cameo/special-teamer") - not backtest-derived, easy to override via the
+# build script's own flag if a different bar turns out to matter more.
+NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE = 0.5
 
 # Which nfl_bestball_rankings.csv column the bell-curve buckets and
 # mean/std are computed over. dk_points_total (real realized season
@@ -1509,12 +1519,8 @@ NFL_BESTBALL_SCARCITY_VALUE_COLUMN = "dk_points_total"
 # standard, textbook convention (not tuned/invented for this project), used
 # specifically because it doesn't require an already-computed mean/std as
 # an input, unlike a z-score-based rule (real NFL season-point totals among
-# a games-played-qualified population are often right-skewed, so a mean/std
+# a snap-share-qualified population are often right-skewed, so a mean/std
 # computed WITH the outliers already baked in would itself be distorted by
 # them - see that function's own docstring for the real before/after
-# numbers, e.g. 2025 WR: mean/std 99.2/83.1 before outlier removal, 92.5/
-# 72.4 after removing the real 4 statistical outliers - a modest, honest
-# effect, not a dramatic one, since real remaining spread among a
-# committee-back-to-workhorse-caliber qualified population is genuine, not
-# leftover contamination).
+# numbers).
 NFL_BESTBALL_SCARCITY_IQR_MULTIPLIER = 1.5

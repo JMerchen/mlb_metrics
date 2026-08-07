@@ -11,8 +11,8 @@ nfl_position_scarcity.csv is built directly from the rankings above (see
 nfl_bestball.compute_position_scarcity's own docstring): per position,
 real player-pool depth and a bell-curve breakdown of how real
 dk_points_total is distributed among players who cleared a real
-games-played qualifier - a "how scarce/deep is this position really"
-read to complement the flat ranking list.
+average-offensive-snap-share qualifier - a "how scarce/deep is this
+position really" read to complement the flat ranking list.
 
 nfl_draft_strategy_takeaways.csv (see
 nfl_bestball.compute_draft_strategy_takeaways's own docstring) ranks the
@@ -31,8 +31,12 @@ news has settled.
 Needs data/raw/nfl/weekly_<season>.parquet and
 data/raw/nfl/schedules_<season>.parquet (see scripts/fetch_nfl_historical.py)
 for both the target season and one prior season (for the
-games_missed_prior_season repeat-injury-risk column) - all already
-persisted for 2016-2025 as of this script's writing.
+games_missed_prior_season repeat-injury-risk column), plus
+data/raw/nfl/snap_counts_<season>.parquet and
+data/raw/nfl/rosters_weekly_<season>.parquet for the target season only
+(the real snap-share qualifier - see
+nfl_bestball.compute_player_snap_share) - all already persisted for
+2016-2025 as of this script's writing.
 
 Usage:
     python scripts/build_nfl_bestball_rankings.py
@@ -69,10 +73,18 @@ def main():
         print(f"No persisted weekly/schedules data for prior season {prior_season} - "
               f"proceeding without games_missed_prior_season.")
 
+    snap_counts = nfl_data.load_persisted_table(args.raw_dir, "snap_counts", args.season)
+    rosters = nfl_data.load_persisted_table(args.raw_dir, "rosters_weekly", args.season)
+    if snap_counts is None or rosters is None:
+        print(f"No persisted snap_counts/rosters_weekly data for {args.season} - "
+              f"proceeding without avg_offense_pct (the position-scarcity table's qualifier will "
+              f"have nothing to filter on).")
+
     rankings = nfl_bestball.build_bestball_rankings(
         weekly, schedules, args.season,
         prior_season=prior_season if prior_weekly is not None and prior_schedules is not None else None,
         prior_weekly_df=prior_weekly, prior_schedules_df=prior_schedules,
+        snap_counts_df=snap_counts, rosters_df=rosters,
     )
 
     os.makedirs(args.data_dir, exist_ok=True)

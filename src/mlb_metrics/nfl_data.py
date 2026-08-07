@@ -119,6 +119,27 @@ def fetch_rosters_weekly(seasons: list[int]) -> pd.DataFrame:
     return nflreadpy.load_rosters_weekly(seasons).to_pandas()
 
 
+def fetch_snap_counts(seasons: list[int]) -> pd.DataFrame:
+    """One row per player per game with real Pro-Football-Reference-sourced
+    snap counts - confirmed live columns include `pfr_player_id` (the join
+    key THIS table uses - NOT the same id space as `fetch_weekly_stats`'s
+    `player_id`/GSIS id; cross this over via `fetch_rosters_weekly`'s own
+    `gsis_id`/`pfr_id` columns, already fetched/persisted separately - see
+    nfl_bestball.compute_player_snap_share), `season`, `week`, `game_type`
+    (REG/POST, filter for regular-season-only use same as every other real
+    NFL table here), `team`, `opponent`, `offense_snaps`/`offense_pct`
+    (share of the TEAM's offensive snaps that player played THAT game - a
+    real, normalized-per-game playing-time signal, confirmed live to
+    real-world-plausible values: a full-time starter's own `offense_pct`
+    sits near 1.0, a inactive-but-rostered special-teamer's near 0),
+    `defense_snaps`/`defense_pct`, `st_snaps`/`st_pct` (special teams).
+    Confirmed live back through the 2016 season (same real historical
+    depth as every other table here)."""
+    import nflreadpy
+
+    return nflreadpy.load_snap_counts(seasons=seasons).to_pandas()
+
+
 def fetch_team_stats(seasons: list[int]) -> pd.DataFrame:
     """One row per team per week (per opponent) with real, already-
     aggregated team-level defense/special-teams box-score stats -

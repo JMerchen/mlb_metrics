@@ -30,6 +30,7 @@ TABLES = [
     ("injuries", nfl_data.fetch_injuries),
     ("rosters_weekly", nfl_data.fetch_rosters_weekly),
     ("team_stats", nfl_data.fetch_team_stats),
+    ("snap_counts", nfl_data.fetch_snap_counts),
 ]
 
 
