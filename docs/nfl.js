@@ -33,6 +33,7 @@ el.innerHTML = html
 
 let nflBestball = []
 let nflPositionScarcity = []
+let nflDraftStrategy = []
 let nflDraftNotes = []
 
 function selectNflTab(tab){
@@ -71,7 +72,10 @@ const bucketColumns = [
 ["below_-3sd", "< -3 SD"],
 ["-3sd_to_-2sd", "-3 to -2 SD"],
 ["-2sd_to_-1sd", "-2 to -1 SD"],
-["within_1sd", "Within 1 SD"],
+["-1sd_to_-0.5sd", "-1 to -0.5 SD"],
+["-0.5sd_to_0sd", "-0.5 to 0 SD"],
+["0sd_to_0.5sd", "0 to +0.5 SD"],
+["0.5sd_to_1sd", "+0.5 to +1 SD"],
 ["1sd_to_2sd", "+1 to +2 SD"],
 ["2sd_to_3sd", "+2 to +3 SD"],
 ["above_3sd", "> +3 SD"],
@@ -81,13 +85,25 @@ const row = {
 "Pos": p.position,
 "Total Players": p.total_players,
 "Qualified": p.qualified_players,
+"Outliers Excluded": p.outliers_removed && p.outliers_removed !== "" ? p.outliers_removed : "0",
 "Mean": p.mean_dk_points && p.mean_dk_points !== "" ? Number(p.mean_dk_points).toFixed(1) : "-",
 "Std": p.std_dk_points && p.std_dk_points !== "" ? Number(p.std_dk_points).toFixed(1) : "-",
+"CV": p.coefficient_of_variation && p.coefficient_of_variation !== "" ? Number(p.coefficient_of_variation).toFixed(2) : "-",
 }
 bucketColumns.forEach(([key, label])=>{ row[label] = p[key] !== undefined && p[key] !== "" ? p[key] : "0" })
 return row
 })
 buildTable(rows, "positionScarcityTable")
+}
+
+function renderDraftStrategy(){
+const rows = nflDraftStrategy.map(t=>({
+"Pos": t.position,
+"Dispersion Rank": t.dispersion_rank && t.dispersion_rank !== "" ? t.dispersion_rank : "-",
+"CV": t.coefficient_of_variation && t.coefficient_of_variation !== "" ? Number(t.coefficient_of_variation).toFixed(2) : "-",
+"Takeaway": t.takeaway,
+}))
+buildTable(rows, "draftStrategyTable")
 }
 
 function renderDraftNotes(){
@@ -114,6 +130,12 @@ console.log("no nfl_position_scarcity.csv yet", e)
 }
 
 try{
+nflDraftStrategy = await loadCSV("./data/nfl_draft_strategy_takeaways.csv")
+}catch(e){
+console.log("no nfl_draft_strategy_takeaways.csv yet", e)
+}
+
+try{
 nflDraftNotes = await loadCSV("./data/nfl_draft_notes.csv")
 }catch(e){
 console.log("no nfl_draft_notes.csv yet", e)
@@ -131,6 +153,13 @@ document.getElementById("positionScarcityTable").innerHTML =
 "No position scarcity data published yet - this page needs scripts/build_nfl_bestball_rankings.py to have been run at least once."
 }else{
 renderPositionScarcity()
+}
+
+if(!nflDraftStrategy.length){
+document.getElementById("draftStrategyTable").innerHTML =
+"No draft strategy analysis published yet - this page needs scripts/build_nfl_bestball_rankings.py to have been run at least once."
+}else{
+renderDraftStrategy()
 }
 
 if(!nflDraftNotes.length){

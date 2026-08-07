@@ -1900,28 +1900,71 @@ the real total player pool size, how many of those players cleared a
 real games-played qualifier (`config.NFL_BESTBALL_SCARCITY_MIN_GAMES =
 8`, roughly half a real season - a simple, honest, not-backtest-derived
 first-pass default meant to exclude tiny-sample cameo performances from
-skewing what "typical production" looks like), the real mean/std of
-`dk_points_total` among those qualified players (population std, not
-sample - this describes the actual observed shape of this real,
-complete season's qualified population, not an estimate of some larger
-population), and a bell-curve breakdown of those qualified players by
-how many standard deviations they sit from their own position's mean
-(the standard empirical-rule bands: within 1 SD, 1-2 SD, 2-3 SD, beyond
-3 SD, in both directions). A position with more of its qualified players
-bunched within 1 SD of the mean is the deeper position (more
-replaceable value, safer to wait on in a draft); a position where the
-mean/std themselves are already low relative to other positions, or
-where few players separate from the pack, is the scarcer one.
+skewing what "typical production" looks like), and a bell-curve
+breakdown of those qualified players by how many standard deviations
+they sit from their own position's mean (the standard empirical-rule
+bands - 1-2 SD, 2-3 SD, beyond 3 SD in both directions - with the
+central "within 1 SD" band further split into real quarter-SD slices,
+since most draft-relevant players land there and one wide bucket would
+hide real shape right where it matters most).
+
+**Real statistical outliers are excluded from the mean/std before the
+bell curve is built, via Tukey's IQR-fence rule** (`config.
+NFL_BESTBALL_SCARCITY_IQR_MULTIPLIER = 1.5`, the textbook convention,
+not tuned for this project - chosen specifically because it doesn't
+need an already-computed mean/std as an input, unlike a z-score rule,
+which would be circular for exactly this problem). Real qualified-player
+point totals are often right-skewed even after the games-played filter,
+so a real elite handful (2025's real outliers: RB Christian McCaffrey;
+WRs Puka Nacua, Jaxon Smith-Njigba, Amon-Ra St. Brown, and Ja'Marr
+Chase; TE Trey McBride) would otherwise pull the mean up and inflate
+the std describing what a "typical" qualified player looks like. Those
+excluded outliers still appear in the bell curve buckets (almost always
+in the extreme bands, exactly where a real outlier belongs) - they're
+excluded from the summary statistics, not from the table. Removing them
+does NOT eliminate all spread, honestly: real production among players
+who cleared only a modest games-played bar genuinely ranges from
+committee/replacement-level to true difference-makers, and that
+remaining spread is real, not leftover contamination - the 2025 WR
+mean/std moved from 99.2/83.1 (with outliers) to 92.5/72.4 (without), a
+real but modest effect.
 
 Real 2025 numbers as of this writing (via `python
 scripts/build_nfl_bestball_rankings.py`):
 
-| Position | Total players | Qualified (8+ games) | Mean DK pts | Std DK pts |
-|---|---|---|---|---|
-| QB | 81 | 37 | 232.7 | 87.1 |
-| RB | 151 | 97 | 121.5 | 102.4 |
-| WR | 240 | 162 | 99.2 | 83.1 |
-| TE | 136 | 87 | 80.6 | 62.9 |
+| Position | Total players | Qualified (8+ games) | Outliers excluded | Mean DK pts | Std DK pts | Coefficient of variation |
+|---|---|---|---|---|---|---|
+| QB | 81 | 37 | 0 | 232.7 | 87.1 | 0.37 |
+| RB | 151 | 97 | 1 | 118.3 | 98.0 | 0.83 |
+| WR | 240 | 162 | 4 | 92.5 | 72.4 | 0.78 |
+| TE | 136 | 87 | 1 | 77.7 | 57.5 | 0.74 |
+
+**Draft Strategy** (`docs/data/nfl_draft_strategy_takeaways.csv`,
+`nfl_bestball.compute_draft_strategy_takeaways`): a real, numbers-driven
+answer to "does this season's real spread argue for prioritizing this
+position early in a draft, or waiting" - the direct question the bell
+curve above raises but doesn't answer by itself. Ranks each position's
+`coefficient_of_variation` (std/mean of its own real, outlier-excluded
+core group) **relative to the other real positions this season**, not
+against an invented absolute cutoff - "high" or "low" dispersion only
+means something compared to the other real positions in the same real
+season's data. Positions at or above the real median CV are read as the
+more top-heavy/scarcer positions this season (a bigger real gap between
+a difference-maker and a typical qualified player, so grabbing a proven
+top-tier player there early carries more relative value); positions
+below the median CV are read as flatter/deeper (real production is more
+interchangeable, so it's generally safer to wait and spend an early
+pick at a scarcer position instead).
+
+This directly answers a natural question like "if QBs are all within 2
+SD of the mean, should a TE be prioritized instead" - yes, exactly when
+the other position's own real CV this season ranks higher (scarcer)
+than QB's. Real 2025 read: QB is the flattest/deepest position by a
+wide margin (CV 0.37, roughly half of any other position's), so it's
+the one to deprioritize; RB is the scarcest (CV 0.83), with WR (0.78)
+and TE (0.74) both above QB but below RB - all three argue for
+prioritizing an early difference-maker over waiting, with RB the
+strongest case of the four this season.
 
 **Preseason Notes** (`docs/data/nfl_draft_notes.csv`): a one-time,
 hand-curated list of real training-camp storylines specifically for

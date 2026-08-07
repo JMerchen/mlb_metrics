@@ -1,6 +1,7 @@
-"""Build docs/data/nfl_bestball_rankings.csv and
-docs/data/nfl_position_scarcity.csv: a preseason bestball draft-strategy
-ranking of real QB/RB/WR/TE production from last season
+"""Build docs/data/nfl_bestball_rankings.csv,
+docs/data/nfl_position_scarcity.csv, and
+docs/data/nfl_draft_strategy_takeaways.csv: a preseason bestball
+draft-strategy ranking of real QB/RB/WR/TE production from last season
 (config.NFL_SEASON - 1), with real games-played/missed as an honest,
 cheap injury-history proxy - see nfl_bestball.py's module docstring for
 why this is a genuinely different question from the weekly DFS pipeline
@@ -12,6 +13,13 @@ real player-pool depth and a bell-curve breakdown of how real
 dk_points_total is distributed among players who cleared a real
 games-played qualifier - a "how scarce/deep is this position really"
 read to complement the flat ranking list.
+
+nfl_draft_strategy_takeaways.csv (see
+nfl_bestball.compute_draft_strategy_takeaways's own docstring) ranks the
+scarcity table's real coefficient-of-variation numbers against each other
+this season and writes a real, numbers-driven takeaway per position -
+whether this season's real spread argues for prioritizing that position
+early in a draft, or waiting.
 
 A manual/one-time build, not part of the daily/weekly cron - real 2025
 season stats don't change, and (per this feature's own scope) this isn't
@@ -76,6 +84,11 @@ def main():
     scarcity_path = os.path.join(args.data_dir, "nfl_position_scarcity.csv")
     scarcity.to_csv(scarcity_path, index=False)
     print(f"Wrote nfl_position_scarcity.csv ({len(scarcity)} rows) for {args.season}.")
+
+    takeaways = nfl_bestball.compute_draft_strategy_takeaways(scarcity)
+    takeaways_path = os.path.join(args.data_dir, "nfl_draft_strategy_takeaways.csv")
+    takeaways.to_csv(takeaways_path, index=False)
+    print(f"Wrote nfl_draft_strategy_takeaways.csv ({len(takeaways)} rows) for {args.season}.")
 
 
 if __name__ == "__main__":

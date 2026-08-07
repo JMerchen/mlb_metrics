@@ -201,14 +201,11 @@ def test_compute_position_scarcity_mean_and_std_match_hand_computation():
     assert result.loc["RB", "std_dk_points"] == pytest.approx((20000 / 3) ** 0.5)
 
 
-def test_compute_position_scarcity_buckets_players_by_standard_deviation():
-    # mean=200, std=100 (population) with these 5 values -> z-scores of
-    # roughly -1.41, -0.71, 0, 0.71, 1.41, all landing "within_1sd" except
-    # the two extremes which fall just short of +/-2sd, still within_1sd
-    # too (|z|<1.5). Use a wider, cleaner spread instead so buckets are
-    # unambiguous by construction: exact z-scores of -3, -1, 0, 1, 3 via a
-    # constructed mean/std.
-    values = [0, 100, 150, 200, 300]  # mean=150, population std=100 (by construction below)
+def test_compute_position_scarcity_buckets_players_into_quarter_sd_subbuckets():
+    # A clean, no-outlier population (no value clears the IQR fence) with
+    # exact z-scores of -1.5, -0.5, 0, 0.5, 1.5 by construction, hitting
+    # both the outer bands and the four within-1sd quarter-SD subbuckets.
+    values = [0, 100, 150, 200, 300]  # mean=150, population std=100
     rankings = pd.DataFrame([_rankings_row(f"qb{i}", "QB", 17, v) for i, v in enumerate(values)])
     mean = sum(values) / len(values)
     std = (sum((v - mean) ** 2 for v in values) / len(values)) ** 0.5
@@ -218,11 +215,38 @@ def test_compute_position_scarcity_buckets_players_by_standard_deviation():
 
     result = nfl_bestball.compute_position_scarcity(rankings, min_games=8).set_index("position")
 
+    # pd.cut bins are right-inclusive - (-1,-0.5] contains -0.5, (-0.5,0]
+    # contains 0, (0,0.5] contains 0.5, so an exact-boundary z-score lands
+    # in the bucket below it, not above.
     row = result.loc["QB"]
+    assert row["outliers_removed"] == 0
     assert row["-2sd_to_-1sd"] == 1  # z=-1.5
-    assert row["within_1sd"] == 3  # z=-0.5, 0, 0.5
+    assert row["-1sd_to_-0.5sd"] == 1  # z=-0.5
+    assert row["-0.5sd_to_0sd"] == 1  # z=0
+    assert row["0sd_to_0.5sd"] == 1  # z=0.5
     assert row["1sd_to_2sd"] == 1  # z=1.5
     assert sum(row[label] for label in nfl_bestball.SCARCITY_BUCKET_LABELS) == 5
+
+
+def test_compute_position_scarcity_excludes_real_outliers_from_mean_std_but_buckets_them():
+    # 8 tightly-clustered "core" values plus one extreme outlier that a
+    # standard 1.5x IQR fence flags. The outlier must not pull the
+    # mean/std, but must still be counted somewhere in the bell curve.
+    core_values = [95, 100, 100, 105, 100, 95, 105, 100]  # mean 100, tight spread
+    rankings = pd.DataFrame(
+        [_rankings_row(f"wr{i}", "WR", 17, v) for i, v in enumerate(core_values)]
+        + [_rankings_row("wr_outlier", "WR", 17, 1000)]  # far outside any real IQR fence
+    )
+
+    result = nfl_bestball.compute_position_scarcity(rankings, min_games=8).set_index("position")
+    row = result.loc["WR"]
+
+    assert row["qualified_players"] == 9
+    assert row["outliers_removed"] == 1
+    assert row["mean_dk_points"] == pytest.approx(sum(core_values) / len(core_values))
+    assert row["mean_dk_points"] < 200  # nowhere near being pulled toward 1000
+    assert sum(row[label] for label in nfl_bestball.SCARCITY_BUCKET_LABELS) == 9  # all 9, outlier included
+    assert row["above_3sd"] == 1  # the real outlier lands in the extreme band
 
 
 def test_compute_position_scarcity_handles_fewer_than_two_qualified_players():
@@ -234,6 +258,7 @@ def test_compute_position_scarcity_handles_fewer_than_two_qualified_players():
     assert row["qualified_players"] == 1
     assert pd.isna(row["mean_dk_points"]) is False  # a single qualified player still has a real mean
     assert pd.isna(row["std_dk_points"])  # but no real std with only one data point
+    assert pd.isna(row["coefficient_of_variation"])
     assert sum(row[label] for label in nfl_bestball.SCARCITY_BUCKET_LABELS) == 0
 
 
@@ -250,4 +275,37 @@ def test_compute_position_scarcity_handles_zero_variance_without_crashing():
     row = result.loc["WR"]
     assert row["mean_dk_points"] == pytest.approx(100.0)
     assert row["std_dk_points"] == pytest.approx(0.0)
+    assert pd.isna(row["coefficient_of_variation"])
     assert sum(row[label] for label in nfl_bestball.SCARCITY_BUCKET_LABELS) == 0
+
+
+def test_compute_draft_strategy_takeaways_ranks_by_relative_dispersion():
+    # QB is flat (CV low), WR is dispersed (CV high) - QB should rank
+    # below-median (flatter/deeper), WR above-median (scarcer).
+    scarcity = pd.DataFrame([
+        {"position": "QB", "mean_dk_points": 200.0, "std_dk_points": 20.0, "coefficient_of_variation": 0.1},
+        {"position": "RB", "mean_dk_points": 150.0, "std_dk_points": 60.0, "coefficient_of_variation": 0.4},
+        {"position": "WR", "mean_dk_points": 100.0, "std_dk_points": 80.0, "coefficient_of_variation": 0.8},
+        {"position": "TE", "mean_dk_points": 80.0, "std_dk_points": 24.0, "coefficient_of_variation": 0.3},
+    ])
+
+    result = nfl_bestball.compute_draft_strategy_takeaways(scarcity).set_index("position")
+
+    assert result.loc["WR", "dispersion_rank"] == 1  # most dispersed
+    assert result.loc["QB", "dispersion_rank"] == 4  # least dispersed
+    assert "flatter" in result.loc["QB", "takeaway"].lower()
+    assert "scarcer" in result.loc["WR", "takeaway"].lower() or "top-heavy" in result.loc["WR", "takeaway"].lower()
+
+
+def test_compute_draft_strategy_takeaways_handles_missing_coefficient_of_variation():
+    scarcity = pd.DataFrame([
+        {"position": "QB", "mean_dk_points": 200.0, "std_dk_points": 20.0, "coefficient_of_variation": 0.1},
+        {"position": "RB", "mean_dk_points": 150.0, "std_dk_points": 60.0, "coefficient_of_variation": 0.4},
+        {"position": "TE", "mean_dk_points": float("nan"), "std_dk_points": float("nan"), "coefficient_of_variation": float("nan")},
+    ])
+
+    result = nfl_bestball.compute_draft_strategy_takeaways(scarcity).set_index("position")
+
+    assert pd.isna(result.loc["TE", "dispersion_rank"])
+    assert "not enough" in result.loc["TE", "takeaway"].lower()
+    assert result.loc["QB", "dispersion_rank"] == 2  # still comparable against RB

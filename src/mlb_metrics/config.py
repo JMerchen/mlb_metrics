@@ -1502,3 +1502,19 @@ NFL_BESTBALL_SCARCITY_MIN_GAMES = 8
 # playing-time/opportunity signal that makes a position scarce or deep in
 # the first place.
 NFL_BESTBALL_SCARCITY_VALUE_COLUMN = "dk_points_total"
+
+# Tukey's IQR-fence multiplier for excluding real statistical outliers
+# before computing a position's mean/std (see
+# nfl_bestball._iqr_outlier_bounds/compute_position_scarcity) - 1.5 is the
+# standard, textbook convention (not tuned/invented for this project), used
+# specifically because it doesn't require an already-computed mean/std as
+# an input, unlike a z-score-based rule (real NFL season-point totals among
+# a games-played-qualified population are often right-skewed, so a mean/std
+# computed WITH the outliers already baked in would itself be distorted by
+# them - see that function's own docstring for the real before/after
+# numbers, e.g. 2025 WR: mean/std 99.2/83.1 before outlier removal, 92.5/
+# 72.4 after removing the real 4 statistical outliers - a modest, honest
+# effect, not a dramatic one, since real remaining spread among a
+# committee-back-to-workhorse-caliber qualified population is genuine, not
+# leftover contamination).
+NFL_BESTBALL_SCARCITY_IQR_MULTIPLIER = 1.5

@@ -51,7 +51,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add docs/data/nfl_bestball_rankings.csv docs/data/nfl_position_scarcity.csv
+          git add docs/data/nfl_bestball_rankings.csv docs/data/nfl_position_scarcity.csv docs/data/nfl_draft_strategy_takeaways.csv
 
           git commit -m "Build NFL bestball rankings" || echo "No changes"
 
