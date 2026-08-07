@@ -89,11 +89,36 @@ def compute_player_games_played(weekly_df: pd.DataFrame, schedules_df: pd.DataFr
 
 
 def compute_player_snap_share(snap_counts_df: pd.DataFrame, rosters_df: pd.DataFrame, season: int) -> pd.DataFrame:
-    """[player_id, avg_offense_pct] - a player's real average share of
-    their TEAM's offensive snaps across regular-season games with a real
-    snap-count row that season (`nfl_data.fetch_snap_counts`'s own real
-    `offense_pct`, already normalized per game - no possible_games-style
-    denominator needed here).
+    """[player_id, season_snap_share] - a player's real total offensive
+    snaps THAT SEASON as a share of their TEAM's real total offensive
+    snaps that season - NOT a per-game average. This matters: a player
+    who suited up for only a couple of real games gets a real LOW season
+    share even if their per-game rate was high in those few games, since
+    the denominator is the team's entire real season offensive workload,
+    not just the games the player happened to appear in. A per-game
+    average would let a real one-game emergency spot start (high rate,
+    tiny sample) look identical to a real every-week starter - exactly
+    the small-sample problem this function exists to avoid. Real
+    confirmed example: a real 2025 one-game QB spot start with an 82%
+    single-game rate drops to a real 5% season share once measured
+    against the team's full real season offensive-play total.
+
+    A team's real total offensive snaps for one game is taken as the max
+    real `offense_snaps` among that team's players that game - in
+    practice this IS the real total (confirmed live: some player, almost
+    always an O-line starter, plays exactly 100% of a team's real
+    offensive snaps in 541/544, ~99.4%, of real 2025 team-games; the
+    small remainder gets an honest slight undercount, never a fabricated
+    exact figure). Summed across every real game a team played that
+    season (regardless of which games the player themselves appeared in)
+    for the real season-total denominator.
+
+    A player who played for more than one real team that season (a real
+    mid-season trade) gets their own real snaps AND each real team's
+    real season total summed across every team they were actually
+    rostered with - the real "how much of your total available real
+    season workload did you personally play" question, unaffected by
+    which specific team(s) that workload came from.
 
     `snap_counts_df` is keyed by `pfr_player_id` (a different real id
     space than this project's own `player_id`/GSIS id used everywhere
@@ -108,13 +133,23 @@ def compute_player_snap_share(snap_counts_df: pd.DataFrame, rosters_df: pd.DataF
     a real 0% share, which would be a fabricated number, not a real
     one)."""
     season_snaps = snap_counts_df[(snap_counts_df["season"] == season) & (snap_counts_df["game_type"] == "REG")]
-    avg_pct = season_snaps.groupby("pfr_player_id")["offense_pct"].mean().rename("avg_offense_pct").reset_index()
+
+    team_game_totals = season_snaps.groupby(["team", "game_id"])["offense_snaps"].max()
+    team_season_totals = team_game_totals.groupby("team").sum().rename("team_season_snaps")
+
+    player_team_snaps = season_snaps.groupby(["pfr_player_id", "team"])["offense_snaps"].sum()
+    player_team_snaps = player_team_snaps.rename("player_snaps").reset_index()
+    player_team_snaps = player_team_snaps.merge(team_season_totals, on="team", how="left")
+
+    totals = player_team_snaps.groupby("pfr_player_id")[["player_snaps", "team_season_snaps"]].sum()
+    totals["season_snap_share"] = totals["player_snaps"] / totals["team_season_snaps"]
+    totals = totals.reset_index()[["pfr_player_id", "season_snap_share"]]
 
     season_rosters = rosters_df[rosters_df["season"] == season]
     crosswalk = season_rosters.dropna(subset=["pfr_id"]).drop_duplicates("gsis_id")[["gsis_id", "pfr_id"]]
 
-    result = avg_pct.merge(crosswalk, left_on="pfr_player_id", right_on="pfr_id", how="inner")
-    return result.rename(columns={"gsis_id": "player_id"})[["player_id", "avg_offense_pct"]]
+    result = totals.merge(crosswalk, left_on="pfr_player_id", right_on="pfr_id", how="inner")
+    return result.rename(columns={"gsis_id": "player_id"})[["player_id", "season_snap_share"]]
 
 
 def compute_season_realized_dk_points(weekly_df: pd.DataFrame, position_group: str, season: int) -> pd.DataFrame:
@@ -165,7 +200,7 @@ def build_bestball_rankings(
     adds `games_missed_prior_season` - a cheap, real repeat-injury-risk
     read using data already persisted for that season too.
 
-    If `snap_counts_df`/`rosters_df` are given, adds `avg_offense_pct`
+    If `snap_counts_df`/`rosters_df` are given, adds `season_snap_share`
     (see `compute_player_snap_share`) - a real playing-time-share signal,
     left-joined so a player missing from the real snap-count crosswalk
     gets a real NaN, not a fabricated 0%."""
@@ -224,12 +259,15 @@ def compute_position_scarcity(
     (i.e. everyone who recorded a real stat line last season), regardless of
     playing time - the position's real total pool size.
 
-    `qualified_players`: restricted to players with real `avg_offense_pct
-    >= min_snap_share` (see `compute_player_snap_share` - `rankings_df`
-    must already carry that column, e.g. via `build_bestball_rankings`'s
-    `snap_counts_df`/`rosters_df` args). A player missing `avg_offense_pct`
-    entirely (no real snap-count crosswalk match) is treated as NOT
-    qualified, not silently included or excluded via a fabricated value.
+    `qualified_players`: restricted to players with real `season_snap_share
+    >= min_snap_share` (see `compute_player_snap_share` - a real SEASON-TOTAL
+    share, not a per-game average, so a real one-or-two-game high-rate
+    sample doesn't qualify the way it would under a per-game average -
+    `rankings_df` must already carry that column, e.g. via
+    `build_bestball_rankings`'s `snap_counts_df`/`rosters_df` args). A
+    player missing `season_snap_share` entirely (no real snap-count
+    crosswalk match) is treated as NOT qualified, not silently included or
+    excluded via a fabricated value.
 
     This replaced a real `games_played >= min_games` qualifier (see git
     history) after real 2025 data showed it let in players with almost no
@@ -240,13 +278,20 @@ def compute_position_scarcity(
     meaningful offensive role, so it let committee/inactive-but-rostered
     players sit right next to true starters in the same "qualified"
     population - inflating the std describing what "typical starter"
-    production looks like far more than real outliers alone did. Real
-    average offensive snap share directly measures playing-time role
-    instead, and is normalized per game (a real percentage, not a raw
-    count), so it's comparable across players/teams/paces the way a raw
-    snap total wouldn't be. `games_played`/`games_missed` remain
-    unaffected everywhere else (the rankings table, the injury-history
-    proxy) - only this qualifier changed.
+    production looks like far more than real outliers alone did.
+
+    The snap-share qualifier itself was originally a real PER-GAME average
+    (`avg_offense_pct`, see git history), which fixed the special-teamer
+    problem above but introduced a real, different small-sample problem in
+    the opposite direction: a real one-or-two-game emergency spot start at
+    a high per-game rate (e.g. a real 2025 backup QB's real 82% single-game
+    rate across exactly 1 real game) would qualify just as easily as a
+    real every-week starter. `compute_player_snap_share`'s real
+    SEASON-TOTAL share fixes this too - that same real spot start drops to
+    a real 5% season share once measured against the team's real full
+    season offensive-play total, correctly excluding it. `games_played`/
+    `games_missed` remain unaffected everywhere else (the rankings table,
+    the injury-history proxy) - only this qualifier changed.
 
     `outliers_removed`/`mean`/`std`/`coefficient_of_variation`: real
     statistical outliers among the qualified players (via `_iqr_outlier_bounds`,
@@ -281,15 +326,15 @@ def compute_position_scarcity(
     is undefined when the distribution has no spread - either way this is
     an honest "not enough real data" result rather than a divide-by-zero
     crash or a fabricated one."""
-    has_snap_share = "avg_offense_pct" in rankings_df.columns
+    has_snap_share = "season_snap_share" in rankings_df.columns
     rows = []
     for position in POSITIONS:
         pos_df = rankings_df[rankings_df["position"] == position]
         total_players = len(pos_df)
         # NaN share never satisfies >=, so those players are correctly excluded. A rankings_df built
-        # WITHOUT snap_counts_df/rosters_df (see build_bestball_rankings) has no avg_offense_pct
+        # WITHOUT snap_counts_df/rosters_df (see build_bestball_rankings) has no season_snap_share
         # column at all - treated as "real data unavailable" (nobody qualifies) rather than a crash.
-        qualified = pos_df[pos_df["avg_offense_pct"] >= min_snap_share] if has_snap_share else pos_df.iloc[0:0]
+        qualified = pos_df[pos_df["season_snap_share"] >= min_snap_share] if has_snap_share else pos_df.iloc[0:0]
         n_qualified = len(qualified)
 
         bucket_counts = {label: 0 for label in SCARCITY_BUCKET_LABELS}

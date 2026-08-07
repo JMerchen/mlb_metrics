@@ -1495,15 +1495,30 @@ NFL_DFS_ROSTER_SLOTS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "FLEX": 1, "DST": 1}
 # (the rankings table, the injury-history proxy) - only this qualifier
 # changed.
 #
-# A player's real average share of their team's offensive snaps
-# (nfl_bestball.compute_player_snap_share, from nfl_data.fetch_snap_counts)
-# across games with a real snap-count row that season, required to clear
-# this bar before their dk_points_total counts toward a position's mean/std.
-# 0.5 (50%) is a simple, honest first-pass default ("played the majority of
-# your team's offensive snaps when active - a real role player, not a
-# cameo/special-teamer") - not backtest-derived, easy to override via the
-# build script's own flag if a different bar turns out to matter more.
-NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE = 0.5
+# The snap-share qualifier itself was originally a real PER-GAME average
+# (avg_offense_pct), which was then replaced by nfl_bestball.compute_
+# player_snap_share's real SEASON-TOTAL share (a player's real total
+# offensive snaps that season / their team's real total offensive snaps
+# that season) - the per-game average let a real one-or-two-game emergency
+# spot start at a high per-game rate qualify just as easily as a real
+# every-week starter (e.g. a real 2025 backup QB's real 82% single-game
+# rate across exactly 1 real game); the season-total share correctly drops
+# that same real player to a real 5% share once measured against the
+# team's full real season offensive-play total. games_played/dk_points_total
+# etc. are unaffected - only how this specific qualifier is computed
+# changed.
+#
+# 0.3 (30% of a team's real total season offensive snaps) is a simple,
+# honest first-pass default - NOT backtest-derived, and deliberately lower
+# than a "majority of snaps" bar would suggest, because a real SEASON-TOTAL
+# share runs meaningfully lower than a per-game rate even for genuinely
+# fantasy-relevant committee/complementary players (real 2025 example:
+# Jaylen Warren and TreVeyon Henderson, both clearly real, draftable RB2/
+# committee-role players with 200+ real season DK points, sit at real
+# season shares of 0.47/0.46 - a 0.5 bar would have wrongly excluded real,
+# relevant players like them). Easy to override via the build script's own
+# flag if a different bar turns out to matter more.
+NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE = 0.3
 
 # Which nfl_bestball_rankings.csv column the bell-curve buckets and
 # mean/std are computed over. dk_points_total (real realized season

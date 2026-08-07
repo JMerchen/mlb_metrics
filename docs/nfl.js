@@ -63,7 +63,7 @@ const rows = filtered.map(p=>({
 "Games": p.games_played && p.possible_games ? `${p.games_played}/${p.possible_games}` : "-",
 "Missed": p.games_missed && p.games_missed !== "" ? p.games_missed : "0",
 "Missed (Prior Yr)": p.games_missed_prior_season && p.games_missed_prior_season !== "" ? p.games_missed_prior_season : "-",
-"Snap %": p.avg_offense_pct && p.avg_offense_pct !== "" ? `${(Number(p.avg_offense_pct)*100).toFixed(0)}%` : "-",
+"Season Snap %": p.season_snap_share && p.season_snap_share !== "" ? `${(Number(p.season_snap_share)*100).toFixed(0)}%` : "-",
 }))
 buildTable(rows, "bestballTable")
 }

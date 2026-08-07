@@ -39,8 +39,12 @@ def _schedule_row(season, week, home, away, game_type="REG"):
     return {"season": season, "week": week, "game_type": game_type, "home_team": home, "away_team": away}
 
 
-def _snap_row(pfr_player_id, season, week, offense_pct, game_type="REG"):
-    return {"pfr_player_id": pfr_player_id, "season": season, "week": week, "game_type": game_type, "offense_pct": offense_pct}
+def _snap_row(pfr_player_id, team, season, week, offense_snaps, game_type="REG", game_id=None):
+    return {
+        "pfr_player_id": pfr_player_id, "team": team, "season": season, "week": week,
+        "game_type": game_type, "game_id": game_id or f"{season}_{week:02d}_{team}",
+        "offense_snaps": offense_snaps,
+    }
 
 
 def _roster_row(gsis_id, pfr_id, season):
@@ -64,7 +68,9 @@ def test_build_nfl_bestball_rankings_writes_csv_with_prior_season_and_snap_share
         _schedule_row(2024, 1, "NYJ", "BUF"),
         _schedule_row(2024, 2, "NYJ", "NE"),  # a real second 2024 game qb1 missed
     ]))
-    _persist(raw_dir, "snap_counts", 2025, pd.DataFrame([_snap_row("Qb1Pfr", 2025, 1, 0.9)]))
+    # Lone player in that team-game, so they ARE the team's real max (a
+    # real 100% season share by construction, no other team-game data).
+    _persist(raw_dir, "snap_counts", 2025, pd.DataFrame([_snap_row("Qb1Pfr", "NYJ", 2025, 1, 55)]))
     _persist(raw_dir, "rosters_weekly", 2025, pd.DataFrame([_roster_row("qb1", "Qb1Pfr", 2025)]))
 
     sys.argv = ["build_nfl_bestball_rankings.py", "--raw-dir", str(raw_dir), "--data-dir", str(data_dir), "--season", "2025"]
@@ -74,13 +80,13 @@ def test_build_nfl_bestball_rankings_writes_csv_with_prior_season_and_snap_share
     assert len(result) == 1
     assert result.iloc[0]["player_id"] == "qb1"
     assert result.iloc[0]["games_missed_prior_season"] == 1
-    assert result.iloc[0]["avg_offense_pct"] == pytest.approx(0.9)
+    assert result.iloc[0]["season_snap_share"] == pytest.approx(1.0)
 
     scarcity = pd.read_csv(data_dir / "nfl_position_scarcity.csv")
     assert set(scarcity["position"]) == {"QB", "RB", "WR", "TE"}
     qb_row = scarcity.set_index("position").loc["QB"]
     assert qb_row["total_players"] == 1
-    assert qb_row["qualified_players"] == 1  # real 90% snap share clears the default 50% qualifier
+    assert qb_row["qualified_players"] == 1  # real 100% season share clears the default 30% qualifier
 
     takeaways = pd.read_csv(data_dir / "nfl_draft_strategy_takeaways.csv")
     assert set(takeaways["position"]) == {"QB", "RB", "WR", "TE"}
@@ -102,7 +108,7 @@ def test_build_nfl_bestball_rankings_missing_snap_data_writes_without_qualifier(
 
     result = pd.read_csv(data_dir / "nfl_bestball_rankings.csv")
     assert len(result) == 1
-    assert "avg_offense_pct" not in result.columns
+    assert "season_snap_share" not in result.columns
 
     scarcity = pd.read_csv(data_dir / "nfl_position_scarcity.csv")
     qb_row = scarcity.set_index("position").loc["QB"]

@@ -1890,15 +1890,26 @@ ground truth for what the right health/talent tradeoff weighting would
 even be, so this project's "show raw signals honestly, don't blend
 without a real backtest to justify it" standard applies here too.
 
-**Real average offensive snap share** (`avg_offense_pct`,
+**Real season-total offensive snap share** (`season_snap_share`,
 `nfl_bestball.compute_player_snap_share`, from `nfl_data.fetch_snap_counts`
 - real Pro-Football-Reference-sourced per-game snap counts via
 `nflreadpy.load_snap_counts`) is also published on the rankings table -
 a real playing-time-ROLE signal, distinct from games played (availability)
-and points-per-game (production rate). It's crosswalked from the snap
-data's own `pfr_player_id` join key to this project's `player_id`/GSIS id
-via `fetch_rosters_weekly`'s real `gsis_id`/`pfr_id` columns (confirmed
-live to cover 382 of 383, ~99.7%, of a real 2025 qualified population); a
+and points-per-game (production rate). This is a real SEASON-TOTAL share
+(a player's real total offensive snaps that season, divided by their
+team's real total offensive snaps that season - both summed across every
+real game, not just the games the player themselves appeared in), not a
+per-game average - a per-game average would let a real one-or-two-game
+emergency spot start at a high per-game rate look identical to a real
+every-week starter, exactly the small-sample problem a playing-time
+signal needs to avoid. A team's real total offensive snaps for one game
+is read as the max real `offense_snaps` among that team's players that
+game (confirmed live: some player, almost always an O-line starter,
+plays exactly 100% of a team's real offensive snaps in 541/544, ~99.4%,
+of real 2025 team-games). It's crosswalked from the snap data's own
+`pfr_player_id` join key to this project's `player_id`/GSIS id via
+`fetch_rosters_weekly`'s real `gsis_id`/`pfr_id` columns (confirmed live
+to cover 382 of 383, ~99.7%, of a real 2025 qualified population); a
 player missing that crosswalk gets a real `NaN`, never a fabricated 0%.
 
 Built via `scripts/build_nfl_bestball_rankings.py`
@@ -1912,47 +1923,56 @@ feed.
 exist at this position, and how many replacement-level guys" read for
 draft strategy, not just a flat rank list. Per position (QB/RB/WR/TE):
 the real total player pool size, how many of those players cleared a
-real average-snap-share qualifier (`config.
-NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE = 0.5`, "played the majority of
-your team's offensive snaps when active" - a simple, honest,
-not-backtest-derived first-pass default), and a bell-curve breakdown of
-those qualified players by how many standard deviations they sit from
-their own position's mean (the standard empirical-rule bands - 1-2 SD,
-2-3 SD, beyond 3 SD in both directions - with the central "within 1 SD"
-band further split into real quarter-SD slices, since most
+real season-total-snap-share qualifier (`config.
+NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE = 0.3`, "played at least 30% of
+your team's total real offensive snaps this season" - a simple, honest,
+not-backtest-derived first-pass default, deliberately lower than a
+"majority of snaps" bar; see below for why), and a bell-curve breakdown
+of those qualified players by how many standard deviations they sit
+from their own position's mean (the standard empirical-rule bands - 1-2
+SD, 2-3 SD, beyond 3 SD in both directions - with the central "within 1
+SD" band further split into real quarter-SD slices, since most
 draft-relevant players land there and one wide bucket would hide real
 shape right where it matters most).
 
-**This qualifier used to be `games_played >= 8`, and was changed after
-real 2025 data showed it let in players with almost no real offensive
-role.** A real return specialist (Jamal Agnew) had `games_played=11` -
-clearing the old bar easily - but played exactly 1 real offensive snap
-(0.18% share) all season and scored 0 real points; several similar
-special-teamers/inactive-but-rostered players sat right in the same
-"qualified" population as true starters. `games_played` only requires
-ANY real stat row that week (even a single special-teams play), not a
-meaningful offensive role - this is exactly why the old table's mean and
-std were suspiciously close together (e.g. real 2025 WR: mean 99.2, std
-83.1 - std nearly as large as the mean, a genuine red flag). Average
-offensive snap share directly measures playing-time role instead, and
-(being a real percentage, not a raw count) is comparable across
-players/teams/paces the way a raw snap total wouldn't be.
+**This qualifier has gone through two real fixes, both driven by real
+data, not guesswork:**
 
-**This is a real tradeoff, not a strict improvement, and worth being
-honest about**: the new qualifier no longer requires a minimum number of
-games at all - a player who started only 1-2 games (e.g. a real
-in-season injury replacement) but played a high snap share in those few
-games now qualifies, where the old bar excluded them for lack of games.
-Real example: Raiders backup QB Aidan O'Connell qualifies with
-`games_played=1`, `avg_offense_pct=0.82`, `dk_points_total=4.78` - a
-legitimately weak single spot-start now counted as "qualified" data,
-whereas games_played=1 would never have cleared the old bar. 17 of 54
-real 2025 qualified QBs have fewer than 8 games played under the new
-rule. Real statistical outliers (below) catch the most extreme of these
-cases but not all of them - this is disclosed here rather than hidden,
-matching this project's "report honestly either way" standard, and
-could be revisited (e.g. requiring both a minimum snap share AND a
-minimum games count) if it turns out to matter in practice.
+1. It used to be `games_played >= 8`, changed after real 2025 data
+   showed it let in players with almost no real offensive role. A real
+   return specialist (Jamal Agnew) had `games_played=11` - clearing the
+   old bar easily - but played exactly 1 real offensive snap (0.18%
+   share) all season and scored 0 real points; several similar
+   special-teamers/inactive-but-rostered players sat right in the same
+   "qualified" population as true starters. `games_played` only
+   requires ANY real stat row that week (even a single special-teams
+   play), not a meaningful offensive role - this is exactly why the
+   table's mean and std were once suspiciously close together (real
+   2025 WR: mean 99.2, std 83.1 under the old rule - std nearly as
+   large as the mean, a genuine red flag).
+2. The snap-share qualifier itself was then a real PER-GAME average
+   (`avg_offense_pct`), which fixed the special-teamer problem but
+   introduced a real, different small-sample problem in the opposite
+   direction: a real one-or-two-game emergency spot start at a high
+   per-game rate would qualify just as easily as a real every-week
+   starter. Real example: Raiders backup QB Aidan O'Connell's real
+   single-game rate was 82% across his exactly-1 real game played -
+   comfortably clearing even a 50% per-game bar. `compute_player_snap_share`
+   now computes a real SEASON-TOTAL share instead (real total snaps
+   that season / team's real total offensive snaps that season, both
+   summed over every real game, not just games the player appeared in)
+   - the same O'Connell drops to a real 5.1% season share once measured
+   against the Raiders' real full-season offensive-play total, and is
+   correctly excluded.
+
+Because a real season-total share runs meaningfully lower than a
+per-game rate even for genuinely relevant players (real 2025 example:
+Jaylen Warren and TreVeyon Henderson, both clearly real, draftable
+committee-role RBs with 200+ real season DK points, sit at real season
+shares of 0.47/0.46 - not the 0.5+ a "majority of snaps" framing might
+suggest), the qualifier's threshold was lowered from 0.5 to 0.3
+alongside this fix - see `config.NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE`'s
+own docstring for the full real-data reasoning.
 
 **Real statistical outliers are excluded from the mean/std before the
 bell curve is built, via Tukey's IQR-fence rule** (`config.
@@ -1969,18 +1989,15 @@ true difference-makers, and that remaining spread is real, not leftover
 contamination.
 
 Real 2025 numbers as of this writing (via `python
-scripts/build_nfl_bestball_rankings.py`), after switching to the real
-snap-share qualifier - note how much closer mean and std now sit
-relative to each other than under the old games-played qualifier, a real
-confirmation that the old "qualified" population really was mixing
-true role players with committee/special-teams noise:
+scripts/build_nfl_bestball_rankings.py`), under the real season-total
+snap-share qualifier:
 
-| Position | Total players | Qualified (50%+ avg snap share) | Outliers excluded | Mean DK pts | Std DK pts | Coefficient of variation |
+| Position | Total players | Qualified (30%+ season snap share) | Outliers excluded | Mean DK pts | Std DK pts | Coefficient of variation |
 |---|---|---|---|---|---|---|
-| QB | 81 | 54 | 0 | 173.4 | 114.8 | 0.66 |
-| RB | 151 | 33 | 0 | 220.5 | 96.0 | 0.44 |
-| WR | 240 | 95 | 2 | 137.2 | 73.5 | 0.54 |
-| TE | 136 | 47 | 1 | 110.3 | 56.1 | 0.51 |
+| QB | 81 | 38 | 0 | 229.8 | 87.8 | 0.38 |
+| RB | 151 | 46 | 1 | 198.4 | 82.4 | 0.42 |
+| WR | 240 | 111 | 2 | 127.8 | 72.2 | 0.56 |
+| TE | 136 | 68 | 1 | 90.6 | 56.3 | 0.62 |
 
 **Draft Strategy** (`docs/data/nfl_draft_strategy_takeaways.csv`,
 `nfl_bestball.compute_draft_strategy_takeaways`): a real, numbers-driven
@@ -2002,16 +2019,19 @@ pick at a scarcer position instead).
 This directly answers a natural question like "if QBs are all within 2
 SD of the mean, should a TE be prioritized instead" - yes, exactly when
 the other position's own real CV this season ranks higher (scarcer)
-than QB's. Real 2025 read, under the corrected snap-share qualifier: QB
-is now the SCARCEST position (CV 0.66, real ranking #1 of 4) - a real
-flip from the old games-played-qualified read, which had QB as the
-flattest position; RB is now the flattest/deepest (CV 0.44), with WR
-(0.54) and TE (0.51) both above RB but below QB. This flip is itself a
-real illustration of why the qualifier mattered: the old population's
-QB read was distorted by which backups happened to appear in 8+ games
-(often mop-up/emergency duty, not meaningful QB1 competition), while the
-new population reflects real starter-caliber QB performance more
-honestly.
+than QB's. Real 2025 read, under the corrected season-total-share
+qualifier: TE is now the SCARCEST position (CV 0.62, real ranking #1 of
+4), followed by WR (0.56), then RB (0.42), with QB the flattest/deepest
+by a wide margin (CV 0.38) - the third real read this table has produced
+across the qualifier's two fixes (originally QB flattest under
+games-played, then QB scarcest under per-game average, now TE scarcest
+under season-total share). Each flip is itself a real illustration of
+how much the qualifier's definition matters for this kind of relative
+comparison - not evidence any one read was "wrong" so much as that a
+population contaminated with the wrong players (special-teamers, or
+short high-rate samples) produces a real but misleading CV, and only
+the current season-total-share population reflects real, meaningful
+role/health-adjusted production.
 
 **Preseason Notes** (`docs/data/nfl_draft_notes.csv`): a one-time,
 hand-curated list of real training-camp storylines specifically for

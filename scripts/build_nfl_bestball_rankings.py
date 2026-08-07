@@ -77,7 +77,7 @@ def main():
     rosters = nfl_data.load_persisted_table(args.raw_dir, "rosters_weekly", args.season)
     if snap_counts is None or rosters is None:
         print(f"No persisted snap_counts/rosters_weekly data for {args.season} - "
-              f"proceeding without avg_offense_pct (the position-scarcity table's qualifier will "
+              f"proceeding without season_snap_share (the position-scarcity table's qualifier will "
               f"have nothing to filter on).")
 
     rankings = nfl_bestball.build_bestball_rankings(
