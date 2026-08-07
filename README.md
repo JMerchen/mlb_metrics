@@ -1893,15 +1893,19 @@ last-season stats don't change and this isn't meant to be a live-updated
 feed.
 
 **Preseason Notes** (`docs/data/nfl_draft_notes.csv`): a one-time,
-hand-curated list of real preseason storylines (injuries, holdouts,
-retirements, depth-chart battles, trades) from trusted sources (ESPN,
-RotoWire, Yahoo Sports, Fox News), each a short paraphrase in original
-words with a link back to the source - never reproduced article text.
-This is genuinely NOT automated - this codebase has zero precedent for
-fetching external web content (no scraping/RSS/WebFetch anywhere), and
-the NFL page's own design philosophy is "no new network call, same-
-origin CSV fetches only." Rookie storylines are intentionally excluded
-(narrative-driven, not something real last-season stats can speak to).
+hand-curated list of real training-camp storylines specifically for
+players drafted in the April 2026 NFL Draft (depth-chart battles,
+landing-spot opportunity, injury setbacks) from trusted sources (ESPN,
+Yahoo Sports, SI, Fox Sports, NFL.com, team sites), each a short
+paraphrase in original words with a link back to the source - never
+reproduced article text. This list deliberately targets rookies: the
+bestball rankings above are built entirely from real last-season stats,
+so they have nothing to say about a player with no NFL track record
+yet - this is where that gap gets filled in, once, by hand. This is
+genuinely NOT automated - this codebase has zero precedent for fetching
+external web content (no scraping/RSS/WebFetch anywhere), and the NFL
+page's own design philosophy is "no new network call, same-origin CSV
+fetches only."
 
 ## Running
 
