@@ -43,17 +43,6 @@ href="./style.css">
 
 </div>
 
-<p style="opacity:.75; max-width:700px;">
-An NFL analog of the MLB pipeline above - the weekly in-season DFS
-Optimal Lineup subtab is still being built (needs live-season data this
-project doesn't have yet). Ready now: a Preseason subtab for bestball
-draft strategy, ranking real QB/RB/WR/TE production from last season
-(full-PPR DraftKings scoring) with real games-played as an honest,
-simple injury-history proxy - not a full medical history. See the
-<a href="https://github.com/JMerchen/mlb_metrics#nfl-dfs-docsnflhtml-in-progress" style="color:inherit">README</a>
-for the full methodology, known limitations, and backtest numbers.
-</p>
-
 <div class="tabGroup" id="nflTabs">
 <button class="tabButton active" data-nfl-tab="preseason" onclick="selectNflTab('preseason')">Preseason</button>
 </div>
@@ -73,16 +62,16 @@ Loading...
 </div>
 
 <h3>
-Preseason Notes
+Position Scarcity
 </h3>
 
-<p style="opacity:.75; max-width:700px;">
-A one-time, hand-curated list of real preseason storylines from trusted
-sources (injuries, holdouts, retirements, depth-chart battles, trades) -
-not a live feed, and not automatically updated as the season goes on.
-Rookie storylines are intentionally excluded (narrative-driven, not
-something real last-season stats can speak to).
-</p>
+<div class="scrollbox" id="positionScarcityTable">
+Loading...
+</div>
+
+<h3>
+Preseason Notes
+</h3>
 
 <div class="scrollbox" id="draftNotesTable">
 Loading...
