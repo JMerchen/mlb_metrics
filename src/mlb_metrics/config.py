@@ -1484,16 +1484,41 @@ NFL_DFS_ROSTER_SLOTS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "FLEX": 1, "DST": 1}
 
 # --- NFL Bestball: Position Scarcity (nfl_bestball.compute_position_scarcity) ---
 #
-# A real games-played qualifier before a player's dk_points_total counts
-# toward a position's mean/std - a handful of huge-rate, tiny-sample games
-# (e.g. a Week 17 injury replacement's one big game) would otherwise skew
-# the "typical starter" distribution the bell-curve buckets are meant to
-# describe. 8 is a simple, honest first-pass default (roughly half of a
-# real 17-game season, "played enough of the year to be read as a real
-# starter/lead role, not a cameo") - not backtest-derived, easy to
-# override via the build script's own flag if a different bar turns out
-# to matter more.
-NFL_BESTBALL_SCARCITY_MIN_GAMES = 8
+# NFL_BESTBALL_SCARCITY_MIN_GAMES (a real games_played >= 8 qualifier) was
+# removed after real 2025 data showed it let in players with almost no real
+# offensive role - e.g. a real return specialist with games_played=11 but
+# exactly 1 real offensive snap all season. games_played only requires ANY
+# real stat row that week (even a single special-teams play), not a
+# meaningful offensive role. Replaced by NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE
+# below - see nfl_bestball.compute_position_scarcity's own docstring for the
+# full reasoning. games_played/games_missed are untouched everywhere else
+# (the rankings table, the injury-history proxy) - only this qualifier
+# changed.
+#
+# The snap-share qualifier itself was originally a real PER-GAME average
+# (avg_offense_pct), which was then replaced by nfl_bestball.compute_
+# player_snap_share's real SEASON-TOTAL share (a player's real total
+# offensive snaps that season / their team's real total offensive snaps
+# that season) - the per-game average let a real one-or-two-game emergency
+# spot start at a high per-game rate qualify just as easily as a real
+# every-week starter (e.g. a real 2025 backup QB's real 82% single-game
+# rate across exactly 1 real game); the season-total share correctly drops
+# that same real player to a real 5% share once measured against the
+# team's full real season offensive-play total. games_played/dk_points_total
+# etc. are unaffected - only how this specific qualifier is computed
+# changed.
+#
+# 0.3 (30% of a team's real total season offensive snaps) is a simple,
+# honest first-pass default - NOT backtest-derived, and deliberately lower
+# than a "majority of snaps" bar would suggest, because a real SEASON-TOTAL
+# share runs meaningfully lower than a per-game rate even for genuinely
+# fantasy-relevant committee/complementary players (real 2025 example:
+# Jaylen Warren and TreVeyon Henderson, both clearly real, draftable RB2/
+# committee-role players with 200+ real season DK points, sit at real
+# season shares of 0.47/0.46 - a 0.5 bar would have wrongly excluded real,
+# relevant players like them). Easy to override via the build script's own
+# flag if a different bar turns out to matter more.
+NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE = 0.3
 
 # Which nfl_bestball_rankings.csv column the bell-curve buckets and
 # mean/std are computed over. dk_points_total (real realized season
@@ -1502,3 +1527,40 @@ NFL_BESTBALL_SCARCITY_MIN_GAMES = 8
 # playing-time/opportunity signal that makes a position scarce or deep in
 # the first place.
 NFL_BESTBALL_SCARCITY_VALUE_COLUMN = "dk_points_total"
+
+# Tukey's IQR-fence multiplier for excluding real statistical outliers
+# before computing a position's mean/std (see
+# nfl_bestball._iqr_outlier_bounds/compute_position_scarcity) - 1.5 is the
+# standard, textbook convention (not tuned/invented for this project), used
+# specifically because it doesn't require an already-computed mean/std as
+# an input, unlike a z-score-based rule (real NFL season-point totals among
+# a snap-share-qualified population are often right-skewed, so a mean/std
+# computed WITH the outliers already baked in would itself be distorted by
+# them - see that function's own docstring for the real before/after
+# numbers).
+NFL_BESTBALL_SCARCITY_IQR_MULTIPLIER = 1.5
+
+# --- NFL Bestball: Draftable Pool Depth (nfl_bestball.compute_draftable_points_floor) ---
+#
+# Real user feedback: even a real 50%+ snap-share qualifier still let in
+# real players nobody would actually draft (a real WR playing a
+# meaningful complementary role but producing very little - snap share
+# measures ROLE/health, not VALUE). This is a real, SEPARATE production
+# floor, layered on top of (not instead of) the snap-share qualifier -
+# real season-total dk_points_total, with the floor itself set at the
+# real Nth-ranked player's own real total, N derived from real DraftKings
+# Best Ball Mania roster-depth math, not an arbitrary points number.
+#
+# Confirmed live via web search (2026-08-07) against DraftKings' own
+# published rules and major fantasy outlets (FantasyPros, Establish The
+# Run, The Fantasy Footballers): DK Best Ball Mania (the flagship DK
+# Best Ball tournament) draft rooms are real 12-team pods, 20 rounds/
+# players per team, with a real 8-slot weekly starting lineup (QB, RB,
+# RB, WR, WR, WR, TE, FLEX). Real published roster-construction strategy
+# guidance gives typical PER-TEAM position counts drafted across those 20
+# rounds: QB 2-3, RB 5-7 (6 the consistently-cited number across
+# multiple real sources), WR 6-8, TE 1-2. The midpoint of each real
+# range, times the real 12-team pod size, gives a real (not invented)
+# estimate of how many players at each position a typical 12-team pool
+# actually drafts - the real "draftable pool depth":
+NFL_BESTBALL_DRAFTABLE_POOL_SIZE = {"QB": 30, "RB": 72, "WR": 84, "TE": 18}

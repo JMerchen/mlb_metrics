@@ -30,6 +30,21 @@ def _schedule_row(season, week, home, away, game_type="REG"):
     return {"season": season, "week": week, "game_type": game_type, "home_team": home, "away_team": away}
 
 
+def _snap_row(pfr_player_id, team, season, week, offense_snaps, game_type="REG", game_id=None):
+    # game_id defaults to one synthetic id per (team, week) - real snap_counts
+    # rows share a real game_id across every player in that real game, which
+    # is exactly what compute_player_snap_share's team-game grouping needs.
+    return {
+        "pfr_player_id": pfr_player_id, "team": team, "season": season, "week": week,
+        "game_type": game_type, "game_id": game_id or f"{season}_{week:02d}_{team}",
+        "offense_snaps": offense_snaps,
+    }
+
+
+def _roster_row(gsis_id, pfr_id, season):
+    return {"gsis_id": gsis_id, "pfr_id": pfr_id, "season": season}
+
+
 def test_compute_player_games_played_counts_real_weeks_and_missed_games():
     # Player played weeks 1-2 out of a real 3-game team schedule (weeks
     # 1-3) - a real week absent from weekly_df means they didn't play it.
@@ -77,6 +92,69 @@ def test_compute_player_games_played_ignores_postseason():
 
     assert result.loc["qb1", "games_played"] == 1
     assert result.loc["qb1", "possible_games"] == 1
+
+
+def test_compute_player_snap_share_is_season_total_not_per_game_average():
+    # NYJ plays 3 real games. QB1 plays every snap (60) in weeks 1-2, then
+    # misses week 3 entirely - QB2 plays all 65 snaps that week instead
+    # (establishing the team's real week-3 total even though QB1 has no
+    # row that week at all). Team season total: 60+60+65=185. QB1 season
+    # snaps: 120. Real season share: 120/185, NOT 1.0 (which a per-game
+    # average over only QB1's own 2 played games would have given).
+    snaps = pd.DataFrame([
+        _snap_row("Qb1Pfr", "NYJ", 2025, 1, 60),
+        _snap_row("Qb1Pfr", "NYJ", 2025, 2, 60),
+        _snap_row("Qb2Pfr", "NYJ", 2025, 3, 65),
+    ])
+    rosters = pd.DataFrame([_roster_row("qb1", "Qb1Pfr", 2025)])
+
+    result = nfl_bestball.compute_player_snap_share(snaps, rosters, 2025).set_index("player_id")
+
+    assert result.loc["qb1", "season_snap_share"] == pytest.approx(120 / 185)
+
+
+def test_compute_player_snap_share_penalizes_short_high_rate_sample():
+    # A real emergency 1-game spot start at a high PER-GAME rate (49/50 =
+    # 98%) must still read as a real LOW season share once the team's
+    # other 16 real games (with a different starter playing the bulk of
+    # real snaps) are counted in the denominator - directly the real
+    # 2025 Aidan O'Connell scenario (82% single-game rate -> ~5% season
+    # share) this function exists to get right.
+    rows = [_snap_row("SpotQbPfr", "NYJ", 2025, 1, 49)]
+    for week in range(2, 18):
+        rows.append(_snap_row("StarterQbPfr", "NYJ", 2025, week, 60))
+    snaps = pd.DataFrame(rows)
+    rosters = pd.DataFrame([_roster_row("spot_qb", "SpotQbPfr", 2025)])
+
+    result = nfl_bestball.compute_player_snap_share(snaps, rosters, 2025).set_index("player_id")
+
+    team_season_total = 49 + 60 * 16
+    assert result.loc["spot_qb", "season_snap_share"] == pytest.approx(49 / team_season_total)
+    assert result.loc["spot_qb", "season_snap_share"] < 0.06  # a real low season share, not the 98% single-game rate
+
+
+def test_compute_player_snap_share_ignores_postseason():
+    snaps = pd.DataFrame([
+        _snap_row("MahoPa00", "KC", 2025, 1, 60, game_type="REG"),
+        _snap_row("MahoPa00", "KC", 2025, 19, 5, game_type="WC"),  # a real low-snap mop-up playoff game
+    ])
+    rosters = pd.DataFrame([_roster_row("00-0033873", "MahoPa00", 2025)])
+
+    result = nfl_bestball.compute_player_snap_share(snaps, rosters, 2025).set_index("player_id")
+
+    assert result.loc["00-0033873", "season_snap_share"] == pytest.approx(1.0)
+
+
+def test_compute_player_snap_share_excludes_player_missing_from_real_crosswalk():
+    # A real snap-count row with no matching pfr_id on any real roster row
+    # that season (e.g. the ~0.3% real gap confirmed against 2025 data) is
+    # simply absent from the result, not given a fabricated share.
+    snaps = pd.DataFrame([_snap_row("NoCrosswalk00", "NYJ", 2025, 1, 45)])
+    rosters = pd.DataFrame([_roster_row("00-0099999", "SomeoneElse00", 2025)])
+
+    result = nfl_bestball.compute_player_snap_share(snaps, rosters, 2025)
+
+    assert result.empty
 
 
 def test_compute_season_realized_dk_points_qb_sums_real_weeks():
@@ -168,72 +246,199 @@ def test_build_bestball_rankings_prior_season_column_added_only_when_given():
     assert with_prior.set_index("player_id").loc["qb1", "games_missed_prior_season"] == 1
 
 
-def _rankings_row(player_id, position, games_played, dk_points_total):
-    return {"player_id": player_id, "position": position, "games_played": games_played, "dk_points_total": dk_points_total}
+def test_build_bestball_rankings_snap_share_column_added_only_when_given():
+    weekly = pd.DataFrame([_qb_week("qb1", 2025, 1, team="NYJ")])
+    schedules = pd.DataFrame([_schedule_row(2025, 1, "NYJ", "BUF")])
+
+    without_snaps = nfl_bestball.build_bestball_rankings(weekly, schedules, 2025)
+    assert "season_snap_share" not in without_snaps.columns
+
+    snap_counts = pd.DataFrame([_snap_row("QbOnePfr", "NYJ", 2025, 1, 55)])
+    rosters = pd.DataFrame([_roster_row("qb1", "QbOnePfr", 2025)])
+    with_snaps = nfl_bestball.build_bestball_rankings(
+        weekly, schedules, 2025, snap_counts_df=snap_counts, rosters_df=rosters
+    )
+    # Lone player in that team-game, so they ARE the team's real max -
+    # a real 100% season share by construction, no other team-game data.
+    assert with_snaps.set_index("player_id").loc["qb1", "season_snap_share"] == pytest.approx(1.0)
+
+
+def _rankings_row(player_id, position, dk_points_total, season_snap_share=0.6):
+    # season_snap_share defaults above config.NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE
+    # (0.3) so a test can omit it entirely when only exercising unrelated
+    # behavior; tests exercising the qualifier itself override it directly.
+    return {"player_id": player_id, "position": position, "dk_points_total": dk_points_total, "season_snap_share": season_snap_share}
 
 
 def test_compute_position_scarcity_counts_total_vs_qualified_players():
-    # 3 real WRs total, but only 2 clear the games threshold.
+    # 3 real WRs total, but only 2 clear the snap-share threshold.
     rankings = pd.DataFrame([
-        _rankings_row("wr1", "WR", 17, 200),
-        _rankings_row("wr2", "WR", 15, 150),
-        _rankings_row("wr3", "WR", 2, 30),  # below threshold - counted in total, not qualified
+        _rankings_row("wr1", "WR", 200, season_snap_share=0.9),
+        _rankings_row("wr2", "WR", 150, season_snap_share=0.35),
+        _rankings_row("wr3", "WR", 30, season_snap_share=0.02),  # below threshold - counted in total, not qualified
     ])
 
-    result = nfl_bestball.compute_position_scarcity(rankings, min_games=8).set_index("position")
+    result = nfl_bestball.compute_position_scarcity(rankings, min_snap_share=0.3).set_index("position")
 
     assert result.loc["WR", "total_players"] == 3
     assert result.loc["WR", "qualified_players"] == 2
+
+
+def test_compute_draftable_points_floor_uses_nth_ranked_real_player():
+    rankings = pd.DataFrame([
+        _rankings_row("wr1", "WR", 300),
+        _rankings_row("wr2", "WR", 200),
+        _rankings_row("wr3", "WR", 100),
+    ])
+
+    floors = nfl_bestball.compute_draftable_points_floor(rankings, pool_sizes={"WR": 2})
+
+    assert floors["WR"] == pytest.approx(200.0)  # the real #2-ranked player's own real total
+
+
+def test_compute_draftable_points_floor_handles_pool_smaller_than_real_population():
+    # Fewer real players at the position than the pool size - no real
+    # floor can be derived, NaN rather than a fabricated one.
+    rankings = pd.DataFrame([_rankings_row("te1", "TE", 100)])
+
+    floors = nfl_bestball.compute_draftable_points_floor(rankings, pool_sizes={"TE": 5})
+
+    assert pd.isna(floors["TE"])
+
+
+def test_compute_position_scarcity_requires_both_snap_share_and_points_floor():
+    # wr1 clears snap share but not the points floor; wr2 clears the
+    # points floor but not snap share; wr3 clears neither; wr4 clears both.
+    rankings = pd.DataFrame([
+        _rankings_row("wr1", "WR", 50, season_snap_share=0.9),
+        _rankings_row("wr2", "WR", 200, season_snap_share=0.1),
+        _rankings_row("wr3", "WR", 40, season_snap_share=0.1),
+        _rankings_row("wr4", "WR", 200, season_snap_share=0.9),
+    ])
+
+    result = nfl_bestball.compute_position_scarcity(
+        rankings, min_snap_share=0.3, min_points_by_position={"WR": 100}
+    ).set_index("position")
+
+    assert result.loc["WR", "qualified_players"] == 1
+    assert result.loc["WR", "points_floor"] == pytest.approx(100.0)
+
+
+def test_compute_position_scarcity_ignores_missing_or_nan_points_floor():
+    rankings = pd.DataFrame([_rankings_row("wr1", "WR", 50, season_snap_share=0.9)])
+
+    # Position absent from min_points_by_position entirely.
+    result = nfl_bestball.compute_position_scarcity(
+        rankings, min_snap_share=0.3, min_points_by_position={}
+    ).set_index("position")
+    assert result.loc["WR", "qualified_players"] == 1
+
+    # Position present but with a real NaN floor (pool deeper than real data).
+    result = nfl_bestball.compute_position_scarcity(
+        rankings, min_snap_share=0.3, min_points_by_position={"WR": float("nan")}
+    ).set_index("position")
+    assert result.loc["WR", "qualified_players"] == 1
+
+
+def test_compute_position_scarcity_excludes_players_missing_snap_share_entirely():
+    # A real NaN season_snap_share (no snap-count crosswalk match) never
+    # satisfies >=, so it must be excluded, not treated as a fabricated 0.
+    rankings = pd.DataFrame([
+        _rankings_row("wr1", "WR", 200, season_snap_share=0.9),
+        _rankings_row("wr2", "WR", 150, season_snap_share=float("nan")),
+    ])
+
+    result = nfl_bestball.compute_position_scarcity(rankings, min_snap_share=0.5).set_index("position")
+
+    assert result.loc["WR", "total_players"] == 2
+    assert result.loc["WR", "qualified_players"] == 1
+
+
+def test_compute_position_scarcity_handles_missing_season_snap_share_column():
+    # rankings_df built without snap_counts_df/rosters_df has no
+    # season_snap_share column at all - must not crash (KeyError), just
+    # report "nothing real to qualify."
+    rankings = pd.DataFrame([{"player_id": "wr1", "position": "WR", "dk_points_total": 200}])
+
+    result = nfl_bestball.compute_position_scarcity(rankings, min_snap_share=0.5).set_index("position")
+
+    assert result.loc["WR", "total_players"] == 1
+    assert result.loc["WR", "qualified_players"] == 0
 
 
 def test_compute_position_scarcity_mean_and_std_match_hand_computation():
     # Qualified points: 100, 200, 300 -> mean 200, population std (ddof=0)
     # is sqrt(((100)^2+(0)^2+(100)^2)/3) = sqrt(20000/3).
     rankings = pd.DataFrame([
-        _rankings_row("rb1", "RB", 17, 100),
-        _rankings_row("rb2", "RB", 17, 200),
-        _rankings_row("rb3", "RB", 17, 300),
+        _rankings_row("rb1", "RB", 100),
+        _rankings_row("rb2", "RB", 200),
+        _rankings_row("rb3", "RB", 300),
     ])
 
-    result = nfl_bestball.compute_position_scarcity(rankings, min_games=8).set_index("position")
+    result = nfl_bestball.compute_position_scarcity(rankings, min_snap_share=0.5).set_index("position")
 
     assert result.loc["RB", "mean_dk_points"] == pytest.approx(200.0)
     assert result.loc["RB", "std_dk_points"] == pytest.approx((20000 / 3) ** 0.5)
 
 
-def test_compute_position_scarcity_buckets_players_by_standard_deviation():
-    # mean=200, std=100 (population) with these 5 values -> z-scores of
-    # roughly -1.41, -0.71, 0, 0.71, 1.41, all landing "within_1sd" except
-    # the two extremes which fall just short of +/-2sd, still within_1sd
-    # too (|z|<1.5). Use a wider, cleaner spread instead so buckets are
-    # unambiguous by construction: exact z-scores of -3, -1, 0, 1, 3 via a
-    # constructed mean/std.
-    values = [0, 100, 150, 200, 300]  # mean=150, population std=100 (by construction below)
-    rankings = pd.DataFrame([_rankings_row(f"qb{i}", "QB", 17, v) for i, v in enumerate(values)])
+def test_compute_position_scarcity_buckets_players_into_quarter_sd_subbuckets():
+    # A clean, no-outlier population (no value clears the IQR fence) with
+    # exact z-scores of -1.5, -0.5, 0, 0.5, 1.5 by construction, hitting
+    # both the outer bands and the four within-1sd quarter-SD subbuckets.
+    values = [0, 100, 150, 200, 300]  # mean=150, population std=100
+    rankings = pd.DataFrame([_rankings_row(f"qb{i}", "QB", v) for i, v in enumerate(values)])
     mean = sum(values) / len(values)
     std = (sum((v - mean) ** 2 for v in values) / len(values)) ** 0.5
     assert mean == pytest.approx(150.0)
     assert std == pytest.approx(100.0)
     # z-scores: 0 -> -1.5, 100 -> -0.5, 150 -> 0, 200 -> 0.5, 300 -> 1.5
 
-    result = nfl_bestball.compute_position_scarcity(rankings, min_games=8).set_index("position")
+    result = nfl_bestball.compute_position_scarcity(rankings, min_snap_share=0.5).set_index("position")
 
+    # pd.cut bins are right-inclusive - (-1,-0.5] contains -0.5, (-0.5,0]
+    # contains 0, (0,0.5] contains 0.5, so an exact-boundary z-score lands
+    # in the bucket below it, not above.
     row = result.loc["QB"]
+    assert row["outliers_removed"] == 0
     assert row["-2sd_to_-1sd"] == 1  # z=-1.5
-    assert row["within_1sd"] == 3  # z=-0.5, 0, 0.5
+    assert row["-1sd_to_-0.5sd"] == 1  # z=-0.5
+    assert row["-0.5sd_to_0sd"] == 1  # z=0
+    assert row["0sd_to_0.5sd"] == 1  # z=0.5
     assert row["1sd_to_2sd"] == 1  # z=1.5
     assert sum(row[label] for label in nfl_bestball.SCARCITY_BUCKET_LABELS) == 5
 
 
-def test_compute_position_scarcity_handles_fewer_than_two_qualified_players():
-    rankings = pd.DataFrame([_rankings_row("te1", "TE", 17, 100)])
+def test_compute_position_scarcity_excludes_real_outliers_from_mean_std_but_buckets_them():
+    # 8 tightly-clustered "core" values plus one extreme outlier that a
+    # standard 1.5x IQR fence flags. The outlier must not pull the
+    # mean/std, but must still be counted somewhere in the bell curve.
+    core_values = [95, 100, 100, 105, 100, 95, 105, 100]  # mean 100, tight spread
+    rankings = pd.DataFrame(
+        [_rankings_row(f"wr{i}", "WR", v) for i, v in enumerate(core_values)]
+        + [_rankings_row("wr_outlier", "WR", 1000)]  # far outside any real IQR fence
+    )
 
-    result = nfl_bestball.compute_position_scarcity(rankings, min_games=8).set_index("position")
+    result = nfl_bestball.compute_position_scarcity(rankings, min_snap_share=0.5).set_index("position")
+    row = result.loc["WR"]
+
+    assert row["qualified_players"] == 9
+    assert row["outliers_removed"] == 1
+    assert row["mean_dk_points"] == pytest.approx(sum(core_values) / len(core_values))
+    assert row["mean_dk_points"] < 200  # nowhere near being pulled toward 1000
+    assert sum(row[label] for label in nfl_bestball.SCARCITY_BUCKET_LABELS) == 9  # all 9, outlier included
+    assert row["above_3sd"] == 1  # the real outlier lands in the extreme band
+
+
+def test_compute_position_scarcity_handles_fewer_than_two_qualified_players():
+    rankings = pd.DataFrame([_rankings_row("te1", "TE", 100)])
+
+    result = nfl_bestball.compute_position_scarcity(rankings, min_snap_share=0.5).set_index("position")
 
     row = result.loc["TE"]
     assert row["qualified_players"] == 1
     assert pd.isna(row["mean_dk_points"]) is False  # a single qualified player still has a real mean
     assert pd.isna(row["std_dk_points"])  # but no real std with only one data point
+    assert pd.isna(row["coefficient_of_variation"])
     assert sum(row[label] for label in nfl_bestball.SCARCITY_BUCKET_LABELS) == 0
 
 
@@ -241,13 +446,46 @@ def test_compute_position_scarcity_handles_zero_variance_without_crashing():
     # Every qualified player tied on points - std is exactly 0, so a
     # z-score is undefined; must not divide by zero.
     rankings = pd.DataFrame([
-        _rankings_row("wr1", "WR", 17, 100),
-        _rankings_row("wr2", "WR", 17, 100),
+        _rankings_row("wr1", "WR", 100),
+        _rankings_row("wr2", "WR", 100),
     ])
 
-    result = nfl_bestball.compute_position_scarcity(rankings, min_games=8).set_index("position")
+    result = nfl_bestball.compute_position_scarcity(rankings, min_snap_share=0.5).set_index("position")
 
     row = result.loc["WR"]
     assert row["mean_dk_points"] == pytest.approx(100.0)
     assert row["std_dk_points"] == pytest.approx(0.0)
+    assert pd.isna(row["coefficient_of_variation"])
     assert sum(row[label] for label in nfl_bestball.SCARCITY_BUCKET_LABELS) == 0
+
+
+def test_compute_draft_strategy_takeaways_ranks_by_relative_dispersion():
+    # QB is flat (CV low), WR is dispersed (CV high) - QB should rank
+    # below-median (flatter/deeper), WR above-median (scarcer).
+    scarcity = pd.DataFrame([
+        {"position": "QB", "mean_dk_points": 200.0, "std_dk_points": 20.0, "coefficient_of_variation": 0.1},
+        {"position": "RB", "mean_dk_points": 150.0, "std_dk_points": 60.0, "coefficient_of_variation": 0.4},
+        {"position": "WR", "mean_dk_points": 100.0, "std_dk_points": 80.0, "coefficient_of_variation": 0.8},
+        {"position": "TE", "mean_dk_points": 80.0, "std_dk_points": 24.0, "coefficient_of_variation": 0.3},
+    ])
+
+    result = nfl_bestball.compute_draft_strategy_takeaways(scarcity).set_index("position")
+
+    assert result.loc["WR", "dispersion_rank"] == 1  # most dispersed
+    assert result.loc["QB", "dispersion_rank"] == 4  # least dispersed
+    assert "flatter" in result.loc["QB", "takeaway"].lower()
+    assert "scarcer" in result.loc["WR", "takeaway"].lower() or "top-heavy" in result.loc["WR", "takeaway"].lower()
+
+
+def test_compute_draft_strategy_takeaways_handles_missing_coefficient_of_variation():
+    scarcity = pd.DataFrame([
+        {"position": "QB", "mean_dk_points": 200.0, "std_dk_points": 20.0, "coefficient_of_variation": 0.1},
+        {"position": "RB", "mean_dk_points": 150.0, "std_dk_points": 60.0, "coefficient_of_variation": 0.4},
+        {"position": "TE", "mean_dk_points": float("nan"), "std_dk_points": float("nan"), "coefficient_of_variation": float("nan")},
+    ])
+
+    result = nfl_bestball.compute_draft_strategy_takeaways(scarcity).set_index("position")
+
+    assert pd.isna(result.loc["TE", "dispersion_rank"])
+    assert "not enough" in result.loc["TE", "takeaway"].lower()
+    assert result.loc["QB", "dispersion_rank"] == 2  # still comparable against RB

@@ -1749,12 +1749,16 @@ project's NFL modules are confirmed live via
 assumed - see `nfl_data.py`'s module docstring for the specific run cited.
 
 Raw per-season tables (`weekly`, `schedules`, `injuries`,
-`rosters_weekly`, `team_stats`) persist to `data/raw/nfl/*.parquet` via
-`nfl_data.py`, one file per table per season - the current season's file
-is overwritten wholesale on each fetch (nflverse retroactively corrects
-stats, so an append-and-dedupe pattern isn't safe), while completed
-historical seasons are fetched once via `scripts/fetch_nfl_historical.py`
-(`config.NFL_HISTORICAL_SEASONS`) and left alone.
+`rosters_weekly`, `team_stats`, `snap_counts`) persist to
+`data/raw/nfl/*.parquet` via `nfl_data.py`, one file per table per season
+- the current season's file is overwritten wholesale on each fetch
+(nflverse retroactively corrects stats, so an append-and-dedupe pattern
+isn't safe), while completed historical seasons are fetched once via
+`scripts/fetch_nfl_historical.py` (`config.NFL_HISTORICAL_SEASONS`) and
+left alone. `snap_counts` is keyed by a real Pro-Football-Reference id
+(`pfr_player_id`), a different id space than every other table's GSIS
+`player_id` - crossed over via `rosters_weekly`'s own real `gsis_id`/
+`pfr_id` columns wherever it's used (see `nfl_bestball.compute_player_snap_share`).
 
 Player form is a **games-back rolling blend** (`nfl_passing.py` for QBs,
 `nfl_rush_rec.py` for RB/WR/TE together, since both share DK's FLEX pool)
@@ -1886,6 +1890,28 @@ ground truth for what the right health/talent tradeoff weighting would
 even be, so this project's "show raw signals honestly, don't blend
 without a real backtest to justify it" standard applies here too.
 
+**Real season-total offensive snap share** (`season_snap_share`,
+`nfl_bestball.compute_player_snap_share`, from `nfl_data.fetch_snap_counts`
+- real Pro-Football-Reference-sourced per-game snap counts via
+`nflreadpy.load_snap_counts`) is also published on the rankings table -
+a real playing-time-ROLE signal, distinct from games played (availability)
+and points-per-game (production rate). This is a real SEASON-TOTAL share
+(a player's real total offensive snaps that season, divided by their
+team's real total offensive snaps that season - both summed across every
+real game, not just the games the player themselves appeared in), not a
+per-game average - a per-game average would let a real one-or-two-game
+emergency spot start at a high per-game rate look identical to a real
+every-week starter, exactly the small-sample problem a playing-time
+signal needs to avoid. A team's real total offensive snaps for one game
+is read as the max real `offense_snaps` among that team's players that
+game (confirmed live: some player, almost always an O-line starter,
+plays exactly 100% of a team's real offensive snaps in 541/544, ~99.4%,
+of real 2025 team-games). It's crosswalked from the snap data's own
+`pfr_player_id` join key to this project's `player_id`/GSIS id via
+`fetch_rosters_weekly`'s real `gsis_id`/`pfr_id` columns (confirmed live
+to cover 382 of 383, ~99.7%, of a real 2025 qualified population); a
+player missing that crosswalk gets a real `NaN`, never a fabricated 0%.
+
 Built via `scripts/build_nfl_bestball_rankings.py`
 (`.github/workflows/build_nfl_bestball_rankings.yml`, `workflow_dispatch`
 only) - a manual/one-time build, not a daily/weekly cron, since real
@@ -1897,31 +1923,155 @@ feed.
 exist at this position, and how many replacement-level guys" read for
 draft strategy, not just a flat rank list. Per position (QB/RB/WR/TE):
 the real total player pool size, how many of those players cleared a
-real games-played qualifier (`config.NFL_BESTBALL_SCARCITY_MIN_GAMES =
-8`, roughly half a real season - a simple, honest, not-backtest-derived
-first-pass default meant to exclude tiny-sample cameo performances from
-skewing what "typical production" looks like), the real mean/std of
-`dk_points_total` among those qualified players (population std, not
-sample - this describes the actual observed shape of this real,
-complete season's qualified population, not an estimate of some larger
-population), and a bell-curve breakdown of those qualified players by
-how many standard deviations they sit from their own position's mean
-(the standard empirical-rule bands: within 1 SD, 1-2 SD, 2-3 SD, beyond
-3 SD, in both directions). A position with more of its qualified players
-bunched within 1 SD of the mean is the deeper position (more
-replaceable value, safer to wait on in a draft); a position where the
-mean/std themselves are already low relative to other positions, or
-where few players separate from the pack, is the scarcer one.
+real season-total-snap-share qualifier (`config.
+NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE = 0.3`, "played at least 30% of
+your team's total real offensive snaps this season" - a simple, honest,
+not-backtest-derived first-pass default, deliberately lower than a
+"majority of snaps" bar; see below for why), and a bell-curve breakdown
+of those qualified players by how many standard deviations they sit
+from their own position's mean (the standard empirical-rule bands - 1-2
+SD, 2-3 SD, beyond 3 SD in both directions - with the central "within 1
+SD" band further split into real quarter-SD slices, since most
+draft-relevant players land there and one wide bucket would hide real
+shape right where it matters most).
+
+**This qualifier has gone through two real fixes, both driven by real
+data, not guesswork:**
+
+1. It used to be `games_played >= 8`, changed after real 2025 data
+   showed it let in players with almost no real offensive role. A real
+   return specialist (Jamal Agnew) had `games_played=11` - clearing the
+   old bar easily - but played exactly 1 real offensive snap (0.18%
+   share) all season and scored 0 real points; several similar
+   special-teamers/inactive-but-rostered players sat right in the same
+   "qualified" population as true starters. `games_played` only
+   requires ANY real stat row that week (even a single special-teams
+   play), not a meaningful offensive role - this is exactly why the
+   table's mean and std were once suspiciously close together (real
+   2025 WR: mean 99.2, std 83.1 under the old rule - std nearly as
+   large as the mean, a genuine red flag).
+2. The snap-share qualifier itself was then a real PER-GAME average
+   (`avg_offense_pct`), which fixed the special-teamer problem but
+   introduced a real, different small-sample problem in the opposite
+   direction: a real one-or-two-game emergency spot start at a high
+   per-game rate would qualify just as easily as a real every-week
+   starter. Real example: Raiders backup QB Aidan O'Connell's real
+   single-game rate was 82% across his exactly-1 real game played -
+   comfortably clearing even a 50% per-game bar. `compute_player_snap_share`
+   now computes a real SEASON-TOTAL share instead (real total snaps
+   that season / team's real total offensive snaps that season, both
+   summed over every real game, not just games the player appeared in)
+   - the same O'Connell drops to a real 5.1% season share once measured
+   against the Raiders' real full-season offensive-play total, and is
+   correctly excluded.
+
+Because a real season-total share runs meaningfully lower than a
+per-game rate even for genuinely relevant players (real 2025 example:
+Jaylen Warren and TreVeyon Henderson, both clearly real, draftable
+committee-role RBs with 200+ real season DK points, sit at real season
+shares of 0.47/0.46 - not the 0.5+ a "majority of snaps" framing might
+suggest), the qualifier's threshold was lowered from 0.5 to 0.3
+alongside this fix - see `config.NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE`'s
+own docstring for the full real-data reasoning.
+
+**A real production floor is ALSO required, layered on top of (not
+instead of) the snap-share qualifier** (`nfl_bestball.
+compute_draftable_points_floor`, `config.NFL_BESTBALL_DRAFTABLE_POOL_SIZE`).
+Real user feedback: even at a real 50%+ snap-share bar, a position's
+qualified-pool mean still didn't reflect "players who'd actually get
+drafted" - real complementary-role players can clear a real snap-share
+bar (a genuine role/health signal) while producing very little (a
+separate value question snap share doesn't answer). The floor is set at
+the real Nth-ranked player's own real `dk_points_total`, N derived from
+real DraftKings Best Ball Mania roster-depth math - confirmed live via
+web search against DraftKings' own published rules and major fantasy
+outlets: real 12-team draft pods, 20 real roster spots/team, with real
+published strategy guidance on typical per-team position counts (QB
+2-3, RB 5-7 [6 the consistently-cited number], WR 6-8, TE 1-2) - the
+midpoint of each real range, times the real 12-team pod size, gives a
+real "how many players at this position does a typical pool actually
+draft" depth: `{"QB": 30, "RB": 72, "WR": 84, "TE": 18}`. A position
+with fewer real players than its pool size gets no real floor (real
+data doesn't reach that deep) rather than a fabricated one.
+
+**Real statistical outliers are excluded from the mean/std before the
+bell curve is built, via Tukey's IQR-fence rule** (`config.
+NFL_BESTBALL_SCARCITY_IQR_MULTIPLIER = 1.5`, the textbook convention,
+not tuned for this project - chosen specifically because it doesn't
+need an already-computed mean/std as an input, unlike a z-score rule,
+which would be circular for exactly this problem). Those excluded
+outliers still appear in the bell curve buckets (almost always in the
+extreme bands, exactly where a real outlier belongs) - they're excluded
+from the summary statistics, not from the table. Removing them does NOT
+eliminate all spread, honestly: real production among a real qualified
+population genuinely ranges from replacement-level to true
+difference-makers, and that remaining spread is real, not leftover
+contamination.
 
 Real 2025 numbers as of this writing (via `python
-scripts/build_nfl_bestball_rankings.py`):
+scripts/build_nfl_bestball_rankings.py`), under BOTH the season-total
+snap-share qualifier AND the roster-depth-based production floor - note
+how much closer the WR/TE means now sit to real "would actually be
+drafted" territory than under snap share alone (WR mean 127.8 -> 157.4,
+TE 90.6 -> 172.8):
 
-| Position | Total players | Qualified (8+ games) | Mean DK pts | Std DK pts |
-|---|---|---|---|---|
-| QB | 81 | 37 | 232.7 | 87.1 |
-| RB | 151 | 97 | 121.5 | 102.4 |
-| WR | 240 | 162 | 99.2 | 83.1 |
-| TE | 136 | 87 | 80.6 | 62.9 |
+| Position | Total players | Qualified | Points floor | Outliers excluded | Mean DK pts | Std DK pts | Coefficient of variation |
+|---|---|---|---|---|---|---|---|
+| QB | 81 | 30 | 145.5 | 0 | 260.2 | 72.4 | 0.28 |
+| RB | 151 | 46 | 43.6 | 1 | 198.4 | 82.4 | 0.42 |
+| WR | 240 | 81 | 75.1 | 2 | 157.4 | 62.5 | 0.40 |
+| TE | 136 | 17 | 130.8 | 1 | 172.8 | 23.9 | 0.14 |
+
+Two honest real observations worth flagging:
+
+- **RB's real points floor (43.6) is surprisingly low** and barely
+  changed RB's qualified count (46, same as snap share alone) - real DK
+  Best Ball roster-construction strategy deliberately drafts deep at RB
+  (handcuffs/dart-throws for real injury insurance, a well-documented
+  real strategy given the position's real injury volatility), so a
+  rank-72 real cutoff lands on real committee/replacement-tier value,
+  not a bug.
+- **TE's qualified pool shrank the most** (68 -> 17) - a real reflection
+  of how few NFL tight ends are real receiving weapons versus real
+  in-line blockers who still play real meaningful snap shares without
+  much real receiving production.
+
+**Draft Strategy** (`docs/data/nfl_draft_strategy_takeaways.csv`,
+`nfl_bestball.compute_draft_strategy_takeaways`): a real, numbers-driven
+answer to "does this season's real spread argue for prioritizing this
+position early in a draft, or waiting" - the direct question the bell
+curve above raises but doesn't answer by itself. Ranks each position's
+`coefficient_of_variation` (std/mean of its own real, outlier-excluded
+core group) **relative to the other real positions this season**, not
+against an invented absolute cutoff - "high" or "low" dispersion only
+means something compared to the other real positions in the same real
+season's data. Positions at or above the real median CV are read as the
+more top-heavy/scarcer positions this season (a bigger real gap between
+a difference-maker and a typical qualified player, so grabbing a proven
+top-tier player there early carries more relative value); positions
+below the median CV are read as flatter/deeper (real production is more
+interchangeable, so it's generally safer to wait and spend an early
+pick at a scarcer position instead).
+
+This directly answers a natural question like "if QBs are all within 2
+SD of the mean, should a TE be prioritized instead" - yes, exactly when
+the other position's own real CV this season ranks higher (scarcer)
+than QB's. Real 2025 read, under the corrected qualifier (season-total
+snap share AND a real production floor): RB is now the SCARCEST
+position (CV 0.42, real ranking #1 of 4), followed by WR (0.40), then
+QB (0.28), with TE the flattest/deepest by a wide margin (CV 0.14) -
+the fourth real read this table has produced across the qualifier's
+three real fixes (originally QB flattest under games-played, then QB
+scarcest under per-game average, then TE scarcest under season-total
+share alone, now RB scarcest with the production floor added). Each
+flip is itself a real illustration of how much the qualifier's
+definition matters for this kind of relative comparison - not evidence
+any one read was "wrong" so much as that a population contaminated with
+the wrong players (special-teamers, short high-rate samples, or
+low-value complementary role players) produces a real but misleading
+CV, and only a population filtered on both real role AND real value
+reflects players a real bestball drafter would actually be choosing
+among.
 
 **Preseason Notes** (`docs/data/nfl_draft_notes.csv`): a one-time,
 hand-curated list of real training-camp storylines specifically for
