@@ -1,0 +1,58 @@
+name: Build NFL Bestball Rankings
+
+# Manual/one-time build, not a daily/weekly cron - see
+# scripts/build_nfl_bestball_rankings.py's own module docstring for why
+# (real last-season stats don't change, and this feature isn't meant to
+# be a live-updated feed). Re-run manually later in preseason if wanted,
+# e.g. once more roster/depth-chart news has settled.
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season to rank (defaults to config.NFL_SEASON - 1, the last completed season)"
+        required: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: |
+          pytest
+
+      - name: Build NFL bestball rankings
+        run: |
+          if [ -n "${{ inputs.season }}" ]; then
+            python scripts/build_nfl_bestball_rankings.py --season "${{ inputs.season }}"
+          else
+            python scripts/build_nfl_bestball_rankings.py
+          fi
+
+      - name: Commit updates
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          git add docs/data/nfl_bestball_rankings.csv
+
+          git commit -m "Build NFL bestball rankings" || echo "No changes"
+
+          git push

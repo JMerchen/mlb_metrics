@@ -1859,8 +1859,49 @@ still ships (the optimizer/roster need it structurally), but should be
 treated as unvalidated/weak, not a trustworthy signal - see
 `config.py`'s NFL Backtesting section for the full numbers and reasoning.
 
-Not yet built: the weekly-cadence pipeline/workflows, or the
-`docs/nfl.html` dashboard page itself.
+Not yet built: the weekly-cadence pipeline/workflows for the in-season
+DFS Optimal Lineup subtab (needs live-season data this project doesn't
+have yet).
+
+### Bestball Draft Strategy (`docs/nfl.html`'s Preseason subtab, `nfl_bestball.py`)
+
+Real preseason bestball drafts don't need a forward-looking weekly
+projection - they need "how much value/risk did this player represent
+LAST season, as a whole." `nfl_bestball.py` answers that with a real,
+realized season total rather than a rolling-window projection: it reuses
+`nfl_dfs_backtest.py`'s `compute_actual_qb_dk_points`/
+`compute_actual_skill_dk_points` (already-validated real full-PPR DK
+scoring from real box scores, see the backtest numbers above) summed
+across every real regular-season week, for QB/RB/WR/TE (DST excluded -
+bestball drafting doesn't need DST optimization the way weekly DFS does).
+
+**Games played is the injury-history signal** - deliberately simple and
+honest, not a full medical history: real games played vs. that player's
+team's real regular-season game count (16 games through 2020, 17 from
+2021 on - always read from the real schedule, never hardcoded), plus the
+same figure for the prior season for a cheap repeat-injury-risk read.
+`dk_points_per_game` and `games_missed` are kept as separate columns
+rather than blended into one "draft score" - there's no backtestable
+ground truth for what the right health/talent tradeoff weighting would
+even be, so this project's "show raw signals honestly, don't blend
+without a real backtest to justify it" standard applies here too.
+
+Built via `scripts/build_nfl_bestball_rankings.py`
+(`.github/workflows/build_nfl_bestball_rankings.yml`, `workflow_dispatch`
+only) - a manual/one-time build, not a daily/weekly cron, since real
+last-season stats don't change and this isn't meant to be a live-updated
+feed.
+
+**Preseason Notes** (`docs/data/nfl_draft_notes.csv`): a one-time,
+hand-curated list of real preseason storylines (injuries, holdouts,
+retirements, depth-chart battles, trades) from trusted sources (ESPN,
+RotoWire, Yahoo Sports, Fox News), each a short paraphrase in original
+words with a link back to the source - never reproduced article text.
+This is genuinely NOT automated - this codebase has zero precedent for
+fetching external web content (no scraping/RSS/WebFetch anywhere), and
+the NFL page's own design philosophy is "no new network call, same-
+origin CSV fetches only." Rookie storylines are intentionally excluded
+(narrative-driven, not something real last-season stats can speak to).
 
 ## Running
 

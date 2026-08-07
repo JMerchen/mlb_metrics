@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8">
+
+<title>MLB Metrics - NFL</title>
+
+<link
+rel="icon"
+type="image/svg+xml"
+href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTQiIGZpbGw9IiNmMmE5M2MiLz48cGF0aCBkPSJNMTAgNCBDMTQgMTAsIDE0IDIyLCAxMCAyOCIgc3Ryb2tlPSIjMGIwZDEwIiBzdHJva2Utd2lkdGg9IjEuOCIgZmlsbD0ibm9uZSIvPjxwYXRoIGQ9Ik0yMiA0IEMxOCAxMCwgMTggMjIsIDIyIDI4IiBzdHJva2U9IiMwYjBkMTAiIHN0cm9rZS13aWR0aD0iMS44IiBmaWxsPSJub25lIi8+PC9zdmc+">
+
+<link
+rel="stylesheet"
+href="./style.css">
+
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="siteHeader">
+
+<div class="brandRow">
+<svg class="brandMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+<circle cx="16" cy="16" r="14" fill="#f2a93c"/>
+<path d="M10 4 C14 10, 14 22, 10 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
+<path d="M22 4 C18 10, 18 22, 22 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
+</svg>
+<h1><span class="brandAccent">NFL</span></h1>
+</div>
+
+<div class="tabGroup pageTabs">
+<a class="tabButton" href="./index.html">Predictive Metrics</a>
+<a class="tabButton" href="./age-curves.html">Age Curves</a>
+<a class="tabButton" href="./dfs.html">DFS Rankings</a>
+<a class="tabButton active" href="./nfl.html">NFL</a>
+</div>
+
+</div>
+
+<p style="opacity:.75; max-width:700px;">
+An NFL analog of the MLB pipeline above - the weekly in-season DFS
+Optimal Lineup subtab is still being built (needs live-season data this
+project doesn't have yet). Ready now: a Preseason subtab for bestball
+draft strategy, ranking real QB/RB/WR/TE production from last season
+(full-PPR DraftKings scoring) with real games-played as an honest,
+simple injury-history proxy - not a full medical history. See the
+<a href="https://github.com/JMerchen/mlb_metrics#nfl-dfs-docsnflhtml-in-progress" style="color:inherit">README</a>
+for the full methodology, known limitations, and backtest numbers.
+</p>
+
+<div class="tabGroup" id="nflTabs">
+<button class="tabButton active" data-nfl-tab="preseason" onclick="selectNflTab('preseason')">Preseason</button>
+</div>
+
+<div id="preseasonSection">
+
+<div class="tabGroup" id="bestballPositionTabs">
+<button class="tabButton active" data-bestball-position="all" onclick="selectBestballPosition('all')">All</button>
+<button class="tabButton" data-bestball-position="QB" onclick="selectBestballPosition('QB')">QB</button>
+<button class="tabButton" data-bestball-position="RB" onclick="selectBestballPosition('RB')">RB</button>
+<button class="tabButton" data-bestball-position="WR" onclick="selectBestballPosition('WR')">WR</button>
+<button class="tabButton" data-bestball-position="TE" onclick="selectBestballPosition('TE')">TE</button>
+</div>
+
+<div class="scrollbox" id="bestballTable">
+Loading...
+</div>
+
+<h3>
+Preseason Notes
+</h3>
+
+<p style="opacity:.75; max-width:700px;">
+A one-time, hand-curated list of real preseason storylines from trusted
+sources (injuries, holdouts, retirements, depth-chart battles, trades) -
+not a live feed, and not automatically updated as the season goes on.
+Rookie storylines are intentionally excluded (narrative-driven, not
+something real last-season stats can speak to).
+</p>
+
+<div class="scrollbox" id="draftNotesTable">
+Loading...
+</div>
+
+</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<script src="./nfl.js"></script>
+
+</body>
+
+</html>
