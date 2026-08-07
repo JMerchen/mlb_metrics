@@ -10,8 +10,11 @@ why this is a genuinely different question from the weekly DFS pipeline
 nfl_position_scarcity.csv is built directly from the rankings above (see
 nfl_bestball.compute_position_scarcity's own docstring): per position,
 real player-pool depth and a bell-curve breakdown of how real
-dk_points_total is distributed among players who cleared a real
-average-offensive-snap-share qualifier - a "how scarce/deep is this
+dk_points_total is distributed among players who cleared BOTH a real
+season-total-snap-share qualifier (role/health) AND a real production
+floor (nfl_bestball.compute_draftable_points_floor, derived from real
+DK Best Ball Mania roster-depth math - see
+config.NFL_BESTBALL_DRAFTABLE_POOL_SIZE) - a "how scarce/deep is this
 position really" read to complement the flat ranking list.
 
 nfl_draft_strategy_takeaways.csv (see
@@ -92,7 +95,8 @@ def main():
     rankings.to_csv(out_path, index=False)
     print(f"Wrote nfl_bestball_rankings.csv ({len(rankings)} rows) for {args.season}.")
 
-    scarcity = nfl_bestball.compute_position_scarcity(rankings)
+    points_floor = nfl_bestball.compute_draftable_points_floor(rankings)
+    scarcity = nfl_bestball.compute_position_scarcity(rankings, min_points_by_position=points_floor)
     scarcity_path = os.path.join(args.data_dir, "nfl_position_scarcity.csv")
     scarcity.to_csv(scarcity_path, index=False)
     print(f"Wrote nfl_position_scarcity.csv ({len(scarcity)} rows) for {args.season}.")

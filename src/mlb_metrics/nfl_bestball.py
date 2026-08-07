@@ -244,9 +244,40 @@ def _iqr_outlier_bounds(values: pd.Series, multiplier: float) -> tuple[float, fl
     return q1 - multiplier * iqr, q3 + multiplier * iqr
 
 
+def compute_draftable_points_floor(
+    rankings_df: pd.DataFrame,
+    pool_sizes: dict = config.NFL_BESTBALL_DRAFTABLE_POOL_SIZE,
+    value_column: str = config.NFL_BESTBALL_SCARCITY_VALUE_COLUMN,
+) -> dict:
+    """{position: points_floor} - the real Nth-ranked player's real
+    `value_column` figure per position, N taken from `pool_sizes` (see
+    `config.NFL_BESTBALL_DRAFTABLE_POOL_SIZE`'s own docstring for the real
+    DK Best Ball Mania roster-depth derivation). Ranked among ALL real
+    players at that position in `rankings_df` (not just snap-share-
+    qualified players) - this is a real, SEPARATE production floor meant
+    to be layered on top of the snap-share qualifier
+    (`compute_position_scarcity`'s `min_snap_share`), not a replacement
+    for it: snap share measures real playing-time ROLE, this measures
+    real season-total VALUE, and a player has to clear both to plausibly
+    have been worth drafting.
+
+    A position with fewer real players than its pool size gets no real
+    floor (`float("nan")`) - real data doesn't reach that deep this
+    season, so nothing is fabricated; `compute_position_scarcity` treats
+    a NaN floor as "doesn't bind" (no player excluded on this basis)
+    rather than excluding everyone."""
+    floors = {}
+    for position, n in pool_sizes.items():
+        pos_df = rankings_df[rankings_df["position"] == position]
+        sorted_values = pos_df[value_column].sort_values(ascending=False)
+        floors[position] = float(sorted_values.iloc[n - 1]) if len(sorted_values) >= n else float("nan")
+    return floors
+
+
 def compute_position_scarcity(
     rankings_df: pd.DataFrame,
     min_snap_share: float = config.NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE,
+    min_points_by_position: dict | None = None,
     value_column: str = config.NFL_BESTBALL_SCARCITY_VALUE_COLUMN,
     iqr_multiplier: float = config.NFL_BESTBALL_SCARCITY_IQR_MULTIPLIER,
 ) -> pd.DataFrame:
@@ -268,6 +299,16 @@ def compute_position_scarcity(
     player missing `season_snap_share` entirely (no real snap-count
     crosswalk match) is treated as NOT qualified, not silently included or
     excluded via a fabricated value.
+
+    If `min_points_by_position` is given ({position: points_floor}, see
+    `compute_draftable_points_floor`), a real production floor is ALSO
+    required - `value_column >= min_points_by_position[position]` - ANDed
+    with the snap-share qualifier, not a replacement for it: snap share
+    alone (even at a high bar) still lets in real players who play a real
+    role but produce very little, since role and value aren't the same
+    thing. A position missing from `min_points_by_position`, or with a NaN
+    floor (see `compute_draftable_points_floor`'s own docstring - real data
+    doesn't reach that deep), gets no additional filtering from this floor.
 
     This replaced a real `games_played >= min_games` qualifier (see git
     history) after real 2025 data showed it let in players with almost no
@@ -335,6 +376,13 @@ def compute_position_scarcity(
         # WITHOUT snap_counts_df/rosters_df (see build_bestball_rankings) has no season_snap_share
         # column at all - treated as "real data unavailable" (nobody qualifies) rather than a crash.
         qualified = pos_df[pos_df["season_snap_share"] >= min_snap_share] if has_snap_share else pos_df.iloc[0:0]
+
+        points_floor = float("nan")
+        if min_points_by_position is not None:
+            points_floor = min_points_by_position.get(position, float("nan"))
+            if not pd.isna(points_floor):
+                qualified = qualified[qualified[value_column] >= points_floor]
+
         n_qualified = len(qualified)
 
         bucket_counts = {label: 0 for label in SCARCITY_BUCKET_LABELS}
@@ -370,6 +418,7 @@ def compute_position_scarcity(
                 "position": position,
                 "total_players": total_players,
                 "qualified_players": n_qualified,
+                "points_floor": points_floor,
                 "outliers_removed": outliers_removed,
                 "mean_dk_points": mean,
                 "std_dk_points": std,

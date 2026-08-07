@@ -86,6 +86,12 @@ def test_build_nfl_bestball_rankings_writes_csv_with_prior_season_and_snap_share
     assert set(scarcity["position"]) == {"QB", "RB", "WR", "TE"}
     qb_row = scarcity.set_index("position").loc["QB"]
     assert qb_row["total_players"] == 1
+    # This tiny synthetic fixture has only 1 real QB, far short of the real
+    # 30-player DK Best Ball Mania draftable-pool depth
+    # (config.NFL_BESTBALL_DRAFTABLE_POOL_SIZE), so compute_draftable_
+    # points_floor correctly can't derive a real floor here (NaN, doesn't
+    # bind) - qualification still comes down to the snap-share qualifier.
+    assert pd.isna(qb_row["points_floor"])
     assert qb_row["qualified_players"] == 1  # real 100% season share clears the default 30% qualifier
 
     takeaways = pd.read_csv(data_dir / "nfl_draft_strategy_takeaways.csv")

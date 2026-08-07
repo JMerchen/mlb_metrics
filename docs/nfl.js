@@ -86,6 +86,7 @@ const row = {
 "Pos": p.position,
 "Total Players": p.total_players,
 "Qualified": p.qualified_players,
+"Points Floor": p.points_floor && p.points_floor !== "" ? Number(p.points_floor).toFixed(1) : "-",
 "Outliers Excluded": p.outliers_removed && p.outliers_removed !== "" ? p.outliers_removed : "0",
 "Mean": p.mean_dk_points && p.mean_dk_points !== "" ? Number(p.mean_dk_points).toFixed(1) : "-",
 "Std": p.std_dk_points && p.std_dk_points !== "" ? Number(p.std_dk_points).toFixed(1) : "-",

@@ -1974,6 +1974,26 @@ suggest), the qualifier's threshold was lowered from 0.5 to 0.3
 alongside this fix - see `config.NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE`'s
 own docstring for the full real-data reasoning.
 
+**A real production floor is ALSO required, layered on top of (not
+instead of) the snap-share qualifier** (`nfl_bestball.
+compute_draftable_points_floor`, `config.NFL_BESTBALL_DRAFTABLE_POOL_SIZE`).
+Real user feedback: even at a real 50%+ snap-share bar, a position's
+qualified-pool mean still didn't reflect "players who'd actually get
+drafted" - real complementary-role players can clear a real snap-share
+bar (a genuine role/health signal) while producing very little (a
+separate value question snap share doesn't answer). The floor is set at
+the real Nth-ranked player's own real `dk_points_total`, N derived from
+real DraftKings Best Ball Mania roster-depth math - confirmed live via
+web search against DraftKings' own published rules and major fantasy
+outlets: real 12-team draft pods, 20 real roster spots/team, with real
+published strategy guidance on typical per-team position counts (QB
+2-3, RB 5-7 [6 the consistently-cited number], WR 6-8, TE 1-2) - the
+midpoint of each real range, times the real 12-team pod size, gives a
+real "how many players at this position does a typical pool actually
+draft" depth: `{"QB": 30, "RB": 72, "WR": 84, "TE": 18}`. A position
+with fewer real players than its pool size gets no real floor (real
+data doesn't reach that deep) rather than a fabricated one.
+
 **Real statistical outliers are excluded from the mean/std before the
 bell curve is built, via Tukey's IQR-fence rule** (`config.
 NFL_BESTBALL_SCARCITY_IQR_MULTIPLIER = 1.5`, the textbook convention,
@@ -1983,21 +2003,38 @@ which would be circular for exactly this problem). Those excluded
 outliers still appear in the bell curve buckets (almost always in the
 extreme bands, exactly where a real outlier belongs) - they're excluded
 from the summary statistics, not from the table. Removing them does NOT
-eliminate all spread, honestly: real production among a real snap-share-
-qualified population genuinely ranges from part-time role players to
-true difference-makers, and that remaining spread is real, not leftover
+eliminate all spread, honestly: real production among a real qualified
+population genuinely ranges from replacement-level to true
+difference-makers, and that remaining spread is real, not leftover
 contamination.
 
 Real 2025 numbers as of this writing (via `python
-scripts/build_nfl_bestball_rankings.py`), under the real season-total
-snap-share qualifier:
+scripts/build_nfl_bestball_rankings.py`), under BOTH the season-total
+snap-share qualifier AND the roster-depth-based production floor - note
+how much closer the WR/TE means now sit to real "would actually be
+drafted" territory than under snap share alone (WR mean 127.8 -> 157.4,
+TE 90.6 -> 172.8):
 
-| Position | Total players | Qualified (30%+ season snap share) | Outliers excluded | Mean DK pts | Std DK pts | Coefficient of variation |
-|---|---|---|---|---|---|---|
-| QB | 81 | 38 | 0 | 229.8 | 87.8 | 0.38 |
-| RB | 151 | 46 | 1 | 198.4 | 82.4 | 0.42 |
-| WR | 240 | 111 | 2 | 127.8 | 72.2 | 0.56 |
-| TE | 136 | 68 | 1 | 90.6 | 56.3 | 0.62 |
+| Position | Total players | Qualified | Points floor | Outliers excluded | Mean DK pts | Std DK pts | Coefficient of variation |
+|---|---|---|---|---|---|---|---|
+| QB | 81 | 30 | 145.5 | 0 | 260.2 | 72.4 | 0.28 |
+| RB | 151 | 46 | 43.6 | 1 | 198.4 | 82.4 | 0.42 |
+| WR | 240 | 81 | 75.1 | 2 | 157.4 | 62.5 | 0.40 |
+| TE | 136 | 17 | 130.8 | 1 | 172.8 | 23.9 | 0.14 |
+
+Two honest real observations worth flagging:
+
+- **RB's real points floor (43.6) is surprisingly low** and barely
+  changed RB's qualified count (46, same as snap share alone) - real DK
+  Best Ball roster-construction strategy deliberately drafts deep at RB
+  (handcuffs/dart-throws for real injury insurance, a well-documented
+  real strategy given the position's real injury volatility), so a
+  rank-72 real cutoff lands on real committee/replacement-tier value,
+  not a bug.
+- **TE's qualified pool shrank the most** (68 -> 17) - a real reflection
+  of how few NFL tight ends are real receiving weapons versus real
+  in-line blockers who still play real meaningful snap shares without
+  much real receiving production.
 
 **Draft Strategy** (`docs/data/nfl_draft_strategy_takeaways.csv`,
 `nfl_bestball.compute_draft_strategy_takeaways`): a real, numbers-driven
@@ -2019,19 +2056,22 @@ pick at a scarcer position instead).
 This directly answers a natural question like "if QBs are all within 2
 SD of the mean, should a TE be prioritized instead" - yes, exactly when
 the other position's own real CV this season ranks higher (scarcer)
-than QB's. Real 2025 read, under the corrected season-total-share
-qualifier: TE is now the SCARCEST position (CV 0.62, real ranking #1 of
-4), followed by WR (0.56), then RB (0.42), with QB the flattest/deepest
-by a wide margin (CV 0.38) - the third real read this table has produced
-across the qualifier's two fixes (originally QB flattest under
-games-played, then QB scarcest under per-game average, now TE scarcest
-under season-total share). Each flip is itself a real illustration of
-how much the qualifier's definition matters for this kind of relative
-comparison - not evidence any one read was "wrong" so much as that a
-population contaminated with the wrong players (special-teamers, or
-short high-rate samples) produces a real but misleading CV, and only
-the current season-total-share population reflects real, meaningful
-role/health-adjusted production.
+than QB's. Real 2025 read, under the corrected qualifier (season-total
+snap share AND a real production floor): RB is now the SCARCEST
+position (CV 0.42, real ranking #1 of 4), followed by WR (0.40), then
+QB (0.28), with TE the flattest/deepest by a wide margin (CV 0.14) -
+the fourth real read this table has produced across the qualifier's
+three real fixes (originally QB flattest under games-played, then QB
+scarcest under per-game average, then TE scarcest under season-total
+share alone, now RB scarcest with the production floor added). Each
+flip is itself a real illustration of how much the qualifier's
+definition matters for this kind of relative comparison - not evidence
+any one read was "wrong" so much as that a population contaminated with
+the wrong players (special-teamers, short high-rate samples, or
+low-value complementary role players) produces a real but misleading
+CV, and only a population filtered on both real role AND real value
+reflects players a real bestball drafter would actually be choosing
+among.
 
 **Preseason Notes** (`docs/data/nfl_draft_notes.csv`): a one-time,
 hand-curated list of real training-camp storylines specifically for

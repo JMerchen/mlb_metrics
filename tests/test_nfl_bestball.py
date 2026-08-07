@@ -284,6 +284,62 @@ def test_compute_position_scarcity_counts_total_vs_qualified_players():
     assert result.loc["WR", "qualified_players"] == 2
 
 
+def test_compute_draftable_points_floor_uses_nth_ranked_real_player():
+    rankings = pd.DataFrame([
+        _rankings_row("wr1", "WR", 300),
+        _rankings_row("wr2", "WR", 200),
+        _rankings_row("wr3", "WR", 100),
+    ])
+
+    floors = nfl_bestball.compute_draftable_points_floor(rankings, pool_sizes={"WR": 2})
+
+    assert floors["WR"] == pytest.approx(200.0)  # the real #2-ranked player's own real total
+
+
+def test_compute_draftable_points_floor_handles_pool_smaller_than_real_population():
+    # Fewer real players at the position than the pool size - no real
+    # floor can be derived, NaN rather than a fabricated one.
+    rankings = pd.DataFrame([_rankings_row("te1", "TE", 100)])
+
+    floors = nfl_bestball.compute_draftable_points_floor(rankings, pool_sizes={"TE": 5})
+
+    assert pd.isna(floors["TE"])
+
+
+def test_compute_position_scarcity_requires_both_snap_share_and_points_floor():
+    # wr1 clears snap share but not the points floor; wr2 clears the
+    # points floor but not snap share; wr3 clears neither; wr4 clears both.
+    rankings = pd.DataFrame([
+        _rankings_row("wr1", "WR", 50, season_snap_share=0.9),
+        _rankings_row("wr2", "WR", 200, season_snap_share=0.1),
+        _rankings_row("wr3", "WR", 40, season_snap_share=0.1),
+        _rankings_row("wr4", "WR", 200, season_snap_share=0.9),
+    ])
+
+    result = nfl_bestball.compute_position_scarcity(
+        rankings, min_snap_share=0.3, min_points_by_position={"WR": 100}
+    ).set_index("position")
+
+    assert result.loc["WR", "qualified_players"] == 1
+    assert result.loc["WR", "points_floor"] == pytest.approx(100.0)
+
+
+def test_compute_position_scarcity_ignores_missing_or_nan_points_floor():
+    rankings = pd.DataFrame([_rankings_row("wr1", "WR", 50, season_snap_share=0.9)])
+
+    # Position absent from min_points_by_position entirely.
+    result = nfl_bestball.compute_position_scarcity(
+        rankings, min_snap_share=0.3, min_points_by_position={}
+    ).set_index("position")
+    assert result.loc["WR", "qualified_players"] == 1
+
+    # Position present but with a real NaN floor (pool deeper than real data).
+    result = nfl_bestball.compute_position_scarcity(
+        rankings, min_snap_share=0.3, min_points_by_position={"WR": float("nan")}
+    ).set_index("position")
+    assert result.loc["WR", "qualified_players"] == 1
+
+
 def test_compute_position_scarcity_excludes_players_missing_snap_share_entirely():
     # A real NaN season_snap_share (no snap-count crosswalk match) never
     # satisfies >=, so it must be excluded, not treated as a fabricated 0.
