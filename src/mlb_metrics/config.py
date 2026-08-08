@@ -1564,3 +1564,18 @@ NFL_BESTBALL_SCARCITY_IQR_MULTIPLIER = 1.5
 # estimate of how many players at each position a typical 12-team pool
 # actually drafts - the real "draftable pool depth":
 NFL_BESTBALL_DRAFTABLE_POOL_SIZE = {"QB": 30, "RB": 72, "WR": 84, "TE": 18}
+
+# --- NFL Bestball: Round Split (nfl_bestball.build_bestball_rankings) ---
+#
+# Confirmed live via web search (2026-08-08) against Establish The Run and
+# 4for4: DK Best Ball Mania's real tournament structure runs a real
+# "Round 1" across weeks 1-14 (cumulative points across those real weeks
+# decide who advances out of each real 12-team draft pod - the top 2),
+# followed by three real single-week knockout rounds - "Round 2" at real
+# week 15, "Round 3" at real week 16, and the real championship "Round 4"
+# at week 17. nfl_bestball_rankings.csv reports the real weeks-1-14 sum as
+# r1_dk_points and the real weeks-15-17 sum as r2_r4_dk_points (one
+# combined column, not split further per round) - a real, direct answer to
+# "was this player producing early enough in the real season to matter for
+# real pod advancement, not just totaling well by the end."
+NFL_BESTBALL_ROUND1_END_WEEK = 14

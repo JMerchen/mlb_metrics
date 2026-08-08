@@ -152,14 +152,35 @@ def compute_player_snap_share(snap_counts_df: pd.DataFrame, rosters_df: pd.DataF
     return result.rename(columns={"gsis_id": "player_id"})[["player_id", "season_snap_share"]]
 
 
-def compute_season_realized_dk_points(weekly_df: pd.DataFrame, position_group: str, season: int) -> pd.DataFrame:
+def compute_season_realized_dk_points(
+    weekly_df: pd.DataFrame,
+    position_group: str,
+    season: int,
+    min_week: int | None = None,
+    max_week: int | None = None,
+) -> pd.DataFrame:
     """[player_id, dk_points_total] - real full-PPR DK points actually
     scored across an entire real regular season, by summing
     nfl_dfs_backtest's real-week-by-real-week actual-points functions
     (each row in `weekly_df` is already one real player-week, so no
     per-week loop is needed - the same real formula just runs once over
-    every row and gets summed by player)."""
+    every row and gets summed by player).
+
+    `min_week`/`max_week` (both inclusive, both optional) narrow the sum to
+    a real week range within that season instead of the whole regular
+    season - used by `build_bestball_rankings` to also report the real
+    DK Best Ball Mania "Round 1" (weeks 1-14) and "Rounds 2-4" (weeks
+    15-17) splits (see `config.NFL_BESTBALL_ROUND1_END_WEEK`), reusing
+    this exact same real per-week formula rather than a second points
+    calculator. A player with no real stat row in the given range is
+    simply absent from the result (real 0 points, not fabricated -
+    handled by the caller's own fillna(0.0), consistent with the
+    season-total convention that an absent row means "didn't play")."""
     season_weekly = weekly_df[(weekly_df["season"] == season) & (weekly_df["season_type"] == "REG")]
+    if min_week is not None:
+        season_weekly = season_weekly[season_weekly["week"] >= min_week]
+    if max_week is not None:
+        season_weekly = season_weekly[season_weekly["week"] <= max_week]
 
     if position_group == "QB":
         per_week = nfl_dfs_backtest.compute_actual_qb_dk_points(season_weekly)
@@ -203,11 +224,39 @@ def build_bestball_rankings(
     If `snap_counts_df`/`rosters_df` are given, adds `season_snap_share`
     (see `compute_player_snap_share`) - a real playing-time-share signal,
     left-joined so a player missing from the real snap-count crosswalk
-    gets a real NaN, not a fabricated 0%."""
+    gets a real NaN, not a fabricated 0%.
+
+    Also adds `r1_dk_points` (real weeks 1-14, DK Best Ball Mania's real
+    "Round 1"/regular-season-standings stage) and `r2_r4_dk_points` (real
+    weeks 15-17, the real single-week knockout rounds that follow) - see
+    `config.NFL_BESTBALL_ROUND1_END_WEEK`'s docstring for the real cited
+    source on that week split. These are real per-range sums of the exact
+    same DK formula `dk_points_total` uses, not a different metric - a
+    player absent from a range (bye/inactive/didn't make it that far in
+    the real NFL season) gets a real 0 for that range, not a NaN, since
+    "0 real points scored in those weeks" is itself real information (as
+    opposed to `season_snap_share`, where a missing crosswalk match is
+    genuinely unknown, not zero)."""
     games = compute_player_games_played(weekly_df, schedules_df, season)
     qb_points = compute_season_realized_dk_points(weekly_df, "QB", season)
     skill_points = compute_season_realized_dk_points(weekly_df, "SKILL", season)
     points = pd.concat([qb_points, skill_points], ignore_index=True)
+
+    qb_r1 = compute_season_realized_dk_points(weekly_df, "QB", season, max_week=config.NFL_BESTBALL_ROUND1_END_WEEK)
+    skill_r1 = compute_season_realized_dk_points(
+        weekly_df, "SKILL", season, max_week=config.NFL_BESTBALL_ROUND1_END_WEEK
+    )
+    r1_points = pd.concat([qb_r1, skill_r1], ignore_index=True).rename(columns={"dk_points_total": "r1_dk_points"})
+
+    qb_r2_r4 = compute_season_realized_dk_points(
+        weekly_df, "QB", season, min_week=config.NFL_BESTBALL_ROUND1_END_WEEK + 1
+    )
+    skill_r2_r4 = compute_season_realized_dk_points(
+        weekly_df, "SKILL", season, min_week=config.NFL_BESTBALL_ROUND1_END_WEEK + 1
+    )
+    r2_r4_points = pd.concat([qb_r2_r4, skill_r2_r4], ignore_index=True).rename(
+        columns={"dk_points_total": "r2_r4_dk_points"}
+    )
 
     season_weekly = weekly_df[(weekly_df["season"] == season) & (weekly_df["season_type"] == "REG")]
     names = season_weekly[["player_id", "player_display_name", "position"]].drop_duplicates("player_id")
@@ -215,6 +264,9 @@ def build_bestball_rankings(
 
     result = names.merge(games, on="player_id", how="left").merge(points, on="player_id", how="inner")
     result["dk_points_per_game"] = result["dk_points_total"] / result["games_played"].replace(0, pd.NA)
+    result = result.merge(r1_points, on="player_id", how="left").merge(r2_r4_points, on="player_id", how="left")
+    result["r1_dk_points"] = result["r1_dk_points"].fillna(0.0)
+    result["r2_r4_dk_points"] = result["r2_r4_dk_points"].fillna(0.0)
 
     if prior_season is not None and prior_weekly_df is not None and prior_schedules_df is not None:
         prior_games = compute_player_games_played(prior_weekly_df, prior_schedules_df, prior_season)
