@@ -1,6 +1,7 @@
 date,rank,name,predicted_probability,actual_hit,status
-2026-08-07,1,Freddie Freeman,0.8546875,,pending
-2026-08-07,2,Shohei Ohtani,0.8382812500000001,,pending
+2026-08-08,,,,,no_pick
+2026-08-07,1,Freddie Freeman,0.8546875,0.0,miss
+2026-08-07,2,Shohei Ohtani,0.8382812500000001,0.0,miss
 2026-08-06,,,,,no_pick
 2026-08-05,1,Freddie Freeman,0.841552830003917,1.0,hit
 2026-08-05,2,Ceddanne Rafaela,0.8523173241852489,0.0,miss
