@@ -1912,6 +1912,26 @@ of real 2025 team-games). It's crosswalked from the snap data's own
 to cover 382 of 383, ~99.7%, of a real 2025 qualified population); a
 player missing that crosswalk gets a real `NaN`, never a fabricated 0%.
 
+**Real round-split scoring** (`r1_dk_points`/`r2_r4_dk_points`,
+`nfl_bestball.build_bestball_rankings`) breaks the real season total into
+the two real stages DraftKings Best Ball Mania tournaments actually run
+on - confirmed live via web search against Establish The Run and 4for4:
+a real "Round 1" spanning weeks 1-14 (cumulative real points across
+those weeks decide who advances out of each real 12-team draft pod - the
+top 2), followed by three real single-week knockout rounds at weeks 15,
+16, and 17 ("Rounds 2-4", reported here as one combined real sum, not
+split further). Both are real per-range sums of the exact same DK
+scoring formula `dk_points_total` uses (`config.
+NFL_BESTBALL_ROUND1_END_WEEK = 14`), not a different metric or a
+simulated pod result - this project has no draft-pod/ADP data, so it
+can't simulate real tournament advancement, only report how a player's
+real production actually split across the two real stages. The
+dashboard's Bestball table shows `R1 Score`/`R2-R4 Score` plus a real
+season total at the end of the row, in place of the redundant `Games`
+column (already covered by `Missed`/`Missed (Prior Yr)`) and the
+`Season Snap %` column (kept in the underlying CSV for the position-
+scarcity qualifier above, just not surfaced in this table).
+
 Built via `scripts/build_nfl_bestball_rankings.py`
 (`.github/workflows/build_nfl_bestball_rankings.yml`, `workflow_dispatch`
 only) - a manual/one-time build, not a daily/weekly cron, since real

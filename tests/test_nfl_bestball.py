@@ -197,6 +197,26 @@ def test_compute_season_realized_dk_points_rejects_unknown_position_group():
         nfl_bestball.compute_season_realized_dk_points(weekly, "K", 2025)
 
 
+def test_compute_season_realized_dk_points_min_max_week_filters_real_range():
+    weekly = pd.DataFrame([
+        _qb_week("qb1", 2025, 1, passing_yards=200, passing_tds=1, rush_yards=0),
+        _qb_week("qb1", 2025, 14, passing_yards=250, passing_tds=2, rush_yards=0),
+        _qb_week("qb1", 2025, 15, passing_yards=300, passing_tds=3, rush_yards=0),
+    ])
+
+    week1 = 200 * config.NFL_DK_PASS_YARD_POINTS + 1 * config.NFL_DK_PASS_TD_POINTS
+    week14 = 250 * config.NFL_DK_PASS_YARD_POINTS + 2 * config.NFL_DK_PASS_TD_POINTS
+    week15 = (
+        300 * config.NFL_DK_PASS_YARD_POINTS + 3 * config.NFL_DK_PASS_TD_POINTS + config.NFL_DK_300_PASS_YARD_BONUS
+    )
+
+    r1 = nfl_bestball.compute_season_realized_dk_points(weekly, "QB", 2025, max_week=14).set_index("player_id")
+    assert r1.loc["qb1", "dk_points_total"] == pytest.approx(week1 + week14)  # right-inclusive at week 14
+
+    r2_r4 = nfl_bestball.compute_season_realized_dk_points(weekly, "QB", 2025, min_week=15).set_index("player_id")
+    assert r2_r4.loc["qb1", "dk_points_total"] == pytest.approx(week15)  # left-inclusive at week 15
+
+
 def test_build_bestball_rankings_ranks_by_total_points_descending():
     weekly = pd.DataFrame([
         _qb_week("qb1", 2025, 1, name="Big Arm", passing_yards=350, passing_tds=4, team="NYJ"),
@@ -214,6 +234,33 @@ def test_build_bestball_rankings_ranks_by_total_points_descending():
     rb1 = result.set_index("player_id").loc["rb1"]
     assert rb1["games_played"] == 2
     assert rb1["dk_points_per_game"] == pytest.approx(rb1["dk_points_total"] / 2)
+
+
+def test_build_bestball_rankings_adds_r1_and_r2_r4_round_split_columns():
+    # rb1 scores across both a real week 1 (Round 1, weeks 1-14) and a real
+    # week 15 (Rounds 2-4, weeks 15-17) game; rb2 only ever plays in Round 1
+    # weeks - a real player who, say, got hurt before the fantasy playoff
+    # weeks - and should get a real 0.0 (not NaN) for r2_r4_dk_points.
+    weekly = pd.DataFrame([
+        _skill_week("rb1", "RB", 2025, 1, name="Splits Guy", rush_yards=60, team="NYJ"),
+        _skill_week("rb1", "RB", 2025, 15, name="Splits Guy", rush_yards=90, team="NYJ"),
+        _skill_week("rb2", "RB", 2025, 1, name="Early Only", rush_yards=40, team="NYJ"),
+    ])
+    schedules = pd.DataFrame([
+        _schedule_row(2025, 1, "NYJ", "BUF"),
+        _schedule_row(2025, 15, "NYJ", "MIA"),
+    ])
+
+    result = nfl_bestball.build_bestball_rankings(weekly, schedules, 2025).set_index("player_id")
+
+    rb1 = result.loc["rb1"]
+    assert rb1["r1_dk_points"] == pytest.approx(60 * config.NFL_DK_RUSH_YARD_POINTS)
+    assert rb1["r2_r4_dk_points"] == pytest.approx(90 * config.NFL_DK_RUSH_YARD_POINTS)
+    assert rb1["dk_points_total"] == pytest.approx(rb1["r1_dk_points"] + rb1["r2_r4_dk_points"])
+
+    rb2 = result.loc["rb2"]
+    assert rb2["r1_dk_points"] == pytest.approx(40 * config.NFL_DK_RUSH_YARD_POINTS)
+    assert rb2["r2_r4_dk_points"] == pytest.approx(0.0)  # real 0, not NaN - didn't play a real week 15-17 game
 
 
 def test_build_bestball_rankings_excludes_non_qb_skill_positions():

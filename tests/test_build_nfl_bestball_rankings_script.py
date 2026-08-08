@@ -81,6 +81,9 @@ def test_build_nfl_bestball_rankings_writes_csv_with_prior_season_and_snap_share
     assert result.iloc[0]["player_id"] == "qb1"
     assert result.iloc[0]["games_missed_prior_season"] == 1
     assert result.iloc[0]["season_snap_share"] == pytest.approx(1.0)
+    # week 1 is real Round 1 (weeks 1-14) - all of this qb's real points land there.
+    assert result.iloc[0]["r1_dk_points"] == pytest.approx(result.iloc[0]["dk_points_total"])
+    assert result.iloc[0]["r2_r4_dk_points"] == pytest.approx(0.0)
 
     scarcity = pd.read_csv(data_dir / "nfl_position_scarcity.csv")
     assert set(scarcity["position"]) == {"QB", "RB", "WR", "TE"}

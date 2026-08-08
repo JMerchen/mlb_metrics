@@ -58,12 +58,12 @@ const rows = filtered.map(p=>({
 "Player": p.player_display_name,
 "Pos": p.position,
 "Team": p.team,
-[`${p.season} Pts`]: p.dk_points_total && p.dk_points_total !== "" ? Number(p.dk_points_total).toFixed(1) : "-",
 "Pts/Game": p.dk_points_per_game && p.dk_points_per_game !== "" ? Number(p.dk_points_per_game).toFixed(1) : "-",
-"Games": p.games_played && p.possible_games ? `${p.games_played}/${p.possible_games}` : "-",
 "Missed": p.games_missed && p.games_missed !== "" ? p.games_missed : "0",
 "Missed (Prior Yr)": p.games_missed_prior_season && p.games_missed_prior_season !== "" ? p.games_missed_prior_season : "-",
-"Season Snap %": p.season_snap_share && p.season_snap_share !== "" ? `${(Number(p.season_snap_share)*100).toFixed(0)}%` : "-",
+"R1 Score": p.r1_dk_points !== undefined && p.r1_dk_points !== "" ? Number(p.r1_dk_points).toFixed(1) : "0.0",
+"R2-R4 Score": p.r2_r4_dk_points !== undefined && p.r2_r4_dk_points !== "" ? Number(p.r2_r4_dk_points).toFixed(1) : "0.0",
+[`${p.season} Total`]: p.dk_points_total && p.dk_points_total !== "" ? Number(p.dk_points_total).toFixed(1) : "-",
 }))
 buildTable(rows, "bestballTable")
 }
