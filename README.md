@@ -1942,6 +1942,23 @@ leading `Rank`/`Pos Rank` columns on the dashboard table, so a real
 box above the table filters by real player name as you type (`oninput`,
 no button/Enter needed), combined with the existing position tabs.
 
+The `Pos Rank` column also shows each player's real `points_z_score` in
+parentheses (e.g. `1 (+2.8σ)`) - how many real standard deviations their
+own real `dk_points_total` sits from their position's real,
+outlier-excluded core mean (`compute_position_scarcity`'s own
+`mean_dk_points`/`std_dk_points`, reused directly rather than a second
+statistical basis). Deliberately the real SEASON-TOTAL z-score, not a
+Round-1-only one - `position_rank` itself comes from `points_above_
+replacement` (season-total based, further scaled by `necessity_ratio`),
+so pairing it with a season-total z-score keeps the parenthetical
+answering the same real question the rank does, rather than quietly
+mixing in a different one. Computed for every real player in the table,
+not just the snap-share/points-floor qualified ones (an honest "how far
+from a typical qualified starter" read even for players who didn't clear
+the bar); a real std of 0 or NaN (fewer than 2 real core players at that
+position) gives a real NaN `points_z_score`, shown as a bare rank with no
+parenthetical rather than a fabricated number.
+
 **Real draft strategy is now baked directly into the ranking, not left
 as a separate table to cross-reference.** Real user feedback: raw
 `dk_points_total` alone was a misleading overall order - Josh Allen

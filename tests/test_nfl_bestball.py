@@ -287,6 +287,58 @@ def test_build_bestball_rankings_adds_overall_and_position_rank_columns():
     assert result.loc["rb1", "position_rank"] == 1
 
 
+def test_build_bestball_rankings_adds_points_z_score_matching_scarcity_core_stats():
+    # 3 real WRs, real 100% season snap share each (lone player in their own
+    # team-game), small rush-yard totals (no 100+yd bonus complexity, no
+    # real IQR outliers) - a real, hand-computable core mean/std.
+    weekly = pd.DataFrame([
+        _skill_week("wr1", "WR", 2025, 1, name="WR One", rush_yards=40, team="NYJ"),
+        _skill_week("wr2", "WR", 2025, 1, name="WR Two", rush_yards=50, team="MIA"),
+        _skill_week("wr3", "WR", 2025, 1, name="WR Three", rush_yards=60, team="BUF"),
+    ])
+    schedules = pd.DataFrame([
+        _schedule_row(2025, 1, "NYJ", "MIA"),
+        _schedule_row(2025, 1, "BUF", "NE"),
+    ])
+    snap_counts = pd.DataFrame([
+        _snap_row("Wr1Pfr", "NYJ", 2025, 1, 55),
+        _snap_row("Wr2Pfr", "MIA", 2025, 1, 55),
+        _snap_row("Wr3Pfr", "BUF", 2025, 1, 55),
+    ])
+    rosters = pd.DataFrame([
+        _roster_row("wr1", "Wr1Pfr", 2025),
+        _roster_row("wr2", "Wr2Pfr", 2025),
+        _roster_row("wr3", "Wr3Pfr", 2025),
+    ])
+
+    result = nfl_bestball.build_bestball_rankings(
+        weekly, schedules, 2025, snap_counts_df=snap_counts, rosters_df=rosters
+    ).set_index("player_id")
+
+    points = result["dk_points_total"]
+    mean = points.loc[["wr1", "wr2", "wr3"]].mean()
+    std = points.loc[["wr1", "wr2", "wr3"]].std(ddof=0)
+    for wr in ["wr1", "wr2", "wr3"]:
+        expected_z = (points.loc[wr] - mean) / std
+        assert result.loc[wr, "points_z_score"] == pytest.approx(expected_z)
+
+
+def test_build_bestball_rankings_points_z_score_nan_when_std_undefined():
+    # Only 1 real player at TE this season - compute_position_scarcity
+    # can't derive a real std from a single real value, so points_z_score
+    # should be a real NaN, not a fabricated 0 or a divide-by-zero crash.
+    weekly = pd.DataFrame([_skill_week("te1", "TE", 2025, 1, name="Lone TE", rush_yards=20, team="NYJ")])
+    schedules = pd.DataFrame([_schedule_row(2025, 1, "NYJ", "BUF")])
+    snap_counts = pd.DataFrame([_snap_row("Te1Pfr", "NYJ", 2025, 1, 55)])
+    rosters = pd.DataFrame([_roster_row("te1", "Te1Pfr", 2025)])
+
+    result = nfl_bestball.build_bestball_rankings(
+        weekly, schedules, 2025, snap_counts_df=snap_counts, rosters_df=rosters
+    ).set_index("player_id")
+
+    assert pd.isna(result.loc["te1", "points_z_score"])
+
+
 def test_build_bestball_rankings_ranks_by_points_above_replacement_not_raw_points():
     # A real Josh-Allen-style scenario: qb1 outscores rb1 on raw points
     # (100 vs 90), but QB is a flat/deep position here (a small pool size
