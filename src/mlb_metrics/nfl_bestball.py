@@ -204,6 +204,7 @@ def build_bestball_rankings(
     prior_schedules_df: pd.DataFrame | None = None,
     snap_counts_df: pd.DataFrame | None = None,
     rosters_df: pd.DataFrame | None = None,
+    points_floor_pool_sizes: dict = config.NFL_BESTBALL_DRAFTABLE_POOL_SIZE,
 ) -> pd.DataFrame:
     """One row per real QB/RB/WR/TE who recorded a real stat line in
     `season`'s regular season: name, position, team, real games played/
@@ -238,14 +239,42 @@ def build_bestball_rankings(
     opposed to `season_snap_share`, where a missing crosswalk match is
     genuinely unknown, not zero).
 
-    Also adds `overall_rank` (1-based, across every real position
-    together, by `dk_points_total` descending - just this already-sorted
-    table's own row order) and `position_rank` (the same real idea,
-    computed separately within each position - a real "QB12"/"WR3" read).
-    Both use pandas' `rank(method="first")` for ties (consecutive integers
-    in original sort order), not a competition-style "1224" scheme -
-    there's no meaningful real distinction between two players tied on
-    `dk_points_total` to the hundredth of a point."""
+    Also adds `points_above_replacement` (`dk_points_total` minus that
+    position's real roster-depth-derived points floor - see
+    `compute_draftable_points_floor`, the same real "last player who'd
+    plausibly get drafted at this position" floor `compute_position_
+    scarcity` already uses as a qualifier) and ranks the WHOLE table by
+    IT, not raw `dk_points_total` - real "draft strategy" baked directly
+    into the ranking rather than left as a separate table to
+    cross-reference. This is what fixes a real, otherwise-misleading read:
+    a flat/deep position's floor sits close to its ceiling (real 2025 QB:
+    mean 260.2, floor 145.5 - not much room), so even a QB1's raw points
+    overstate how much real value that QB1 was worth relative to a QB
+    draftable many rounds later; a scarce position's floor sits far below
+    its stars (real 2025 RB: floor 43.6 vs. a top-2 RB near 400+), so real
+    RB/WR production keeps most of its raw-points rank. `overall_rank`
+    (1-based, across every real position together) and `position_rank`
+    (the same real idea, computed separately within each position - a
+    real "QB12"/"WR3" read) are both now derived from `points_above_
+    replacement`, not `dk_points_total` directly - `position_rank` lands
+    on the identical order either way (subtracting one position's own
+    constant floor from every player at that position can't reorder them
+    relative to each other), but `overall_rank` genuinely changes, which
+    is the real point. A position whose real player pool doesn't reach
+    its real roster-depth pool size gets a NaN floor (see
+    `compute_draftable_points_floor`'s own docstring) - treated as a real
+    floor of 0 here (not a fabricated one), so those players fall back to
+    being ranked on raw `dk_points_total` rather than being wrongly
+    excluded or crashing. Both ranks use pandas' `rank(method="first")`
+    for ties (consecutive integers in sort order), not a competition-style
+    "1224" scheme - there's no meaningful real distinction between two
+    players tied to the hundredth of a point.
+
+    `points_floor_pool_sizes` overrides the real roster-depth pool sizes
+    `compute_draftable_points_floor` uses (defaults to `config.
+    NFL_BESTBALL_DRAFTABLE_POOL_SIZE`) - exposed mainly so a small
+    synthetic test fixture can exercise the real reordering effect
+    without needing dozens of real players per position."""
     games = compute_player_games_played(weekly_df, schedules_df, season)
     qb_points = compute_season_realized_dk_points(weekly_df, "QB", season)
     skill_points = compute_season_realized_dk_points(weekly_df, "SKILL", season)
@@ -288,17 +317,31 @@ def build_bestball_rankings(
         snap_share = compute_player_snap_share(snap_counts_df, rosters_df, season)
         result = result.merge(snap_share, on="player_id", how="left")
 
-    result = result.sort_values("dk_points_total", ascending=False).reset_index(drop=True)
+    # points_above_replacement: real draft-strategy signal baked directly
+    # into the ranking (see this function's own docstring for the real
+    # Josh-Allen-style example this fixes) - a position with fewer real
+    # players than its real roster-depth pool size gets a NaN floor
+    # (compute_draftable_points_floor's own "real data doesn't reach that
+    # deep" case), treated as a real floor of 0 here so those players
+    # still rank on raw dk_points_total rather than being excluded.
+    points_floor = compute_draftable_points_floor(result, pool_sizes=points_floor_pool_sizes)
+    floor_by_position = result["position"].map(points_floor).fillna(0.0)
+    result["points_above_replacement"] = result["dk_points_total"] - floor_by_position
+
+    result = result.sort_values("points_above_replacement", ascending=False).reset_index(drop=True)
     # overall_rank: 1-based real rank across every real QB/RB/WR/TE in the
-    # table together, by dk_points_total descending - just the row's own
-    # position in this already-sorted table, so ties get consecutive ranks
-    # (not a competition-style "1224" scheme) rather than an invented
-    # tie-break. position_rank is the same real idea, computed separately
-    # WITHIN each position (a real "QB12"/"WR3" read a bestball drafter
-    # actually thinks in), via pandas' own descending dense-free rank.
+    # table together, by points_above_replacement descending - just the
+    # row's own position in this already-sorted table, so ties get
+    # consecutive ranks (not a competition-style "1224" scheme) rather
+    # than an invented tie-break. position_rank is the same real idea,
+    # computed separately WITHIN each position (a real "QB12"/"WR3" read a
+    # bestball drafter actually thinks in) - lands on the same order as
+    # ranking by dk_points_total directly would (a per-position constant
+    # shift can't reorder players within that position), computed from
+    # points_above_replacement anyway so both ranks share one real basis.
     result["overall_rank"] = result.index + 1
     result["position_rank"] = (
-        result.groupby("position")["dk_points_total"].rank(method="first", ascending=False).astype(int)
+        result.groupby("position")["points_above_replacement"].rank(method="first", ascending=False).astype(int)
     )
     return result
 
@@ -338,7 +381,12 @@ def compute_draftable_points_floor(
     floor (`float("nan")`) - real data doesn't reach that deep this
     season, so nothing is fabricated; `compute_position_scarcity` treats
     a NaN floor as "doesn't bind" (no player excluded on this basis)
-    rather than excluding everyone."""
+    rather than excluding everyone.
+
+    Also called by `build_bestball_rankings` (a second, real use of this
+    same floor): there, it's subtracted from each player's own
+    `value_column` to get `points_above_replacement` - a real "draft
+    strategy baked into the ranking" signal, not just a qualifier."""
     floors = {}
     for position, n in pool_sizes.items():
         pos_df = rankings_df[rankings_df["position"] == position]

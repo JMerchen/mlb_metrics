@@ -72,6 +72,7 @@ const rows = filtered.map(p=>({
 "Missed (Prior Yr)": p.games_missed_prior_season && p.games_missed_prior_season !== "" ? p.games_missed_prior_season : "-",
 "R1 Score": p.r1_dk_points !== undefined && p.r1_dk_points !== "" ? Number(p.r1_dk_points).toFixed(1) : "0.0",
 "R2-R4 Score": p.r2_r4_dk_points !== undefined && p.r2_r4_dk_points !== "" ? Number(p.r2_r4_dk_points).toFixed(1) : "0.0",
+"Value": p.points_above_replacement !== undefined && p.points_above_replacement !== "" ? Number(p.points_above_replacement).toFixed(1) : "-",
 [`${p.season} Total`]: p.dk_points_total && p.dk_points_total !== "" ? Number(p.dk_points_total).toFixed(1) : "-",
 }))
 buildTable(rows, "bestballTable")

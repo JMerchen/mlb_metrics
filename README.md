@@ -1933,16 +1933,49 @@ column (already covered by `Missed`/`Missed (Prior Yr)`) and the
 scarcity qualifier above, just not surfaced in this table).
 
 **Real rank columns and live player search.** `build_bestball_rankings`
-also adds `overall_rank` (1-based, across every real position together,
-by `dk_points_total` descending - just this already-sorted table's own
-row order) and `position_rank` (the same real idea, computed separately
-within each position, via pandas' own `rank(method="first")` so ties get
-consecutive real ranks rather than an invented tie-break) - both surfaced
-as the leading `Rank`/`Pos Rank` columns on the dashboard table, so a
-real "QB12"/"WR3" read doesn't require counting rows by hand. A player
-search box above the table filters by real player name as you type
-(`oninput`, no button/Enter needed), combined with the existing position
-tabs.
+adds `overall_rank` (1-based, across every real position together) and
+`position_rank` (the same real idea, computed separately within each
+position, via pandas' own `rank(method="first")` so ties get consecutive
+real ranks rather than an invented tie-break) - both surfaced as the
+leading `Rank`/`Pos Rank` columns on the dashboard table, so a real
+"QB12"/"WR3" read doesn't require counting rows by hand. A player search
+box above the table filters by real player name as you type (`oninput`,
+no button/Enter needed), combined with the existing position tabs.
+
+**Real draft strategy is now baked directly into the ranking, not left
+as a separate table to cross-reference.** Real user feedback: raw
+`dk_points_total` alone was a misleading overall order - Josh Allen
+ranked #4 overall on real 2025 points (389.6), well above where real
+DraftKings ADP would ever put him, because QB is a real flat/deep
+position (real CV 0.28 - see Draft Strategy below) where a QB drafted
+many rounds later still scores close to a QB1's total. `overall_rank`/
+`position_rank` are now computed from a new `points_above_replacement`
+column instead of raw `dk_points_total`: each player's real
+`dk_points_total` minus their OWN position's real roster-depth-derived
+points floor (`compute_draftable_points_floor` - the same real floor
+`compute_position_scarcity`'s qualifier already uses, see below) - a
+real "how much do you actually lose by waiting on this position"
+question, the same logic real ADP reflects. A flat position's floor
+sits close to its ceiling (real 2025 QB: mean 260.2, floor 145.5 - not
+much daylight), so even a QB1's raw points overstate their real value;
+a scarce position's floor sits far below its stars (real 2025 RB: floor
+43.6 vs. McCaffrey's 428.6), so real RB/WR production keeps most of its
+raw-points rank. `position_rank` lands on the identical order either
+way (subtracting one position's own constant floor can't reorder
+players within that position), but `overall_rank` genuinely changes -
+real 2025 effect: Josh Allen drops from raw-points rank #4 to real
+`overall_rank` 13 (still `position_rank` 1, still the real #1 QB - the
+adjustment is about cross-position value, not within-position ranking).
+That's a real, substantial, directionally-correct move, though it lands
+short of the ~25 the user's own recollection of DK ADP suggested -
+expected, since real ADP also prices in things this project doesn't
+model (injury risk, name value, rookie hype), and this metric is
+independently derived from real roster-depth math, not fit to reproduce
+a specific external number. `points_above_replacement` itself is also
+published as a `Value` column for transparency. A position whose real
+player pool doesn't reach its real roster-depth pool size gets a real
+floor of 0 (not a fabricated exclusion) - falls back to ranking on raw
+`dk_points_total`, same as before this feature existed.
 
 Built via `scripts/build_nfl_bestball_rankings.py`
 (`.github/workflows/build_nfl_bestball_rankings.yml`, `workflow_dispatch`

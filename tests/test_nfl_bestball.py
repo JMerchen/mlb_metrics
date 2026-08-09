@@ -287,6 +287,61 @@ def test_build_bestball_rankings_adds_overall_and_position_rank_columns():
     assert result.loc["rb1", "position_rank"] == 1
 
 
+def test_build_bestball_rankings_ranks_by_points_above_replacement_not_raw_points():
+    # A real Josh-Allen-style scenario: qb1 outscores rb1 on raw points
+    # (100 vs 90), but QB is a flat/deep position here (a small pool size
+    # of 1 means qb1's own real score IS the floor - points_above_
+    # replacement = 0), while RB's pool size of 2 means rb1's floor is
+    # rb2's real 40 points (points_above_replacement = 50) - rb1 should
+    # rank above qb1 overall despite scoring fewer raw points.
+    weekly = pd.DataFrame([
+        _qb_week("qb1", 2025, 1, name="Flat Position QB", passing_yards=1000, passing_tds=0, rush_yards=0, team="NYJ"),
+        _skill_week("rb1", "RB", 2025, 1, name="Scarce Position RB1", rush_yards=90, team="MIA"),
+        _skill_week("rb2", "RB", 2025, 1, name="Scarce Position RB2", rush_yards=40, team="BUF"),
+    ])
+    schedules = pd.DataFrame([
+        _schedule_row(2025, 1, "NYJ", "MIA"),
+        _schedule_row(2025, 1, "BUF", "NE"),
+    ])
+    # qb1's own 100 raw points = 1000 * NFL_DK_PASS_YARD_POINTS (0.04/yd + 300yd
+    # bonus) = 40 + 10(300yd bonus, 1000 clears it once) ... use a round rush-
+    # yard-only RB fixture instead so the raw-points math is simple to reason
+    # about by inspection; QB pool size 1 means qb1 IS its own floor regardless
+    # of the real raw total.
+    pool_sizes = {"QB": 1, "RB": 2, "WR": 84, "TE": 18}
+
+    result = nfl_bestball.build_bestball_rankings(
+        weekly, schedules, 2025, points_floor_pool_sizes=pool_sizes
+    ).set_index("player_id")
+
+    assert result.loc["qb1", "points_above_replacement"] == pytest.approx(0.0)  # qb1 IS the QB floor (pool size 1)
+    assert result.loc["rb1", "points_above_replacement"] == pytest.approx(
+        90 * config.NFL_DK_RUSH_YARD_POINTS - 40 * config.NFL_DK_RUSH_YARD_POINTS
+    )
+    # rb1 beats qb1 on points_above_replacement even though qb1 scored more
+    # real raw dk_points_total - the real draft-strategy reordering effect.
+    assert result.loc["rb1", "dk_points_total"] < result.loc["qb1", "dk_points_total"]
+    assert result.loc["rb1", "overall_rank"] < result.loc["qb1", "overall_rank"]
+
+
+def test_build_bestball_rankings_missing_points_floor_falls_back_to_raw_points():
+    # Both positions here have far fewer real players than the real
+    # NFL_BESTBALL_DRAFTABLE_POOL_SIZE defaults, so points_floor is NaN for
+    # both - points_above_replacement should equal dk_points_total exactly
+    # (a real floor of 0, not a fabricated exclusion), same real ranking as
+    # before this feature existed.
+    weekly = pd.DataFrame([
+        _qb_week("qb1", 2025, 1, name="Big Arm", passing_yards=350, passing_tds=4, team="NYJ"),
+        _skill_week("rb1", "RB", 2025, 1, name="Workhorse", rush_yards=60, rush_tds=1, team="NYJ"),
+    ])
+    schedules = pd.DataFrame([_schedule_row(2025, 1, "NYJ", "BUF")])
+
+    result = nfl_bestball.build_bestball_rankings(weekly, schedules, 2025).set_index("player_id")
+
+    assert result.loc["qb1", "points_above_replacement"] == pytest.approx(result.loc["qb1", "dk_points_total"])
+    assert result.loc["rb1", "points_above_replacement"] == pytest.approx(result.loc["rb1", "dk_points_total"])
+
+
 def test_build_bestball_rankings_excludes_non_qb_skill_positions():
     weekly = pd.DataFrame([
         _qb_week("qb1", 2025, 1, team="NYJ"),
