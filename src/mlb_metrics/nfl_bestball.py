@@ -282,6 +282,17 @@ def build_bestball_rankings(
     competition-style "1224" scheme - there's no meaningful real
     distinction between two players tied to the hundredth of a point.
 
+    Also adds `points_z_score` - how many real standard deviations a
+    player's own real `dk_points_total` sits from their position's real,
+    outlier-excluded core mean (reusing `compute_position_scarcity`'s own
+    `mean_dk_points`/`std_dk_points`, not a second statistical basis).
+    Computed for every real player in this table, not just the snap-share/
+    points-floor qualified ones - an honest "how far from the position's
+    typical qualified starter is this player" read even for those who
+    didn't clear the qualifier. A real std of 0 or NaN (fewer than 2 real
+    core players at that position) gives a real NaN `points_z_score`,
+    never a fabricated one.
+
     `points_floor_pool_sizes` overrides the real roster-depth pool sizes
     both `compute_draftable_points_floor` and `compute_position_necessity`
     use (defaults to `config.NFL_BESTBALL_DRAFTABLE_POOL_SIZE`) - exposed
@@ -370,6 +381,24 @@ def build_bestball_rankings(
     result["position_rank"] = (
         result.groupby("position")["points_above_replacement"].rank(method="first", ascending=False).astype(int)
     )
+
+    # points_z_score: how many real standard deviations a player's own real
+    # dk_points_total sits from their position's real, outlier-excluded core
+    # mean - reuses the SAME real mean_dk_points/std_dk_points compute_
+    # position_scarcity already computed above (for necessity_ratio), not a
+    # second statistical basis. Computed for EVERY real player in this
+    # table, not just the snap-share/points-floor qualified ones - an honest
+    # "how far below the position's typical qualified starter is this
+    # player" read even for players who didn't clear the qualifier. A
+    # position with a real std of 0 or NaN (fewer than 2 real core players -
+    # see compute_position_scarcity's own docstring) gets a real NaN
+    # z-score, not a fabricated one (never divides by zero).
+    mean_by_position = scarcity.set_index("position")["mean_dk_points"]
+    std_by_position = scarcity.set_index("position")["std_dk_points"].replace(0, float("nan"))
+    result["points_z_score"] = (result["dk_points_total"] - result["position"].map(mean_by_position)) / result[
+        "position"
+    ].map(std_by_position)
+
     return result
 
 

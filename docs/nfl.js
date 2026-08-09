@@ -62,9 +62,15 @@ if(search){
 filtered = filtered.filter(p=>(p.player_display_name || "").toLowerCase().includes(search))
 }
 
-const rows = filtered.map(p=>({
+const rows = filtered.map(p=>{
+const zScore = p.points_z_score !== undefined && p.points_z_score !== "" && !isNaN(Number(p.points_z_score))
+? Number(p.points_z_score) : null
+const posRank = p.position_rank && p.position_rank !== ""
+? (zScore !== null ? `${p.position_rank} (${zScore>=0?"+":""}${zScore.toFixed(1)}σ)` : p.position_rank)
+: "-"
+return {
 "Rank": p.overall_rank && p.overall_rank !== "" ? p.overall_rank : "-",
-"Pos Rank": p.position_rank && p.position_rank !== "" ? p.position_rank : "-",
+"Pos Rank": posRank,
 "Player": p.player_display_name,
 "Pos": p.position,
 "Team": p.team,
@@ -75,7 +81,8 @@ const rows = filtered.map(p=>({
 "R2-R4 Score": p.r2_r4_dk_points !== undefined && p.r2_r4_dk_points !== "" ? Number(p.r2_r4_dk_points).toFixed(1) : "0.0",
 "Value": p.points_above_replacement !== undefined && p.points_above_replacement !== "" ? Number(p.points_above_replacement).toFixed(1) : "-",
 [`${p.season} Total`]: p.dk_points_total && p.dk_points_total !== "" ? Number(p.dk_points_total).toFixed(1) : "-",
-}))
+}
+})
 buildTable(rows, "bestballTable")
 }
 
