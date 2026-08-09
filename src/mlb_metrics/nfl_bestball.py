@@ -236,7 +236,16 @@ def build_bestball_rankings(
     the real NFL season) gets a real 0 for that range, not a NaN, since
     "0 real points scored in those weeks" is itself real information (as
     opposed to `season_snap_share`, where a missing crosswalk match is
-    genuinely unknown, not zero)."""
+    genuinely unknown, not zero).
+
+    Also adds `overall_rank` (1-based, across every real position
+    together, by `dk_points_total` descending - just this already-sorted
+    table's own row order) and `position_rank` (the same real idea,
+    computed separately within each position - a real "QB12"/"WR3" read).
+    Both use pandas' `rank(method="first")` for ties (consecutive integers
+    in original sort order), not a competition-style "1224" scheme -
+    there's no meaningful real distinction between two players tied on
+    `dk_points_total` to the hundredth of a point."""
     games = compute_player_games_played(weekly_df, schedules_df, season)
     qb_points = compute_season_realized_dk_points(weekly_df, "QB", season)
     skill_points = compute_season_realized_dk_points(weekly_df, "SKILL", season)
@@ -279,7 +288,19 @@ def build_bestball_rankings(
         snap_share = compute_player_snap_share(snap_counts_df, rosters_df, season)
         result = result.merge(snap_share, on="player_id", how="left")
 
-    return result.sort_values("dk_points_total", ascending=False).reset_index(drop=True)
+    result = result.sort_values("dk_points_total", ascending=False).reset_index(drop=True)
+    # overall_rank: 1-based real rank across every real QB/RB/WR/TE in the
+    # table together, by dk_points_total descending - just the row's own
+    # position in this already-sorted table, so ties get consecutive ranks
+    # (not a competition-style "1224" scheme) rather than an invented
+    # tie-break. position_rank is the same real idea, computed separately
+    # WITHIN each position (a real "QB12"/"WR3" read a bestball drafter
+    # actually thinks in), via pandas' own descending dense-free rank.
+    result["overall_rank"] = result.index + 1
+    result["position_rank"] = (
+        result.groupby("position")["dk_points_total"].rank(method="first", ascending=False).astype(int)
+    )
+    return result
 
 
 def _iqr_outlier_bounds(values: pd.Series, multiplier: float) -> tuple[float, float]:

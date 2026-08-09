@@ -57,6 +57,12 @@ href="./style.css">
 <button class="tabButton" data-bestball-position="TE" onclick="selectBestballPosition('TE')">TE</button>
 </div>
 
+<input
+type="text"
+id="bestballSearch"
+placeholder="Search player"
+oninput="renderBestball()">
+
 <div class="scrollbox" id="bestballTable">
 Loading...
 </div>

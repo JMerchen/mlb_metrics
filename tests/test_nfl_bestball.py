@@ -263,6 +263,30 @@ def test_build_bestball_rankings_adds_r1_and_r2_r4_round_split_columns():
     assert rb2["r2_r4_dk_points"] == pytest.approx(0.0)  # real 0, not NaN - didn't play a real week 15-17 game
 
 
+def test_build_bestball_rankings_adds_overall_and_position_rank_columns():
+    weekly = pd.DataFrame([
+        _qb_week("qb1", 2025, 1, name="Big Arm", passing_yards=350, passing_tds=4, team="NYJ"),
+        _qb_week("qb2", 2025, 1, name="Backup Arm", passing_yards=150, passing_tds=1, team="MIA"),
+        _skill_week("rb1", "RB", 2025, 1, name="Workhorse", rush_yards=60, rush_tds=1, team="NYJ"),
+        _skill_week("rb2", "RB", 2025, 1, name="Committee Back", rush_yards=20, team="MIA"),
+    ])
+    schedules = pd.DataFrame([
+        _schedule_row(2025, 1, "NYJ", "MIA"),
+    ])
+
+    result = nfl_bestball.build_bestball_rankings(weekly, schedules, 2025).set_index("player_id")
+
+    # qb1 outscores everyone (real 350yd/4td game) -> real overall_rank 1 and real QB position_rank 1.
+    assert result.loc["qb1", "overall_rank"] == 1
+    assert result.loc["qb1", "position_rank"] == 1
+    # rb2 is the weakest scorer of the four but is still real RB position_rank 2 (only 2 real RBs),
+    # despite a worse overall_rank than qb2.
+    assert result.loc["rb2", "position_rank"] == 2
+    assert result.loc["rb2", "overall_rank"] == 4
+    # Each position's own real rank restarts at 1, independent of overall_rank.
+    assert result.loc["rb1", "position_rank"] == 1
+
+
 def test_build_bestball_rankings_excludes_non_qb_skill_positions():
     weekly = pd.DataFrame([
         _qb_week("qb1", 2025, 1, team="NYJ"),

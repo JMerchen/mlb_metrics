@@ -1932,6 +1932,18 @@ column (already covered by `Missed`/`Missed (Prior Yr)`) and the
 `Season Snap %` column (kept in the underlying CSV for the position-
 scarcity qualifier above, just not surfaced in this table).
 
+**Real rank columns and live player search.** `build_bestball_rankings`
+also adds `overall_rank` (1-based, across every real position together,
+by `dk_points_total` descending - just this already-sorted table's own
+row order) and `position_rank` (the same real idea, computed separately
+within each position, via pandas' own `rank(method="first")` so ties get
+consecutive real ranks rather than an invented tie-break) - both surfaced
+as the leading `Rank`/`Pos Rank` columns on the dashboard table, so a
+real "QB12"/"WR3" read doesn't require counting rows by hand. A player
+search box above the table filters by real player name as you type
+(`oninput`, no button/Enter needed), combined with the existing position
+tabs.
+
 Built via `scripts/build_nfl_bestball_rankings.py`
 (`.github/workflows/build_nfl_bestball_rankings.yml`, `workflow_dispatch`
 only) - a manual/one-time build, not a daily/weekly cron, since real
