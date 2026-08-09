@@ -1540,8 +1540,28 @@ NFL_BESTBALL_SCARCITY_VALUE_COLUMN = "dk_points_total"
 # numbers).
 NFL_BESTBALL_SCARCITY_IQR_MULTIPLIER = 1.5
 
-# --- NFL Bestball: Draftable Pool Depth (nfl_bestball.compute_draftable_points_floor) ---
+# --- NFL Bestball: Roster Construction & Draftable Pool Depth
+# (nfl_bestball.compute_draftable_points_floor, compute_position_necessity) ---
 #
+# Confirmed live via web search (2026-08-07) against DraftKings' own
+# published rules and major fantasy outlets (FantasyPros, Establish The
+# Run, The Fantasy Footballers): DK Best Ball Mania (the flagship DK
+# Best Ball tournament) draft rooms are real 12-team pods, 20 rounds/
+# players per team, with a real 8-slot weekly starting lineup (QB, RB,
+# RB, WR, WR, WR, TE, FLEX).
+NFL_BESTBALL_DRAFT_POD_SIZE = 12
+
+# Real published roster-construction strategy guidance gives typical
+# PER-TEAM position counts drafted across those 20 rounds - "how many of
+# each position do we actually want on our own team": QB 2-3, RB 5-7 (6
+# the consistently-cited number across multiple real sources), WR 6-8,
+# TE 1-2. This is the real "position necessity" input -
+# compute_position_necessity compares it against how many real players
+# at that position actually clear compute_position_scarcity's qualifier
+# this season (real role AND real value), not just an invented "wanted"
+# number in isolation.
+NFL_BESTBALL_ROSTER_TARGET = {"QB": (2, 3), "RB": (5, 7), "WR": (6, 8), "TE": (1, 2)}
+
 # Real user feedback: even a real 50%+ snap-share qualifier still let in
 # real players nobody would actually draft (a real WR playing a
 # meaningful complementary role but producing very little - snap share
@@ -1551,19 +1571,15 @@ NFL_BESTBALL_SCARCITY_IQR_MULTIPLIER = 1.5
 # real Nth-ranked player's own real total, N derived from real DraftKings
 # Best Ball Mania roster-depth math, not an arbitrary points number.
 #
-# Confirmed live via web search (2026-08-07) against DraftKings' own
-# published rules and major fantasy outlets (FantasyPros, Establish The
-# Run, The Fantasy Footballers): DK Best Ball Mania (the flagship DK
-# Best Ball tournament) draft rooms are real 12-team pods, 20 rounds/
-# players per team, with a real 8-slot weekly starting lineup (QB, RB,
-# RB, WR, WR, WR, TE, FLEX). Real published roster-construction strategy
-# guidance gives typical PER-TEAM position counts drafted across those 20
-# rounds: QB 2-3, RB 5-7 (6 the consistently-cited number across
-# multiple real sources), WR 6-8, TE 1-2. The midpoint of each real
-# range, times the real 12-team pod size, gives a real (not invented)
-# estimate of how many players at each position a typical 12-team pool
-# actually drafts - the real "draftable pool depth":
-NFL_BESTBALL_DRAFTABLE_POOL_SIZE = {"QB": 30, "RB": 72, "WR": 84, "TE": 18}
+# The midpoint of each real NFL_BESTBALL_ROSTER_TARGET range, times the
+# real 12-team pod size, gives a real (not invented) estimate of how many
+# players at each position a typical 12-team pool actually drafts - the
+# real "draftable pool depth" (derived, not independently hardcoded, so
+# this and NFL_BESTBALL_ROSTER_TARGET can never silently drift apart):
+NFL_BESTBALL_DRAFTABLE_POOL_SIZE = {
+    position: round((lo + hi) / 2 * NFL_BESTBALL_DRAFT_POD_SIZE)
+    for position, (lo, hi) in NFL_BESTBALL_ROSTER_TARGET.items()
+}
 
 # --- NFL Bestball: Round Split (nfl_bestball.build_bestball_rankings) ---
 #

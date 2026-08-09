@@ -615,3 +615,126 @@ def test_compute_draft_strategy_takeaways_handles_missing_coefficient_of_variati
     assert pd.isna(result.loc["TE", "dispersion_rank"])
     assert "not enough" in result.loc["TE", "takeaway"].lower()
     assert result.loc["QB", "dispersion_rank"] == 2  # still comparable against RB
+
+
+def _necessity_scarcity_row(position, qualified_players):
+    return {"position": position, "qualified_players": qualified_players}
+
+
+def test_compute_position_necessity_flags_real_shortage():
+    # Real RB-style case: a 12-team pod wants 72 (roster_target midpoint 6 *
+    # 12), but only 46 real players clear the position-scarcity qualifier -
+    # a real shortage (ratio 72/46 ~= 1.565 >= 1.1).
+    scarcity = pd.DataFrame([_necessity_scarcity_row("RB", 46)])
+    roster_target = {"RB": (5, 7)}
+    pool_sizes = {"RB": 72}
+
+    result = nfl_bestball.compute_position_necessity(
+        scarcity, roster_target=roster_target, pool_sizes=pool_sizes
+    ).set_index("position")
+
+    assert result.loc["RB", "pod_demand"] == 72
+    assert result.loc["RB", "available"] == 46
+    assert result.loc["RB", "necessity_ratio"] == pytest.approx(72 / 46)
+    assert "shortage" in result.loc["RB", "read"].lower()
+
+
+def test_compute_position_necessity_flags_real_surplus():
+    scarcity = pd.DataFrame([_necessity_scarcity_row("TE", 40)])
+    roster_target = {"TE": (1, 2)}
+    pool_sizes = {"TE": 18}
+
+    result = nfl_bestball.compute_position_necessity(
+        scarcity, roster_target=roster_target, pool_sizes=pool_sizes
+    ).set_index("position")
+
+    assert result.loc["TE", "necessity_ratio"] == pytest.approx(18 / 40)
+    assert "surplus" in result.loc["TE", "read"].lower()
+
+
+def test_compute_position_necessity_flags_roughly_balanced():
+    scarcity = pd.DataFrame([_necessity_scarcity_row("QB", 30)])
+    roster_target = {"QB": (2, 3)}
+    pool_sizes = {"QB": 30}
+
+    result = nfl_bestball.compute_position_necessity(
+        scarcity, roster_target=roster_target, pool_sizes=pool_sizes
+    ).set_index("position")
+
+    assert result.loc["QB", "necessity_ratio"] == pytest.approx(1.0)
+    assert "balanced" in result.loc["QB", "read"].lower()
+
+
+def test_compute_position_necessity_zero_available_gives_nan_ratio_not_crash():
+    scarcity = pd.DataFrame([_necessity_scarcity_row("WR", 0)])
+    roster_target = {"WR": (6, 8)}
+    pool_sizes = {"WR": 84}
+
+    result = nfl_bestball.compute_position_necessity(
+        scarcity, roster_target=roster_target, pool_sizes=pool_sizes
+    ).set_index("position")
+
+    assert pd.isna(result.loc["WR", "necessity_ratio"])
+    assert "not enough" in result.loc["WR", "read"].lower()
+
+
+def test_compute_position_necessity_position_missing_from_scarcity_treated_as_zero_available():
+    scarcity = pd.DataFrame([_necessity_scarcity_row("RB", 46)])  # no WR row at all
+    roster_target = {"RB": (5, 7), "WR": (6, 8)}
+    pool_sizes = {"RB": 72, "WR": 84}
+
+    result = nfl_bestball.compute_position_necessity(
+        scarcity, roster_target=roster_target, pool_sizes=pool_sizes
+    ).set_index("position")
+
+    assert result.loc["WR", "available"] == 0
+    assert pd.isna(result.loc["WR", "necessity_ratio"])
+
+
+def test_build_bestball_rankings_necessity_ratio_scales_points_above_replacement():
+    # 1 real QB, 2 real RBs, all with a real 100% season snap share (lone
+    # player in their own team-game, matching this file's established
+    # construction). RB pool size (3) exceeds the real RB sample (2), so
+    # compute_draftable_points_floor can't derive a real RB floor (NaN,
+    # falls back to 0 - points_above_replacement pre-necessity = raw
+    # dk_points_total for both RBs), while necessity's own real pod_demand
+    # (3) still exceeds real RB availability (2, both qualify on snap
+    # share) - a real shortage (ratio 3/2 = 1.5) that SHOULD scale RB
+    # points_above_replacement up from its pre-necessity (raw-points)
+    # value. QB's pool size (1) exactly matches its real sample (1
+    # qualified QB) - necessity_ratio 1/1 = 1.0, no real adjustment.
+    weekly = pd.DataFrame([
+        _qb_week("qb1", 2025, 1, name="Only QB", passing_yards=300, passing_tds=2, rush_yards=0, team="NYJ"),
+        _skill_week("rb1", "RB", 2025, 1, name="Top RB", rush_yards=100, team="MIA"),
+        _skill_week("rb2", "RB", 2025, 1, name="Second RB", rush_yards=50, team="BUF"),
+    ])
+    schedules = pd.DataFrame([
+        _schedule_row(2025, 1, "NYJ", "MIA"),
+        _schedule_row(2025, 1, "BUF", "NE"),
+    ])
+    snap_counts = pd.DataFrame([
+        _snap_row("Qb1Pfr", "NYJ", 2025, 1, 55),
+        _snap_row("Rb1Pfr", "MIA", 2025, 1, 60),
+        _snap_row("Rb2Pfr", "BUF", 2025, 1, 40),
+    ])
+    rosters = pd.DataFrame([
+        _roster_row("qb1", "Qb1Pfr", 2025),
+        _roster_row("rb1", "Rb1Pfr", 2025),
+        _roster_row("rb2", "Rb2Pfr", 2025),
+    ])
+    pool_sizes = {"QB": 1, "RB": 3, "WR": 84, "TE": 18}
+
+    result = nfl_bestball.build_bestball_rankings(
+        weekly, schedules, 2025, snap_counts_df=snap_counts, rosters_df=rosters,
+        points_floor_pool_sizes=pool_sizes,
+    ).set_index("player_id")
+
+    # Real RB floor is NaN (falls back to 0), so pre-necessity points_above_
+    # replacement == raw dk_points_total for both RBs - real necessity_ratio
+    # 1.5 (pod_demand 3 / available 2) should scale each up by exactly 1.5x.
+    assert result.loc["rb1", "points_above_replacement"] == pytest.approx(result.loc["rb1", "dk_points_total"] * 1.5)
+    assert result.loc["rb2", "points_above_replacement"] == pytest.approx(result.loc["rb2", "dk_points_total"] * 1.5)
+    # QB pool size (1) exactly matches QB's real 1-player sample, so qb1 IS
+    # its own real floor (points_above_replacement 0 pre-necessity), and
+    # necessity_ratio 1.0 (pod_demand 1 == available 1) leaves it at 0.
+    assert result.loc["qb1", "points_above_replacement"] == pytest.approx(0.0)

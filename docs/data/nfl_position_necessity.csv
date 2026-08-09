@@ -1,0 +1,5 @@
+position,roster_target_min,roster_target_max,pod_demand,available,necessity_ratio,read
+QB,2,3,30,30,1.0,QB: roughly balanced - a 12-team pod wants 30 real QBs (target 2-3/team) against 30 real players who clear this season's role+value bar.
+RB,5,7,72,46,1.565217391304348,RB: real shortage - a 12-team pod wants 72 real RBs (target 5-7/team) but only 46 real players clear this season's role+value bar. Waiting risks settling for a real replacement-level pick late.
+WR,6,8,84,81,1.037037037037037,WR: roughly balanced - a 12-team pod wants 84 real WRs (target 6-8/team) against 81 real players who clear this season's role+value bar.
+TE,1,2,18,17,1.0588235294117647,TE: roughly balanced - a 12-team pod wants 18 real TEs (target 1-2/team) against 17 real players who clear this season's role+value bar.
