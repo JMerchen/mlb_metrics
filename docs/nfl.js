@@ -53,8 +53,17 @@ renderBestball()
 function renderBestball(){
 const activeBtn = document.querySelector("#bestballPositionTabs .tabButton.active")
 const position = activeBtn ? activeBtn.dataset.bestballPosition : "all"
-const filtered = position === "all" ? nflBestball : nflBestball.filter(p=>p.position === position)
+let filtered = position === "all" ? nflBestball : nflBestball.filter(p=>p.position === position)
+
+const searchEl = document.getElementById("bestballSearch")
+const search = searchEl ? searchEl.value.trim().toLowerCase() : ""
+if(search){
+filtered = filtered.filter(p=>(p.player_display_name || "").toLowerCase().includes(search))
+}
+
 const rows = filtered.map(p=>({
+"Rank": p.overall_rank && p.overall_rank !== "" ? p.overall_rank : "-",
+"Pos Rank": p.position_rank && p.position_rank !== "" ? p.position_rank : "-",
 "Player": p.player_display_name,
 "Pos": p.position,
 "Team": p.team,
