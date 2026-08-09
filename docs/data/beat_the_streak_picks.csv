@@ -1,4 +1,6 @@
 date,rank,name,predicted_probability,actual_hit,status
+2026-08-09,1,Shohei Ohtani,0.7979535793094497,,pending
+2026-08-09,2,Steven Kwan,0.825645788587682,,pending
 2026-08-08,,,,,no_pick
 2026-08-07,1,Freddie Freeman,0.8546875,0.0,miss
 2026-08-07,2,Shohei Ohtani,0.8382812500000001,0.0,miss
