@@ -2138,6 +2138,50 @@ CV, and only a population filtered on both real role AND real value
 reflects players a real bestball drafter would actually be choosing
 among.
 
+**Position Necessity** (`docs/data/nfl_position_necessity.csv`,
+`nfl_bestball.compute_position_necessity`): a real, distinct question from
+the CV-based takeaway above - not "how spread out is production within
+this position" but "how many of each position do we actually want on our
+own 20-round roster, compared to how many real players are actually good
+enough to draft this season." Compares real per-team roster-construction
+targets (`config.NFL_BESTBALL_ROSTER_TARGET = {"QB": (2,3), "RB": (5,7),
+"WR": (6,8), "TE": (1,2)}`, the same real DK Best Ball Mania guidance
+`NFL_BESTBALL_DRAFTABLE_POOL_SIZE` is now DERIVED from, not independently
+hardcoded) times a real 12-team pod (`config.NFL_BESTBALL_DRAFT_POD_SIZE
+= 12`) against the position-scarcity table's own real `qualified_players`
+count - real demand vs. real supply. Real 2025 read:
+
+| Position | Roster target/team | Pod demand | Available (qualified) | Necessity ratio | Read |
+|---|---|---|---|---|---|
+| QB | 2-3 | 30 | 30 | 1.00 | roughly balanced |
+| RB | 5-7 | 72 | 46 | 1.57 | real shortage |
+| WR | 6-8 | 84 | 81 | 1.04 | roughly balanced |
+| TE | 1-2 | 18 | 17 | 1.06 | roughly balanced |
+
+RB is the one real standout: a 12-team pod wants 72 real RBs across its
+20-round drafts, but only 46 real RBs actually clear this season's real
+role+value bar - real bestball RB strategy (drafting deep/handcuffs for
+real injury insurance, discussed above) means a real chunk of "the RBs a
+pod drafts" are dart-throws, not genuinely startable difference-makers.
+
+**This necessity_ratio is ALSO baked directly into `points_above_
+replacement`/`overall_rank` in `nfl_bestball_rankings.csv`, not left as a
+separate table to cross-reference only** - `build_bestball_rankings`
+multiplies each player's VOR-adjusted value by their own position's real
+necessity_ratio (both the points-floor subtraction and this multiplier
+are per-position CONSTANTS, so `position_rank` is unaffected - only
+`overall_rank` moves further). Real, honest compounding effect worth
+flagging: since RB was already the position VOR rewarded most (see
+above), stacking a real 1.57x necessity multiplier on top pushes RB even
+further ahead - the real top 10 overall-ranked players are now ALL RBs
+(previously a mix with WRs and Josh Allen in the top 10). Josh Allen's
+`overall_rank` moves from 13 (VOR alone) to 26 (VOR + necessity) - QB's
+necessity_ratio is right at 1.00 (roughly balanced), so this move is
+entirely RB pulling further away, not QB being pushed down further. The
+`read`/threshold cutoffs (>=1.1 shortage, <=0.9 surplus) are a simple,
+honest first pass - NOT backtest-derived, easy to revisit once more real
+seasons accumulate.
+
 **Preseason Notes** (`docs/data/nfl_draft_notes.csv`): a one-time,
 hand-curated list of real training-camp storylines specifically for
 players drafted in the April 2026 NFL Draft (depth-chart battles,

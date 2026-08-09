@@ -252,29 +252,42 @@ def build_bestball_rankings(
     overstate how much real value that QB1 was worth relative to a QB
     draftable many rounds later; a scarce position's floor sits far below
     its stars (real 2025 RB: floor 43.6 vs. a top-2 RB near 400+), so real
-    RB/WR production keeps most of its raw-points rank. `overall_rank`
-    (1-based, across every real position together) and `position_rank`
-    (the same real idea, computed separately within each position - a
-    real "QB12"/"WR3" read) are both now derived from `points_above_
-    replacement`, not `dk_points_total` directly - `position_rank` lands
-    on the identical order either way (subtracting one position's own
-    constant floor from every player at that position can't reorder them
-    relative to each other), but `overall_rank` genuinely changes, which
-    is the real point. A position whose real player pool doesn't reach
-    its real roster-depth pool size gets a NaN floor (see
-    `compute_draftable_points_floor`'s own docstring) - treated as a real
-    floor of 0 here (not a fabricated one), so those players fall back to
-    being ranked on raw `dk_points_total` rather than being wrongly
-    excluded or crashing. Both ranks use pandas' `rank(method="first")`
-    for ties (consecutive integers in sort order), not a competition-style
-    "1224" scheme - there's no meaningful real distinction between two
-    players tied to the hundredth of a point.
+    RB/WR production keeps most of its raw-points rank.
+
+    `points_above_replacement` is then further scaled by that position's
+    real `necessity_ratio` (see `compute_position_necessity` - real
+    per-team roster demand across a 12-team pod vs. real supply of
+    qualified players this season) - a second, distinct real "draft
+    strategy" signal baked in alongside the floor: a position running
+    real short of quality options relative to real demand gets an extra
+    real boost, on top of (not instead of) the VOR adjustment above.
+
+    `overall_rank` (1-based, across every real position together) and
+    `position_rank` (the same real idea, computed separately within each
+    position - a real "QB12"/"WR3" read) are both derived from this final
+    `points_above_replacement` - `position_rank` lands on the identical
+    order raw `dk_points_total` would give either way (both the floor
+    subtraction and the necessity-ratio multiplication are per-position
+    CONSTANTS - applying the same shift/scale to every player at a
+    position can't reorder them relative to each other), but
+    `overall_rank` genuinely changes, which is the real point. A position
+    whose real player pool doesn't reach its real roster-depth pool size
+    gets a NaN floor (see `compute_draftable_points_floor`'s own
+    docstring) - treated as a real floor of 0 here (not a fabricated
+    one); a position with 0 real qualified players (e.g. `season_snap_
+    share` wasn't available this run) gets a NaN `necessity_ratio` -
+    treated as a real neutral 1.0 multiplier (no adjustment), not a
+    fabricated one either way. Both ranks use pandas' `rank(method=
+    "first")` for ties (consecutive integers in sort order), not a
+    competition-style "1224" scheme - there's no meaningful real
+    distinction between two players tied to the hundredth of a point.
 
     `points_floor_pool_sizes` overrides the real roster-depth pool sizes
-    `compute_draftable_points_floor` uses (defaults to `config.
-    NFL_BESTBALL_DRAFTABLE_POOL_SIZE`) - exposed mainly so a small
-    synthetic test fixture can exercise the real reordering effect
-    without needing dozens of real players per position."""
+    both `compute_draftable_points_floor` and `compute_position_necessity`
+    use (defaults to `config.NFL_BESTBALL_DRAFTABLE_POOL_SIZE`) - exposed
+    mainly so a small synthetic test fixture can exercise the real
+    reordering effect without needing dozens of real players per
+    position."""
     games = compute_player_games_played(weekly_df, schedules_df, season)
     qb_points = compute_season_realized_dk_points(weekly_df, "QB", season)
     skill_points = compute_season_realized_dk_points(weekly_df, "SKILL", season)
@@ -327,6 +340,20 @@ def build_bestball_rankings(
     points_floor = compute_draftable_points_floor(result, pool_sizes=points_floor_pool_sizes)
     floor_by_position = result["position"].map(points_floor).fillna(0.0)
     result["points_above_replacement"] = result["dk_points_total"] - floor_by_position
+
+    # necessity_ratio: real roster-demand-vs-supply signal (see
+    # compute_position_necessity's own docstring) scales points_above_
+    # replacement further - a position running short of real quality
+    # options relative to real per-team roster demand gets an extra real
+    # boost beyond VOR alone. Computed from this same result (which may
+    # not have season_snap_share if snap_counts_df/rosters_df weren't
+    # given) via compute_position_scarcity - a real 0-qualified-players
+    # position yields a NaN ratio, fillna'd to 1.0 (no adjustment) rather
+    # than a fabricated multiplier.
+    scarcity = compute_position_scarcity(result, min_points_by_position=points_floor)
+    necessity = compute_position_necessity(scarcity, pool_sizes=points_floor_pool_sizes)
+    necessity_by_position = necessity.set_index("position")["necessity_ratio"]
+    result["points_above_replacement"] *= result["position"].map(necessity_by_position).fillna(1.0)
 
     result = result.sort_values("points_above_replacement", ascending=False).reset_index(drop=True)
     # overall_rank: 1-based real rank across every real QB/RB/WR/TE in the
@@ -545,6 +572,95 @@ def compute_position_scarcity(
                 "std_dk_points": std,
                 "coefficient_of_variation": coefficient_of_variation,
                 **bucket_counts,
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def compute_position_necessity(
+    scarcity_df: pd.DataFrame,
+    roster_target: dict = config.NFL_BESTBALL_ROSTER_TARGET,
+    pool_sizes: dict = config.NFL_BESTBALL_DRAFTABLE_POOL_SIZE,
+) -> pd.DataFrame:
+    """[position, roster_target_min, roster_target_max, pod_demand, available,
+    necessity_ratio, read] - a real, direct answer to "how many of each
+    position do we want on our team, compared to how many real good options
+    are actually available."
+
+    `roster_target_min`/`roster_target_max` is the real per-team draft-count
+    range (`config.NFL_BESTBALL_ROSTER_TARGET`, e.g. real RB 5-7). `pod_demand`
+    is that same real target's midpoint times the real 12-team pod size
+    (`config.NFL_BESTBALL_DRAFTABLE_POOL_SIZE`) - how many real players at
+    that position a full 12-team pod wants ACROSS ALL 12 TEAMS, not just
+    yours. `available` is `scarcity_df`'s own real `qualified_players` count
+    (`compute_position_scarcity` - real players who cleared BOTH the
+    snap-share role qualifier AND the points-floor value qualifier this
+    season, not just anyone with a real stat line) - the real "good enough
+    to actually draft" population the whole pod is competing over.
+
+    `necessity_ratio` = `pod_demand / available`. Above 1 means real demand
+    across the pod exceeds real supply of quality options - the position
+    runs dry before every team's real need is filled, so waiting on it
+    risks settling for a real replacement-level/dart-throw pick. Below 1
+    means real supply comfortably covers real demand - safer to wait. This
+    is a real, SEPARATE signal from `compute_draft_strategy_takeaways`'s
+    `coefficient_of_variation`: CV describes the SHAPE of production within
+    a position's own qualified pool (how much of a gap exists between a
+    difference-maker and a typical starter); `necessity_ratio` describes
+    whether there's simply ENOUGH real pool to go around. A position can be
+    flat (low CV) yet still run short on real bodies, or top-heavy (high
+    CV) yet still have plenty of real depth - real, distinct questions.
+
+    A `NaN` `necessity_ratio` (and a real, honest `read` explaining why)
+    happens when `available` is 0 - most commonly because `scarcity_df` was
+    built without real `season_snap_share` data (see `compute_position_
+    scarcity`'s own docstring), so there's no real qualified population to
+    compare against; this is never silently treated as an infinite/zero
+    ratio. The `read` thresholds (>=1.1 real shortage, <=0.9 real surplus,
+    otherwise roughly balanced) are a simple, honest first pass - NOT
+    backtest-derived, easy to revisit once more real seasons accumulate."""
+    rows = []
+    for position, (lo, hi) in roster_target.items():
+        pod_demand = pool_sizes.get(position, float("nan"))
+        matching = scarcity_df[scarcity_df["position"] == position]
+        available = int(matching["qualified_players"].iloc[0]) if len(matching) else 0
+
+        necessity_ratio = float("nan")
+        read = (
+            f"{position}: not enough real qualified-player data this run to compute a real "
+            f"necessity ratio (0 real players cleared the position-scarcity qualifier)."
+        )
+        if available > 0 and not pd.isna(pod_demand):
+            necessity_ratio = pod_demand / available
+            if necessity_ratio >= 1.1:
+                read = (
+                    f"{position}: real shortage - a 12-team pod wants {pod_demand} real {position}s "
+                    f"(target {lo}-{hi}/team) but only {available} real players clear this season's "
+                    f"role+value bar. Waiting risks settling for a real replacement-level pick late."
+                )
+            elif necessity_ratio <= 0.9:
+                read = (
+                    f"{position}: real surplus - a 12-team pod wants {pod_demand} real {position}s "
+                    f"(target {lo}-{hi}/team) and {available} real players clear this season's "
+                    f"role+value bar. Real depth to spare - safer to wait here."
+                )
+            else:
+                read = (
+                    f"{position}: roughly balanced - a 12-team pod wants {pod_demand} real {position}s "
+                    f"(target {lo}-{hi}/team) against {available} real players who clear this season's "
+                    f"role+value bar."
+                )
+
+        rows.append(
+            {
+                "position": position,
+                "roster_target_min": lo,
+                "roster_target_max": hi,
+                "pod_demand": pod_demand,
+                "available": available,
+                "necessity_ratio": necessity_ratio,
+                "read": read,
             }
         )
 

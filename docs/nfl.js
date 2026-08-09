@@ -34,6 +34,7 @@ el.innerHTML = html
 let nflBestball = []
 let nflPositionScarcity = []
 let nflDraftStrategy = []
+let nflPositionNecessity = []
 let nflDraftNotes = []
 
 function selectNflTab(tab){
@@ -118,6 +119,18 @@ const rows = nflDraftStrategy.map(t=>({
 buildTable(rows, "draftStrategyTable")
 }
 
+function renderPositionNecessity(){
+const rows = nflPositionNecessity.map(n=>({
+"Pos": n.position,
+"Roster Target": n.roster_target_min && n.roster_target_max ? `${n.roster_target_min}-${n.roster_target_max}/team` : "-",
+"Pod Demand": n.pod_demand && n.pod_demand !== "" ? n.pod_demand : "-",
+"Available": n.available !== undefined && n.available !== "" ? n.available : "-",
+"Necessity Ratio": n.necessity_ratio && n.necessity_ratio !== "" ? Number(n.necessity_ratio).toFixed(2) : "-",
+"Read": n.read,
+}))
+buildTable(rows, "positionNecessityTable")
+}
+
 function renderDraftNotes(){
 const rows = nflDraftNotes.map(n=>({
 "Player / Topic": n.player_or_topic,
@@ -148,6 +161,12 @@ console.log("no nfl_draft_strategy_takeaways.csv yet", e)
 }
 
 try{
+nflPositionNecessity = await loadCSV("./data/nfl_position_necessity.csv")
+}catch(e){
+console.log("no nfl_position_necessity.csv yet", e)
+}
+
+try{
 nflDraftNotes = await loadCSV("./data/nfl_draft_notes.csv")
 }catch(e){
 console.log("no nfl_draft_notes.csv yet", e)
@@ -172,6 +191,13 @@ document.getElementById("draftStrategyTable").innerHTML =
 "No draft strategy analysis published yet - this page needs scripts/build_nfl_bestball_rankings.py to have been run at least once."
 }else{
 renderDraftStrategy()
+}
+
+if(!nflPositionNecessity.length){
+document.getElementById("positionNecessityTable").innerHTML =
+"No position necessity data published yet - this page needs scripts/build_nfl_bestball_rankings.py to have been run at least once."
+}else{
+renderPositionNecessity()
 }
 
 if(!nflDraftNotes.length){

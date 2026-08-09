@@ -24,6 +24,19 @@ this season and writes a real, numbers-driven takeaway per position -
 whether this season's real spread argues for prioritizing that position
 early in a draft, or waiting.
 
+nfl_position_necessity.csv (see nfl_bestball.compute_position_necessity's
+own docstring) is a real, distinct question from the takeaways above -
+not "how spread out is production within this position" but "how many of
+each position do we actually want on our own 20-round roster, compared
+to how many real players are actually good enough to draft this season."
+Compares real per-team roster-construction targets (config.
+NFL_BESTBALL_ROSTER_TARGET) times a real 12-team pod against the
+position-scarcity table's own real qualified_players count, producing a
+real shortage/balanced/surplus read per position. This same real
+necessity_ratio is also baked directly into nfl_bestball_rankings.csv's
+points_above_replacement/overall_rank (see build_bestball_rankings' own
+docstring) - not left as a separate table to cross-reference only.
+
 A manual/one-time build, not part of the daily/weekly cron - real 2025
 season stats don't change, and (per this feature's own scope) this isn't
 meant to be a live-updated feed. Re-run manually
@@ -105,6 +118,11 @@ def main():
     takeaways_path = os.path.join(args.data_dir, "nfl_draft_strategy_takeaways.csv")
     takeaways.to_csv(takeaways_path, index=False)
     print(f"Wrote nfl_draft_strategy_takeaways.csv ({len(takeaways)} rows) for {args.season}.")
+
+    necessity = nfl_bestball.compute_position_necessity(scarcity)
+    necessity_path = os.path.join(args.data_dir, "nfl_position_necessity.csv")
+    necessity.to_csv(necessity_path, index=False)
+    print(f"Wrote nfl_position_necessity.csv ({len(necessity)} rows) for {args.season}.")
 
 
 if __name__ == "__main__":

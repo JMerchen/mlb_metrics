@@ -101,6 +101,11 @@ def test_build_nfl_bestball_rankings_writes_csv_with_prior_season_and_snap_share
     assert set(takeaways["position"]) == {"QB", "RB", "WR", "TE"}
     assert "takeaway" in takeaways.columns
 
+    necessity = pd.read_csv(data_dir / "nfl_position_necessity.csv")
+    assert set(necessity["position"]) == {"QB", "RB", "WR", "TE"}
+    assert "necessity_ratio" in necessity.columns
+    assert "read" in necessity.columns
+
 
 def test_build_nfl_bestball_rankings_missing_snap_data_writes_without_qualifier(tmp_path):
     module = _load_module()
