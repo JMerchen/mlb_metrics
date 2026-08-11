@@ -212,8 +212,8 @@ function renderDraftAssistantRoster(){
 const el = document.getElementById("draftAssistantRoster")
 if(!myDraftRoster.length){ el.innerHTML = "No players added yet - search above to build your real roster."; return }
 el.innerHTML = myDraftRoster.map(p=>
-`<span class="pickCard">${p.player_display_name} (${p.position}) <button class="removePitcher" onclick="removeFromDraftRoster('${p.player_id}')">x</button></span>`
-).join(" ")
+`<div class="pickCard">${p.player_display_name} (${p.position}) <button class="removePitcher" onclick="removeFromDraftRoster('${p.player_id}')">x</button></div>`
+).join("")
 }
 
 function renderDraftAssistant(){
@@ -240,6 +240,20 @@ const g = gap[position]
 const necessity = necessityByPosition[position]
 const bestAvailable = nflBestball
 .filter(p=>p.position === position && !rosterIds.has(p.player_id))
+// When a real pick number is entered, drop anyone whose own real ECR +/-
+// their expert-rank standard deviation puts them clearly off the board by
+// that pick - a "value" read here means the current pick number falls
+// well PAST their real expert-consensus range (the same real comparison
+// used for the reach/value read below, just reused as a filter here), so
+// they were almost certainly already drafted by an earlier pick. A
+// player with no real ECR match can't be filtered this way and stays in
+// consideration rather than being silently excluded.
+.filter(p=>{
+if(!pickNumber){ return true }
+const ff = ffByPlayerId[p.player_id]
+if(!ff){ return true }
+return computeReachValueRead(Number(ff.ecr), Number(ff.ecr_sd), pickNumber) !== "value"
+})
 .sort((a, b)=>Number(b.points_above_replacement || 0) - Number(a.points_above_replacement || 0))[0]
 
 let bestAvailableLabel = "-"
