@@ -1,6 +1,7 @@
 date,rank,name,predicted_probability,actual_hit,status
-2026-08-10,1,Jake McCarthy,0.8310733009442248,,pending
-2026-08-10,2,Jonathan Aranda,0.7876794754298682,,pending
+2026-08-11,,,,,no_pick
+2026-08-10,1,Jake McCarthy,0.8310733009442248,1.0,hit
+2026-08-10,2,Jonathan Aranda,0.7876794754298682,1.0,hit
 2026-08-09,1,Shohei Ohtani,0.7979535793094497,0.0,miss
 2026-08-09,2,Steven Kwan,0.825645788587682,1.0,hit
 2026-08-08,,,,,no_pick
