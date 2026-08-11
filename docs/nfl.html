@@ -68,6 +68,41 @@ Loading...
 </div>
 
 <h3>
+My Draft
+</h3>
+
+<p>
+Real, transparent signals for the pick you're at right now - your own real
+roster gap against real per-team targets, each position's real necessity
+(Position Necessity above), the real best remaining player, and (once a
+draft slot + pick number are entered) a real reach/value read against
+FantasyPros' real Best Ball Overall Expert Consensus Rank. "Best remaining"
+only excludes your own roster below - it has no view of a live draft board,
+so it can't know what OTHER teams have already taken. Saved to this browser
+only (no account/server) - use "Clear My Draft" to reset.
+</p>
+
+<input
+type="text"
+id="draftAssistantSearch"
+placeholder="Search player to add to your roster"
+oninput="renderDraftAssistantCandidates()">
+
+<div id="draftAssistantCandidates"></div>
+
+<div id="draftAssistantRoster"></div>
+
+<div id="draftAssistantInputs">
+<label>Your draft slot (1-12): <input type="number" id="draftAssistantSlot" min="1" max="12" oninput="renderDraftAssistant()"></label>
+<label>Current pick number: <input type="number" id="draftAssistantPick" min="1" oninput="renderDraftAssistant()"></label>
+<button onclick="clearDraftAssistant()">Clear My Draft</button>
+</div>
+
+<div class="scrollbox" id="draftAssistantTable">
+Loading...
+</div>
+
+<h3>
 Position Scarcity
 </h3>
 
@@ -104,6 +139,8 @@ Loading...
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<script src="./nfl_draft_assistant.js"></script>
 
 <script src="./nfl.js"></script>
 

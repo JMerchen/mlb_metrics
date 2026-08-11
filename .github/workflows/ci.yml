@@ -27,6 +27,9 @@ jobs:
       - name: Run nfl_dfs_solver.js unit tests
         run: node --test docs/nfl_dfs_solver.test.js
 
+      - name: Run nfl_draft_assistant.js unit tests
+        run: node --test docs/nfl_draft_assistant.test.js
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
