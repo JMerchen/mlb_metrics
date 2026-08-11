@@ -3,8 +3,9 @@ maintained nflverse successor to the now-deprecated `nfl_data_py` - see
 README.md's NFL DFS section for the real deprecation-notice citation).
 Every real field name/shape referenced anywhere in this module is
 confirmed via a live run of `scripts/debug_nfl_data.py`
-(`.github/workflows/debug_nfl_data.yml`, run 30675199512, 2026-08-01) -
-not assumed.
+(`.github/workflows/debug_nfl_data.yml`, run 30675199512, 2026-08-01;
+`fetch_ff_rankings`/`fetch_ff_playerids` confirmed separately, run
+31513644704, 2026-08-11) - not assumed.
 
 `nflreadpy` returns Polars DataFrames by default; every fetch function
 here converts to pandas via `.to_pandas()` immediately, since the rest of
@@ -138,6 +139,50 @@ def fetch_snap_counts(seasons: list[int]) -> pd.DataFrame:
     import nflreadpy
 
     return nflreadpy.load_snap_counts(seasons=seasons).to_pandas()
+
+
+def fetch_ff_rankings() -> pd.DataFrame:
+    """Real FantasyPros Expert Consensus Ranking (ECR) snapshot - NOT
+    season-keyed like every other fetcher here, since this is a real
+    CURRENT-moment market-consensus read, not a per-season historical
+    stat (there's no real "2024 ECR" to retroactively backfill the way
+    box-score stats work) - confirmed live via `.github/workflows/
+    debug_nfl_data.yml` run 31513644704, 2026-08-11. Confirmed real
+    columns include `id` (FantasyPros' own player id - crosswalk to this
+    project's `player_id`/GSIS id via `fetch_ff_playerids`'s
+    `fantasypros_id` column, see nfl_ff_rankings.py), `player`, `pos`,
+    `team`, `ecr` (mean expert rank), `sd` (standard deviation of expert
+    ranks for that player - a real, already-available "how much
+    draft-position uncertainty does this player have" number), `best`/
+    `worst` (the most/least optimistic real expert rank given), and
+    `ecr_type` - confirmed real distinct values `['bo', 'bp', 'do', 'dp',
+    'drk', 'dsf', 'ro', 'rp', 'rsf']` (best-ball/dynasty/redraft ×
+    overall/positional/rookie/superflex slices). `nfl_ff_rankings.py`
+    filters to `ecr_type == "bo"` (real "best-ball overall") - the one
+    real slice that matches this project's bestball focus directly,
+    already cross-position-comparable the way a real draft pick is."""
+    import nflreadpy
+
+    return nflreadpy.load_ff_rankings().to_pandas()
+
+
+def fetch_ff_playerids() -> pd.DataFrame:
+    """Real ffverse/dynastyprocess player-id crosswalk table - also NOT
+    season-keyed (a real current player-universe snapshot, refetched live
+    alongside `fetch_ff_rankings`). Confirmed live (same run as above)
+    real columns include `fantasypros_id` (the real crosswalk key back to
+    `fetch_ff_rankings`'s own `id` column), `gsis_id` (this project's own
+    `player_id` space), plus many other real id spaces (`sleeper_id`,
+    `espn_id`, `yahoo_id`, `pfr_id`, etc.) not used here. Real crosswalk
+    coverage confirmed live: `gsis_id` overlaps 2211 of 3134 (70.5%) real
+    2025-rostered players - meaningfully lower than the 99.7% `pfr_id`
+    crosswalk `compute_player_snap_share` uses, so a real chunk of
+    players will legitimately have no real ECR match (absent from
+    `nfl_ff_rankings.compute_ff_rankings_export`'s output, never a
+    fabricated value)."""
+    import nflreadpy
+
+    return nflreadpy.load_ff_playerids().to_pandas()
 
 
 def fetch_team_stats(seasons: list[int]) -> pd.DataFrame:

@@ -130,6 +130,53 @@ def test_build_nfl_bestball_rankings_missing_snap_data_writes_without_qualifier(
     assert qb_row["qualified_players"] == 0  # no real snap-share data to qualify anyone on
 
 
+def test_build_nfl_bestball_rankings_ff_rankings_fetch_failure_does_not_crash_build(tmp_path, monkeypatch):
+    module = _load_module()
+    raw_dir = tmp_path / "raw"
+    data_dir = tmp_path / "data"
+    raw_dir.mkdir()
+
+    _persist(raw_dir, "weekly", 2025, pd.DataFrame([_weekly_row("qb1", "QB", 2025, 1, passing_yards=250, passing_tds=2)]))
+    _persist(raw_dir, "schedules", 2025, pd.DataFrame([_schedule_row(2025, 1, "NYJ", "BUF")]))
+
+    def _raise(*args, **kwargs):
+        raise RuntimeError("real network failure, simulated")
+
+    monkeypatch.setattr(module.nfl_data, "fetch_ff_rankings", _raise)
+
+    sys.argv = ["build_nfl_bestball_rankings.py", "--raw-dir", str(raw_dir), "--data-dir", str(data_dir), "--season", "2025"]
+    module.main()  # must not raise
+
+    assert (data_dir / "nfl_bestball_rankings.csv").exists()  # rest of the build still completes
+    assert not (data_dir / "nfl_ff_rankings.csv").exists()  # real fetch failure - no fabricated file
+
+
+def test_build_nfl_bestball_rankings_writes_ff_rankings_csv_when_fetch_succeeds(tmp_path, monkeypatch):
+    module = _load_module()
+    raw_dir = tmp_path / "raw"
+    data_dir = tmp_path / "data"
+    raw_dir.mkdir()
+
+    _persist(raw_dir, "weekly", 2025, pd.DataFrame([_weekly_row("qb1", "QB", 2025, 1, passing_yards=250, passing_tds=2)]))
+    _persist(raw_dir, "schedules", 2025, pd.DataFrame([_schedule_row(2025, 1, "NYJ", "BUF")]))
+
+    fake_rankings = pd.DataFrame([{
+        "id": 101, "pos": "QB", "ecr": 5.0, "sd": 1.2, "best": 1, "worst": 10,
+        "ecr_type": "bo", "scrape_date": "2026-08-11",
+    }])
+    fake_playerids = pd.DataFrame([{"fantasypros_id": 101.0, "gsis_id": "qb1"}])
+    monkeypatch.setattr(module.nfl_data, "fetch_ff_rankings", lambda: fake_rankings)
+    monkeypatch.setattr(module.nfl_data, "fetch_ff_playerids", lambda: fake_playerids)
+
+    sys.argv = ["build_nfl_bestball_rankings.py", "--raw-dir", str(raw_dir), "--data-dir", str(data_dir), "--season", "2025"]
+    module.main()
+
+    ff_rankings = pd.read_csv(data_dir / "nfl_ff_rankings.csv")
+    assert len(ff_rankings) == 1
+    assert ff_rankings.iloc[0]["player_id"] == "qb1"
+    assert ff_rankings.iloc[0]["ecr"] == pytest.approx(5.0)
+
+
 def test_build_nfl_bestball_rankings_missing_season_data_writes_nothing(tmp_path):
     module = _load_module()
     raw_dir = tmp_path / "raw"

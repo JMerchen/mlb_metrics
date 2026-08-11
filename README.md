@@ -2199,6 +2199,82 @@ entirely RB pulling further away, not QB being pushed down further. The
 honest first pass - NOT backtest-derived, easy to revisit once more real
 seasons accumulate.
 
+### Draft Assistant ("My Draft" - real, live-draft advice)
+
+Everything above is a static preseason snapshot - it has no notion of an
+in-progress draft. Real user ask: given a real current roster (e.g. 3 RBs,
+2 WRs already drafted) and the pick you're at right now, what should you
+actually do next? Three real gaps stood between the static tables above
+and that ask, all addressed here: (1) real draft-state tracking - what's
+on your roster, what pick you're at; (2) real market-consensus data to
+judge "is this pick a reach"; (3) real snake-draft "picks until your next
+turn" arithmetic.
+
+**Real ECR data, not raw ADP.** Every raw ADP-provider domain (Fantasy
+Football Calculator, FantasyPros itself, MyFantasyLeague) is blocked by
+this sandbox's network egress policy, and this project has no HTTP client
+dependency (see `requirements.txt`) to reach one directly regardless.
+Instead, `nfl_ff_rankings.py` uses `nflreadpy.load_ff_rankings()`/
+`load_ff_playerids()` (already-installed dependency, zero new packages) -
+real FantasyPros Expert Consensus Rank (ECR) data, confirmed live via
+`scripts/debug_nfl_data.py` (`.github/workflows/debug_nfl_data.yml`, run
+31513644704, 2026-08-11) before any parsing code was written against
+assumed field names, per this project's established data-confirmation
+discipline. Filtered to real `ecr_type == "bo"` ("best-ball overall" - one
+of nine real confirmed slices, the one that matches this project's
+bestball focus directly and is already cross-position-comparable, like a
+real draft pick number). Crosswalked from FantasyPros' own real player id
+to this project's `player_id` (GSIS id) via `load_ff_playerids()`'s real
+`fantasypros_id`/`gsis_id` columns - real confirmed coverage ~70.5%
+(2211/3134 real 2025-rostered players), meaningfully lower than the 99.7%
+`pfr_id` crosswalk `compute_player_snap_share` uses, so a real chunk of
+players legitimately has no ECR match (absent from the output, never
+fabricated). Unlike every other table on this page, ECR is a real
+CURRENT-moment snapshot, not a per-season historical stat - fetched LIVE
+at build time by `scripts/build_nfl_bestball_rankings.py` (not from
+persisted parquet), and resiliently skipped (never a build failure) if
+the real fetch fails that run.
+
+**Roster gap, real necessity, and best available - buildable from data
+this project already had.** `docs/nfl_draft_assistant.js` (real
+`node --test` coverage, `docs/nfl_draft_assistant.test.js`, added to
+`ci.yml` - the same real-test-coverage bar `docs/nfl_dfs_solver.js`
+already holds): `computeRosterGap` compares your real entered roster
+against `config.NFL_BESTBALL_ROSTER_TARGET`'s real per-team ranges
+(mirrored as a JS constant, same "duplicate the real constant rather than
+share a Python/JS module" convention `nfl_dfs_solver.js` already uses),
+reading each position as real `need` (below the real min), `optional`
+(within range), or `full` (at/above the real max). Combined with each
+position's already-published real `necessity_ratio` (Position Necessity,
+above) and the real best remaining player (`nflBestball`, filtered to
+exclude your own roster, ranked by real `points_above_replacement`) -
+every column a real, separate, transparent number, no invented composite
+"take this player" score, matching this project's "show raw signals
+honestly" standard used by every other table on this page.
+
+**Reach/value read and snake-draft math - the two pieces that needed real
+ECR data.** `computeReachValueRead(ecr, ecrSd, pickNumber)`: a real,
+honest comparison - your entered pick number against a player's real ECR
+± their own real expert-rank standard deviation (no invented probability
+model; both numbers come straight from the real confirmed `load_ff_rankings`
+columns). `computeSnakeDraftPicksUntilNextTurn(draftSlot, podSize,
+pickNumber)`: real snake-draft arithmetic (12-team pod, alternating
+direction each round) from an entered real draft slot (1-12) and pick
+number - both optional inputs; roster gap/necessity/best-available always
+work without them.
+
+**Entirely client-side, no account/server.** Roster search-and-add reuses
+the already-loaded `nflBestball` array (no new CSV for search itself),
+rendered as clickable candidate buttons (mirrors `docs/app.js`'s
+`searchPlayer`/`showPlayer` pattern) with removable roster cards (reusing
+the existing `.removePitcher` button styling). Your roster, draft slot,
+and pick number persist to this browser's `localStorage` only (key
+`nflDraftAssistant.v1`) - a public static GitHub Pages site with no
+per-user backend - with a "Clear My Draft" button to reset. "Best
+remaining" only excludes your own roster, not a real live draft board of
+everyone else's picks (no real data source for that exists here) -
+flagged honestly in the UI copy.
+
 **Preseason Notes** (`docs/data/nfl_draft_notes.csv`): a one-time,
 hand-curated list of real training-camp storylines specifically for
 players drafted in the April 2026 NFL Draft (depth-chart battles,
