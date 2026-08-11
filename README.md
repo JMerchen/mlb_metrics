@@ -1869,6 +1869,15 @@ have yet).
 
 ### Bestball Draft Strategy (`docs/nfl.html`'s Preseason subtab, `nfl_bestball.py`)
 
+**Its own visual theme.** `docs/style.css` is shared across every page, but
+`docs/nfl.html` overrides the brand accent tokens (`--accent`,
+`--accent-strong`, `--on-accent`) in its own inline `<style>` block -
+football green instead of the baseball-orange every other page uses - and
+swaps the header/favicon brand mark from the baseball-seam glyph to a
+football-and-laces glyph. Scoped to this one file only (the shared
+stylesheet and every other page's markup are untouched), so it's a purely
+additive, page-local override rather than a new theming system.
+
 Real preseason bestball drafts don't need a forward-looking weekly
 projection - they need "how much value/risk did this player represent
 LAST season, as a whole." `nfl_bestball.py` answers that with a real,
