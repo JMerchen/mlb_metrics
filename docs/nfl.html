@@ -11,11 +11,22 @@
 <link
 rel="icon"
 type="image/svg+xml"
-href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTQiIGZpbGw9IiNmMmE5M2MiLz48cGF0aCBkPSJNMTAgNCBDMTQgMTAsIDE0IDIyLCAxMCAyOCIgc3Ryb2tlPSIjMGIwZDEwIiBzdHJva2Utd2lkdGg9IjEuOCIgZmlsbD0ibm9uZSIvPjxwYXRoIGQ9Ik0yMiA0IEMxOCAxMCwgMTggMjIsIDIyIDI4IiBzdHJva2U9IiMwYjBkMTAiIHN0cm9rZS13aWR0aD0iMS44IiBmaWxsPSJub25lIi8+PC9zdmc+">
+href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHBhdGggZD0iTTMgMTYgUTE2IDQgMjkgMTYgUTE2IDI4IDMgMTYgWiIgZmlsbD0iIzRjYWY2YiIvPjxwYXRoIGQ9Ik0xNiAxMC41IEwxNiAyMS41IiBzdHJva2U9IiMwYjBkMTAiIHN0cm9rZS13aWR0aD0iMS44IiBmaWxsPSJub25lIi8+PHBhdGggZD0iTTEzLjMgMTMuMiBMMTguNyAxMy4yIE0xMy4zIDE2IEwxOC43IDE2IE0xMy4zIDE4LjggTDE4LjcgMTguOCIgc3Ryb2tlPSIjMGIwZDEwIiBzdHJva2Utd2lkdGg9IjEuNCIgZmlsbD0ibm9uZSIvPjwvc3ZnPg==">
 
 <link
 rel="stylesheet"
 href="./style.css">
+
+<style>
+/* This page's own football-green theme, overriding style.css's shared
+baseball-orange brand accent - NFL only, no other page is affected since
+this block isn't in the shared stylesheet. */
+:root{
+--accent:#4caf6b;
+--accent-strong:#7ed9a0;
+--on-accent:#0c1f13;
+}
+</style>
 
 </head>
 
@@ -27,9 +38,9 @@ href="./style.css">
 
 <div class="brandRow">
 <svg class="brandMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-<circle cx="16" cy="16" r="14" fill="#f2a93c"/>
-<path d="M10 4 C14 10, 14 22, 10 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
-<path d="M22 4 C18 10, 18 22, 22 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
+<path d="M3 16 Q16 4 29 16 Q16 28 3 16 Z" fill="#4caf6b"/>
+<path d="M16 10.5 L16 21.5" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
+<path d="M13.3 13.2 L18.7 13.2 M13.3 16 L18.7 16 M13.3 18.8 L18.7 18.8" stroke="#0b0d10" stroke-width="1.4" fill="none"/>
 </svg>
 <h1><span class="brandAccent">NFL</span></h1>
 </div>
