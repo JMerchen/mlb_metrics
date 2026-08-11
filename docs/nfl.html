@@ -74,12 +74,16 @@ My Draft
 <p>
 Real, transparent signals for the pick you're at right now - your own real
 roster gap against real per-team targets, each position's real necessity
-(Position Necessity above), the real best remaining player, and (once a
-draft slot + pick number are entered) a real reach/value read against
-FantasyPros' real Best Ball Overall Expert Consensus Rank. "Best remaining"
-only excludes your own roster below - it has no view of a live draft board,
-so it can't know what OTHER teams have already taken. Saved to this browser
-only (no account/server) - use "Clear My Draft" to reset.
+(Position Necessity above), and the real best remaining player. Once a
+draft slot + pick number are entered, "best remaining" also drops any real
+player whose own real ECR +/- their expert-rank standard deviation puts
+them clearly off the board by that pick (the same real comparison used for
+the reach/value read, just applied as a filter) - a player with no real ECR
+match can't be filtered this way and may already be gone without warning.
+Otherwise "best remaining" only excludes your own roster below - it has no
+view of a live draft board, so it can't know what OTHER teams have taken.
+Saved to this browser only (no account/server) - use "Clear My Draft" to
+reset.
 </p>
 
 <input
@@ -90,7 +94,7 @@ oninput="renderDraftAssistantCandidates()">
 
 <div id="draftAssistantCandidates"></div>
 
-<div id="draftAssistantRoster"></div>
+<div class="todaysPicks" id="draftAssistantRoster"></div>
 
 <div id="draftAssistantInputs">
 <label>Your draft slot (1-12): <input type="number" id="draftAssistantSlot" min="1" max="12" oninput="renderDraftAssistant()"></label>
