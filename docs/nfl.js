@@ -44,6 +44,7 @@ let nflDraftNotes = []
 // account/server, matches this being a public static GitHub Pages site.
 const DRAFT_ASSISTANT_STORAGE_KEY = "nflDraftAssistant.v1"
 let myDraftRoster = [] // [{player_id, player_display_name, position}]
+let myDraftConsidering = [] // [{player_id, player_display_name, position}] - players being weighed for the CURRENT pick, not yet drafted
 
 function selectNflTab(tab){
 document.querySelectorAll("#nflTabs .tabButton").forEach(btn=>{
@@ -150,6 +151,7 @@ function loadDraftAssistantState(){
 try{
 const saved = JSON.parse(localStorage.getItem(DRAFT_ASSISTANT_STORAGE_KEY) || "{}")
 myDraftRoster = saved.roster || []
+myDraftConsidering = saved.considering || []
 if(saved.draftSlot){ document.getElementById("draftAssistantSlot").value = saved.draftSlot }
 if(saved.pickNumber){ document.getElementById("draftAssistantPick").value = saved.pickNumber }
 }catch(e){
@@ -160,17 +162,21 @@ console.log("could not load saved My Draft state", e)
 function saveDraftAssistantState(){
 const draftSlot = document.getElementById("draftAssistantSlot").value
 const pickNumber = document.getElementById("draftAssistantPick").value
-localStorage.setItem(DRAFT_ASSISTANT_STORAGE_KEY, JSON.stringify({roster: myDraftRoster, draftSlot, pickNumber}))
+localStorage.setItem(DRAFT_ASSISTANT_STORAGE_KEY, JSON.stringify({roster: myDraftRoster, considering: myDraftConsidering, draftSlot, pickNumber}))
 }
 
 function clearDraftAssistant(){
 myDraftRoster = []
+myDraftConsidering = []
 document.getElementById("draftAssistantSlot").value = ""
 document.getElementById("draftAssistantPick").value = ""
 document.getElementById("draftAssistantSearch").value = ""
+document.getElementById("draftAssistantConsiderSearch").value = ""
 localStorage.removeItem(DRAFT_ASSISTANT_STORAGE_KEY)
 renderDraftAssistantCandidates()
 renderDraftAssistantRoster()
+renderDraftAssistantConsiderCandidates()
+renderDraftAssistantConsiderList()
 renderDraftAssistant()
 }
 
@@ -178,9 +184,13 @@ function addToDraftRoster(playerId){
 const player = nflBestball.find(p=>p.player_id === playerId)
 if(!player){ return }
 myDraftRoster.push({player_id: player.player_id, player_display_name: player.player_display_name, position: player.position})
+// A player just drafted is no longer "under consideration" for this pick.
+myDraftConsidering = myDraftConsidering.filter(p=>p.player_id !== playerId)
 document.getElementById("draftAssistantSearch").value = ""
 renderDraftAssistantCandidates()
 renderDraftAssistantRoster()
+renderDraftAssistantConsiderCandidates()
+renderDraftAssistantConsiderList()
 renderDraftAssistant() // also saves state - see its own comment
 }
 
@@ -188,6 +198,24 @@ function removeFromDraftRoster(playerId){
 myDraftRoster = myDraftRoster.filter(p=>p.player_id !== playerId)
 renderDraftAssistantCandidates()
 renderDraftAssistantRoster()
+renderDraftAssistant() // also saves state - see its own comment
+}
+
+function addToConsidering(playerId){
+if(myDraftConsidering.some(p=>p.player_id === playerId)){ return }
+const player = nflBestball.find(p=>p.player_id === playerId)
+if(!player){ return }
+myDraftConsidering.push({player_id: player.player_id, player_display_name: player.player_display_name, position: player.position})
+document.getElementById("draftAssistantConsiderSearch").value = ""
+renderDraftAssistantConsiderCandidates()
+renderDraftAssistantConsiderList()
+renderDraftAssistant() // also saves state - see its own comment
+}
+
+function removeFromConsidering(playerId){
+myDraftConsidering = myDraftConsidering.filter(p=>p.player_id !== playerId)
+renderDraftAssistantConsiderCandidates()
+renderDraftAssistantConsiderList()
 renderDraftAssistant() // also saves state - see its own comment
 }
 
@@ -216,9 +244,35 @@ el.innerHTML = myDraftRoster.map(p=>
 ).join("")
 }
 
+function renderDraftAssistantConsiderCandidates(){
+const searchEl = document.getElementById("draftAssistantConsiderSearch")
+const search = searchEl ? searchEl.value.trim().toLowerCase() : ""
+const el = document.getElementById("draftAssistantConsiderCandidates")
+if(!search){ el.innerHTML = ""; return }
+
+// A player already on your roster is drafted, not "under consideration";
+// a player already in the considering list doesn't need to be re-added.
+const excludeIds = new Set([...myDraftRoster, ...myDraftConsidering].map(p=>p.player_id))
+const matches = nflBestball
+.filter(p=>!excludeIds.has(p.player_id) && (p.player_display_name || "").toLowerCase().includes(search))
+.slice(0, 10)
+
+if(!matches.length){ el.innerHTML = "No players found"; return }
+el.innerHTML = matches.map(p=>
+`<button onclick="addToConsidering('${p.player_id}')">+ ${p.player_display_name} (${p.position}, ${p.team})</button>`
+).join(" ")
+}
+
+function renderDraftAssistantConsiderList(){
+const el = document.getElementById("draftAssistantConsiderList")
+if(!myDraftConsidering.length){ el.innerHTML = "No players added yet - search above to add players you're weighing for this pick."; return }
+el.innerHTML = myDraftConsidering.map(p=>
+`<div class="pickCard">${p.player_display_name} (${p.position}) <button class="removePitcher" onclick="removeFromConsidering('${p.player_id}')">x</button></div>`
+).join("")
+}
+
 function renderDraftAssistant(){
 saveDraftAssistantState() // also called on every draft-slot/pick-number input change, not just roster edits
-const rosterIds = new Set(myDraftRoster.map(p=>p.player_id))
 const countsByPosition = {}
 myDraftRoster.forEach(p=>{ countsByPosition[p.position] = (countsByPosition[p.position] || 0) + 1 })
 
@@ -228,60 +282,72 @@ nflPositionNecessity.forEach(n=>{ necessityByPosition[n.position] = n })
 const ffByPlayerId = {}
 nflFfRankings.forEach(f=>{ ffByPlayerId[f.player_id] = f })
 
+const bestballByPlayerId = {}
+nflBestball.forEach(p=>{ bestballByPlayerId[p.player_id] = p })
+
 const draftSlot = Number(document.getElementById("draftAssistantSlot").value) || null
 const pickNumber = Number(document.getElementById("draftAssistantPick").value) || null
 const picksUntilNextTurn = (draftSlot && pickNumber)
 ? computeSnakeDraftPicksUntilNextTurn(draftSlot, DRAFT_POD_SIZE, pickNumber) : null
 
+const picksUntilTurnEl = document.getElementById("draftAssistantPicksUntilTurn")
+if(picksUntilTurnEl){
+picksUntilTurnEl.textContent = picksUntilNextTurn !== null
+? `Picks until your next turn: ${picksUntilNextTurn}`
+: ""
+}
+
 const gap = computeRosterGap(countsByPosition)
 
-const rows = Object.keys(ROSTER_TARGET).map(position=>{
+// Real roster gap / necessity, per position - no prediction of who's
+// still on the board, just your own real team construction.
+const gapRows = Object.keys(ROSTER_TARGET).map(position=>{
 const g = gap[position]
 const necessity = necessityByPosition[position]
-const bestAvailable = nflBestball
-.filter(p=>p.position === position && !rosterIds.has(p.player_id))
-// When a real pick number is entered, drop anyone whose own real ECR +/-
-// their expert-rank standard deviation puts them clearly off the board by
-// that pick - a "value" read here means the current pick number falls
-// well PAST their real expert-consensus range (the same real comparison
-// used for the reach/value read below, just reused as a filter here), so
-// they were almost certainly already drafted by an earlier pick. A
-// player with no real ECR match can't be filtered this way and stays in
-// consideration rather than being silently excluded.
-.filter(p=>{
-if(!pickNumber){ return true }
-const ff = ffByPlayerId[p.player_id]
-if(!ff){ return true }
-return computeReachValueRead(Number(ff.ecr), Number(ff.ecr_sd), pickNumber) !== "value"
-})
-.sort((a, b)=>Number(b.points_above_replacement || 0) - Number(a.points_above_replacement || 0))[0]
-
-let bestAvailableLabel = "-"
-let valueRead = "-"
-if(bestAvailable){
-bestAvailableLabel = `${bestAvailable.player_display_name} (Value ${Number(bestAvailable.points_above_replacement || 0).toFixed(1)})`
-const ff = ffByPlayerId[bestAvailable.player_id]
-if(ff && pickNumber){
-const read = computeReachValueRead(Number(ff.ecr), Number(ff.ecr_sd), pickNumber)
-valueRead = read || "-"
-}
-}
-
 return {
 "Pos": position,
 "Roster": `${g.current}/${g.min}-${g.max}`,
 "Status": g.status,
 "Necessity Ratio": necessity && necessity.necessity_ratio ? Number(necessity.necessity_ratio).toFixed(2) : "-",
-"Best Available": bestAvailableLabel,
-"Reach/Value vs ECR": valueRead,
 }
 })
+buildTable(gapRows, "draftAssistantGapTable")
 
-if(picksUntilNextTurn !== null){
-rows.forEach(r=>{ r["Picks Until Your Next Turn"] = picksUntilNextTurn })
+// Real assessment of ONLY the players you said you're considering for
+// this pick - sorted by real value above replacement, best first.
+const considerRows = myDraftConsidering
+.map(p=>{
+const full = bestballByPlayerId[p.player_id]
+const g = gap[p.position]
+const ff = ffByPlayerId[p.player_id]
+let valueRead = "-"
+if(ff && pickNumber){
+const read = computeReachValueRead(Number(ff.ecr), Number(ff.ecr_sd), pickNumber)
+valueRead = read || "no ECR match"
 }
+return {
+"Player": p.player_display_name,
+"Pos": p.position,
+"Team": full ? full.team : "-",
+"Value": full && full.points_above_replacement !== undefined && full.points_above_replacement !== ""
+? Number(full.points_above_replacement).toFixed(1) : "-",
+"Roster Status": g ? g.status : "-",
+"Necessity Ratio": necessityByPosition[p.position] && necessityByPosition[p.position].necessity_ratio
+? Number(necessityByPosition[p.position].necessity_ratio).toFixed(2) : "-",
+"Reach/Value vs ECR": valueRead,
+"_sortValue": full && full.points_above_replacement !== undefined && full.points_above_replacement !== ""
+? Number(full.points_above_replacement) : -Infinity,
+}
+})
+.sort((a, b)=>b._sortValue - a._sortValue)
+.map(row=>{ delete row._sortValue; return row })
 
-buildTable(rows, "draftAssistantTable")
+if(!myDraftConsidering.length){
+document.getElementById("draftAssistantTable").innerHTML =
+"Add players above to see a real assessment of each one for this pick."
+}else{
+buildTable(considerRows, "draftAssistantTable")
+}
 }
 
 function renderDraftNotes(){
@@ -369,10 +435,13 @@ if(nflBestball.length){
 loadDraftAssistantState()
 renderDraftAssistantCandidates()
 renderDraftAssistantRoster()
+renderDraftAssistantConsiderCandidates()
+renderDraftAssistantConsiderList()
 renderDraftAssistant()
 }else{
-document.getElementById("draftAssistantTable").innerHTML =
-"No bestball rankings published yet - the Draft Assistant needs scripts/build_nfl_bestball_rankings.py to have been run at least once."
+const noDataMessage = "No bestball rankings published yet - the Draft Assistant needs scripts/build_nfl_bestball_rankings.py to have been run at least once."
+document.getElementById("draftAssistantGapTable").innerHTML = noDataMessage
+document.getElementById("draftAssistantTable").innerHTML = noDataMessage
 }
 
 }

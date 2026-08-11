@@ -73,18 +73,20 @@ My Draft
 
 <p>
 Real, transparent signals for the pick you're at right now - your own real
-roster gap against real per-team targets, each position's real necessity
-(Position Necessity above), and the real best remaining player. Once a
-draft slot + pick number are entered, "best remaining" also drops any real
-player whose own real ECR +/- their expert-rank standard deviation puts
-them clearly off the board by that pick (the same real comparison used for
-the reach/value read, just applied as a filter) - a player with no real ECR
-match can't be filtered this way and may already be gone without warning.
-Otherwise "best remaining" only excludes your own roster below - it has no
-view of a live draft board, so it can't know what OTHER teams have taken.
-Saved to this browser only (no account/server) - use "Clear My Draft" to
-reset.
+roster gap against real per-team targets, and each position's real
+necessity (Position Necessity above). This tool does NOT try to guess who's
+still on the board - it has no view of a live draft board, so it can't know
+what OTHER teams have taken. Instead, add the specific players YOU'RE
+weighing for this pick below and the table assesses each one: their real
+value above replacement, whether their position is a real roster need
+right now, and - once a draft slot + pick number are entered - a real
+reach/value read against their own real ECR +/- expert-rank standard
+deviation (a player with no real ECR match simply shows no read, not a
+fabricated one). Saved to this browser only (no account/server) - use
+"Clear My Draft" to reset.
 </p>
+
+<p><strong>My Roster</strong></p>
 
 <input
 type="text"
@@ -96,11 +98,29 @@ oninput="renderDraftAssistantCandidates()">
 
 <div class="todaysPicks" id="draftAssistantRoster"></div>
 
+<div class="scrollbox" id="draftAssistantGapTable">
+Loading...
+</div>
+
 <div id="draftAssistantInputs">
 <label>Your draft slot (1-12): <input type="number" id="draftAssistantSlot" min="1" max="12" oninput="renderDraftAssistant()"></label>
 <label>Current pick number: <input type="number" id="draftAssistantPick" min="1" oninput="renderDraftAssistant()"></label>
 <button onclick="clearDraftAssistant()">Clear My Draft</button>
 </div>
+
+<div id="draftAssistantPicksUntilTurn"></div>
+
+<p><strong>Players I'm Considering For This Pick</strong></p>
+
+<input
+type="text"
+id="draftAssistantConsiderSearch"
+placeholder="Search player to assess for this pick"
+oninput="renderDraftAssistantConsiderCandidates()">
+
+<div id="draftAssistantConsiderCandidates"></div>
+
+<div class="todaysPicks" id="draftAssistantConsiderList"></div>
 
 <div class="scrollbox" id="draftAssistantTable">
 Loading...

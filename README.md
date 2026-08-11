@@ -2235,45 +2235,62 @@ at build time by `scripts/build_nfl_bestball_rankings.py` (not from
 persisted parquet), and resiliently skipped (never a build failure) if
 the real fetch fails that run.
 
-**Roster gap, real necessity, and best available - buildable from data
-this project already had.** `docs/nfl_draft_assistant.js` (real
-`node --test` coverage, `docs/nfl_draft_assistant.test.js`, added to
-`ci.yml` - the same real-test-coverage bar `docs/nfl_dfs_solver.js`
-already holds): `computeRosterGap` compares your real entered roster
-against `config.NFL_BESTBALL_ROSTER_TARGET`'s real per-team ranges
-(mirrored as a JS constant, same "duplicate the real constant rather than
-share a Python/JS module" convention `nfl_dfs_solver.js` already uses),
-reading each position as real `need` (below the real min), `optional`
-(within range), or `full` (at/above the real max). Combined with each
-position's already-published real `necessity_ratio` (Position Necessity,
-above) and the real best remaining player (`nflBestball`, filtered to
-exclude your own roster, ranked by real `points_above_replacement`) -
+**Roster gap and real necessity - buildable from data this project
+already had.** `docs/nfl_draft_assistant.js` (real `node --test`
+coverage, `docs/nfl_draft_assistant.test.js`, added to `ci.yml` - the
+same real-test-coverage bar `docs/nfl_dfs_solver.js` already holds):
+`computeRosterGap` compares your real entered roster against
+`config.NFL_BESTBALL_ROSTER_TARGET`'s real per-team ranges (mirrored as a
+JS constant, same "duplicate the real constant rather than share a
+Python/JS module" convention `nfl_dfs_solver.js` already uses), reading
+each position as real `need` (below the real min), `optional` (within
+range), or `full` (at/above the real max). Combined with each position's
+already-published real `necessity_ratio` (Position Necessity, above) -
 every column a real, separate, transparent number, no invented composite
-"take this player" score, matching this project's "show raw signals
-honestly" standard used by every other table on this page.
+"take this player" score.
+
+**No prediction of who's still on the board.** An earlier version of this
+tool tried to guess a real "best remaining" player per position by
+filtering `nflBestball` against ECR - real user feedback caught this
+guessing at pick 59 that Josh Allen and Christian McCaffrey were still
+available, when a real draft board would obviously have taken them long
+before. The tool has no view of a live draft board and can't know what
+OTHER teams have taken, so it stopped trying to guess. Instead, a second
+search-and-add list ("Players I'm Considering For This Pick") lets you
+name the specific players YOU'RE weighing right now, and the table
+assesses only those real players: their real `points_above_replacement`
+value, whether their position is a real roster need for you, the
+position's real `necessity_ratio`, and a real reach/value read (below).
+Drafting a considered player (adding them to My Roster) automatically
+drops them from the considering list - they're no longer a decision to
+weigh, they're on your team.
 
 **Reach/value read and snake-draft math - the two pieces that needed real
 ECR data.** `computeReachValueRead(ecr, ecrSd, pickNumber)`: a real,
 honest comparison - your entered pick number against a player's real ECR
 ± their own real expert-rank standard deviation (no invented probability
 model; both numbers come straight from the real confirmed `load_ff_rankings`
-columns). `computeSnakeDraftPicksUntilNextTurn(draftSlot, podSize,
-pickNumber)`: real snake-draft arithmetic (12-team pod, alternating
-direction each round) from an entered real draft slot (1-12) and pick
-number - both optional inputs; roster gap/necessity/best-available always
+columns), applied per considered player rather than as a filter over the
+whole player pool. A player with no real ECR match simply shows no read
+(never a fabricated one), and is NOT excluded from consideration - you
+told the tool you're weighing them, so it assesses what it honestly can.
+`computeSnakeDraftPicksUntilNextTurn(draftSlot, podSize, pickNumber)`:
+real snake-draft arithmetic (12-team pod, alternating direction each
+round) from an entered real draft slot (1-12) and pick number - both
+optional inputs; roster gap/necessity/considered-player assessment always
 work without them.
 
-**Entirely client-side, no account/server.** Roster search-and-add reuses
-the already-loaded `nflBestball` array (no new CSV for search itself),
+**Entirely client-side, no account/server.** Both search-and-add lists
+(My Roster, Players I'm Considering For This Pick) reuse the
+already-loaded `nflBestball` array (no new CSV for search itself),
 rendered as clickable candidate buttons (mirrors `docs/app.js`'s
-`searchPlayer`/`showPlayer` pattern) with removable roster cards (reusing
-the existing `.removePitcher` button styling). Your roster, draft slot,
-and pick number persist to this browser's `localStorage` only (key
-`nflDraftAssistant.v1`) - a public static GitHub Pages site with no
-per-user backend - with a "Clear My Draft" button to reset. "Best
-remaining" only excludes your own roster, not a real live draft board of
-everyone else's picks (no real data source for that exists here) -
-flagged honestly in the UI copy.
+`searchPlayer`/`showPlayer` pattern) with removable player cards (reusing
+the existing `.removePitcher` button styling, laid out via the same
+`.todaysPicks` flex-wrap container `docs/app.js` already uses elsewhere).
+Your roster, considered-players list, draft slot, and pick number persist
+to this browser's `localStorage` only (key `nflDraftAssistant.v1`) - a
+public static GitHub Pages site with no per-user backend - with a "Clear
+My Draft" button to reset.
 
 **Preseason Notes** (`docs/data/nfl_draft_notes.csv`): a one-time,
 hand-curated list of real training-camp storylines specifically for
