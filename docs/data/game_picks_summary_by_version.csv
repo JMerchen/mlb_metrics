@@ -1,3 +1,3 @@
 model_version,metric,min_probability,n_games_resolved,accuracy,brier_score,log_loss,current_streak,best_streak
-all_time,GamePick_Win_Probability,0.58,136,0.5588235294117647,0.2500377538485618,0.6937422519609896,2,6
-v1,GamePick_Win_Probability,0.58,59,0.5423728813559322,0.2523191728010536,0.698331104997764,1,6
+all_time,GamePick_Win_Probability,0.58,137,0.5547445255474452,0.2510454031120828,0.6957982787440024,0,7
+v1,GamePick_Win_Probability,0.58,60,0.5333333333333333,0.25458194830355146,0.7029492186016968,0,6
