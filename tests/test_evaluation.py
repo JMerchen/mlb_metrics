@@ -181,16 +181,18 @@ def test_zero_at_bats_pick_is_neutral_not_a_break():
     assert evaluation.longest_streak(preds, min_probability=0.0) == 1
 
 
-def test_recommended_picks_gated_by_threshold_can_be_zero_one_or_two():
+def test_graded_picks_can_be_all_recommended_mixed_or_all_speculative():
     preds = pd.DataFrame(
         [
-            # Day A: both clear the bar -> 2 recommended.
+            # Day A: both clear the bar -> both graded recommended.
             _pick("2026-06-18", 1, 0.90, 3, 1),
             _pick("2026-06-18", 2, 0.85, 3, 1),
-            # Day B: only rank 1 clears it -> 1 recommended.
+            # Day B: only rank 1 clears it -> mixed grades.
             _pick("2026-06-19", 1, 0.90, 3, 1),
             _pick("2026-06-19", 2, 0.60, 3, 0),
-            # Day C: neither clears it -> 0 recommended, day is a no-op.
+            # Day C: neither clears it -> both graded speculative, but
+            # STILL shown (not collapsed to a single no_pick placeholder -
+            # real candidates were logged, they're just below the bar).
             _pick("2026-06-20", 1, 0.70, 3, 0),
             _pick("2026-06-20", 2, 0.65, 3, 1),
         ]
@@ -199,20 +201,47 @@ def test_recommended_picks_gated_by_threshold_can_be_zero_one_or_two():
     picks, summary = evaluation.build_beat_the_streak_export(preds, max_picks=2, min_probability=0.80)
 
     assert set(picks[picks["date"] == "2026-06-18"]["rank"]) == {1, 2}
-    assert set(picks[picks["date"] == "2026-06-19"]["rank"]) == {1}
-    # Day C had picks logged (both rank 1 and 2), just none cleared the bar -
-    # a real "no pick that day", surfaced as its own row rather than the
-    # date being silently absent (see test below for the dedicated check).
-    day_c = picks[picks["date"] == "2026-06-20"]
-    assert len(day_c) == 1
-    assert day_c.iloc[0]["status"] == "no_pick"
-    assert pd.isna(day_c.iloc[0]["rank"])
+    assert set(picks[picks["date"] == "2026-06-18"]["grade"]) == {"recommended"}
 
-    # Day C never enters the streak at all (not even as a no-op skip in the
-    # progression table), and day A+B both hit -> 2 + 1 = 3.
+    day_b = picks[picks["date"] == "2026-06-19"].set_index("rank")
+    assert day_b.loc[1, "grade"] == "recommended"
+    assert day_b.loc[2, "grade"] == "speculative"
+
+    day_c = picks[picks["date"] == "2026-06-20"]
+    assert len(day_c) == 2  # both real candidates shown, no no_pick placeholder
+    assert set(day_c["grade"]) == {"speculative"}
+    assert set(day_c["status"]) == {"miss", "hit"}  # real outcomes still tracked
+    assert day_c["combined_probability"].notna().all()
+
+    # Speculative-only day C never enters the streak at all (not even as a
+    # no-op skip in the progression table), and day A+B's recommended picks
+    # both hit -> 2 + 1 = 3. Day B's speculative rank-2 miss doesn't count.
     assert summary.loc[0, "current_streak"] == 3
     assert summary.loc[0, "longest_streak"] == 3
     assert summary.loc[0, "n_days_resolved"] == 2
+
+
+def test_a_date_with_no_rank_within_max_picks_still_gets_a_no_pick_row():
+    # A defensive edge case, not something the live pipeline produces in
+    # practice (select_picks always starts ranking at 1, so any date with
+    # ANY logged candidate has a rank<=max_picks row - a real off day, e.g.
+    # the All-Star break, is simply absent from the log entirely and was
+    # never something this placeholder could detect either, before or
+    # after this change): a date whose only logged row has rank > max_picks
+    # still needs its own explicit no_pick row rather than silently
+    # vanishing from picks_table.
+    preds = pd.DataFrame(
+        [
+            _pick("2026-06-18", 1, 0.90, 3, 1),
+            _pick("2026-06-19", 3, 0.90, 3, 1),  # rank 3 > max_picks (2)
+        ]
+    )
+    picks, summary = evaluation.build_beat_the_streak_export(preds, max_picks=2, min_probability=0.80)
+
+    no_pick_row = picks[picks["date"] == "2026-06-19"]
+    assert len(no_pick_row) == 1
+    assert no_pick_row.iloc[0]["status"] == "no_pick"
+    assert pd.isna(no_pick_row.iloc[0]["grade"])
 
 
 def test_build_beat_the_streak_export_picks_table_status_and_summary():
@@ -246,19 +275,24 @@ def test_recommended_picks_blends_probability_and_matchup_not_just_ghp():
 
     picks, summary = evaluation.build_beat_the_streak_export(preds, max_picks=2, min_probability=0.80)
 
-    assert set(picks["status"]) == {"hit"}  # recommended (blend = (0.79+0.85+0.83)/3 = 0.823 >= 0.80)
+    assert set(picks["status"]) == {"hit"}
+    assert set(picks["grade"]) == {"recommended"}  # blend = (0.79+0.85+0.83)/3 = 0.823 >= 0.80
 
 
 def test_recommended_picks_blend_can_also_exclude_a_pick_ghp_alone_would_have_passed():
     # GHP alone clears 0.80, but probability/Matchup_Hit_Probability are
-    # both weak - the blended mean drops below the bar.
+    # both weak - the blended mean drops below the bar, so the pick is
+    # still SHOWN (real, logged candidate) but graded speculative rather
+    # than counted as recommended.
     preds = pd.DataFrame([
         _pick("2026-06-18", 1, 0.90, 3, 1) | {"probability": 0.55, "Matchup_Hit_Probability": 0.50},
     ])
 
     picks, summary = evaluation.build_beat_the_streak_export(preds, max_picks=2, min_probability=0.80)
 
-    assert set(picks["status"]) == {"no_pick"}  # blend = (0.90+0.55+0.50)/3 = 0.65 < 0.80
+    assert set(picks["status"]) == {"hit"}  # real outcome still tracked, not hidden behind no_pick
+    assert set(picks["grade"]) == {"speculative"}  # blend = (0.90+0.55+0.50)/3 = 0.65 < 0.80
+    assert picks.iloc[0]["combined_probability"] == pytest.approx(0.65)
 
 
 def test_recommended_picks_blend_ignores_missing_matchup_hit_probability_per_row():
@@ -274,27 +308,27 @@ def test_recommended_picks_blend_ignores_missing_matchup_hit_probability_per_row
     assert set(picks["status"]) == {"hit"}  # blend = (0.85+0.81)/2 = 0.83 >= 0.80, NaN excluded not zeroed
 
 
-def test_build_beat_the_streak_export_no_pick_day_does_not_affect_streak_or_other_days():
+def test_build_beat_the_streak_export_speculative_only_day_does_not_affect_streak_or_other_days():
     preds = pd.DataFrame(
         [
             _pick("2026-06-18", 1, 0.90, 3, 1),  # hit -> streak=1
-            _pick("2026-06-19", 1, 0.70, 3, 0),  # below bar -> no_pick day
-            _pick("2026-06-19", 2, 0.65, 3, 1),  # below bar -> no_pick day
+            _pick("2026-06-19", 1, 0.70, 3, 0),  # below bar -> speculative, shown, miss
+            _pick("2026-06-19", 2, 0.65, 3, 1),  # below bar -> speculative, shown, hit
             _pick("2026-06-20", 1, 0.90, 3, 1),  # hit -> streak continues to 2
         ]
     )
 
     picks, summary = evaluation.build_beat_the_streak_export(preds, max_picks=2, min_probability=0.80)
 
-    no_pick_rows = picks[picks["date"] == "2026-06-19"]
-    assert len(no_pick_rows) == 1
-    row = no_pick_rows.iloc[0]
-    assert row["status"] == "no_pick"
-    assert pd.isna(row["rank"]) and pd.isna(row["name"]) and pd.isna(row["predicted_probability"])
-    assert pd.isna(row["actual_hit"])
+    speculative_rows = picks[picks["date"] == "2026-06-19"]
+    assert len(speculative_rows) == 2  # both real candidates shown, not collapsed to one no_pick row
+    assert set(speculative_rows["grade"]) == {"speculative"}
+    assert set(speculative_rows["status"]) == {"miss", "hit"}  # real outcomes, not hidden
+    assert speculative_rows["rank"].notna().all()
 
-    # The no-pick day is a true no-op for the streak - not a break, not
-    # skipped-as-pending, just absent from the progression entirely.
+    # The speculative-only day is still a true no-op for the streak - not a
+    # break, not skipped-as-pending, just absent from the progression
+    # entirely, exactly like a real no_pick day was before this change.
     assert summary.loc[0, "n_days_resolved"] == 2
     assert summary.loc[0, "current_streak"] == 2
     assert summary.loc[0, "longest_streak"] == 2

@@ -125,14 +125,57 @@ def _recommended_picks(
     min_probability: float,
     model_version: str | None = None,
 ) -> pd.DataFrame:
-    """The subset of logged picks that actually count as "recommended" for
-    a given day: top-ranked, capped at `max_picks`, and only those whose
-    _combined_probability clears `min_probability` ("a good matchup"). A day
-    can have 0, 1, or `max_picks` rows here depending on how many clear the
-    bar - it's never padded out to a fixed count."""
+    """The subset of logged picks that actually count toward the tracked
+    streak/day_survival_rate for a given day: top-ranked, capped at
+    `max_picks`, and only those whose _combined_probability clears
+    `min_probability` ("a good matchup"). A day can have 0, 1, or
+    `max_picks` rows here depending on how many clear the bar - it's never
+    padded out to a fixed count. This is the STREAK-COUNTING definition of
+    "recommended" only - see graded_daily_picks for what the dashboard
+    actually displays, which is a superset of this (every logged
+    candidate, not just the ones that clear the bar)."""
     df = _filter_metric(predictions, metric)
     df = _filter_model_version(df, model_version)
     df = df[(df["rank"] <= max_picks) & (_combined_probability(df) >= min_probability)]
+    return df
+
+
+def graded_daily_picks(
+    predictions: pd.DataFrame,
+    metric: str | None,
+    max_picks: int,
+    min_probability: float,
+    model_version: str | None = None,
+) -> pd.DataFrame:
+    """Every day's top `max_picks` candidates by rank, ALWAYS returned -
+    unlike _recommended_picks, a day is never empty just because nobody
+    cleared `min_probability`. Each row gets its own real `combined_probability`
+    and a `grade` ("recommended" if that clears `min_probability` - the
+    exact same bar/columns _recommended_picks gates on, so a "recommended"
+    grade here is precisely what counts toward the tracked streak/
+    day_survival_rate, see streak_progression - else "speculative"). A
+    "speculative" pick is still a real, already-qualified candidate
+    (predictions.select_picks already gated it on HITTER_MIN_PROBABILITY/
+    the model shortlist before it was ever logged) - just below the
+    backtested confidence bar, shown for visibility rather than hidden.
+
+    Added because DAILY_PICK_MIN_PROBABILITY (0.77) was validated on a
+    42-day historical replay where Matchup_Hit_Probability was always NaN
+    (never persisted to git history at the time - see that constant's own
+    docstring) - once live runs started actually carrying real
+    Matchup_Hit_Probability values most days, the blended mean runs lower
+    on an ordinary day than that replay ever exercised, and real live data
+    hit a 5-day-straight stretch (2026-08-11 through 2026-08-15) where the
+    top-ranked candidate's real combined probability landed at 0.71-0.77 -
+    just under the bar every single day, producing a blank dashboard
+    despite real, qualified candidates existing every one of those days.
+    Rather than re-chase a moving threshold, the dashboard now always shows
+    its real top candidates, graded honestly, instead of going blank."""
+    df = _filter_metric(predictions, metric)
+    df = _filter_model_version(df, model_version)
+    df = df[df["rank"] <= max_picks].copy()
+    df["combined_probability"] = _combined_probability(df)
+    df["grade"] = np.where(df["combined_probability"] >= min_probability, "recommended", "speculative")
     return df
 
 
@@ -224,12 +267,25 @@ def build_beat_the_streak_export(
     model_version: str | None = None,
 ):
     """Build the two tables the dashboard's Beat the Streak section reads:
-    (picks_table, summary_row). picks_table is every *recommended* pick
-    (see _recommended_picks - not necessarily a fixed count per day) with a
-    hit/miss/no_game/pending status, most recent day first; summary_row has
-    longest_streak/current_streak plus a day_survival_rate (fraction of
-    resolved days that didn't reset the streak - a looser sanity metric than
-    the streak count itself, since a single miss zeroes a long streak).
+    (picks_table, summary_row). picks_table is every day's top `max_picks`
+    candidates by rank (see graded_daily_picks) with a hit/miss/no_game/
+    pending status AND a "recommended"/"speculative" grade, most recent day
+    first - unlike before, a day with real logged candidates is NEVER blank
+    just because none cleared `min_probability`; it always shows its real
+    best options, honestly graded. summary_row has longest_streak/
+    current_streak plus a day_survival_rate (fraction of resolved days that
+    didn't reset the streak - a looser sanity metric than the streak count
+    itself, since a single miss zeroes a long streak) - these are still
+    computed from ONLY "recommended"-grade picks (see streak_progression/
+    _recommended_picks, unchanged), so a "speculative" day is still a
+    real no-op for the tracked streak, exactly like a no_pick day was
+    before this function's picks_table stopped going blank on those days.
+
+    A date is only absent from picks_table's real rows (and gets the
+    explicit "no_pick" placeholder row instead) when NOTHING was logged for
+    it at all - a genuine off day (All-Star break), a rainout across the
+    whole slate, or a pipeline gap - not a weak-slate day, which now gets a
+    real "speculative" row instead of vanishing.
 
     `model_version` (default None, i.e. every version blended together -
     unchanged behavior) restricts to picks tagged with a specific
@@ -237,17 +293,16 @@ def build_beat_the_streak_export(
     - the summary row's own "model_version" column is set to whatever was
     passed (or "all_time" when None), so pipeline.py can build one small
     CSV covering both views without ambiguity about which row is which."""
-    picks = _recommended_picks(predictions, metric, max_picks, min_probability, model_version).copy()
+    picks = graded_daily_picks(predictions, metric, max_picks, min_probability, model_version).copy()
     picks["status"] = _classify_outcome(picks)
-    picks = picks[["date", "rank", "name", "predicted_probability", "actual_hit", "status"]]
+    picks = picks[["date", "rank", "name", "predicted_probability", "combined_probability", "actual_hit", "status", "grade"]]
 
-    # select_picks logs every top-N candidate regardless of whether it
-    # clears min_probability, so a date with logged picks but zero
-    # recommended ones is a real "no good matchup that day", not missing
-    # data - surface it explicitly as its own row rather than leaving the
-    # date silently absent, which a reader (or the dashboard) would
-    # otherwise misread as "the most recent recommendation was some earlier
-    # day."
+    # graded_daily_picks already includes every rank<=max_picks candidate
+    # regardless of grade, so a date can only be missing from `picks` here
+    # when NOTHING was logged for it at all (see docstring above) - surface
+    # that explicitly as its own row rather than leaving the date silently
+    # absent, which a reader (or the dashboard) would otherwise misread as
+    # "the most recent day was some earlier date."
     filtered = _filter_model_version(_filter_metric(predictions, metric), model_version)
     no_pick_dates = sorted(set(filtered["date"]) - set(picks["date"]))
     if no_pick_dates:
@@ -257,8 +312,10 @@ def build_beat_the_streak_export(
                 "rank": pd.NA,
                 "name": pd.NA,
                 "predicted_probability": pd.NA,
+                "combined_probability": pd.NA,
                 "actual_hit": pd.NA,
                 "status": "no_pick",
+                "grade": pd.NA,
             }
         )
         picks = pd.concat([picks, no_pick_rows], ignore_index=True)

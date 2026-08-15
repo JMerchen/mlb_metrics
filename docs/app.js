@@ -1512,10 +1512,12 @@ function renderTodaysPicks(picks){
 
 const el = document.getElementById("todaysPicks")
 
-// A day with zero recommendations still gets a "no_pick" row (see
-// evaluation.build_beat_the_streak_export), so the latest date here is
-// always the actual most recent day the pipeline ran, whether or not it
-// had a real pick.
+// A date with ZERO logged candidates at all (a genuine off day - an
+// All-Star break, a rainout across the whole slate, or a pipeline gap)
+// still gets a "no_pick" row (see evaluation.build_beat_the_streak_export)
+// so the latest date here is always the actual most recent day the
+// pipeline ran. A weak-slate day no longer gets this treatment - it shows
+// its real top candidates graded "speculative" instead (see below).
 if(!picks.length){
 el.innerHTML = "No picks tracked yet"
 return
@@ -1531,7 +1533,7 @@ const todays = picks
 .sort((a,b)=>Number(a.rank) - Number(b.rank))
 
 if(!todays.length){
-el.innerHTML = `<div class="pickCard no_pick"><div class="pickName">No pick for ${latestDate}</div><div class="pickStatus">no strong matchup today</div></div>`
+el.innerHTML = `<div class="pickCard no_pick"><div class="pickName">No games or eligible batters for ${latestDate}</div></div>`
 return
 }
 
@@ -1542,6 +1544,11 @@ no_game: "no game",
 pending: "pending",
 }
 
+const gradeLabels = {
+recommended: "Recommended",
+speculative: "Speculative",
+}
+
 el.innerHTML = todays
 .map(p=>{
 
@@ -1550,9 +1557,16 @@ p.predicted_probability && p.predicted_probability !== ""
 ? (Number(p.predicted_probability) * 100).toFixed(1) + "% predicted"
 : ""
 
+// "recommended" reuses the same highlight ring the Automated Game
+// Picks cards already use for a confident pick (see .pickCard.recommended
+// in style.css); "speculative" is a real, already-qualified candidate
+// that just didn't clear the recommendation bar - shown, not hidden,
+// but visually dimmed and explicitly labeled rather than blended in
+// as if it were equally confident.
 return `
-<div class="pickCard ${p.status}">
+<div class="pickCard ${p.status} ${p.grade || ""}">
 <div class="pickName">${p.name}</div>
+<div class="pickGrade ${p.grade || ""}">${gradeLabels[p.grade] || ""}</div>
 <div class="pickProb">${prob}</div>
 <div class="pickStatus">${statusLabels[p.status] || p.status}</div>
 </div>

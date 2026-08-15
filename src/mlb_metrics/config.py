@@ -256,6 +256,25 @@ HITTER_MODEL_VERSION = "v4-model-shortlist"
 # above 0.77 both start producing zero-pick days again AND stop improving
 # (sometimes worsening) hit rate/Brier on this sample. Revisit once more
 # live picks accumulate carrying real (non-NaN) Matchup_Hit_Probability.
+#
+# That revisit already happened, informally: once live runs started
+# carrying real (non-NaN) Matchup_Hit_Probability most days, the blended
+# mean runs lower on an ordinary day than the NaN-heavy 42-day replay ever
+# exercised - real live data hit a 5-day-straight zero-pick stretch
+# (2026-08-11 through 2026-08-15) where the top-ranked candidate's real
+# combined probability landed at 0.71-0.77, just under this bar every
+# single day, despite real qualified candidates existing all five days.
+# Rather than re-chase a moving threshold with another point estimate, this
+# constant's MEANING changed instead of its value (see
+# evaluation.graded_daily_picks): it's no longer "the bar a day needs to
+# clear to show anything" - the dashboard now always shows its real top
+# DAILY_PICK_MAX candidates, each individually graded "recommended" (still
+# means "clears this exact bar") or "speculative" (doesn't, shown for
+# visibility, doesn't count toward the tracked streak - see
+# evaluation._recommended_picks/streak_progression, both unchanged). This
+# constant's own validated value/meaning as a streak-counting bar is
+# untouched; only "what happens below it" changed from "nothing shown" to
+# "shown, honestly labeled."
 DAILY_PICK_MAX = 2
 DAILY_PICK_MIN_PROBABILITY = 0.77
 
