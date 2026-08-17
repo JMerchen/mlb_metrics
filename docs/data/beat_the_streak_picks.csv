@@ -1,5 +1,6 @@
 date,rank,name,predicted_probability,actual_hit,status
-2026-08-16,1,Ceddanne Rafaela,0.8119668212112432,,pending
+2026-08-17,,,,,no_pick
+2026-08-16,1,Ceddanne Rafaela,0.8119668212112432,0.0,miss
 2026-08-15,,,,,no_pick
 2026-08-14,,,,,no_pick
 2026-08-13,,,,,no_pick
