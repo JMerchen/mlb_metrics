@@ -29,11 +29,22 @@ raw-ingredients philosophy applies: these are fed directly, not run
 through the flagged ratio.
 
 **Retraining note**: HITTER_FEATURE_COLUMNS widened when BB/HBP/RBI
-scoring shipped - any model artifact trained on the OLD (narrower) schema
-is schema-incompatible and MUST be retired (deleted, not left in place)
-whenever this list changes, since apply_ml_overrides's predict() call is
-NOT wrapped in a try/except - a stale artifact would hard-crash
-scripts/build_dfs_rankings.py rather than gracefully falling back.
+scoring shipped, and again to add real Statcast batted-ball-quality
+signals (Exit_Velo/Barrel_Rate/xBA/xwOBA, hitters.compute_quality_of_contact)
+- any model artifact trained on an OLDER (narrower) schema is
+schema-incompatible and MUST be retired (deleted, not left in place)
+whenever this list changes, since BOTH apply_ml_overrides's predict() call
+AND predict_hitter_hit_probability's predict_proba() call are NOT wrapped
+in a try/except - a stale artifact would hard-crash
+scripts/build_dfs_rankings.py/live daily picks rather than gracefully
+falling back. Every prior modeling attempt in this project used only
+outcome-RATE signals (WAVE/PAVE-style hit/walk/RBI rates) - never a real
+measure of contact QUALITY (how hard/well the ball was actually hit,
+independent of whether that particular ball found a fielder) - even
+though the raw Statcast columns needed for it (launch_speed, launch_angle,
+estimated_ba_using_speedangle, estimated_woba_using_speedangle,
+launch_speed_angle) were sitting unused in the already-persisted raw data
+the whole time.
 
 ## Pitcher features: dfs.py's own engineered columns
 
@@ -67,6 +78,7 @@ HITTER_FEATURE_COLUMNS = [
     "WAVE", "WAVE_L", "WAVE_R", "PA_L", "PA_R", "probability",
     "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
     "Expected_BB", "Expected_HBP", "Expected_RBI",
+    "Exit_Velo", "Barrel_Rate", "xBA", "xwOBA",
     "starter_PAVE", "Bullpen_PAVE", "Park_Factor", "is_home",
     "Matchup_Hit_Probability",
 ]

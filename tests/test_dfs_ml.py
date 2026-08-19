@@ -12,6 +12,7 @@ def _wave_row(key_mlbam, team, **overrides):
         "probability": 0.65, "Game_Hit_Probability": 0.70, "Consistency": 0.05,
         "Approach": 0.45, "Expected_Bases": 1.5,
         "Expected_BB": 0.3, "Expected_HBP": 0.1, "Expected_RBI": 0.4,
+        "Exit_Velo": 90.0, "Barrel_Rate": 0.08, "xBA": 0.25, "xwOBA": 0.32,
     }
     row.update(overrides)
     return row
@@ -50,6 +51,7 @@ def test_build_hitter_features_falls_back_to_wave_when_wave_l_r_missing():
         "probability": 0.65, "Game_Hit_Probability": 0.70, "Consistency": 0.05,
         "Approach": 0.45, "Expected_Bases": 1.5,
         "Expected_BB": 0.3, "Expected_HBP": 0.1, "Expected_RBI": 0.4,
+        "Exit_Velo": 90.0, "Barrel_Rate": 0.08, "xBA": 0.25, "xwOBA": 0.32,
     }])
     pave = pd.DataFrame([{"key_mlbam": 99, "PAVE": 0.24}])
     confidence = pd.DataFrame([{"team": "NYY", "Bullpen_PAVE": 0.26, "Park_Factor": 0.95}])
@@ -78,7 +80,8 @@ def test_hitter_feature_matrix_fills_missing_and_coerces_is_home():
     features = pd.DataFrame([{
         "key_mlbam": 1, "WAVE": 0.28, "WAVE_L": 0.30, "WAVE_R": 0.27, "PA_L": 20, "PA_R": 40,
         "probability": 0.65, "Game_Hit_Probability": 0.70, "Consistency": 0.05, "Approach": 0.45,
-        "Expected_Bases": 1.5, "starter_PAVE": pd.NA, "Bullpen_PAVE": 0.26, "Park_Factor": pd.NA,
+        "Expected_Bases": 1.5, "Exit_Velo": 90.0, "Barrel_Rate": 0.08, "xBA": pd.NA, "xwOBA": 0.32,
+        "starter_PAVE": pd.NA, "Bullpen_PAVE": 0.26, "Park_Factor": pd.NA,
         "is_home": True, "Matchup_Hit_Probability": 0.72,
     }])
 
@@ -87,6 +90,7 @@ def test_hitter_feature_matrix_fills_missing_and_coerces_is_home():
     assert list(X.columns) == dfs_ml.HITTER_FEATURE_COLUMNS
     assert X.loc[0, "starter_PAVE"] == 0
     assert X.loc[0, "Park_Factor"] == 0
+    assert X.loc[0, "xBA"] == 0
     assert X.loc[0, "is_home"] == 1.0
 
 

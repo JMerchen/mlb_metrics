@@ -110,6 +110,35 @@ def is_official_at_bat(events: pd.Series) -> pd.Series:
     return (~events.isin(NON_AT_BAT_EVENTS)).astype(int)
 
 
+def is_batted_ball(type_col: pd.Series) -> pd.Series:
+    """A pitch that was put in play ("X", Statcast's own pitch-result code
+    for the `type` column) - the subset of completed-PA rows
+    (data.completed_events's own output) that carry real batted-ball data
+    (launch_speed/launch_angle/estimated_ba_using_speedangle/
+    estimated_woba_using_speedangle/launch_speed_angle). A strikeout/walk/
+    HBP has none of these populated - averaging over them unfiltered would
+    silently bias every quality-of-contact rate toward 0/NaN, not measure
+    contact quality at all.
+
+    Returns a boolean mask, unlike every other classifier in this file
+    (which return 0/1 int Series meant to be summed via a stat_fns entry) -
+    this is meant for FILTERING `dt` down to batted-ball rows before
+    windowing/blending (see hitters.compute_quality_of_contact), not for
+    counting."""
+    return type_col == "X"
+
+
+def is_barrel(launch_speed_angle: pd.Series) -> pd.Series:
+    """Statcast's own real quality-of-contact bucket (`launch_speed_angle`,
+    an integer 0-6 assigned to every batted ball) - 6 is Statcast's own
+    definition of a "barrel" (the launch-speed/launch-angle combination
+    most correlated with extra-base value). No literal `barrel` boolean
+    column exists on a real Statcast row; this IS the real barrel
+    classification (not an approximation reconstructed from the raw
+    launch_speed/launch_angle formula)."""
+    return (launch_speed_angle == 6).astype(int)
+
+
 def estimate_rbi(df: pd.DataFrame) -> pd.Series:
     """Runs driven in on this completed plate appearance, approximated as
     `post_bat_score - bat_score` on the PA's own final-pitch row (the one

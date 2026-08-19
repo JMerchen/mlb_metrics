@@ -10,7 +10,13 @@ def _at_bats(batter, throws, rows):
     """rows: list of (game_date, events) tuples, or (game_date, events,
     bat_score, post_bat_score) 4-tuples when a row needs a real RBI delta -
     bat_score/post_bat_score default to (0, 0) (Expected_RBI == 0) when
-    omitted, so existing 2-tuple call sites are unaffected."""
+    omitted, so existing 2-tuple call sites are unaffected.
+
+    Every row also gets the batted-ball-quality columns
+    (compute_quality_of_contact) defaulted to null/not-a-batted-ball (type
+    != "X") - none of these existing call sites specify real Statcast
+    exit-velocity/xBA data, so none of their at-bats should be counted as
+    a real batted ball (see _batted_balls below for that dedicated case)."""
     result = []
     for row in rows:
         if len(row) == 4:
@@ -21,6 +27,25 @@ def _at_bats(batter, throws, rows):
         result.append({
             "batter": batter, "game_date": pd.Timestamp(date), "events": events, "p_throws": throws,
             "bat_score": bat_score, "post_bat_score": post_bat_score,
+            "type": pd.NA, "launch_speed": pd.NA, "estimated_ba_using_speedangle": pd.NA,
+            "estimated_woba_using_speedangle": pd.NA, "launch_speed_angle": pd.NA,
+        })
+    return result
+
+
+def _batted_balls(batter, throws, rows):
+    """rows: list of (game_date, launch_speed, launch_speed_angle, xba, xwoba)
+    5-tuples - each becomes a real ball-in-play row (type="X") for
+    hitters.compute_quality_of_contact. events is a fixed "field_out" (an
+    arbitrary real batted-ball outcome - compute_quality_of_contact never
+    reads `events` at all, only the batted-ball-quality columns)."""
+    result = []
+    for date, launch_speed, launch_speed_angle, xba, xwoba in rows:
+        result.append({
+            "batter": batter, "game_date": pd.Timestamp(date), "events": "field_out", "p_throws": throws,
+            "bat_score": 0, "post_bat_score": 0,
+            "type": "X", "launch_speed": launch_speed, "estimated_ba_using_speedangle": xba,
+            "estimated_woba_using_speedangle": xwoba, "launch_speed_angle": launch_speed_angle,
         })
     return result
 
@@ -121,6 +146,61 @@ def test_compute_extended_dk_rates_blends_platoon_share():
     assert result.loc[1, "Expected_BB"] == pytest.approx(0.25 * config.WTB_TRIALS_PER_GAME)
 
 
+def test_compute_quality_of_contact_exact_arithmetic_all_windows():
+    # All 5 batted balls land within 7 days of the latest date (2026-06-20),
+    # so they're included in every one of config.WHOPS_WTB_WINDOWS
+    # (7d/15d/30d/full) - weights sum to 1.0, so the blended rate equals
+    # the raw mean/rate exactly, same technique
+    # test_compute_extended_dk_rates_exact_arithmetic_all_windows uses.
+    rows = _batted_balls(1, "R", [
+        ("2026-06-16", 90.0, 3, 0.20, 0.25),
+        ("2026-06-17", 95.0, 4, 0.30, 0.35),
+        ("2026-06-18", 100.0, 6, 0.40, 0.45),  # real barrel (launch_speed_angle == 6)
+        ("2026-06-19", 105.0, 5, 0.50, 0.55),
+        ("2026-06-20", 110.0, 2, 0.60, 0.65),
+    ])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_quality_of_contact(dt).set_index("key_mlbam")
+
+    assert result.loc[1, "Exit_Velo"] == pytest.approx(100.0)  # mean(90,95,100,105,110)
+    assert result.loc[1, "Barrel_Rate"] == pytest.approx(0.2)  # 1 barrel / 5 batted balls
+    assert result.loc[1, "xBA"] == pytest.approx(0.4)  # mean(0.2..0.6)
+    assert result.loc[1, "xwOBA"] == pytest.approx(0.45)  # mean(0.25..0.65)
+
+
+def test_compute_quality_of_contact_excludes_non_batted_ball_events():
+    # A strikeout/walk has no real batted-ball data (type != "X") - must
+    # not crash on the missing launch columns. A batter with real at-bats
+    # but ZERO real batted balls on either side has no anchoring row on
+    # either side (same "anchored on batters with a real full-season row
+    # on that side" precedent WAVE/WTB/compute_extended_dk_rates already
+    # establish) - absent from this function's own output entirely, not
+    # present-with-a-zero. assemble_hitters's own left-join + fillna(0) is
+    # what actually turns that absence into a real 0 for such a batter in
+    # the real output table (see test_assemble_hitters_output_columns_and_derived_fields).
+    rows = _at_bats(1, "R", [("2026-06-15", "strikeout"), ("2026-06-16", "walk")])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_quality_of_contact(dt)
+
+    assert result.empty
+
+
+def test_compute_quality_of_contact_blends_platoon_share():
+    # Batter faces both sides with very different exit velo - isolate the
+    # bbtl/bbtr platoon-share blend the same way
+    # test_compute_extended_dk_rates_blends_platoon_share does.
+    rows = _batted_balls(1, "R", [("2026-06-19", 100.0, 6, 0.5, 0.5), ("2026-06-19", 100.0, 6, 0.5, 0.5)])
+    rows += _batted_balls(1, "L", [("2026-06-19", 50.0, 0, 0.1, 0.1), ("2026-06-19", 50.0, 0, 0.1, 0.1)])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_quality_of_contact(dt).set_index("key_mlbam")
+
+    # 2 batted balls each side -> bbtr = bbtl = 0.5; blended Exit_Velo = 100*0.5 + 50*0.5 = 75
+    assert result.loc[1, "Exit_Velo"] == pytest.approx(75.0)
+
+
 def test_compute_game_hit_probability_blends_game_level_hit_rate():
     rows = [
         {"batter": 1, "game_id": 1, "game_date": pd.Timestamp("2026-03-12"), "events": "field_out"},
@@ -201,13 +281,23 @@ def test_assemble_hitters_output_columns_and_derived_fields():
         "key_mlbam", "name_first", "name_last", "team", "PA_L", "PA_R",
         "WAVE", "WAVE_L", "WAVE_R", "probability_L", "probability_R", "probability",
         "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
-        "Expected_BB", "Expected_HBP", "Expected_RBI", "Last_Game_Date",
+        "Expected_BB", "Expected_HBP", "Expected_RBI",
+        "Exit_Velo", "Barrel_Rate", "xBA", "xwOBA", "Last_Game_Date",
     ]
     row = result.iloc[0]
     assert row["name_last"] == "Player"
     assert row["Consistency"] == pytest.approx(row["Game_Hit_Probability"] - row["probability"])
     assert row["Approach"] == pytest.approx(row["Game_Hit_Probability"] * row["probability"])
     assert row["Last_Game_Date"] == pd.Timestamp("2026-06-16")
+    # Neither at-bat in this fixture is a real batted ball (see _at_bats's
+    # docstring) - quality-of-contact should read 0 (via assemble_hitters's
+    # final fillna(0), since compute_quality_of_contact itself returns no
+    # row at all for a batter with zero batted balls - see the dedicated
+    # test for that), not a fabricated value.
+    assert row["Exit_Velo"] == 0
+    assert row["Barrel_Rate"] == 0
+    assert row["xBA"] == 0
+    assert row["xwOBA"] == 0
 
 
 def test_compute_last_game_dates_most_recent_completed_event():

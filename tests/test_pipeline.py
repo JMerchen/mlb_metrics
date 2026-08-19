@@ -161,8 +161,10 @@ def _minimal_outputs():
             # dfs_ml.build_hitter_features (pipeline.run's Model_Hit_Probability
             # tier) requires every dfs_ml.HITTER_FEATURE_COLUMNS column to
             # exist on wave - a real outputs["wave"] always carries these
-            # (hitters.compute_extended_dk_rates), so this fixture must too.
+            # (hitters.compute_extended_dk_rates/compute_quality_of_contact),
+            # so this fixture must too.
             "Expected_BB": 0.3, "Expected_HBP": 0.05, "Expected_RBI": 0.5,
+            "Exit_Velo": 90.0, "Barrel_Rate": 0.08, "xBA": 0.25, "xwOBA": 0.32,
         },
     ])
     # PAVE/PAVE_PLUS chosen so this fixture's Matchup_Hit_Probability clears
@@ -337,6 +339,7 @@ def test_run_model_shortlist_excludes_heuristic_favorite_outside_model_top_n(mon
                 "PA_L": 0, "PA_R": 40, "WAVE": 0.30, "probability_L": 0, "probability_R": 0.60, "probability": 0.60,
                 "Game_Hit_Probability": 0.60, "Consistency": 0.0, "Approach": 0.36, "Expected_Bases": 1.0,
                 "Expected_BB": 0.3, "Expected_HBP": 0.05, "Expected_RBI": 0.5,
+                "Exit_Velo": 90.0, "Barrel_Rate": 0.08, "xBA": 0.25, "xwOBA": 0.32,
             }
             for key in range(1, 11)
         ]
@@ -345,6 +348,7 @@ def test_run_model_shortlist_excludes_heuristic_favorite_outside_model_top_n(mon
             "PA_L": 0, "PA_R": 40, "WAVE": 0.40, "probability_L": 0, "probability_R": 0.95, "probability": 0.95,
             "Game_Hit_Probability": 0.95, "Consistency": 0.0, "Approach": 0.9025, "Expected_Bases": 1.5,
             "Expected_BB": 0.3, "Expected_HBP": 0.05, "Expected_RBI": 0.5,
+            "Exit_Velo": 90.0, "Barrel_Rate": 0.08, "xBA": 0.25, "xwOBA": 0.32,
         })
         wave = pd.DataFrame(rows)
         pave = pd.DataFrame([{

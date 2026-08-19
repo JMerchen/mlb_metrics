@@ -1,8 +1,11 @@
 """Hitter metrics: WAVE (at-bat based hit probability), Game_Hit_Probability
-(game-level hit rate), WTB (weighted total bases), and WHOPS/RC (weighted
+(game-level hit rate), WTB (weighted total bases), WHOPS/RC (weighted
 OPS / runs-created proxy - computed but, as in the original script, not
 currently written to any output; kept here as a reusable building block for
-future matchup work rather than wired into the CSV pipeline).
+future matchup work rather than wired into the CSV pipeline), and
+compute_quality_of_contact (real Statcast batted-ball-quality rates -
+Exit_Velo/Barrel_Rate/xBA/xwOBA - added to widen dfs_ml.HITTER_FEATURE_COLUMNS
+beyond outcome-rate-only signals; see that module's docstring for why).
 
 All three of WAVE/WHOPS/WTB share the same shape: split at-bats by the
 opposing pitcher's throwing hand, compute a rate per recency window, and
@@ -237,6 +240,80 @@ def compute_extended_dk_rates(dt: pd.DataFrame) -> pd.DataFrame:
     return result[["key_mlbam", "Expected_BB", "Expected_HBP", "Expected_RBI"]]
 
 
+def compute_quality_of_contact(dt: pd.DataFrame) -> pd.DataFrame:
+    """Recency-windowed real batted-ball-quality rates - Exit_Velo (mean
+    launch_speed), Barrel_Rate (share of batted balls that are real
+    Statcast barrels, helpers.is_barrel), xBA (mean
+    estimated_ba_using_speedangle), xwOBA (mean
+    estimated_woba_using_speedangle) - each blended by throws-side and
+    recency window, the exact same shape WAVE/WTB/compute_extended_dk_rates
+    already use.
+
+    Computed over BATTED BALLS ONLY (helpers.is_batted_ball filters `dt`
+    down to real balls-in-play before windowing) - a strikeout/walk/HBP
+    has none of these columns populated, and including them unfiltered
+    would silently bias every rate toward 0 instead of measuring contact
+    quality. This means `n` here is a batted-ball count, not a
+    plate-appearance count, unlike every other function in this file - the
+    shared `_blend_windows`/`_side_window_agg` machinery still applies
+    completely unmodified, since it operates on whatever frame it's given.
+
+    Deliberately reuses config.WHOPS_WTB_WINDOWS (not a new dedicated
+    window constant) - same reasoning compute_extended_dk_rates's own
+    docstring already gives: this draws from a subset of the identical
+    per-PA event stream WTB blends, at the same row granularity (just
+    narrowed to the balls-in-play rows), so a separate window schedule
+    isn't a justified extra knob on a first pass - revisit if a real
+    backtest suggests batted-ball sample size specifically needs different
+    window weights.
+
+    Returns [key_mlbam, Exit_Velo, Barrel_Rate, xBA, xwOBA]. A batter with
+    zero batted balls in a window contributes 0 to that window (same
+    fillna(0) precedent every other blended rate in this file uses), not a
+    fabricated league-average value."""
+    batted = dt[helpers.is_batted_ball(dt["type"])].copy()
+
+    stat_fns = {
+        "exit_velo_sum": lambda df: df["launch_speed"],
+        "barrel": lambda df: helpers.is_barrel(df["launch_speed_angle"]),
+        "xba_sum": lambda df: df["estimated_ba_using_speedangle"],
+        "xwoba_sum": lambda df: df["estimated_woba_using_speedangle"],
+    }
+    rate_fns = {
+        "exit_velo": lambda agg: agg["exit_velo_sum"] / agg["n"],
+        "barrel_rate": lambda agg: agg["barrel"] / agg["n"],
+        "xba": lambda agg: agg["xba_sum"] / agg["n"],
+        "xwoba": lambda agg: agg["xwoba_sum"] / agg["n"],
+    }
+    windows = config.WHOPS_WTB_WINDOWS
+
+    r_blended, r_full = _blend_windows(batted, windows, "R", stat_fns, rate_fns)
+    l_blended, l_full = _blend_windows(batted, windows, "L", stat_fns, rate_fns)
+
+    r_blended = r_blended.rename(
+        columns={"exit_velo": "Exit_Velo_R", "barrel_rate": "Barrel_Rate_R", "xba": "xBA_R", "xwoba": "xwOBA_R"}
+    )
+    l_blended = l_blended.rename(
+        columns={"exit_velo": "Exit_Velo_L", "barrel_rate": "Barrel_Rate_L", "xba": "xBA_L", "xwoba": "xwOBA_L"}
+    )
+
+    result = r_full.rename(columns={"n": "bb_rfull"})
+    result = result.merge(r_blended, on="batter", how="left")
+    result = result.merge(l_full.rename(columns={"n": "bb_lfull"}), on="batter", how="left")
+    result = result.merge(l_blended, on="batter", how="left")
+    result = result.fillna(0)
+
+    result["bbt"] = result["bb_lfull"] + result["bb_rfull"]
+    result["bbtl"] = result["bb_lfull"] / result["bbt"]
+    result["bbtr"] = result["bb_rfull"] / result["bbt"]
+
+    for stat in ("Exit_Velo", "Barrel_Rate", "xBA", "xwOBA"):
+        result[stat] = result[f"{stat}_R"] * result["bbtr"] + result[f"{stat}_L"] * result["bbtl"]
+
+    result = result.rename(columns={"batter": "key_mlbam"})
+    return result[["key_mlbam", "Exit_Velo", "Barrel_Rate", "xBA", "xwOBA"]]
+
+
 def compute_game_hit_probability(data_with_game_id: pd.DataFrame) -> pd.DataFrame:
     """Rate of *games* (not at-bats) with >=1 hit, blended across windows.
     This is the closest existing analog to a Beat-the-Streak pick probability."""
@@ -345,6 +422,7 @@ def assemble_hitters(
     wave = compute_wave(dt)
     wtb = compute_wtb(dt)
     extended_dk_rates = compute_extended_dk_rates(dt)
+    quality_of_contact = compute_quality_of_contact(dt)
     game_hit_prob = compute_game_hit_probability(data_with_game_id)
     last_game = compute_last_game_dates(data_with_game_id)
 
@@ -352,6 +430,7 @@ def assemble_hitters(
         wtb[["key_mlbam", "pa_lfull", "pa_rfull", "Expected_Bases"]], on="key_mlbam", how="left"
     )
     hitters = hitters.merge(extended_dk_rates, on="key_mlbam", how="left")
+    hitters = hitters.merge(quality_of_contact, on="key_mlbam", how="left")
     hitters = hitters.merge(game_hit_prob, on="key_mlbam", how="left")
     hitters = hitters.merge(names, on="key_mlbam", how="left")
     hitters = hitters.merge(latest_team, on="key_mlbam", how="left")
@@ -366,6 +445,7 @@ def assemble_hitters(
             "WAVE", "WAVE_L", "WAVE_R", "probability_L", "probability_R", "probability",
             "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
             "Expected_BB", "Expected_HBP", "Expected_RBI",
+            "Exit_Velo", "Barrel_Rate", "xBA", "xwOBA",
         ]
     ].fillna(0)
 

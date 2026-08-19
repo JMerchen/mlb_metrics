@@ -27,10 +27,34 @@ from mlb_metrics import (
 def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
     """Completed at-bat events with batter/p_throws, used by WAVE/WHOPS/WTB.
     Carries bat_score/post_bat_score too (helpers.estimate_rbi, via
-    hitters.compute_extended_dk_rates) - both already exist on every raw
-    Statcast row, so no extra fetch/join is needed to add them here."""
+    hitters.compute_extended_dk_rates), and the real batted-ball-quality
+    columns (type, launch_speed, estimated_ba_using_speedangle,
+    estimated_woba_using_speedangle, launch_speed_angle) used by
+    hitters.compute_quality_of_contact - all of these already exist on
+    every raw Statcast row (data.completed_events's own output is already
+    one row per completed PA, and for a ball-in-play PA that row IS the
+    real batted-ball-quality row), so no extra fetch/join is needed to add
+    any of them here. The quality-of-contact columns are simply null on a
+    non-batted-ball PA (a strikeout/walk/HBP never had a batted ball) -
+    helpers.is_batted_ball is what filters those out downstream.
+
+    A `df` missing one or more of the 5 quality-of-contact columns entirely
+    (never happens with a real pybaseball.statcast() pull - see
+    data.fetch_statcast_range's docstring - but does happen with an older/
+    narrower synthetic fixture, e.g. this project's own pre-existing test
+    fixtures built before this feature existed) degrades those columns to
+    null rather than raising - the same "missing optional input becomes an
+    honest null, not a crash" precedent Bullpen_PAVE/Park_Factor/etc.
+    already establish elsewhere in this pipeline."""
+    quality_columns = [
+        "type", "launch_speed", "estimated_ba_using_speedangle",
+        "estimated_woba_using_speedangle", "launch_speed_angle",
+    ]
+    missing = [c for c in quality_columns if c not in df.columns]
+    if missing:
+        df = df.assign(**{c: pd.NA for c in missing})
     return data.completed_events(
-        df, ["game_date", "batter", "events", "p_throws", "bat_score", "post_bat_score"]
+        df, ["game_date", "batter", "events", "p_throws", "bat_score", "post_bat_score"] + quality_columns
     )
 
 
