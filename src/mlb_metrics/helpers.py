@@ -135,8 +135,18 @@ def is_barrel(launch_speed_angle: pd.Series) -> pd.Series:
     most correlated with extra-base value). No literal `barrel` boolean
     column exists on a real Statcast row; this IS the real barrel
     classification (not an approximation reconstructed from the raw
-    launch_speed/launch_angle formula)."""
-    return (launch_speed_angle == 6).astype(int)
+    launch_speed/launch_angle formula).
+
+    A real gap confirmed against the actual persisted data (not just a
+    synthetic-test edge case): some real batted-ball rows have a null
+    launch_speed_angle even though Statcast otherwise tracked the batted
+    ball - the `== 6` comparison against a pandas nullable-dtype column
+    returns pd.NA (not False) for those rows (three-valued comparison
+    logic), which `.astype(int)` alone cannot convert - fillna(False)
+    resolves "no tracked quality bucket" to "not a barrel" before casting,
+    the same "missing data reads as a real, honest 0, never a crash or a
+    fabricated value" precedent every other classifier here follows."""
+    return (launch_speed_angle == 6).fillna(False).astype(int)
 
 
 def estimate_rbi(df: pd.DataFrame) -> pd.Series:
