@@ -426,6 +426,49 @@ including the smaller `rank<=2` "recommended" subset (n=11-18 - too small
 to trust on its own, and noisier in the opposite direction on this
 particular window). Revisit once more dates accumulate.
 
+### Real batted-ball-quality signal (`hitters.compute_quality_of_contact`)
+
+Every windowed hitter signal up to this point (`WAVE`, `Game_Hit_Probability`,
+`Consistency`, `Approach`, the extended DK rates) is an outcome-RATE
+statistic - hit/walk/RBI rates blended over recent games. None of them
+measure contact QUALITY directly: how hard/well the ball was actually hit,
+independent of whether it happened to find a fielder. The raw Statcast
+columns for that (`launch_speed`, `estimated_ba_using_speedangle`,
+`estimated_woba_using_speedangle`, `launch_speed_angle`) were already
+present on every real Statcast row, just never used.
+
+`compute_quality_of_contact(dt)` computes real recency-windowed
+`Exit_Velo` (mean `launch_speed`), `Barrel_Rate` (share of batted balls
+with `launch_speed_angle == 6` - Statcast's own real "barrel" bucket, not
+an approximation reconstructed from the raw formula), `xBA` (mean
+`estimated_ba_using_speedangle`), and `xwOBA` (mean
+`estimated_woba_using_speedangle`), computed over real batted-ball rows
+only (`helpers.is_batted_ball` filters to `type == "X"` - a strikeout/
+walk/HBP has no batted-ball data and would otherwise silently bias every
+rate toward 0/NaN). Blended by throws-side using the exact same
+`_blend_windows`/`_side_window_agg` machinery `WAVE`/`WTB`/the extended DK
+rates already use, reusing `config.WHOPS_WTB_WINDOWS`. Merged into
+`wave.csv` and into `dfs_ml.HITTER_FEATURE_COLUMNS` (both the DK-points
+regressor and the hit-probability classifier), so both models can learn
+from contact quality directly instead of only ever seeing outcome rates.
+
+**A real production bug found via a live retrain, not a synthetic test**:
+`helpers.is_barrel` originally did `(launch_speed_angle == 6).astype(int)`.
+Every synthetic test fixture supplied clean, non-null values, so `pytest`
+passed cleanly (541 tests) - but the real persisted
+`data/raw/statcast_2026.parquet`'s `launch_speed_angle` column has genuine
+null values on some real tracked batted balls, and comparing a pandas
+nullable-dtype column via `==` against those null rows returns `pd.NA`
+(not `False`, per three-valued comparison logic), which `.astype(int)`
+can't cast - `scripts/train_dfs_ml_models.py` crashed for real on the
+first retrain attempt (GitHub Actions run 32280494858). Fixed with
+`.fillna(False)` before casting, so "no tracked quality bucket" reads as
+"not a barrel" - a real, honest 0, matching every other classifier's
+missing-data convention in `helpers.py`. The retrain that followed the
+fix succeeded end to end (run 32281354568) - see the significance report
+above and the DFS ML retrain table below for what these four columns
+actually contributed once real data was behind them.
+
 ### Hitter hit log (`data/predictions/hitter_hit_log.csv`, data asset - not yet a live signal)
 
 Investigating why Beat the Streak's day-survival rate sits at ~50% found a
@@ -476,47 +519,54 @@ candidate - a handful of career plate appearances gives a mostly-noise
 just drag down real coefficients):
 
 **Significance report** (`statsmodels.Logit`, full history, real numbers
-from 2026-07-29): individually (one univariate model per feature),
-`WAVE`, `WAVE_L`/`WAVE_R`, `PA_L`/`PA_R`, `probability`,
-`Game_Hit_Probability`, `Consistency`, `Approach`, `Expected_Bases`,
-`Expected_RBI`, `Park_Factor`, and `Matchup_Hit_Probability` are all
-significant (p<0.001) - notably including `Game_Hit_Probability` itself
-(coef 0.2201, p<0.0001), the OPPOSITE of the earlier n=64 finding. That
-earlier result wasn't wrong given its data - it was underpowered; a
-64-pick sample simply can't reliably detect an effect of this size.
-`Expected_BB`, `Expected_HBP`, `starter_PAVE`, `Bullpen_PAVE`, and
-`is_home` are not individually significant. In the combined (multivariate)
-model, `probability`, `Game_Hit_Probability`, and `Consistency` show
-enormous standard errors (~300,000+) and are unusable there - real,
-expected multicollinearity, since `Consistency` (`Game_Hit_Probability -
-probability`) and `Approach` (`Game_Hit_Probability * probability`) are
-algebraically derived from those same two columns. `WAVE_L`, `WAVE_R`,
-`PA_R`, and `Park_Factor` remain significant once the others are
-controlled for.
+from 2026-08-19, after adding the batted-ball-quality columns below):
+individually (one univariate model per feature), `WAVE`, `WAVE_L`/`WAVE_R`,
+`PA_L`/`PA_R`, `probability`, `Game_Hit_Probability`, `Consistency`,
+`Approach`, `Expected_Bases`, `Expected_RBI`, `Exit_Velo`, `Barrel_Rate`,
+`xBA`, `xwOBA`, `Park_Factor`, and `Matchup_Hit_Probability` are all
+significant (p<0.001, `Barrel_Rate` at p=0.0005) - notably including
+`Game_Hit_Probability` itself (coef 0.2153, p<0.0001), the OPPOSITE of the
+much-earlier n=64 finding. That earlier result wasn't wrong given its
+data - it was underpowered; a 64-pick sample simply can't reliably detect
+an effect of this size. `Expected_BB`, `Expected_HBP`, `starter_PAVE`,
+`Bullpen_PAVE`, and `is_home` are not individually significant. In the
+combined (multivariate) model, `probability`, `Game_Hit_Probability`, and
+`Consistency` show enormous standard errors (~300,000+) and are unusable
+there - real, expected multicollinearity, since `Consistency`
+(`Game_Hit_Probability - probability`) and `Approach`
+(`Game_Hit_Probability * probability`) are algebraically derived from
+those same two columns. `WAVE_L`, `WAVE_R`, `PA_R`, and `Park_Factor`
+remain significant once the others are controlled for. **Reported
+honestly**: `Exit_Velo`/`Barrel_Rate`/`xBA`/`xwOBA` are each individually
+significant on their own (real signal, not noise), but none remain
+significant in the combined model (p=0.51/0.60/0.42/0.65) - they're
+substantially collinear with the existing WAVE/Approach-family columns
+(a hitter who makes consistently hard contact also tends to have a high
+recent WAVE), so this simple linear specification can't cleanly credit
+them with independent lift once those columns are already in the model.
+That's a genuine, useful finding on its own, not a failure to ship - see
+the walk-forward model result just below, which reflects all columns
+(including these four) together.
 
 **Walk-forward-validated predictive model** (sklearn `LogisticRegression`,
 same `ml_models.py` machinery and nested-holdout discipline as the three
-live DFS ML models): on a 20-date untouched holdout (n=5,048), the model
-beats BOTH bars it has to clear - log_loss 0.6757 vs. naive-baseline
-0.6815 vs. the existing `Game_Hit_Probability` heuristic's 0.6901 (ROC AUC
-0.575 vs. 0.564 for the heuristic alone) - a modest but real edge, not a
-dramatic one. Saved to `config.HITTER_HIT_PROBABILITY_MODEL_PATH`
+live DFS ML models): on the most recent untouched holdout (real run
+2026-08-19, n=5,186), the model beats BOTH bars it has to clear - log_loss
+0.6814 vs. naive-baseline 0.6843 vs. the existing `Game_Hit_Probability`
+heuristic's 0.7003 (ROC AUC 0.5694 vs. 0.5527 for the heuristic alone) - a
+modest but real edge, not a dramatic one. These numbers aren't directly
+comparable to the previous reported run (log_loss 0.6757/0.6815/0.6901,
+ROC AUC 0.575/0.564, 2026-07-29) - the holdout window itself moved forward
+with the season (more real dates behind and ahead of the split), not just
+the feature set, so a change here isn't attributable to the new
+`Exit_Velo`/`Barrel_Rate`/`xBA`/`xwOBA` columns alone. Saved to
+`config.HITTER_HIT_PROBABILITY_MODEL_PATH`
 (`data/models/hitter_hit_probability_model.joblib`).
 
-This model is now the PRIMARY ranking/gating signal for the official Beat
-the Streak picks (`predictions.select_picks`, see the next section) -
-`Approach`/`Matchup_Approach` are matchup-blind to a batter's own recent
-hot/cold form dominating the ranking (both `Game_Hit_Probability` and
-`probability` are recency-weighted ~32.5%/27.5% toward the last 10/30
-days), while this model treats the same matchup ingredients
-(`starter_PAVE`, `Bullpen_PAVE`, `Park_Factor`, platoon-adjusted
-`WAVE_L`/`WAVE_R`) as independent learned features rather than one
-hand-picked multiplier on top of a recency-heavy base rate. It replaces
-the old design floated here (using the model as an extra gate ahead of an
-unchanged `Approach`/`Matchup_Approach` ranking) - once the model
-independently learns from the same raw ingredients, ranking by
-`Approach`/`Matchup_Approach` on top of it would just reintroduce the same
-recency bias downstream.
+The model shortlists candidates for the official Beat the Streak picks
+(`predictions.select_picks`, see the next section) rather than ranking
+the whole pool directly - see `HITTER_MODEL_VERSION`'s `"v4-model-shortlist"`
+docstring and the "Wiring the model into Our Picks" section below for why.
 `.github/workflows/ml_training_update.yml`'s weekly retrain job now
 includes `scripts/train_hitter_hit_model.py` alongside the three DFS/
 age-curve models, so this artifact stays current instead of being frozen
@@ -1166,6 +1216,38 @@ additional gain stacked on top of the formula fix, not just the model
 recovering ground the bug had cost it. All three again beat both the
 naive baseline and their own (now-corrected) heuristic, so all three
 stayed live with these updated weights.
+
+**Retrained again 2026-08-19** after `dfs_ml.HITTER_FEATURE_COLUMNS`
+widened to add `Exit_Velo`/`Barrel_Rate`/`xBA`/`xwOBA` (see "Real
+batted-ball-quality signal" above), forcing a retire-and-retrain of the
+two stale artifacts (`dfs_hitter_model.joblib`,
+`hitter_hit_probability_model.joblib`) whose schema no longer matched:
+
+| signal | model | MAE | naive baseline MAE | heuristic MAE | correlation | n scored |
+|---|---|---|---|---|---|---|
+| `DK_Points_Hitter` | gradient boosting | 4.3898 | 4.2960 | 4.3548 | 0.164 | 5,463 |
+| `Expected_H_Allowed` | Ridge (alpha=30) | 1.7879 | 1.7959 | 1.9050 | 0.202 | 490 |
+| `Expected_BB` | Ridge (alpha=0.1) | 0.9869 | 0.9790 | 0.9841 | 0.194 | 490 |
+
+Reported honestly rather than silently kept as-is: `DK_Points_Hitter`'s
+retrained model does **not** beat the naive baseline this run (4.3898 vs.
+4.2960) - a reversal from the prior retrain above, where it beat both
+bars. `Expected_BB` also misses the baseline (0.9869 vs. 0.9790), same as
+several earlier runs. Both fall back to their heuristic automatically
+(`ml_models.save_model`'s existing "beats baseline AND heuristic or don't
+save" gate - see `dfs.py`'s docstring), so the live DFS Hitters tab keeps
+serving the heuristic for these two exactly as it did before either model
+ever existed - no crash, no silently-worse predictions shipped. Whether
+this miss traces to the four new columns specifically, to a materially
+different holdout window (the season has moved forward since the last
+retrain, so the dates being fit/scored aren't the same), or plain
+retrain-to-retrain noise on a signal whose correlation has hovered
+0.16-0.30 the whole time isn't separable from this run alone - it isn't
+evidence the new columns are bad, just that they didn't rescue this
+particular model this time. `Expected_H_Allowed` (whose feature set
+doesn't include the new columns at all) beat both bars again and stayed
+live, essentially unaffected as expected. Next weekly retrain will show
+whether `DK_Points_Hitter`/`Expected_BB` recover baseline on fresh data.
 
 ## Optimal Lineup (`docs/dfs.html`'s "Optimal Lineup" tab, `dfs_optimizer.py`)
 
