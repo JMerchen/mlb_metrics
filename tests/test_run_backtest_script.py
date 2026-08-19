@@ -111,16 +111,22 @@ def test_run_backtest_reconstructs_resolves_and_summarizes(tmp_path, monkeypatch
 
     docs_data_dir = tmp_path / "docs_data"
     streak_picks = pd.read_csv(docs_data_dir / "beat_the_streak_picks.csv")
-    # 06-18's pick (0.80 predicted) clears the default 0.80 "good matchup"
-    # bar and gets a hit; 06-19's (0.70) doesn't clear the bar at all, so
-    # that day is a no-op with zero recommended picks - surfaced as its own
-    # explicit "no_pick" row rather than being silently absent.
+    # 06-18's pick (0.80 predicted) clears config.DAILY_PICK_MIN_PROBABILITY
+    # (0.77) and gets a hit, graded "recommended"; 06-19's (0.70) doesn't
+    # clear the bar, but is still a real logged candidate - shown as its
+    # own real row (miss) graded "speculative" rather than collapsed into a
+    # no_pick placeholder.
     assert len(streak_picks) == 2
     hit_row = streak_picks[streak_picks["date"] == "2026-06-18"].iloc[0]
     assert hit_row["status"] == "hit"
-    no_pick_row = streak_picks[streak_picks["date"] == "2026-06-19"].iloc[0]
-    assert no_pick_row["status"] == "no_pick"
+    assert hit_row["grade"] == "recommended"
+    speculative_row = streak_picks[streak_picks["date"] == "2026-06-19"].iloc[0]
+    assert speculative_row["status"] == "miss"
+    assert speculative_row["grade"] == "speculative"
     streak_summary = pd.read_csv(docs_data_dir / "beat_the_streak_summary.csv")
+    # Only the "recommended"-grade 06-18 pick counts toward the tracked
+    # streak - the "speculative" 06-19 miss is a real no-op for it, exactly
+    # like a no_pick day was before this change.
     assert streak_summary.loc[0, "n_days_resolved"] == 1
     assert streak_summary.loc[0, "current_streak"] == 1
     assert streak_summary.loc[0, "longest_streak"] == 1

@@ -71,24 +71,38 @@ The dashboard's top section simulates actually playing Beat the Streak,
 following its real rules rather than a simplified per-day win/loss model
 (see `evaluation.streak_progression()`):
 
-- A batter is only "recommended" if a blended score - the mean of whichever
+- A pick is graded "recommended" if a blended score - the mean of whichever
   of `predicted_probability` (Game_Hit_Probability), `probability`, and
   `Matchup_Hit_Probability` are available for that pick (see
   `evaluation._combined_probability`) - clears `DAILY_PICK_MIN_PROBABILITY`
-  (config.py, default 0.77). A day can surface 0, 1, or up to
-  `DAILY_PICK_MAX` (2) picks depending on how many clear the bar, not a
-  fixed count regardless of matchup quality. This used to gate on
+  (config.py, default 0.77), else "speculative". This used to gate on
   Game_Hit_Probability alone at 0.80, which ignored the other two signals
   and produced zero-pick days whenever GHP landed just under the bar even
   with a strong matchup; blending all three (and lowering the bar to match,
   since a mean of two-or-three probabilities runs lower than GHP alone -
-  see config.py's docstring for the backtest that picked 0.77) fixes that
-  without loosening quality, empirically validated via a 42-day
-  git-history-replay backtest. A zero-pick day still gets an explicit
-  `"no_pick"` row in the export (see `build_beat_the_streak_export`) rather
-  than being silently absent - the dashboard shows "No pick for `<date>`"
-  instead of falling back to whatever earlier day last had one, which would
-  otherwise look like a stale/broken pipeline.
+  see config.py's docstring for the backtest that picked 0.77) fixed that,
+  empirically validated via a 42-day git-history-replay backtest.
+- **The dashboard's top DAILY_PICK_MAX (2) candidates are ALWAYS shown,
+  each individually graded** (`evaluation.graded_daily_picks`) - real user
+  feedback: that 42-day replay never carried real (non-NaN)
+  `Matchup_Hit_Probability` (it wasn't persisted to git history at the
+  time), so once live runs started actually carrying it most days, the
+  blended mean ran measurably lower than the replay ever exercised - a real
+  5-day-straight stretch (2026-08-11 through 2026-08-15) landed the
+  top-ranked candidate's combined probability at 0.71-0.77 every single
+  day, just under the bar, leaving the dashboard blank despite real,
+  already-qualified candidates existing all five days. Rather than
+  re-chase a moving threshold, `DAILY_PICK_MIN_PROBABILITY`'s role changed
+  instead of its value: it's no longer "the bar a day needs to clear to
+  show anything" - it's now the recommended/speculative grade boundary,
+  and the dashboard always shows its real top candidates, honestly graded,
+  never blank on a weak-slate day. **Only "recommended"-grade picks still
+  count toward the tracked streak/day_survival_rate** (`streak_progression`/
+  `_recommended_picks`, unchanged) - a "speculative" day is still a real
+  no-op for the streak, exactly like a zero-pick day was before. A date
+  with literally NOTHING logged (a true off day, not a weak one) still
+  gets the explicit `"no_pick"` row in the export rather than silently
+  vanishing.
 - A pick with an at-bat and no hit resets the streak to 0.
 - A pick with zero at-bats that day (rained out, DNP, not in the lineup)
   is neutral - it neither advances nor resets the streak.

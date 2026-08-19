@@ -78,12 +78,16 @@ def compute_outputs(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
 def write_beat_the_streak_export(predictions_log_path: str, output_dir: str) -> None:
     """Read the full predictions log and (re)write the CSVs the dashboard's
-    Beat the Streak section reads: each day's recommended picks (0 to
-    DAILY_PICK_MAX, gated by DAILY_PICK_MIN_PROBABILITY - "no good matchup"
-    means zero) with hit/miss/no_game/pending status, an all-time
+    Beat the Streak section reads: each day's top DAILY_PICK_MAX candidates,
+    ALWAYS shown (see evaluation.graded_daily_picks) with hit/miss/no_game/
+    pending status and a "recommended"/"speculative" grade (whether that
+    candidate's own real combined probability clears
+    DAILY_PICK_MIN_PROBABILITY) - a weak-slate day shows its real best
+    options graded "speculative" rather than going blank; an all-time
     longest_streak/current_streak summary following Beat the Streak's actual
-    rules (see evaluation.streak_progression), and a small by-version
-    summary (all_time plus config.HITTER_MODEL_VERSION) so a selection-logic
+    rules, counting only "recommended"-grade picks (see
+    evaluation.streak_progression), and a small by-version summary
+    (all_time plus config.HITTER_MODEL_VERSION) so a selection-logic
     change's real effect on accuracy is visible without waiting for
     pre-change history to stop dominating the all-time numbers. No-op if
     nothing's logged yet."""
