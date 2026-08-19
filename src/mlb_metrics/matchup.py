@@ -219,9 +219,28 @@ def _pitch_arsenal_multiplier(matchup: pd.DataFrame, league_mix: dict) -> pd.Ser
     )
     # A starter with no real arsenal row (unannounced, not found in `pave`)
     # leaves starter_fastball_rate/etc. null - vs_starter is then null too,
-    # and the ratio below correctly comes out NaN, filled to the neutral
+    # and vs_starter/vs_league divides out to NaN, filled to the neutral
     # 1.0 default just like a batter with no real family data does.
-    ratio = (vs_starter / vs_league.replace(0, pd.NA)).fillna(1.0)
+    #
+    # Real bug found via a live retrain (GitHub Actions): `.replace(0,
+    # pd.NA)` on a float64 Series silently upcasts it to `object` dtype
+    # (pd.NA doesn't fit float64 the way np.nan does) - every arithmetic
+    # op downstream (division, clip, the final weight-dial) then runs
+    # through slow, un-vectorized Python-level operators instead of
+    # numpy's, and `(1 - matchup_ab_rate) ** 3.5` on a real row where the
+    # combined multipliers pushed matchup_ab_rate above 1.0 produced a
+    # genuine Python `complex` number (Python's own `**` does that for a
+    # negative base and a non-integer exponent; numpy's vectorized power
+    # would have just produced `nan`) - `.clip(0, 1)` then crashed with
+    # `TypeError: '>=' not supported between instances of 'complex' and
+    # 'int'`. Plain division needs no such replace() at all: 0/0 is
+    # already a real NaN in numpy/pandas float division (never a crash),
+    # and vs_starter/vs_league can only be 0/0 - not x/0 - since both
+    # sides are weighted sums of the SAME Fastball_WAVE/Breaking_WAVE/
+    # Offspeed_WAVE terms (only the weights differ), so vs_league==0
+    # implies vs_starter==0 too. Staying in float64 throughout is what
+    # keeps `**` on the real numpy path.
+    ratio = (vs_starter / vs_league).fillna(1.0)
 
     lo, hi = config.MATCHUP_PITCH_ARSENAL_CLIP
     clipped = ratio.clip(lo, hi)

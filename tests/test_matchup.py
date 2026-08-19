@@ -280,6 +280,29 @@ def test_league_arsenal_mix_falls_back_when_columns_missing():
     assert result == config.MATCHUP_LEAGUE_ARSENAL_FALLBACK
 
 
+def test_pitch_arsenal_multiplier_zero_batter_data_stays_float_and_neutral():
+    # Real bug found via a live retrain (GitHub Actions): the original
+    # implementation divided by `vs_league.replace(0, pd.NA)`, which
+    # silently upcast the Series to `object` dtype whenever it hit a real
+    # zero - every op downstream then ran through Python's own operators
+    # instead of numpy's, and a later `(1 - matchup_ab_rate) ** 3.5` on a
+    # real row produced a genuine Python `complex` value that crashed
+    # `.clip(0, 1)` with a TypeError. A batter with zero real data in
+    # every pitch family (vs_league == vs_starter == 0, a real 0/0) is
+    # exactly the case that used to trigger the replace() - must resolve
+    # to a real float64 1.0 (neutral), never an object-dtype NA.
+    matchup_df = pd.DataFrame([{
+        "Fastball_WAVE": 0.0, "Breaking_WAVE": 0.0, "Offspeed_WAVE": 0.0,
+        "starter_fastball_rate": 0.6, "starter_breaking_rate": 0.3, "starter_offspeed_rate": 0.1,
+    }])
+    league_mix = {"fastball": 0.55, "breaking": 0.30, "offspeed": 0.15}
+
+    result = matchup._pitch_arsenal_multiplier(matchup_df, league_mix)
+
+    assert result.dtype == float
+    assert result.iloc[0] == pytest.approx(1.0)
+
+
 def test_pitch_arsenal_multiplier_is_a_noop_when_batter_columns_missing():
     matchup_df = pd.DataFrame([
         {"starter_fastball_rate": 0.7, "starter_breaking_rate": 0.2, "starter_offspeed_rate": 0.1}
