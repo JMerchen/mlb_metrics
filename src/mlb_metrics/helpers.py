@@ -149,6 +149,44 @@ def is_barrel(launch_speed_angle: pd.Series) -> pd.Series:
     return (launch_speed_angle == 6).fillna(False).astype(int)
 
 
+PITCH_TYPE_FAMILY = {
+    # Fastballs: thrown hard and relatively straight, or with modest cut/sink.
+    "FF": "fastball", "SI": "fastball", "FC": "fastball", "FA": "fastball",
+    # Breaking balls: sharp lateral/downward break off a fastball-speed arm action.
+    "SL": "breaking", "ST": "breaking", "CU": "breaking", "KC": "breaking",
+    "SV": "breaking", "CS": "breaking",
+    # Offspeed: same arm action as a fastball, thrown noticeably slower to
+    # disrupt timing (changeups/splitters) or a handful of rare novelty
+    # pitches with no real fastball/breaking analog.
+    "CH": "offspeed", "FS": "offspeed", "FO": "offspeed", "EP": "offspeed",
+    "KN": "offspeed",
+    # Deliberately unmapped (pitch_type_family returns NaN for these, same
+    # as any code not listed at all): "PO" (pitchout - not a real pitch to
+    # the batter) and "UN"/null (Statcast couldn't classify it). A rare/
+    # unclassifiable pitch_type is dropped from arsenal-mix/pitch-family
+    # windowing rather than guessed into a family - see
+    # pitchers.compute_pitch_arsenal and hitters.compute_pitch_family_rates.
+}
+
+
+def pitch_type_family(pitch_type: pd.Series) -> pd.Series:
+    """Groups Statcast's real `pitch_type` codes into the same three-bucket
+    fastball/breaking/offspeed scheme Baseball Savant's own pitch-arsenal
+    pages use, confirmed against every real code observed in the actual
+    persisted `data/raw/statcast_2026.parquet` (FF/SI/SL/CH/ST/FC/CU/FS/KC/
+    SV/EP/FA/FO/KN/CS/PO/UN, plus real nulls - see PITCH_TYPE_FAMILY above
+    for the exact mapping). Returns NaN (not a fabricated fourth bucket) for
+    any code not in the mapping, including real nulls - about 0.4% of real
+    pitches in the persisted data, mostly pitchouts and Statcast's own rare
+    "couldn't classify" rows.
+
+    Unlike `is_batted_ball`/`is_barrel` above, this returns the family
+    label itself (a string, or NaN), not a 0/1 count - it's meant for
+    grouping/filtering (`dt.assign(pitch_family=...)`, then window by that
+    column) rather than direct summation."""
+    return pitch_type.map(PITCH_TYPE_FAMILY)
+
+
 def estimate_rbi(df: pd.DataFrame) -> pd.Series:
     """Runs driven in on this completed plate appearance, approximated as
     `post_bat_score - bat_score` on the PA's own final-pitch row (the one

@@ -16,7 +16,10 @@ def _at_bats(batter, throws, rows):
     (compute_quality_of_contact) defaulted to null/not-a-batted-ball (type
     != "X") - none of these existing call sites specify real Statcast
     exit-velocity/xBA data, so none of their at-bats should be counted as
-    a real batted ball (see _batted_balls below for that dedicated case)."""
+    a real batted ball (see _batted_balls below for that dedicated case) -
+    and pitch_type defaulted to null too (compute_pitch_family_rates), so
+    none of these existing call sites' at-bats count toward any pitch
+    family either (see _family_at_bats below for that dedicated case)."""
     result = []
     for row in rows:
         if len(row) == 4:
@@ -29,6 +32,7 @@ def _at_bats(batter, throws, rows):
             "bat_score": bat_score, "post_bat_score": post_bat_score,
             "type": pd.NA, "launch_speed": pd.NA, "estimated_ba_using_speedangle": pd.NA,
             "estimated_woba_using_speedangle": pd.NA, "launch_speed_angle": pd.NA,
+            "pitch_type": pd.NA,
         })
     return result
 
@@ -46,6 +50,24 @@ def _batted_balls(batter, throws, rows):
             "bat_score": 0, "post_bat_score": 0,
             "type": "X", "launch_speed": launch_speed, "estimated_ba_using_speedangle": xba,
             "estimated_woba_using_speedangle": xwoba, "launch_speed_angle": launch_speed_angle,
+            "pitch_type": pd.NA,
+        })
+    return result
+
+
+def _family_at_bats(batter, throws, rows):
+    """rows: list of (game_date, pitch_type, events) tuples - each becomes
+    a real completed-PA row tagged with a real Statcast pitch_type code for
+    hitters.compute_pitch_family_rates (see helpers.PITCH_TYPE_FAMILY for
+    which family each code maps to)."""
+    result = []
+    for date, pitch_type, events in rows:
+        result.append({
+            "batter": batter, "game_date": pd.Timestamp(date), "events": events, "p_throws": throws,
+            "bat_score": 0, "post_bat_score": 0,
+            "type": pd.NA, "launch_speed": pd.NA, "estimated_ba_using_speedangle": pd.NA,
+            "estimated_woba_using_speedangle": pd.NA, "launch_speed_angle": pd.NA,
+            "pitch_type": pitch_type,
         })
     return result
 
@@ -201,6 +223,54 @@ def test_compute_quality_of_contact_blends_platoon_share():
     assert result.loc[1, "Exit_Velo"] == pytest.approx(75.0)
 
 
+def test_compute_pitch_family_rates_exact_arithmetic_all_windows():
+    # Windows relative to latest=2026-06-20 (config.WAVE_WINDOWS: full/81d/
+    # 30d/10d, cutoffs 2026-03-31/05-21/06-10).
+    rows = _family_at_bats(1, "R", [
+        ("2026-03-15", "FF", "single"),      # only full (before 81d cutoff)
+        ("2026-05-01", "FF", "field_out"),   # in 81d, not 30d/10d
+        ("2026-05-25", "FF", "single"),      # in 30d, not 10d
+        ("2026-06-15", "FF", "single"),      # in 10d
+    ])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_pitch_family_rates(dt).set_index("key_mlbam")
+
+    # full: n=4, hits=3 -> 0.75; 81d: n=3, hits=2 -> 2/3; 30d: n=2, hits=2 -> 1.0; 10d: n=1, hits=1 -> 1.0
+    expected = 0.75 * 0.150 + (2 / 3) * 0.250 + 1.0 * 0.275 + 1.0 * 0.325
+    assert result.loc[1, "Fastball_WAVE"] == pytest.approx(expected)
+    assert result.loc[1, "Breaking_WAVE"] == 0
+    assert result.loc[1, "Offspeed_WAVE"] == 0
+
+
+def test_compute_pitch_family_rates_excludes_unclassifiable_pitch_types():
+    # A pitchout ("PO") and a real null pitch_type have no real family -
+    # same "absent from this function's own output entirely" precedent
+    # compute_quality_of_contact's non-batted-ball test establishes.
+    rows = _family_at_bats(1, "R", [("2026-06-15", "PO", "single"), ("2026-06-16", None, "single")])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_pitch_family_rates(dt)
+
+    assert result.empty
+
+
+def test_compute_pitch_family_rates_family_absent_reads_zero_not_dropped():
+    # A batter with real data in ONE family only (breaking) must still
+    # appear in the output, with the other two families at a real 0 - not
+    # silently dropped from the whole table just because one family has no
+    # data (the union-merge across all three families, not an anchor on
+    # any single one).
+    rows = _family_at_bats(1, "R", [("2026-06-18", "SL", "single")])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_pitch_family_rates(dt).set_index("key_mlbam")
+
+    assert result.loc[1, "Breaking_WAVE"] > 0
+    assert result.loc[1, "Fastball_WAVE"] == 0
+    assert result.loc[1, "Offspeed_WAVE"] == 0
+
+
 def test_compute_game_hit_probability_blends_game_level_hit_rate():
     rows = [
         {"batter": 1, "game_id": 1, "game_date": pd.Timestamp("2026-03-12"), "events": "field_out"},
@@ -282,7 +352,8 @@ def test_assemble_hitters_output_columns_and_derived_fields():
         "WAVE", "WAVE_L", "WAVE_R", "probability_L", "probability_R", "probability",
         "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
         "Expected_BB", "Expected_HBP", "Expected_RBI",
-        "Exit_Velo", "Barrel_Rate", "xBA", "xwOBA", "Last_Game_Date",
+        "Exit_Velo", "Barrel_Rate", "xBA", "xwOBA",
+        "Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE", "Last_Game_Date",
     ]
     row = result.iloc[0]
     assert row["name_last"] == "Player"
@@ -298,6 +369,11 @@ def test_assemble_hitters_output_columns_and_derived_fields():
     assert row["Barrel_Rate"] == 0
     assert row["xBA"] == 0
     assert row["xwOBA"] == 0
+    # Neither at-bat has a real pitch_type either - same "0, not a
+    # fabricated value" convention for pitch-family rates.
+    assert row["Fastball_WAVE"] == 0
+    assert row["Breaking_WAVE"] == 0
+    assert row["Offspeed_WAVE"] == 0
 
 
 def test_compute_last_game_dates_most_recent_completed_event():

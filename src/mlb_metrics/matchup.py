@@ -26,13 +26,26 @@ Known first-pass simplifications, not fixed here: modern bullpen-game usage
 assumed starter/bullpen at-bat-share split; schedule.py's v1 only carries a
 team's first game of a doubleheader.
 
-Two further adjustments beyond the base batter-vs-starter blend: platoon
+Three further adjustments beyond the base batter-vs-starter blend: platoon
 (uses the batter's WAVE_L/WAVE_R against the probable starter's actual
 throwing hand instead of a hand-blended overall WAVE - see _platoon_wave)
 and park (scales the AB rate by the game's actual venue's Park_Factor - see
 _park_factor_multiplier and teams.compute_park_factors). Both were
 empirically validated together via backtest before shipping on by default -
 see config.MATCHUP_PARK_FACTOR_WEIGHT's docstring for the numbers.
+
+The third, pitch-type-specific platoon (_pitch_arsenal_multiplier), scales
+the AB rate by how much better/worse the batter's own real
+Fastball_WAVE/Breaking_WAVE/Offspeed_WAVE (hitters.compute_pitch_family_rates)
+suggests they'll do against TODAY'S probable starter's own real
+fastball/breaking/offspeed usage mix (pitchers.compute_pitch_arsenal) vs.
+a league-average mix - a real signal independent of the handedness
+platoon above (a batter's fastball/breaking split isn't the same thing as
+their same/opposite-handed split). Ships at
+config.MATCHUP_PITCH_ARSENAL_WEIGHT=0.0 (informational-only, exactly
+reproduces the pre-arsenal rate) until a real backtest earns a nonzero
+default - see that constant's own docstring for the real numbers once
+that backtest has run.
 
 Validation status: backtested on 30 days of real history reconstructed
 directly from persisted Statcast (git-history CSV replay wasn't available -
@@ -142,6 +155,79 @@ def _platoon_wave(matchup: pd.DataFrame) -> pd.Series:
     return pd.Series(platoon, index=matchup.index)
 
 
+def _league_arsenal_mix(pave: pd.DataFrame) -> dict:
+    """Real league-average pitch-family usage mix (fastball/breaking/
+    offspeed) recovered directly from `pave` - the neutral baseline a
+    batter's own Fastball_WAVE/Breaking_WAVE/Offspeed_WAVE (see
+    hitters.compute_pitch_family_rates) is compared against in
+    _pitch_arsenal_multiplier, the same role _league_pave plays for the
+    handedness-platoon blend. Falls back to
+    config.MATCHUP_LEAGUE_ARSENAL_FALLBACK when `pave` can't yield real
+    values (empty, or missing the Fastball_Rate/Breaking_Rate/
+    Offspeed_Rate columns - e.g. a test fixture, or pitchers.assemble_pitchers
+    called without pitch_arsenal)."""
+    columns = ("Fastball_Rate", "Breaking_Rate", "Offspeed_Rate")
+    if pave.empty or not set(columns).issubset(pave.columns):
+        return dict(config.MATCHUP_LEAGUE_ARSENAL_FALLBACK)
+    means = {
+        "fastball": pave["Fastball_Rate"].mean(),
+        "breaking": pave["Breaking_Rate"].mean(),
+        "offspeed": pave["Offspeed_Rate"].mean(),
+    }
+    if any(pd.isna(v) for v in means.values()):
+        return dict(config.MATCHUP_LEAGUE_ARSENAL_FALLBACK)
+    return means
+
+
+def _pitch_arsenal_multiplier(matchup: pd.DataFrame, league_mix: dict) -> pd.Series:
+    """Pitch-type-specific platoon adjustment: compares a batter's own
+    real Fastball_WAVE/Breaking_WAVE/Offspeed_WAVE weighted by TODAY'S
+    probable starter's own real arsenal mix (starter_fastball_rate/
+    starter_breaking_rate/starter_offspeed_rate) against the same batter
+    rates weighted by the real league-average mix (`league_mix`) - the
+    ratio is how much better/worse this batter is expected to do
+    specifically against this starter's pitch mix than against an average
+    one, independent of the handedness platoon adjustment above (a batter
+    can have a real fastball/breaking split a same/opposite-handed platoon
+    split doesn't capture).
+
+    1.0 (no-op) whenever either side of the comparison can't be computed -
+    the batter's own family rates are unavailable (old wave.csv snapshot,
+    test fixture) or all zero (a batter who's genuinely never ended a
+    tracked PA on any classified pitch, e.g. a September call-up), or
+    today's starter has no real arsenal-mix row (unannounced starter, not
+    found in `pave`) - never a guessed/interpolated multiplier. Otherwise
+    the raw ratio is clipped to config.MATCHUP_PITCH_ARSENAL_CLIP (one
+    small-sample outlier arsenal shouldn't swing a probability further
+    than a real skew would) and scaled by
+    config.MATCHUP_PITCH_ARSENAL_WEIGHT (0 = fully off, 1 = full effect),
+    same shape as _park_factor_multiplier."""
+    batter_columns = {"Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE"}
+    starter_columns = {"starter_fastball_rate", "starter_breaking_rate", "starter_offspeed_rate"}
+    if not batter_columns.issubset(matchup.columns) or not starter_columns.issubset(matchup.columns):
+        return pd.Series(1.0, index=matchup.index)
+
+    vs_starter = (
+        matchup["Fastball_WAVE"] * matchup["starter_fastball_rate"]
+        + matchup["Breaking_WAVE"] * matchup["starter_breaking_rate"]
+        + matchup["Offspeed_WAVE"] * matchup["starter_offspeed_rate"]
+    )
+    vs_league = (
+        matchup["Fastball_WAVE"] * league_mix["fastball"]
+        + matchup["Breaking_WAVE"] * league_mix["breaking"]
+        + matchup["Offspeed_WAVE"] * league_mix["offspeed"]
+    )
+    # A starter with no real arsenal row (unannounced, not found in `pave`)
+    # leaves starter_fastball_rate/etc. null - vs_starter is then null too,
+    # and the ratio below correctly comes out NaN, filled to the neutral
+    # 1.0 default just like a batter with no real family data does.
+    ratio = (vs_starter / vs_league.replace(0, pd.NA)).fillna(1.0)
+
+    lo, hi = config.MATCHUP_PITCH_ARSENAL_CLIP
+    clipped = ratio.clip(lo, hi)
+    return 1 + config.MATCHUP_PITCH_ARSENAL_WEIGHT * (clipped - 1)
+
+
 def _park_factor_multiplier(park_factor: pd.Series) -> pd.Series:
     """1.0 (no-op) when Park_Factor is missing (old confidence.csv
     snapshots, or a test fixture - see teams.compute_park_factors);
@@ -165,7 +251,7 @@ def compute_matchup_hit_probability(
     contributes a neutral (league-average) matchup rather than dropping the
     batter.
 
-    Two adjustments beyond the base batter-vs-pitcher log5 blend:
+    Three adjustments beyond the base batter-vs-pitcher log5 blend:
     - Platoon: uses the batter's WAVE_L/WAVE_R against the probable
       starter's actual throwing hand (see _platoon_wave) instead of their
       hand-blended overall WAVE.
@@ -173,18 +259,38 @@ def compute_matchup_hit_probability(
       Park_Factor (see teams.compute_park_factors) - the home team's park,
       looked up via `schedule_df`'s `is_home`, since neither side's own
       Park_Factor is relevant when they're the road team today.
+    - Pitch arsenal: scales the matchup AB rate by how much better/worse
+      the batter's own Fastball_WAVE/Breaking_WAVE/Offspeed_WAVE suggests
+      they'll do against TODAY'S starter's own real pitch mix vs. a
+      league-average mix (see _pitch_arsenal_multiplier) - ships at
+      config.MATCHUP_PITCH_ARSENAL_WEIGHT=0.0 (no-op) until a real
+      backtest earns a nonzero default, same as Park before its own
+      backtest.
     """
-    wave_columns = [c for c in ("key_mlbam", "team", "WAVE", "WAVE_L", "WAVE_R") if c in wave.columns]
+    wave_columns = [
+        c for c in
+        ("key_mlbam", "team", "WAVE", "WAVE_L", "WAVE_R", "Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE")
+        if c in wave.columns
+    ]
     schedule_columns = [
         c for c in ("team", "opponent", "probable_pitcher_key_mlbam", "is_home") if c in schedule_df.columns
     ]
     matchup = wave[wave_columns].merge(schedule_df[schedule_columns], on="team", how="inner")
 
     league_pave = _league_pave(pave)
+    league_arsenal_mix = _league_arsenal_mix(pave)
 
-    pave_columns = [c for c in ("key_mlbam", "PAVE", "Throws") if c in pave.columns]
+    pave_columns = [
+        c for c in
+        ("key_mlbam", "PAVE", "Throws", "Fastball_Rate", "Breaking_Rate", "Offspeed_Rate")
+        if c in pave.columns
+    ]
     starter_pave = pave[pave_columns].rename(
-        columns={"key_mlbam": "probable_pitcher_key_mlbam", "PAVE": "starter_pave", "Throws": "starter_throws"}
+        columns={
+            "key_mlbam": "probable_pitcher_key_mlbam", "PAVE": "starter_pave", "Throws": "starter_throws",
+            "Fastball_Rate": "starter_fastball_rate", "Breaking_Rate": "starter_breaking_rate",
+            "Offspeed_Rate": "starter_offspeed_rate",
+        }
     )
     matchup = matchup.merge(starter_pave, on="probable_pitcher_key_mlbam", how="left")
 
@@ -200,7 +306,11 @@ def compute_matchup_hit_probability(
 
     opponent_rate = clip_and_blend_pitching_pave(matchup["starter_pave"], matchup["Bullpen_PAVE"], league_pave)
     batter_rate = _platoon_wave(matchup)
-    matchup_ab_rate = _log5(batter_rate, opponent_rate, league_pave) * _park_factor_multiplier(matchup["Park_Factor"])
+    matchup_ab_rate = (
+        _log5(batter_rate, opponent_rate, league_pave)
+        * _park_factor_multiplier(matchup["Park_Factor"])
+        * _pitch_arsenal_multiplier(matchup, league_arsenal_mix)
+    )
     matchup["Matchup_Hit_Probability"] = (
         1 - (1 - matchup_ab_rate) ** config.WAVE_TRIALS_PER_GAME
     ).clip(0, 1)

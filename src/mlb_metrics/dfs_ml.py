@@ -29,22 +29,29 @@ raw-ingredients philosophy applies: these are fed directly, not run
 through the flagged ratio.
 
 **Retraining note**: HITTER_FEATURE_COLUMNS widened when BB/HBP/RBI
-scoring shipped, and again to add real Statcast batted-ball-quality
-signals (Exit_Velo/Barrel_Rate/xBA/xwOBA, hitters.compute_quality_of_contact)
-- any model artifact trained on an OLDER (narrower) schema is
-schema-incompatible and MUST be retired (deleted, not left in place)
-whenever this list changes, since BOTH apply_ml_overrides's predict() call
-AND predict_hitter_hit_probability's predict_proba() call are NOT wrapped
-in a try/except - a stale artifact would hard-crash
+scoring shipped, again to add real Statcast batted-ball-quality signals
+(Exit_Velo/Barrel_Rate/xBA/xwOBA, hitters.compute_quality_of_contact), and
+again to add pitch-type-family signals (Fastball_WAVE/Breaking_WAVE/
+Offspeed_WAVE - hitters.compute_pitch_family_rates - and today's probable
+starter's own starter_fastball_rate/starter_breaking_rate/
+starter_offspeed_rate - pitchers.compute_pitch_arsenal) - any model
+artifact trained on an OLDER (narrower) schema is schema-incompatible and
+MUST be retired (deleted, not left in place) whenever this list changes,
+since BOTH apply_ml_overrides's predict() call AND
+predict_hitter_hit_probability's predict_proba() call are NOT wrapped in
+a try/except - a stale artifact would hard-crash
 scripts/build_dfs_rankings.py/live daily picks rather than gracefully
 falling back. Every prior modeling attempt in this project used only
 outcome-RATE signals (WAVE/PAVE-style hit/walk/RBI rates) - never a real
 measure of contact QUALITY (how hard/well the ball was actually hit,
-independent of whether that particular ball found a fielder) - even
-though the raw Statcast columns needed for it (launch_speed, launch_angle,
-estimated_ba_using_speedangle, estimated_woba_using_speedangle,
-launch_speed_angle) were sitting unused in the already-persisted raw data
-the whole time.
+independent of whether that particular ball found a fielder), and never a
+pitch-type-specific matchup signal (does this batter's own fastball/
+breaking/offspeed split suggest a better/worse day against THIS starter's
+own real pitch mix) - even though the raw Statcast columns needed for
+both (launch_speed/launch_angle/estimated_ba_using_speedangle/
+estimated_woba_using_speedangle/launch_speed_angle for the first,
+pitch_type for the second) were sitting unused in the already-persisted
+raw data the whole time.
 
 ## Pitcher features: dfs.py's own engineered columns
 
@@ -79,7 +86,9 @@ HITTER_FEATURE_COLUMNS = [
     "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
     "Expected_BB", "Expected_HBP", "Expected_RBI",
     "Exit_Velo", "Barrel_Rate", "xBA", "xwOBA",
+    "Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE",
     "starter_PAVE", "Bullpen_PAVE", "Park_Factor", "is_home",
+    "starter_fastball_rate", "starter_breaking_rate", "starter_offspeed_rate",
     "Matchup_Hit_Probability",
 ]
 
@@ -113,9 +122,29 @@ def build_hitter_features(
         if column not in df.columns:
             df[column] = df["WAVE"]
 
-    pave_columns = [c for c in ("key_mlbam", "PAVE") if c in pave.columns]
-    starter = pave[pave_columns].rename(columns={"key_mlbam": "probable_pitcher_key_mlbam", "PAVE": "starter_PAVE"})
+    # A batter's own pitch-family rates (an even older wave.csv snapshot
+    # predating hitters.compute_pitch_family_rates) degrade to null rather
+    # than a crash - hitter_feature_matrix's blanket fillna(0) then reads
+    # this exactly like "no family data", the same convention every other
+    # optional feature column here already uses.
+    for column in ("Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE"):
+        if column not in df.columns:
+            df[column] = pd.NA
+
+    pave_columns = [
+        c for c in ("key_mlbam", "PAVE", "Fastball_Rate", "Breaking_Rate", "Offspeed_Rate") if c in pave.columns
+    ]
+    starter = pave[pave_columns].rename(
+        columns={
+            "key_mlbam": "probable_pitcher_key_mlbam", "PAVE": "starter_PAVE",
+            "Fastball_Rate": "starter_fastball_rate", "Breaking_Rate": "starter_breaking_rate",
+            "Offspeed_Rate": "starter_offspeed_rate",
+        }
+    )
     df = df.merge(starter, on="probable_pitcher_key_mlbam", how="left")
+    for column in ("starter_fastball_rate", "starter_breaking_rate", "starter_offspeed_rate"):
+        if column not in df.columns:
+            df[column] = pd.NA
 
     if "Bullpen_PAVE" in confidence.columns:
         bullpen = confidence[["team", "Bullpen_PAVE"]].rename(columns={"team": "opponent"})

@@ -7,6 +7,33 @@ import pytest
 from mlb_metrics import pipeline
 
 
+def test_build_all_pitch_events_drops_unclassifiable_pitch_types():
+    df = pd.DataFrame([
+        {"game_date": pd.Timestamp("2026-06-15"), "pitcher": 1, "pitch_type": "FF"},
+        {"game_date": pd.Timestamp("2026-06-15"), "pitcher": 1, "pitch_type": None},
+        {"game_date": pd.Timestamp("2026-06-16"), "pitcher": 2, "pitch_type": "SL"},
+    ])
+
+    result = pipeline.build_all_pitch_events(df)
+
+    assert len(result) == 2
+    assert list(result.columns) == ["game_date", "pitcher", "pitch_type"]
+    assert set(result["pitcher"]) == {1, 2}
+
+
+def test_build_all_pitch_events_degrades_gracefully_when_pitch_type_missing():
+    # An older/narrower synthetic df predating pitch_type - degrades to an
+    # empty (all-null-then-dropped) result rather than a KeyError, same
+    # "missing optional input becomes an honest null" precedent
+    # build_pitch_events already establishes for its own quality columns.
+    df = pd.DataFrame([{"game_date": pd.Timestamp("2026-06-15"), "pitcher": 1}])
+
+    result = pipeline.build_all_pitch_events(df)
+
+    assert result.empty
+    assert list(result.columns) == ["game_date", "pitcher", "pitch_type"]
+
+
 def test_run_excludes_games_on_or_after_as_of_date(monkeypatch, tmp_path):
     """The pipeline must only ever compute metrics from games strictly
     before --as-of-date, regardless of what the fetch/persist layer hands

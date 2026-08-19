@@ -49,6 +49,15 @@ used by matchup.py to select a batter's platoon-specific hit rate
 (WAVE_L/WAVE_R, see hitters.py) against today's actual probable starter,
 instead of a hand-blended overall rate that treats facing a lefty and a
 righty as interchangeable.
+
+compute_pitch_arsenal is a different kind of pitcher signal: not an
+outcome rate at all, but a real windowed USAGE mix (what share of a
+pitcher's actual pitches are fastball/breaking/offspeed - see
+helpers.pitch_type_family). It's the pitcher half of matchup.py's
+pitch-type-specific platoon adjustment - the batter half is
+hitters.compute_pitch_family_rates. Unlike every other function here, it
+needs EVERY pitch a pitcher threw, not just the PA-ending ones -
+pipeline.build_all_pitch_events (not build_pitcher_events) is its input.
 """
 
 import pandas as pd
@@ -126,6 +135,71 @@ def _blend_pave(pdf: pd.DataFrame, group_col: str) -> pd.DataFrame:
     return result.merge(full_stats, on=group_col, how="left")
 
 
+def compute_pitch_arsenal(all_pitches: pd.DataFrame) -> pd.DataFrame:
+    """Recency-windowed pitch-type-family usage mix: what real share of
+    this pitcher's actual pitches are fastballs vs. breaking balls vs.
+    offspeed (helpers.pitch_type_family), blended across
+    config.PAVE_WINDOWS (the same recency weighting PAVE itself uses - no
+    new, separately-validated window scheme introduced just for this).
+
+    `all_pitches` must be pipeline.build_all_pitch_events's output - EVERY
+    real pitch thrown, not the PA-ending-pitch-only frame every other
+    function in this module uses (`pdf`/`_slice_by_days`'s usual input) -
+    a usage mix computed from only PA-ending pitches would be badly
+    distorted (a putaway pitch is disproportionately breaking/offspeed in
+    the real game, not representative of the full mix a batter actually
+    sees).
+
+    This is the pitcher half of the pitch-type-specific platoon matchup
+    (matchup.py's _pitch_arsenal_multiplier is the other half, using the
+    batter's own Fastball_WAVE/Breaking_WAVE/Offspeed_WAVE -
+    hitters.compute_pitch_family_rates).
+
+    Returns [key_mlbam, Fastball_Rate, Breaking_Rate, Offspeed_Rate,
+    pitches_thrown]. A pitch with no real, classifiable pitch_type
+    (helpers.PITCH_TYPE_FAMILY) is already excluded by
+    pipeline.build_all_pitch_events, so the three rates sum to 1.0 for
+    every pitcher with at least one real classified pitch in a window; a
+    pitcher absent from a window (no real pitches thrown in it at all)
+    contributes 0 to every family there, same fillna(0) precedent every
+    other blended rate in this project uses."""
+    classified = all_pitches.assign(family=helpers.pitch_type_family(all_pitches["pitch_type"]))
+    classified = classified[classified["family"].notna()]
+
+    families = ("fastball", "breaking", "offspeed")
+    latest = classified["game_date"].max()
+    blended = {family: None for family in families}
+    full_counts = None
+
+    for days_back, weight in config.PAVE_WINDOWS:
+        window_df = _slice_by_days(classified, latest, days_back).copy()
+        window_df["n"] = 1
+        for family in families:
+            window_df[family] = (window_df["family"] == family).astype(int)
+        agg = window_df[["pitcher", "n", *families]].groupby("pitcher", as_index=False).sum()
+        base = agg[["pitcher"]]
+        for family in families:
+            rate = (agg[family] / agg["n"]).fillna(0)
+            contribution = base.assign(rate=rate.values).set_index("pitcher")["rate"] * weight
+            blended[family] = (
+                contribution if blended[family] is None else blended[family].add(contribution, fill_value=0)
+            )
+        if days_back is None:
+            full_counts = agg[["pitcher", "n"]].rename(columns={"n": "pitches_thrown"})
+
+    result = pd.DataFrame(blended)
+    result.index.name = "pitcher"
+    result = result.reset_index()
+    result = result.merge(full_counts, on="pitcher", how="left")
+    result = result.rename(
+        columns={
+            "pitcher": "key_mlbam", "fastball": "Fastball_Rate",
+            "breaking": "Breaking_Rate", "offspeed": "Offspeed_Rate",
+        }
+    )
+    return result[["key_mlbam", "Fastball_Rate", "Breaking_Rate", "Offspeed_Rate", "pitches_thrown"]]
+
+
 def compute_pave(pdf: pd.DataFrame) -> pd.DataFrame:
     """Returns key_mlbam, PAVE, baa, power_a, hr_per, at_bats, hits, TBA -
     the raw building blocks assemble_pitchers() turns into PAVE_PLUS and
@@ -187,14 +261,31 @@ def compute_bullpen_pave(pdf_with_role: pd.DataFrame) -> pd.DataFrame:
     ]
 
 
-def assemble_pitchers(pdf: pd.DataFrame, names: pd.DataFrame, latest_pitcher_team: pd.DataFrame) -> pd.DataFrame:
+def assemble_pitchers(
+    pdf: pd.DataFrame,
+    names: pd.DataFrame,
+    latest_pitcher_team: pd.DataFrame,
+    pitch_arsenal: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """Build the final pitcher output table (equivalent to the original script's `pave` dataframe).
 
     `pdf` must carry a `p_throws` column (see pipeline.build_pitcher_events)
     for the `Throws` column below - a missing p_throws (old callers/test
     fixtures predating this) degrades to Throws=NaN for every pitcher via
     compute_pitcher_throws's dropna, not a crash.
-    """
+
+    `pitch_arsenal` (compute_pitch_arsenal's output) is optional so
+    existing callers/tests are unaffected; when given, it adds
+    Fastball_Rate/Breaking_Rate/Offspeed_Rate - matchup.py's
+    pitch-type-specific platoon adjustment reads these for today's
+    probable starter. Deliberately left NULL (not filled to 0) for a
+    pitcher with no real pitch_arsenal row - a real pitcher's three rates
+    always sum to ~1.0, so a 0/0/0 fallback would misrepresent "we don't
+    know this pitcher's mix" as "this pitcher throws nothing," the same
+    "null loses, isn't coerced into a value that looks meaningful"
+    precedent avg_batting_order/Last_Game_Date already establish
+    elsewhere - matchup.py's own multiplier defaults a missing mix to
+    neutral at the point of use instead."""
     pave = compute_pave(pdf)
     throws = compute_pitcher_throws(pdf)
 
@@ -214,11 +305,17 @@ def assemble_pitchers(pdf: pd.DataFrame, names: pd.DataFrame, latest_pitcher_tea
     pave = pave.merge(latest_pitcher_team, on="key_mlbam", how="left")
     pave = pave.merge(throws, on="key_mlbam", how="left")
 
-    pave = pave[
-        [
-            "key_mlbam", "name_first", "name_last", "team", "at_bats", "Throws",
-            "PAVE", "PAVE_PLUS", "Power_A_PLUS",
-            "Expected_Hits", "Expected_Bases", "Expected_HRs",
-        ]
+    columns = [
+        "key_mlbam", "name_first", "name_last", "team", "at_bats", "Throws",
+        "PAVE", "PAVE_PLUS", "Power_A_PLUS",
+        "Expected_Hits", "Expected_Bases", "Expected_HRs",
     ]
+    if pitch_arsenal is not None:
+        pave = pave.merge(
+            pitch_arsenal[["key_mlbam", "Fastball_Rate", "Breaking_Rate", "Offspeed_Rate"]],
+            on="key_mlbam", how="left",
+        )
+        columns = columns + ["Fastball_Rate", "Breaking_Rate", "Offspeed_Rate"]
+
+    pave = pave[columns]
     return pave.sort_values("PAVE_PLUS", ascending=False)

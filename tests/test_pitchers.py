@@ -170,3 +170,91 @@ def test_compute_bullpen_pave_excludes_starters_and_pools_by_team():
     mean_power_a = (0.669675 + 1.0) / 2
     assert result.loc["X", "Bullpen_Power_A_PLUS"] == pytest.approx(0.669675 / mean_power_a, rel=1e-3)
     assert result.loc["Y", "Bullpen_Power_A_PLUS"] == pytest.approx(1.0 / mean_power_a, rel=1e-3)
+
+
+def _pitches(pitcher, rows):
+    return [{"pitcher": pitcher, "game_date": pd.Timestamp(date), "pitch_type": pitch_type} for date, pitch_type in rows]
+
+
+def test_compute_pitch_arsenal_exact_arithmetic_all_windows():
+    # Windows relative to latest=2026-06-20 (config.PAVE_WINDOWS: full/30d/
+    # 81d/15d, cutoffs 2026-05-21/03-31/06-05).
+    rows = _pitches(1, [
+        ("2026-03-01", "FF"),                    # only in full
+        ("2026-04-15", "SL"), ("2026-04-15", "CH"),   # in 81d, not 30d/15d
+        ("2026-06-01", "FF"), ("2026-06-01", "FF"),   # in 30d, not 15d
+        ("2026-06-18", "SL"),                    # in 15d
+    ])
+    all_pitches = pd.DataFrame(rows)
+
+    result = pitchers.compute_pitch_arsenal(all_pitches).set_index("key_mlbam")
+
+    assert result.loc[1, "pitches_thrown"] == 6
+    # full (6 pitches): FF=3, SL=2, CH=1 -> 0.5/0.3333/0.1667
+    # 30d (3 pitches): FF=2, SL=1, CH=0 -> 0.6667/0.3333/0
+    # 81d (5 pitches): FF=2, SL=2, CH=1 -> 0.4/0.4/0.2
+    # 15d (1 pitch): FF=0, SL=1, CH=0 -> 0/1.0/0
+    expected_fastball = 0.5 * 0.300 + (2 / 3) * 0.265 + 0.4 * 0.230 + 0 * 0.205
+    expected_breaking = (1 / 3) * 0.300 + (1 / 3) * 0.265 + 0.4 * 0.230 + 1.0 * 0.205
+    expected_offspeed = (1 / 6) * 0.300 + 0 * 0.265 + 0.2 * 0.230 + 0 * 0.205
+    assert result.loc[1, "Fastball_Rate"] == pytest.approx(expected_fastball)
+    assert result.loc[1, "Breaking_Rate"] == pytest.approx(expected_breaking)
+    assert result.loc[1, "Offspeed_Rate"] == pytest.approx(expected_offspeed)
+    total = result.loc[1, "Fastball_Rate"] + result.loc[1, "Breaking_Rate"] + result.loc[1, "Offspeed_Rate"]
+    assert total == pytest.approx(1.0)
+
+
+def test_compute_pitch_arsenal_excludes_unclassifiable_pitch_types():
+    # A pitchout ("PO") and a real null both have no real family - dropped
+    # from the denominator entirely, not counted as a fourth bucket.
+    rows = _pitches(1, [("2026-06-18", "FF"), ("2026-06-18", "PO"), ("2026-06-18", None)])
+    all_pitches = pd.DataFrame(rows)
+
+    result = pitchers.compute_pitch_arsenal(all_pitches).set_index("key_mlbam")
+
+    assert result.loc[1, "pitches_thrown"] == 1
+    assert result.loc[1, "Fastball_Rate"] == pytest.approx(1.0)
+    assert result.loc[1, "Breaking_Rate"] == 0
+    assert result.loc[1, "Offspeed_Rate"] == 0
+
+
+def test_assemble_pitchers_merges_pitch_arsenal_when_provided():
+    rows = _events(1, [("2026-06-18", "single")])
+    pdf = pd.DataFrame(rows)
+    names = pd.DataFrame([{"key_mlbam": 1, "name_first": "Test", "name_last": "Pitcher"}])
+    latest_team = pd.DataFrame([{"key_mlbam": 1, "team": "NYY"}])
+    pitch_arsenal = pd.DataFrame([
+        {"key_mlbam": 1, "Fastball_Rate": 0.6, "Breaking_Rate": 0.3, "Offspeed_Rate": 0.1, "pitches_thrown": 50}
+    ])
+
+    result = pitchers.assemble_pitchers(pdf, names, latest_team, pitch_arsenal).set_index("key_mlbam")
+
+    assert result.loc[1, "Fastball_Rate"] == pytest.approx(0.6)
+    assert result.loc[1, "Breaking_Rate"] == pytest.approx(0.3)
+    assert result.loc[1, "Offspeed_Rate"] == pytest.approx(0.1)
+
+
+def test_assemble_pitchers_omits_arsenal_columns_when_not_provided():
+    rows = _events(1, [("2026-06-18", "single")])
+    pdf = pd.DataFrame(rows)
+    names = pd.DataFrame([{"key_mlbam": 1, "name_first": "Test", "name_last": "Pitcher"}])
+    latest_team = pd.DataFrame([{"key_mlbam": 1, "team": "NYY"}])
+
+    result = pitchers.assemble_pitchers(pdf, names, latest_team)
+
+    assert "Fastball_Rate" not in result.columns
+
+
+def test_assemble_pitchers_pitch_arsenal_missing_pitcher_is_null_not_zero():
+    # A pitcher present in `pdf` but absent from pitch_arsenal (no real
+    # pitches tracked in that window) must get null rates, not a fabricated
+    # 0/0/0 that would misrepresent "unknown mix" as "throws nothing."
+    rows = _events(1, [("2026-06-18", "single")])
+    pdf = pd.DataFrame(rows)
+    names = pd.DataFrame([{"key_mlbam": 1, "name_first": "Test", "name_last": "Pitcher"}])
+    latest_team = pd.DataFrame([{"key_mlbam": 1, "team": "NYY"}])
+    pitch_arsenal = pd.DataFrame(columns=["key_mlbam", "Fastball_Rate", "Breaking_Rate", "Offspeed_Rate"])
+
+    result = pitchers.assemble_pitchers(pdf, names, latest_team, pitch_arsenal).set_index("key_mlbam")
+
+    assert pd.isna(result.loc[1, "Fastball_Rate"])

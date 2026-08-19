@@ -38,8 +38,12 @@ def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
     non-batted-ball PA (a strikeout/walk/HBP never had a batted ball) -
     helpers.is_batted_ball is what filters those out downstream.
 
-    A `df` missing one or more of the 5 quality-of-contact columns entirely
-    (never happens with a real pybaseball.statcast() pull - see
+    Also carries `pitch_type` (the PA-ending pitch's own Statcast code),
+    used by hitters.compute_pitch_family_rates - same "already on every
+    real row, no extra fetch" reasoning as the quality-of-contact columns.
+
+    A `df` missing one or more of these optional columns entirely (never
+    happens with a real pybaseball.statcast() pull - see
     data.fetch_statcast_range's docstring - but does happen with an older/
     narrower synthetic fixture, e.g. this project's own pre-existing test
     fixtures built before this feature existed) degrades those columns to
@@ -48,7 +52,7 @@ def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
     already establish elsewhere in this pipeline."""
     quality_columns = [
         "type", "launch_speed", "estimated_ba_using_speedangle",
-        "estimated_woba_using_speedangle", "launch_speed_angle",
+        "estimated_woba_using_speedangle", "launch_speed_angle", "pitch_type",
     ]
     missing = [c for c in quality_columns if c not in df.columns]
     if missing:
@@ -56,6 +60,28 @@ def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
     return data.completed_events(
         df, ["game_date", "batter", "events", "p_throws", "bat_score", "post_bat_score"] + quality_columns
     )
+
+
+def build_all_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
+    """Every real pitch thrown (not filtered down to one row per completed
+    PA) - needed for pitchers.compute_pitch_arsenal's per-pitch usage-mix
+    windowing. Every other pitcher/hitter metric in this pipeline only
+    needs the PA-ENDING pitch (data.completed_events); arsenal mix is
+    fundamentally about every pitch a pitcher threw, not just the ones that
+    happened to end a plate appearance - a pitcher's real fastball/breaking/
+    offspeed usage share would be badly distorted by only counting
+    PA-ending pitches (a putaway pitch is disproportionately a breaking or
+    offspeed pitch in the real game, not representative of the full mix).
+
+    Filtered to rows with a real, non-null `pitch_type` - about 0.4% of
+    real rows have none (mostly pitchouts and Statcast's own rare
+    "couldn't classify" rows, see helpers.PITCH_TYPE_FAMILY), dropped here
+    rather than guessed into a family."""
+    columns = ["game_date", "pitcher", "pitch_type"]
+    missing = [c for c in columns if c not in df.columns]
+    if missing:
+        df = df.assign(**{c: pd.NA for c in missing})
+    return df[columns].dropna(subset=["pitch_type"])
 
 
 def build_pitcher_events(df: pd.DataFrame) -> pd.DataFrame:
@@ -90,12 +116,15 @@ def compute_outputs(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     pdf_with_role = build_pitcher_events_with_role(data_with_game_id, roles)
     bullpen_pave = pitchers.compute_bullpen_pave(pdf_with_role)
 
+    all_pitches = build_all_pitch_events(df)
+    pitch_arsenal = pitchers.compute_pitch_arsenal(all_pitches)
+
     batting_order = data.assign_batting_order(data_with_game_id)
     lineup_consistency = lineup.compute_lineup_consistency(batting_order, latest_batter_team)
 
     return {
         "wave": hitters.assemble_hitters(dt, data_with_game_id, names, latest_batter_team, lineup_consistency),
-        "pave": pitchers.assemble_pitchers(pdf, names, latest_pitcher_team),
+        "pave": pitchers.assemble_pitchers(pdf, names, latest_pitcher_team, pitch_arsenal),
         "confidence": teams.assemble_team_metrics(data_with_game_id, bullpen_pave),
     }
 
