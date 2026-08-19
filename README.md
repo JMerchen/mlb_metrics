@@ -539,6 +539,59 @@ surfaced and fixed, not a measurable accuracy gain - the
 `MATCHUP_PITCH_ARSENAL_WEIGHT` matchup multiplier remains unvalidated
 and off (0.0) pending a real backtest.
 
+### Real plate-discipline signal (`helpers.is_swing`/`is_whiff`/`is_out_of_zone`/`is_chase`, `hitters.compute_plate_discipline`)
+
+The last raw signal this item set out to add: every pitch a hitter sees or
+takes carries real swing/contact/zone information in Statcast's own
+`description` and `zone` columns, already sitting unused in the same
+persisted raw data the batted-ball-quality and pitch-arsenal work above
+already tapped. `helpers.is_swing` classifies real Statcast `description`
+codes into swing vs. take (bunts counted as swings - a documented
+simplification, since bunts are ~0.25% of real pitches); `is_whiff`
+classifies genuine swinging strikes (explicitly excluding `foul_tip`,
+which Statcast scores as real contact, not a miss); `is_out_of_zone` uses
+Statcast's own real `zone` 11-14 "chase quadrant" codes (its own
+classification of the area just outside the 3x3 strike-zone grid, not
+something derived from `plate_x`/`plate_z`/`sz_top`/`sz_bot`); `is_chase`
+is the conjunction of the two. `pipeline.build_all_pitch_events` (already
+built for the pitch-arsenal work above) was widened to carry
+`description`/`zone` alongside `pitch_type`, and its blanket
+`pitch_type`-null pre-filter was removed - `description`/`zone` are
+populated on some rows where `pitch_type` is null, so a pre-filter keyed
+only on `pitch_type` would have silently dropped real plate-discipline
+data. `hitters.compute_plate_discipline` blends per-window `Whiff_Rate`
+(swinging-strike rate on swings) and `Chase_Rate` (chase rate on
+out-of-zone pitches) using the same rate-then-blend pattern every other
+windowed signal in this codebase follows (`WAVE`, PAVE,
+`compute_quality_of_contact`, `compute_pitch_arsenal`) - compute the RATE
+per window first, then blend the windows' rates by weight, reusing
+`config.WAVE_WINDOWS`. Merged into `wave.csv` and
+`dfs_ml.HITTER_FEATURE_COLUMNS`.
+
+**Real retrain results** (GitHub Actions run 32304349888, 2026-08-19 -
+first clean run this item's three slices have had, no new production bug
+surfaced): `Whiff_Rate` is significant both individually (coef -0.0980,
+p<0.0001) and in the combined multivariate model (coef -0.1011,
+p<0.0001) - the expected direction (a hitter who whiffs more often on
+swings is less likely to get a hit) and, unlike most of the
+batted-ball-quality/pitch-arsenal columns, it SURVIVES the multivariate
+fit rather than collapsing to collinearity with existing WAVE/Approach
+signal. `Chase_Rate` is only marginal individually (coef 0.0197,
+p=0.0785) but reaches significance in the combined model (coef 0.0380,
+p=0.0073) - both with a positive sign, which is counterintuitive (naively,
+chasing more should predict fewer hits, not more) and worth flagging
+honestly rather than glossing over; a plausible read is that `Chase_Rate`
+is partly standing in for aggressive, high-contact-skill hitters once
+`Whiff_Rate` is already in the model, but this hasn't been separately
+tested. The full walk-forward hitter hit-probability model (now 30
+features) improved slightly on this run: holdout log_loss=0.6802 (vs.
+0.6817 the immediately prior run), ROC AUC=0.5726 (vs. 0.5679) - both
+still beating naive-baseline (log_loss 0.6843) and the
+`Game_Hit_Probability` heuristic (log_loss 0.7003, ROC AUC 0.5527) by a
+real if modest margin. This is the first of item #1's three slices where
+the new columns visibly moved the holdout numbers in the model's favor
+rather than landing flat - a genuinely useful addition, not just informational.
+
 ### Hitter hit log (`data/predictions/hitter_hit_log.csv`, data asset - not yet a live signal)
 
 Investigating why Beat the Streak's day-survival rate sits at ~50% found a
@@ -589,58 +642,65 @@ candidate - a handful of career plate appearances gives a mostly-noise
 just drag down real coefficients):
 
 **Significance report** (`statsmodels.Logit`, full history, real numbers
-from 2026-08-19, after adding both the batted-ball-quality columns and the
-pitch-type-family columns below): individually (one univariate model per
-feature), `WAVE`, `WAVE_L`/`WAVE_R`, `PA_L`/`PA_R`, `probability`,
-`Game_Hit_Probability`, `Consistency`, `Approach`, `Expected_Bases`,
-`Expected_RBI`, `Exit_Velo`, `Barrel_Rate`, `xBA`, `xwOBA`,
-`Fastball_WAVE`, `Breaking_WAVE`, `Offspeed_WAVE`, `Park_Factor`, and
-`Matchup_Hit_Probability` are all significant (p<0.001, `Barrel_Rate` at
-p=0.0005) - notably including `Game_Hit_Probability` itself (coef 0.2153,
-p<0.0001), the OPPOSITE of the much-earlier n=64 finding. That earlier
-result wasn't wrong given its data - it was underpowered; a 64-pick sample
-simply can't reliably detect an effect of this size. `Expected_BB`,
-`Expected_HBP`, `starter_PAVE`, `Bullpen_PAVE`, `is_home`, and
-`starter_fastball_rate`/`starter_breaking_rate`/`starter_offspeed_rate`
+from 2026-08-19, after adding the batted-ball-quality columns, the
+pitch-type-family columns, and the plate-discipline columns below):
+individually (one univariate model per feature), `WAVE`, `WAVE_L`/`WAVE_R`,
+`PA_L`/`PA_R`, `probability`, `Game_Hit_Probability`, `Consistency`,
+`Approach`, `Expected_Bases`, `Expected_RBI`, `Exit_Velo`, `Barrel_Rate`,
+`xBA`, `xwOBA`, `Fastball_WAVE`, `Breaking_WAVE`, `Offspeed_WAVE`,
+`Whiff_Rate`, `Park_Factor`, and `Matchup_Hit_Probability` are all
+significant (p<0.001) - notably including `Game_Hit_Probability` itself
+(coef 0.2153, p<0.0001), the OPPOSITE of the much-earlier n=64 finding.
+That earlier result wasn't wrong given its data - it was underpowered; a
+64-pick sample simply can't reliably detect an effect of this size.
+`Chase_Rate` is only marginal individually (coef 0.0197, p=0.0785).
+`Expected_BB`, `Expected_HBP`, `starter_PAVE`, `Bullpen_PAVE`, `is_home`,
+and `starter_fastball_rate`/`starter_breaking_rate`/`starter_offspeed_rate`
 are not individually significant. In the combined (multivariate) model,
 `probability`, `Game_Hit_Probability`, and `Consistency` show enormous
-standard errors (~300,000+) and are unusable there - real, expected
+standard errors (~1,000,000+) and are unusable there - real, expected
 multicollinearity, since `Consistency` (`Game_Hit_Probability -
 probability`) and `Approach` (`Game_Hit_Probability * probability`) are
 algebraically derived from those same two columns. `WAVE_L`, `WAVE_R`,
-`PA_R`, and `Park_Factor` remain significant once the others are
-controlled for. **Reported honestly**: `Exit_Velo`/`Barrel_Rate`/`xBA`/
-`xwOBA` and `Fastball_WAVE`/`Breaking_WAVE`/`Offspeed_WAVE` are each
-individually significant on their own (real signal, not noise), but none
-remain significant in the combined model (p=0.51/0.60/0.46/0.69 for the
-first four, p=0.99/0.57/0.22 for the pitch-family three) - they're
-substantially collinear with the existing WAVE/Approach-family columns (a
-hitter who makes consistently hard contact, or reliably ends ABs on
-fastballs successfully, also tends to have a high recent WAVE), so this
-simple linear specification can't cleanly credit them with independent
-lift once those columns are already in the model. The starter's own
-`starter_fastball_rate`/`starter_breaking_rate`/`starter_offspeed_rate`
-never reach significance either way (individually or combined,
-p=0.34-0.93) - a genuine, useful finding on its own, not a failure to
-ship - see the walk-forward model result just below, which reflects all
-columns (including all seven of these) together.
+`PA_R`, `Park_Factor`, `Whiff_Rate` (coef -0.1011, p<0.0001), and
+`Chase_Rate` (coef 0.0380, p=0.0073) remain significant once the others
+are controlled for - `Whiff_Rate` in the expected direction (more whiffs,
+fewer hits) and surviving the multivariate fit unlike most of the other
+new columns; `Chase_Rate` significant but with a counterintuitive positive
+sign, reported honestly rather than glossed over (see the plate-discipline
+subsection above for a plausible read). **Reported honestly**:
+`Exit_Velo`/`Barrel_Rate`/`xBA`/`xwOBA` and `Fastball_WAVE`/`Breaking_WAVE`/
+`Offspeed_WAVE` are each individually significant on their own (real
+signal, not noise), but none remain significant in the combined model
+(p=0.48/0.49/0.93/0.45 for the first four, p=0.80/0.71/0.31 for the
+pitch-family three) - they're substantially collinear with the existing
+WAVE/Approach-family columns (a hitter who makes consistently hard
+contact, or reliably ends ABs on fastballs successfully, also tends to
+have a high recent WAVE), so this simple linear specification can't
+cleanly credit them with independent lift once those columns are already
+in the model. The starter's own `starter_fastball_rate`/
+`starter_breaking_rate`/`starter_offspeed_rate` never reach significance
+either way (individually or combined, p=0.31-0.98) - a genuine, useful
+finding on its own, not a failure to ship - see the walk-forward model
+result just below, which reflects all 30 columns together.
 
 **Walk-forward-validated predictive model** (sklearn `LogisticRegression`,
 same `ml_models.py` machinery and nested-holdout discipline as the three
 live DFS ML models): on the most recent untouched holdout (real run
-2026-08-19, n=5,186), the model beats BOTH bars it has to clear - log_loss
-0.6817 vs. naive-baseline 0.6843 vs. the existing `Game_Hit_Probability`
-heuristic's 0.7003 (ROC AUC 0.5679 vs. 0.5527 for the heuristic alone) - a
-modest but real edge, not a dramatic one, and essentially unchanged from
-the immediately-prior run (log_loss 0.6814, ROC AUC 0.5694, same date) -
-adding the six pitch-family columns didn't move this holdout's numbers in
-either direction by a meaningful margin, consistent with the significance
-report above finding them collinear with existing signal rather than
-independently predictive. Neither run's numbers are directly comparable to
-the original reported run (log_loss 0.6757/0.6815/0.6901, ROC AUC
-0.575/0.564, 2026-07-29) - the holdout window itself moved forward with
-the season (more real dates behind and ahead of the split), not just the
-feature set. Saved to `config.HITTER_HIT_PROBABILITY_MODEL_PATH`
+2026-08-19, n=5,186, 30 features), the model beats BOTH bars it has to
+clear - log_loss 0.6802 vs. naive-baseline 0.6843 vs. the existing
+`Game_Hit_Probability` heuristic's 0.7003 (ROC AUC 0.5726 vs. 0.5527 for
+the heuristic alone; brier 0.2435; accuracy 0.5673) - a modest but real
+edge. This run improved on the immediately-prior run (log_loss 0.6817,
+ROC AUC 0.5679, same holdout window) after adding `Whiff_Rate`/
+`Chase_Rate` - the first of item #1's three raw-signal slices where the
+new columns visibly moved the holdout numbers rather than landing flat,
+consistent with `Whiff_Rate` surviving the multivariate significance fit
+above. Neither this nor the prior two runs' numbers are directly
+comparable to the original reported run (log_loss 0.6757/0.6815/0.6901,
+ROC AUC 0.575/0.564, 2026-07-29) - the holdout window itself moved forward
+with the season (more real dates behind and ahead of the split), not just
+the feature set. Saved to `config.HITTER_HIT_PROBABILITY_MODEL_PATH`
 (`data/models/hitter_hit_probability_model.joblib`).
 
 The model shortlists candidates for the official Beat the Streak picks
@@ -1340,6 +1400,18 @@ unchanged (1.7879 and 0.9869, identical to just above - expected, since
 neither's feature set includes any of the six new columns). No
 meaningful movement either direction from the pitch-family columns on
 this signal.
+
+**Retrained again 2026-08-19** (same day, third run) after
+`HITTER_FEATURE_COLUMNS` widened once more to add `Whiff_Rate`/
+`Chase_Rate` (see "Real plate-discipline signal" above): `DK_Points_Hitter`
+MAE 4.3806 (vs. 4.3982 just above, still short of the 4.2960 naive
+baseline - still not saved, heuristic keeps serving), correlation 0.165
+(n=5,463). `Expected_H_Allowed`/`Expected_BB` don't include `Whiff_Rate`/
+`Chase_Rate` in their own feature sets and are unaffected by this run.
+Consistent with the pattern in the immediately-prior two retrains: these
+two hitter-side batted-ball/plate-discipline signals move the hit-
+probability classifier (see above) but haven't yet rescued the separate
+`DK_Points_Hitter` points-regression model off its naive baseline.
 
 ## Optimal Lineup (`docs/dfs.html`'s "Optimal Lineup" tab, `dfs_optimizer.py`)
 
