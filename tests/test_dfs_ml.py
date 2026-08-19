@@ -14,6 +14,7 @@ def _wave_row(key_mlbam, team, **overrides):
         "Expected_BB": 0.3, "Expected_HBP": 0.1, "Expected_RBI": 0.4,
         "Exit_Velo": 90.0, "Barrel_Rate": 0.08, "xBA": 0.25, "xwOBA": 0.32,
         "Fastball_WAVE": 0.30, "Breaking_WAVE": 0.20, "Offspeed_WAVE": 0.15,
+        "Whiff_Rate": 0.22, "Chase_Rate": 0.28,
     }
     row.update(overrides)
     return row
@@ -42,6 +43,8 @@ def test_build_hitter_features_joins_matchup_ingredients():
     assert result.loc[1, "Park_Factor"] == pytest.approx(1.05)
     assert result.loc[1, "is_home"] == True  # noqa: E712
     assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(0.72)
+    assert result.loc[1, "Whiff_Rate"] == pytest.approx(0.22)
+    assert result.loc[1, "Chase_Rate"] == pytest.approx(0.28)
     assert result.loc[1, "Expected_Bases"] == pytest.approx(1.5)
     assert result.loc[1, "Fastball_WAVE"] == pytest.approx(0.30)
     assert result.loc[1, "starter_fastball_rate"] == pytest.approx(0.60)
@@ -71,6 +74,7 @@ def test_build_hitter_features_falls_back_to_null_when_pitch_family_columns_miss
 
     assert pd.isna(result.loc[1, "Fastball_WAVE"])
     assert pd.isna(result.loc[1, "starter_fastball_rate"])
+    assert pd.isna(result.loc[1, "Whiff_Rate"])
 
 
 def test_build_hitter_features_falls_back_to_wave_when_wave_l_r_missing():
@@ -115,6 +119,7 @@ def test_hitter_feature_matrix_fills_missing_and_coerces_is_home():
         "starter_PAVE": pd.NA, "Bullpen_PAVE": 0.26, "Park_Factor": pd.NA,
         "is_home": True, "Matchup_Hit_Probability": 0.72,
         "Fastball_WAVE": pd.NA, "starter_fastball_rate": pd.NA,
+        "Whiff_Rate": pd.NA,
     }])
 
     X = dfs_ml.hitter_feature_matrix(features)
@@ -126,6 +131,7 @@ def test_hitter_feature_matrix_fills_missing_and_coerces_is_home():
     assert X.loc[0, "is_home"] == 1.0
     assert X.loc[0, "Fastball_WAVE"] == 0
     assert X.loc[0, "starter_fastball_rate"] == 0
+    assert X.loc[0, "Whiff_Rate"] == 0
 
 
 def test_pitcher_feature_matrix_selects_columns_and_fills_missing():

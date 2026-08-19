@@ -187,6 +187,70 @@ def pitch_type_family(pitch_type: pd.Series) -> pd.Series:
     return pitch_type.map(PITCH_TYPE_FAMILY)
 
 
+# Real Statcast `description` codes for a pitch where the batter's bat
+# genuinely never moved - confirmed against every real code observed in
+# `data/raw/statcast_2026.parquet` (ball/called_strike/blocked_ball/
+# automatic_ball/hit_by_pitch/automatic_strike/pitchout, plus real nulls).
+# `is_swing` is defined as the complement of this set (same "define what's
+# excluded, everything else counts" pattern is_official_at_bat already
+# uses for NON_AT_BAT_EVENTS) - a bunt attempt (foul_bunt/missed_bunt/
+# bunt_foul_tip) IS counted as a swing here (the batter did swing/offer at
+# the pitch, even with bunt mechanics) - a real, documented simplification
+# (bunts are ~0.25% of real pitches in the persisted data, not worth a
+# separate bucket for this project's purposes).
+TAKE_DESCRIPTIONS = {
+    "ball", "called_strike", "blocked_ball", "automatic_ball",
+    "hit_by_pitch", "automatic_strike", "pitchout",
+}
+
+# Real Statcast `description` codes for a genuine swing-and-miss - a
+# `foul_tip` is deliberately NOT included: Statcast classifies it as
+# contact (the bat touched the ball), the same real distinction
+# Baseball Savant's own Whiff% methodology makes.
+WHIFF_DESCRIPTIONS = {"swinging_strike", "swinging_strike_blocked", "swinging_pitchout", "missed_bunt"}
+
+
+def is_swing(description: pd.Series) -> pd.Series:
+    """Whether the batter offered at this pitch (any real description code
+    not in TAKE_DESCRIPTIONS) - the denominator for Whiff_Rate
+    (hitters.compute_plate_discipline)."""
+    return (~description.isin(TAKE_DESCRIPTIONS)).astype(int)
+
+
+def is_whiff(description: pd.Series) -> pd.Series:
+    """A genuine swing-and-miss (WHIFF_DESCRIPTIONS above) - the numerator
+    for Whiff_Rate. A subset of is_swing's real 1s, never the complement of
+    a take (foul balls/balls in play are real swings that aren't misses)."""
+    return description.isin(WHIFF_DESCRIPTIONS).astype(int)
+
+
+# Statcast's own real zone classification: 1-9 is the actual 3x3 strike
+# zone grid, 11-14 are the four real "chase" quadrants just outside it
+# (confirmed against the actual persisted zone value_counts - no other
+# codes exist on a real classified pitch). Using Statcast's own zone
+# rather than reconstructing "outside the zone" from plate_x/plate_z/
+# sz_top/sz_bot - this IS the real classification, not an approximation.
+OUT_OF_ZONE_CODES = {11, 12, 13, 14}
+
+
+def is_out_of_zone(zone: pd.Series) -> pd.Series:
+    """Whether the pitch was real Statcast-classified as outside the
+    strike zone - the denominator for Chase_Rate (a real null zone, ~0.4%
+    of pitches, reads as False here via pandas' own NA-comparison
+    semantics on the `.isin` call, not a crash - same "missing data is
+    excluded, not guessed" precedent every other classifier in this file
+    follows)."""
+    return zone.isin(OUT_OF_ZONE_CODES).astype(int)
+
+
+def is_chase(description: pd.Series, zone: pd.Series) -> pd.Series:
+    """A swing at a pitch outside the real strike zone - the numerator for
+    Chase_Rate. Real, not an approximation: both is_swing and
+    is_out_of_zone are already real Statcast classifications, this is
+    just their conjunction."""
+    return ((is_swing(description) == 1) & (is_out_of_zone(zone) == 1)).astype(int)
+
+
 def estimate_rbi(df: pd.DataFrame) -> pd.Series:
     """Runs driven in on this completed plate appearance, approximated as
     `post_bat_score - bat_score` on the PA's own final-pitch row (the one

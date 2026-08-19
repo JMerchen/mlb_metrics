@@ -7,31 +7,36 @@ import pytest
 from mlb_metrics import pipeline
 
 
-def test_build_all_pitch_events_drops_unclassifiable_pitch_types():
+def test_build_all_pitch_events_keeps_every_row_no_pre_filtering():
+    # No pre-filter on pitch_type/zone here - a row with a null pitch_type
+    # but a perfectly real description/zone (e.g. a real ball/strike call)
+    # must still come through, since hitters.compute_plate_discipline
+    # needs it even though pitchers.compute_pitch_arsenal (which filters
+    # on pitch_type itself) would drop it downstream.
     df = pd.DataFrame([
-        {"game_date": pd.Timestamp("2026-06-15"), "pitcher": 1, "pitch_type": "FF"},
-        {"game_date": pd.Timestamp("2026-06-15"), "pitcher": 1, "pitch_type": None},
-        {"game_date": pd.Timestamp("2026-06-16"), "pitcher": 2, "pitch_type": "SL"},
+        {"game_date": pd.Timestamp("2026-06-15"), "batter": 10, "pitcher": 1, "pitch_type": "FF", "description": "ball", "zone": 5},
+        {"game_date": pd.Timestamp("2026-06-15"), "batter": 10, "pitcher": 1, "pitch_type": None, "description": "called_strike", "zone": None},
+        {"game_date": pd.Timestamp("2026-06-16"), "batter": 20, "pitcher": 2, "pitch_type": "SL", "description": "swinging_strike", "zone": 12},
     ])
 
     result = pipeline.build_all_pitch_events(df)
 
-    assert len(result) == 2
-    assert list(result.columns) == ["game_date", "pitcher", "pitch_type"]
+    assert len(result) == 3
+    assert list(result.columns) == ["game_date", "batter", "pitcher", "pitch_type", "description", "zone"]
     assert set(result["pitcher"]) == {1, 2}
 
 
-def test_build_all_pitch_events_degrades_gracefully_when_pitch_type_missing():
-    # An older/narrower synthetic df predating pitch_type - degrades to an
-    # empty (all-null-then-dropped) result rather than a KeyError, same
+def test_build_all_pitch_events_degrades_gracefully_when_columns_missing():
+    # An older/narrower synthetic df predating pitch_type/description/zone
+    # - degrades every missing column to null rather than a KeyError, same
     # "missing optional input becomes an honest null" precedent
     # build_pitch_events already establishes for its own quality columns.
-    df = pd.DataFrame([{"game_date": pd.Timestamp("2026-06-15"), "pitcher": 1}])
+    df = pd.DataFrame([{"game_date": pd.Timestamp("2026-06-15"), "batter": 10, "pitcher": 1}])
 
     result = pipeline.build_all_pitch_events(df)
 
-    assert result.empty
-    assert list(result.columns) == ["game_date", "pitcher", "pitch_type"]
+    assert len(result) == 1
+    assert list(result.columns) == ["game_date", "batter", "pitcher", "pitch_type", "description", "zone"]
 
 
 def test_run_excludes_games_on_or_after_as_of_date(monkeypatch, tmp_path):
