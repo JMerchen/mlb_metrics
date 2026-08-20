@@ -799,6 +799,20 @@ DFS_PITCHER_RIDGE_ALPHA_GRID = [0.1, 0.3, 1, 3, 10, 30, 100]
 # above, reused rather than duplicated).
 HITTER_HIT_LOGIT_C_GRID = [0.01, 0.03, 0.1, 0.3, 1, 3, 10]
 
+# HistGradientBoostingClassifier's second-candidate grid for the same
+# hitter hit-probability model - literally DFS_HITTER_GBM_PARAM_GRID's
+# values (same order-of-magnitude row/fold count on this signal), not a
+# freshly invented grid. train_hitter_hit_model.py runs this alongside
+# LogisticRegression above and keeps whichever wins by walk-forward CV
+# score, mirroring train_dfs_ml_models.py's own Ridge-vs-GBM selection for
+# DK_Points_Hitter (quant-analytics item #2 - "model family").
+HITTER_HIT_GBM_PARAM_GRID = {
+    "max_depth": [2, 3],
+    "learning_rate": [0.03, 0.1],
+    "max_iter": [100, 200],
+    "min_samples_leaf": [50, 200],
+}
+
 # Game-pick win-probability model (scripts/train_game_pick_model.py) - fit +
 # report phase only, mirrors the hitter-side model above but not wired into
 # live picks. One row per game per date (~15 games/day in a full slate, not

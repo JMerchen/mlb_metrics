@@ -16,14 +16,30 @@ picks) couldn't answer with confidence:
    std) is excluded and reported as such rather than crashing on a
    divide-by-zero.
 
-2. **Walk-forward-validated predictive model** (sklearn LogisticRegression +
-   ml_models.py's WalkForwardDateSplit machinery): the SAME no-lookahead,
-   nested-holdout methodology scripts/train_dfs_ml_models.py already uses
-   for the three live DFS ML signals. The selected model is evaluated
-   ONCE on an untouched final holdout and must beat BOTH a naive baseline
-   (always predict the base hit rate) AND the existing Game_Hit_Probability
-   heuristic column (the natural "heuristic to beat" here) before being
-   saved to config.HITTER_HIT_PROBABILITY_MODEL_PATH.
+2. **Walk-forward-validated predictive model** (ml_models.py's
+   WalkForwardDateSplit machinery, the SAME no-lookahead, nested-holdout
+   methodology scripts/train_dfs_ml_models.py already uses for the three
+   live DFS ML signals): TWO candidate model families are grid-searched -
+   sklearn LogisticRegression (config.HITTER_HIT_LOGIT_C_GRID) and
+   HistGradientBoostingClassifier (config.HITTER_HIT_GBM_PARAM_GRID) -
+   and whichever wins by walk-forward CV log_loss is kept, mirroring
+   train_dfs_ml_models.py's own Ridge-vs-GBM selection for
+   DK_Points_Hitter (quant-analytics item #2 - "model family": this used
+   to be a single logistic regression with no real alternative
+   considered). The winner is evaluated ONCE on an untouched final
+   holdout and must beat BOTH a naive baseline (always predict the base
+   hit rate) AND the existing Game_Hit_Probability heuristic column (the
+   natural "heuristic to beat" here) before being saved to
+   config.HITTER_HIT_PROBABILITY_MODEL_PATH.
+
+3. **Permutation-importance report** (sklearn.inspection.permutation_importance,
+   computed on the same untouched holdout, never the train pool - the
+   same reasoning behind evaluating the model itself out-of-sample):
+   a model-agnostic feature-importance sanity check for whichever model
+   won above, chosen over SHAP specifically to avoid adding a new heavy
+   dependency to a project that has never needed one beyond scikit-learn/
+   statsmodels (see README's "Model family" section for the real
+   comparison against SHAP).
 
 **Scope**: this fits and reports. The saved model artifact is NOT wired
 into dfs_ml.apply_ml_overrides or predictions.select_picks - whether/how
@@ -55,6 +71,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import pandas as pd
 import statsmodels.api as sm
+from sklearn.ensemble import HistGradientBoostingClassifier
+from sklearn.inspection import permutation_importance
 from sklearn.linear_model import LogisticRegression
 
 from mlb_metrics import config, dfs_backtest, dfs_ml, ml_models
@@ -133,25 +151,72 @@ def significance_report(rows: pd.DataFrame) -> None:
         print(f"\n  pseudo R^2={result.prsquared:.4f}, log-likelihood={result.llf:.2f}, n={int(result.nobs)}")
 
 
-def predictive_model(train_pool: pd.DataFrame, holdout: pd.DataFrame) -> None:
-    print("\n=== Walk-forward-validated predictive model (sklearn LogisticRegression) ===")
-    X_train = dfs_ml.hitter_feature_matrix(train_pool)
-    y_train = train_pool["Got_Hit"]
-    dates_train = train_pool["date"]
-
-    search = ml_models.grid_search_walk_forward(
+def _select_best_model(X_train, y_train, dates_train):
+    """Grid-searches BOTH candidate model families (LogisticRegression and
+    HistGradientBoostingClassifier) via the same walk-forward CV, prints
+    each one's best_params_/cv_score, and returns whichever GridSearchCV
+    has the higher (less negative) neg_log_loss best_score_ - the same
+    "run every candidate, keep the CV winner" pattern
+    train_dfs_ml_models.py already uses for DK_Points_Hitter (Ridge vs.
+    HistGradientBoostingRegressor)."""
+    logit_search = ml_models.grid_search_walk_forward(
         X_train, y_train, dates_train, LogisticRegression(max_iter=1000),
         {"C": config.HITTER_HIT_LOGIT_C_GRID},
         config.ML_WALK_FORWARD_MIN_TRAIN_DATES_HITTER, config.ML_WALK_FORWARD_TEST_BLOCK_DATES_HITTER,
         scoring="neg_log_loss",
     )
-    print(f"  Logistic Regression best_params={search.best_params_} cv_score={search.best_score_:.4f}")
+    gbm_search = ml_models.grid_search_walk_forward(
+        X_train, y_train, dates_train, HistGradientBoostingClassifier(),
+        config.HITTER_HIT_GBM_PARAM_GRID,
+        config.ML_WALK_FORWARD_MIN_TRAIN_DATES_HITTER, config.ML_WALK_FORWARD_TEST_BLOCK_DATES_HITTER,
+        scoring="neg_log_loss",
+    )
+    print(f"  Logistic Regression best_params={logit_search.best_params_} cv_score={logit_search.best_score_:.4f}")
+    print(f"  GBM                 best_params={gbm_search.best_params_} cv_score={gbm_search.best_score_:.4f}")
+
+    best_search = logit_search if logit_search.best_score_ >= gbm_search.best_score_ else gbm_search
+    best_name = "LogisticRegression" if best_search is logit_search else "HistGradientBoostingClassifier"
+    print(f"  Selected: {best_name}")
+    return best_search
+
+
+def feature_importance_report(best_search, X_holdout: pd.DataFrame, y_holdout: pd.Series) -> None:
+    """Model-agnostic permutation-importance sanity check (sklearn.inspection.
+    permutation_importance) on the SAME untouched holdout the model itself
+    is scored on above - never the train pool, since permutation
+    importance computed on training data can overstate importance for an
+    overfit model, the same out-of-sample discipline this whole script
+    already applies to the model's own headline metrics. Works identically
+    for either candidate model (LogisticRegression or
+    HistGradientBoostingClassifier) since permutation importance only
+    needs a fitted estimator's .predict/.predict_proba, not anything
+    model-family-specific - chosen over SHAP for exactly this reason, plus
+    avoiding a new heavy dependency (see README's "Model family" section)."""
+    print("\n=== Permutation-importance report (holdout, model-agnostic) ===")
+    result = permutation_importance(
+        best_search.best_estimator_, X_holdout, y_holdout,
+        scoring="neg_log_loss", n_repeats=20, random_state=0,
+    )
+    table = pd.DataFrame({
+        "importance_mean": result.importances_mean, "importance_std": result.importances_std,
+    }, index=X_holdout.columns).sort_values("importance_mean", ascending=False)
+    print(table.to_string(float_format=lambda v: f"{v:.5f}"))
+
+
+def predictive_model(train_pool: pd.DataFrame, holdout: pd.DataFrame) -> None:
+    print("\n=== Walk-forward-validated predictive model (LogisticRegression vs. HistGradientBoostingClassifier) ===")
+    X_train = dfs_ml.hitter_feature_matrix(train_pool)
+    y_train = train_pool["Got_Hit"]
+    dates_train = train_pool["date"]
+
+    best_search = _select_best_model(X_train, y_train, dates_train)
 
     X_holdout = dfs_ml.hitter_feature_matrix(holdout)
-    predicted_proba = search.predict_proba(X_holdout)[:, 1]
-    result = ml_models.evaluate_classifier_predictions(holdout["Got_Hit"], predicted_proba)
+    y_holdout = holdout["Got_Hit"]
+    predicted_proba = best_search.predict_proba(X_holdout)[:, 1]
+    result = ml_models.evaluate_classifier_predictions(y_holdout, predicted_proba)
     heuristic_result = ml_models.evaluate_classifier_predictions(
-        holdout["Got_Hit"], holdout["Game_Hit_Probability"].clip(0, 1)
+        y_holdout, holdout["Game_Hit_Probability"].clip(0, 1)
     )
 
     print(
@@ -164,10 +229,12 @@ def predictive_model(train_pool: pd.DataFrame, holdout: pd.DataFrame) -> None:
         f"brier={heuristic_result['brier_score']:.4f}, roc_auc={heuristic_result['roc_auc']:.4f}"
     )
 
+    feature_importance_report(best_search, X_holdout, y_holdout)
+
     beats_baseline = result["log_loss"] < result["baseline_log_loss"]
     beats_heuristic = result["log_loss"] < heuristic_result["log_loss"]
     if beats_baseline and beats_heuristic:
-        ml_models.save_model(search.best_estimator_, config.HITTER_HIT_PROBABILITY_MODEL_PATH)
+        ml_models.save_model(best_search.best_estimator_, config.HITTER_HIT_PROBABILITY_MODEL_PATH)
         print(
             f"  -> SAVED to {config.HITTER_HIT_PROBABILITY_MODEL_PATH} "
             f"(beats baseline and Game_Hit_Probability - artifact only, NOT wired into live picks)"
