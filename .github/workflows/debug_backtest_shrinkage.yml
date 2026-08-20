@@ -1,0 +1,52 @@
+name: Debug backtest_shrinkage
+
+# One-off runner for scripts/backtest_shrinkage.py against real persisted
+# Statcast. Exists because the interactive dev sandbox's egress policy
+# blocks github.com, which pybaseball's chadwick_register()
+# (data.get_name_register(), needed by pipeline.compute_outputs, needed by
+# dfs_backtest.assemble_hitter_hit_log) fetches from - this workflow
+# runner has normal internet access, mirroring the
+# debug_backtest_selection_rule.yml precedent for exactly this situation.
+# Report-only (no CSV/artifact output) - real numbers are read from this
+# run's own job log, not committed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Trailing dates to backtest (blank = full persisted history - expensive, each date recomputes the pipeline once PER grid value)"
+        required: false
+      wave_grid:
+        description: "Comma-separated WAVE_SHRINKAGE_STRENGTH candidates"
+        required: false
+        default: "0,10,25,50,100"
+      game_hit_prob_grid:
+        description: "Comma-separated GAME_HIT_PROB_SHRINKAGE_STRENGTH candidates"
+        required: false
+        default: "0,10,25,50,100"
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run shrinkage backtest
+        run: |
+          args=(--wave-grid "${{ inputs.wave_grid }}" --game-hit-prob-grid "${{ inputs.game_hit_prob_grid }}")
+          if [ -n "${{ inputs.days }}" ]; then
+            args+=(--days "${{ inputs.days }}")
+          fi
+          python scripts/backtest_shrinkage.py "${args[@]}"
