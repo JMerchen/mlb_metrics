@@ -628,7 +628,7 @@ the actual logistic regression against it (and deciding whether it ever
 replaces or augments `predictions.select_picks`'s probability gate) is a
 follow-up once the log has accumulated real history.
 
-### Fitting the logistic regression (`scripts/train_hitter_hit_model.py`)
+### Fitting the predictive model: logistic regression vs. gradient boosting (`scripts/train_hitter_hit_model.py`)
 
 Real answers to the "why is survival only ~50%, and which features are
 actually significant" question, now that the hit log above fixes the
@@ -684,24 +684,67 @@ either way (individually or combined, p=0.31-0.98) - a genuine, useful
 finding on its own, not a failure to ship - see the walk-forward model
 result just below, which reflects all 30 columns together.
 
-**Walk-forward-validated predictive model** (sklearn `LogisticRegression`,
-same `ml_models.py` machinery and nested-holdout discipline as the three
-live DFS ML models): on the most recent untouched holdout (real run
-2026-08-19, n=5,186, 30 features), the model beats BOTH bars it has to
-clear - log_loss 0.6802 vs. naive-baseline 0.6843 vs. the existing
-`Game_Hit_Probability` heuristic's 0.7003 (ROC AUC 0.5726 vs. 0.5527 for
-the heuristic alone; brier 0.2435; accuracy 0.5673) - a modest but real
-edge. This run improved on the immediately-prior run (log_loss 0.6817,
-ROC AUC 0.5679, same holdout window) after adding `Whiff_Rate`/
-`Chase_Rate` - the first of item #1's three raw-signal slices where the
-new columns visibly moved the holdout numbers rather than landing flat,
-consistent with `Whiff_Rate` surviving the multivariate significance fit
-above. Neither this nor the prior two runs' numbers are directly
-comparable to the original reported run (log_loss 0.6757/0.6815/0.6901,
-ROC AUC 0.575/0.564, 2026-07-29) - the holdout window itself moved forward
-with the season (more real dates behind and ahead of the split), not just
-the feature set. Saved to `config.HITTER_HIT_PROBABILITY_MODEL_PATH`
-(`data/models/hitter_hit_probability_model.joblib`).
+**Walk-forward-validated predictive model** (`ml_models.py`'s
+`WalkForwardDateSplit`/nested-holdout machinery, same discipline as the
+three live DFS ML models): quant-analytics item #2 ("model family") -
+until this run, this was a single `sklearn.LogisticRegression` with no
+real alternative ever tried. `scripts/train_hitter_hit_model.py` now
+grid-searches TWO candidates on the same walk-forward CV -
+`LogisticRegression` (`config.HITTER_HIT_LOGIT_C_GRID`) and
+`HistGradientBoostingClassifier` (new `config.HITTER_HIT_GBM_PARAM_GRID`,
+reusing `DFS_HITTER_GBM_PARAM_GRID`'s exact values) - and keeps whichever
+wins by walk-forward CV `neg_log_loss`, mirroring
+`train_dfs_ml_models.py`'s own Ridge-vs-GBM selection for
+`DK_Points_Hitter`.
+
+**Real run (2026-08-20, n=5,186 holdout, 30 features)**:
+`LogisticRegression` `best_params={'C': 0.3}` `cv_score=-0.6754`;
+`HistGradientBoostingClassifier`
+`best_params={'learning_rate': 0.03, 'max_depth': 3, 'max_iter': 100,
+'min_samples_leaf': 200}` `cv_score=-0.6747` - GBM wins the CV comparison
+and is selected. On the untouched holdout: log_loss 0.6795 vs.
+naive-baseline 0.6843 vs. the `Game_Hit_Probability` heuristic's 0.7003 -
+beats both bars, saved. **Reported honestly, not a clean win**: compared
+against the immediately-prior LogisticRegression-only run on the same
+holdout window (log_loss 0.6802, ROC AUC 0.5726 - see the plate-discipline
+section above), GBM's log_loss is marginally better (0.6795 vs. 0.6802)
+but its ROC AUC is actually WORSE (0.5654 vs. 0.5726) and its accuracy is
+essentially flat (0.5669 vs. 0.5673). Two different proper-scoring metrics
+moved in opposite directions on the same holdout - a real, mixed result on
+this modest-sized holdout, not a decisive verdict that gradient boosting
+beats logistic regression here. Neither of these two runs' numbers is
+directly comparable to the original 2026-07-29 run (log_loss
+0.6757/0.6815/0.6901, ROC AUC 0.575/0.564) - the holdout window itself
+moved forward with the season across all these runs, not just the model/
+feature set. Saved to `config.HITTER_HIT_PROBABILITY_MODEL_PATH`
+(`data/models/hitter_hit_probability_model.joblib`); `HITTER_MODEL_VERSION`
+is unchanged - it tracks the selection/gating logic (v3/v4), not which
+sklearn class produces `Model_Hit_Probability`, and a model-family swap
+under the same artifact schema isn't a version-worthy event under this
+project's own convention.
+
+**Permutation-importance report** (`sklearn.inspection.permutation_importance`,
+same untouched holdout, chosen over SHAP specifically to avoid adding a
+new heavy dependency to a project that has never needed one beyond
+scikit-learn/statsmodels): a real, model-agnostic sanity check on what the
+winning GBM is actually learning from, computed independently of the
+significance report's own Logit coefficients above. Top real features by
+mean importance: `Game_Hit_Probability` (0.00245), `Consistency`
+(0.00108), `PA_L` (0.00060), `PA_R` (0.00058), `Whiff_Rate` (0.00046),
+`Offspeed_WAVE` (0.00018), `Park_Factor` (0.00016), `WAVE_R` (0.00014),
+`Fastball_WAVE` (0.00013), `xBA` (0.00009) - every other feature's
+importance rounds to ~0.0000-0.00002, several slightly negative (expected
+sampling noise for a genuinely uninformative feature, not evidence of
+active harm). **A real, honest divergence worth flagging**: `Whiff_Rate`
+ranking 5th here roughly matches its own significance in the Logit above,
+but `Matchup_Hit_Probability` (highly significant there, coef 0.1069,
+p<0.0001) ranks near the very bottom here (0.00002), and `Chase_Rate`
+(significant in the Logit's combined model) barely registers (0.00005).
+GBM's tree splits absorb correlated signal differently than a linear
+model's coefficients do - this isn't evidence either method is wrong, just
+that "which features matter" genuinely depends on which model family is
+asking, a real quant lesson this comparison surfaces rather than papering
+over.
 
 The model shortlists candidates for the official Beat the Streak picks
 (`predictions.select_picks`, see the next section) rather than ranking
