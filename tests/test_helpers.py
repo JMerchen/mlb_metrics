@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from mlb_metrics import helpers
 
@@ -70,3 +71,29 @@ def test_estimate_rbi_exact_score_delta_clipped_at_zero():
 
 def test_outs_recorded():
     assert helpers.outs_recorded(OUTS_EVENTS).tolist() == [1, 1, 1, 1, 2, 2, 2, 0, 0, 0, 0]
+
+
+def test_shrink_rate_zero_strength_is_exact_unshrunk_rate():
+    count = pd.Series([3, 30, 0])
+    n = pd.Series([10, 100, 5])
+    result = helpers.shrink_rate(count, n, prior_rate=0.25, prior_strength=0.0)
+    assert result.tolist() == [0.3, 0.3, 0.0]
+
+
+def test_shrink_rate_zero_over_zero_is_nan_not_a_crash():
+    result = helpers.shrink_rate(pd.Series([0]), pd.Series([0]), prior_rate=0.25, prior_strength=0.0)
+    assert pd.isna(result.iloc[0])
+
+
+def test_shrink_rate_pulls_low_n_hard_toward_prior_and_high_n_barely():
+    # Same raw rate (0.50) at two very different sample sizes; same prior (0.25), same strength.
+    low_n = helpers.shrink_rate(pd.Series([5]), pd.Series([10]), prior_rate=0.25, prior_strength=20.0)
+    high_n = helpers.shrink_rate(pd.Series([250]), pd.Series([500]), prior_rate=0.25, prior_strength=20.0)
+    # Hand-computed: low_n = (5 + 20*0.25) / (10 + 20) = 10/30 = 0.3333...
+    #                high_n = (250 + 20*0.25) / (500 + 20) = 255/520 = 0.4904...
+    assert low_n.iloc[0] == pytest.approx(10 / 30)
+    assert high_n.iloc[0] == pytest.approx(255 / 520)
+    # Both started at the same raw 0.50 rate; the low-n player got pulled much
+    # further toward the 0.25 prior than the high-n player did.
+    assert abs(low_n.iloc[0] - 0.25) < abs(high_n.iloc[0] - 0.25)
+    assert (0.50 - low_n.iloc[0]) > (0.50 - high_n.iloc[0])

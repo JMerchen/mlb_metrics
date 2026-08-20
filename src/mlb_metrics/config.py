@@ -29,6 +29,18 @@ WAVE_WINDOWS = [
 # probability: probability = 1 - (1 - rate) ** WAVE_TRIALS_PER_GAME.
 WAVE_TRIALS_PER_GAME = 3.5
 
+# Quant-analytics item #3, slice 1 ("uncertainty quantification" -
+# Bayesian shrinkage for small-sample hitters): real-unit (at-bats)
+# pseudo-observation strength for helpers.shrink_rate, applied to each
+# per-window at-bat hit rate inside hitters.compute_wave BEFORE blending.
+# 0.0 = exact null hypothesis (reproduces today's unshrunk WAVE bit-for-
+# bit), the same "ship conservatively until a real backtest earns a
+# nonzero default" precedent MATCHUP_PITCH_ARSENAL_WEIGHT/
+# PITCHER_MATCHUP_OFFENSE_WEIGHT already establish - see
+# scripts/backtest_shrinkage.py and README's "Bayesian shrinkage" section
+# for the real go/no-go numbers once run.
+WAVE_SHRINKAGE_STRENGTH = 0.0
+
 # PAVE (pitcher hits-allowed rate, converted from a per-PA rate to a
 # per-AB rate by excluding walks/HBP only - NOT strikeouts, which are
 # real at-bats; see pitchers.py's module docstring for the real bug this
@@ -52,6 +64,15 @@ GAME_HIT_PROB_WINDOWS = [
     (30, 0.275),
     (10, 0.325),
 ]
+
+# Same shrinkage treatment as WAVE_SHRINKAGE_STRENGTH above, but in
+# real-unit GAMES (not at-bats) - Game_Hit_Probability's own sample size
+# is a game count, typically much smaller than WAVE's at-bat count for
+# the same player, so this is deliberately its own separate constant
+# rather than reusing WAVE_SHRINKAGE_STRENGTH's value. 0.0 = exact null
+# hypothesis. See hitters.compute_game_hit_probability and
+# scripts/backtest_shrinkage.py.
+GAME_HIT_PROB_SHRINKAGE_STRENGTH = 0.0
 
 # hitters.compute_current_hit_streaks: a batter whose most recent game is
 # more than this many days before the latest game_date in the data is

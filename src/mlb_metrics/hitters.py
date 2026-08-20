@@ -100,12 +100,25 @@ def _blend_windows(dt: pd.DataFrame, windows, side: str, stat_fns: dict, rate_fn
     return result, full_counts
 
 
-def compute_wave(dt: pd.DataFrame) -> pd.DataFrame:
+def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None) -> pd.DataFrame:
     """Recency-weighted at-bat hit rate vs L/R pitching, converted to a
     per-game hit probability. Returns key_mlbam, WAVE, WAVE_L, WAVE_R,
-    l_at_bat, r_at_bat, probability, probability_L, probability_R."""
+    l_at_bat, r_at_bat, probability, probability_L, probability_R.
+
+    `shrinkage_strength` (real-unit at-bats; None -> config.WAVE_SHRINKAGE_STRENGTH)
+    pulls each per-window rate toward the real league-average AB hit rate
+    computed from THIS SAME `dt` (no new fetch, no lookahead - it's
+    whatever historical data is already loaded for this run, the same
+    "compute the league average from currently-loaded data" pattern
+    pitcher_matchup.attach_opponent_offense's league_bases_pg already
+    uses) via helpers.shrink_rate - see quant-analytics item #3's
+    "Bayesian shrinkage" README section. 0.0 (the live default) is the
+    exact null hypothesis: bit-for-bit identical to the unshrunk
+    hit/n division this function always used before."""
+    strength = config.WAVE_SHRINKAGE_STRENGTH if shrinkage_strength is None else shrinkage_strength
+    league_rate = helpers.is_hit(dt["events"]).sum() / len(dt) if len(dt) else 0.0
     stat_fns = {"hit": lambda df: helpers.is_hit(df["events"])}
-    rate_fns = {"rate": lambda agg: agg["hit"] / agg["n"]}
+    rate_fns = {"rate": lambda agg: helpers.shrink_rate(agg["hit"], agg["n"], league_rate, strength)}
 
     r_blended, r_full = _blend_windows(dt, config.WAVE_WINDOWS, "R", stat_fns, rate_fns)
     l_blended, l_full = _blend_windows(dt, config.WAVE_WINDOWS, "L", stat_fns, rate_fns)
@@ -451,9 +464,17 @@ def compute_plate_discipline(all_pitches: pd.DataFrame) -> pd.DataFrame:
     return result[["key_mlbam", "Whiff_Rate", "Chase_Rate"]]
 
 
-def compute_game_hit_probability(data_with_game_id: pd.DataFrame) -> pd.DataFrame:
+def compute_game_hit_probability(data_with_game_id: pd.DataFrame, shrinkage_strength: float | None = None) -> pd.DataFrame:
     """Rate of *games* (not at-bats) with >=1 hit, blended across windows.
-    This is the closest existing analog to a Beat-the-Streak pick probability."""
+    This is the closest existing analog to a Beat-the-Streak pick probability.
+
+    `shrinkage_strength` (real-unit games; None -> config.GAME_HIT_PROB_SHRINKAGE_STRENGTH)
+    is the games-unit analog of compute_wave's own shrinkage param - see
+    that function's docstring and quant-analytics item #3's "Bayesian
+    shrinkage" README section. 0.0 (the live default) is the exact null
+    hypothesis, bit-for-bit identical to this function's original
+    had_hit/game division."""
+    strength = config.GAME_HIT_PROB_SHRINKAGE_STRENGTH if shrinkage_strength is None else shrinkage_strength
     completed = data_with_game_id[data_with_game_id["events"].isin(config.COUNTED_EVENTS)][
         ["game_date", "batter", "events", "game_id"]
     ].copy()
@@ -462,12 +483,13 @@ def compute_game_hit_probability(data_with_game_id: pd.DataFrame) -> pd.DataFram
     game_hits = completed.groupby(["batter", "game_id", "game_date"], as_index=False)["had_hit"].max()
     game_hits["game"] = 1
     latest = game_hits["game_date"].max()
+    league_rate = game_hits["had_hit"].sum() / len(game_hits) if len(game_hits) else 0.0
 
     blended = None
     for days_back, weight in config.GAME_HIT_PROB_WINDOWS:
         window_games = _slice_by_days(game_hits, latest, days_back)
         agg = window_games.groupby("batter", as_index=False)[["had_hit", "game"]].sum()
-        rate = (agg["had_hit"] / agg["game"]).fillna(0)
+        rate = helpers.shrink_rate(agg["had_hit"], agg["game"], league_rate, strength).fillna(0)
         contribution = agg[["batter"]].assign(rate=rate.values).set_index("batter")["rate"] * weight
         blended = contribution if blended is None else blended.add(contribution, fill_value=0)
 

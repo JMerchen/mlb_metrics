@@ -251,6 +251,31 @@ def is_chase(description: pd.Series, zone: pd.Series) -> pd.Series:
     return ((is_swing(description) == 1) & (is_out_of_zone(zone) == 1)).astype(int)
 
 
+def shrink_rate(count: pd.Series, n: pd.Series, prior_rate: float, prior_strength: float) -> pd.Series:
+    """Empirical-Bayes (Beta-Binomial) shrinkage of a rate toward
+    `prior_rate`, weighted by `prior_strength` real-unit pseudo-
+    observations (at-bats for hitters.compute_wave, games for
+    hitters.compute_game_hit_probability - never an abstract 0-1 weight).
+    A low-n player's rate gets pulled hard toward the league prior; a
+    high-n player's barely moves, since `prior_strength` pseudo-counts
+    matter less and less relative to a growing real `n`. This is the
+    real fix for quant-analytics item #3's own headline example: today,
+    a 15-PA rookie and a 500-PA veteran run through the identical
+    `count/n` division with zero sample-size-aware treatment, gated only
+    by a hard external PA cutoff (config.BACKTEST_MIN_PLATE_APPEARANCES)
+    that either fully excludes or fully includes a player with nothing in
+    between.
+
+    `prior_strength=0` returns the EXACT unshrunk `count/n` - the same
+    "0 = exact null hypothesis, reproduces today's heuristic exactly, not
+    just an approximation of it" contract
+    PITCHER_MATCHUP_OFFENSE_WEIGHT/MATCHUP_PITCH_ARSENAL_WEIGHT already
+    establish elsewhere in this project. A genuine 0/0 (prior_strength=0
+    AND n=0) intentionally still divides to NaN - every caller already
+    `.fillna(0)`s downstream, matching every other rate in this file."""
+    return (count + prior_strength * prior_rate) / (n + prior_strength)
+
+
 def estimate_rbi(df: pd.DataFrame) -> pd.Series:
     """Runs driven in on this completed plate appearance, approximated as
     `post_bat_score - bat_score` on the PA's own final-pitch row (the one
