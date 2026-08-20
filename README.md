@@ -723,6 +723,19 @@ sklearn class produces `Model_Hit_Probability`, and a model-family swap
 under the same artifact schema isn't a version-worthy event under this
 project's own convention.
 
+**Refreshed after shipping shrinkage** (GitHub Actions run 32424947608,
+2026-08-20, immediately after `WAVE_SHRINKAGE_STRENGTH`/
+`GAME_HIT_PROB_SHRINKAGE_STRENGTH` shipped nonzero above): GBM still wins
+the CV comparison (`cv_score=-0.6745` vs. Logit's `-0.6755`) and this time
+it's a clean win on the holdout too, not the mixed result the immediately
+prior run reported - log_loss 0.6773 (vs. 0.6795 before) and ROC AUC
+0.5723 (vs. 0.5654 before, now beating the `Game_Hit_Probability`
+heuristic's own 0.6797/0.5639 on both metrics). Not a controlled
+before/after comparison (the holdout window also moved forward with the
+season), but a genuinely healthier-looking result than the last run, and
+one real data point that shrinkage's shipped defaults didn't hurt the
+downstream model.
+
 **Permutation-importance report** (`sklearn.inspection.permutation_importance`,
 same untouched holdout, chosen over SHAP specifically to avoid adding a
 new heavy dependency to a project that has never needed one beyond
