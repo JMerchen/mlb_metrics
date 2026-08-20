@@ -1,8 +1,18 @@
 """Hitter metrics: WAVE (at-bat based hit probability), Game_Hit_Probability
-(game-level hit rate), WTB (weighted total bases), and WHOPS/RC (weighted
+(game-level hit rate), WTB (weighted total bases), WHOPS/RC (weighted
 OPS / runs-created proxy - computed but, as in the original script, not
 currently written to any output; kept here as a reusable building block for
-future matchup work rather than wired into the CSV pipeline).
+future matchup work rather than wired into the CSV pipeline), and
+compute_quality_of_contact (real Statcast batted-ball-quality rates -
+Exit_Velo/Barrel_Rate/xBA/xwOBA - added to widen dfs_ml.HITTER_FEATURE_COLUMNS
+beyond outcome-rate-only signals; see that module's docstring for why), and
+compute_pitch_family_rates (WAVE split by the PA-ending pitch's fastball/
+breaking/offspeed family instead of by pitcher handedness - the batter half
+of matchup.py's pitch-type-specific platoon matchup, see that function's
+own docstring), and compute_plate_discipline (real per-pitch Whiff_Rate/
+Chase_Rate - unlike every other function here, built from EVERY pitch a
+batter saw, not just the PA-ending one, since a swing decision is a
+per-pitch signal, not a per-PA one).
 
 All three of WAVE/WHOPS/WTB share the same shape: split at-bats by the
 opposing pitcher's throwing hand, compute a rate per recency window, and
@@ -34,9 +44,18 @@ def _slice_by_days(frame: pd.DataFrame, latest, days_back):
     return frame[frame["game_date"] >= cutoff]
 
 
-def _side_window_agg(dt: pd.DataFrame, latest, days_back, throws: str, stat_fns: dict) -> pd.DataFrame:
+def _side_window_agg(
+    dt: pd.DataFrame, latest, days_back, side: str, stat_fns: dict, column: str = "p_throws"
+) -> pd.DataFrame:
     """One row per batter: `n` (at-bat count) plus the sum of each stat in
-    `stat_fns`, restricted to the window and the given opposing-pitcher hand.
+    `stat_fns`, restricted to the window and to rows where `column` equals
+    `side`. `column` defaults to "p_throws" (every original caller here -
+    WAVE/WHOPS/WTB/extended DK rates/quality-of-contact - splits by the
+    opposing pitcher's throwing hand); compute_pitch_family_rates passes
+    column="pitch_family" instead to split the exact same windowing/
+    blending machinery by pitch-type family rather than by handedness - the
+    "side" concept generalizes cleanly to any categorical column with a
+    small, fixed set of values.
 
     Each `stat_fns` value is `fn(side_df) -> Series`, given the WHOLE
     windowed/sided frame (not just its `events` column) - needed by stats
@@ -44,7 +63,7 @@ def _side_window_agg(dt: pd.DataFrame, latest, days_back, throws: str, stat_fns:
     (`bat_score`/`post_bat_score`). Existing `events`-only classifiers
     (`helpers.is_hit`, etc.) are passed as `lambda df: helpers.is_hit(df["events"])`."""
     window_df = _slice_by_days(dt, latest, days_back)
-    side_df = window_df[window_df["p_throws"] == throws].copy()
+    side_df = window_df[window_df[column] == side].copy()
     side_df["n"] = 1
     for name, fn in stat_fns.items():
         side_df[name] = fn(side_df)
@@ -52,8 +71,8 @@ def _side_window_agg(dt: pd.DataFrame, latest, days_back, throws: str, stat_fns:
     return side_df[cols].groupby("batter", as_index=False).sum()
 
 
-def _blend_windows(dt: pd.DataFrame, windows, throws: str, stat_fns: dict, rate_fns: dict):
-    """Blend one or more rate functions across `windows` for one throws-side.
+def _blend_windows(dt: pd.DataFrame, windows, side: str, stat_fns: dict, rate_fns: dict, column: str = "p_throws"):
+    """Blend one or more rate functions across `windows` for one side of `column`.
 
     rate_fns: dict of name -> function(window_agg_df) -> per-batter rate Series.
     Returns (blended_df, full_season_counts) where blended_df has columns
@@ -64,7 +83,7 @@ def _blend_windows(dt: pd.DataFrame, windows, throws: str, stat_fns: dict, rate_
     full_counts = None
 
     for days_back, weight in windows:
-        agg = _side_window_agg(dt, latest, days_back, throws, stat_fns)
+        agg = _side_window_agg(dt, latest, days_back, side, stat_fns, column=column)
         base = agg[["batter"]]
         for name, rate_fn in rate_fns.items():
             rate = rate_fn(agg).fillna(0)
@@ -237,6 +256,201 @@ def compute_extended_dk_rates(dt: pd.DataFrame) -> pd.DataFrame:
     return result[["key_mlbam", "Expected_BB", "Expected_HBP", "Expected_RBI"]]
 
 
+def compute_quality_of_contact(dt: pd.DataFrame) -> pd.DataFrame:
+    """Recency-windowed real batted-ball-quality rates - Exit_Velo (mean
+    launch_speed), Barrel_Rate (share of batted balls that are real
+    Statcast barrels, helpers.is_barrel), xBA (mean
+    estimated_ba_using_speedangle), xwOBA (mean
+    estimated_woba_using_speedangle) - each blended by throws-side and
+    recency window, the exact same shape WAVE/WTB/compute_extended_dk_rates
+    already use.
+
+    Computed over BATTED BALLS ONLY (helpers.is_batted_ball filters `dt`
+    down to real balls-in-play before windowing) - a strikeout/walk/HBP
+    has none of these columns populated, and including them unfiltered
+    would silently bias every rate toward 0 instead of measuring contact
+    quality. This means `n` here is a batted-ball count, not a
+    plate-appearance count, unlike every other function in this file - the
+    shared `_blend_windows`/`_side_window_agg` machinery still applies
+    completely unmodified, since it operates on whatever frame it's given.
+
+    Deliberately reuses config.WHOPS_WTB_WINDOWS (not a new dedicated
+    window constant) - same reasoning compute_extended_dk_rates's own
+    docstring already gives: this draws from a subset of the identical
+    per-PA event stream WTB blends, at the same row granularity (just
+    narrowed to the balls-in-play rows), so a separate window schedule
+    isn't a justified extra knob on a first pass - revisit if a real
+    backtest suggests batted-ball sample size specifically needs different
+    window weights.
+
+    Returns [key_mlbam, Exit_Velo, Barrel_Rate, xBA, xwOBA]. A batter with
+    zero batted balls in a window contributes 0 to that window (same
+    fillna(0) precedent every other blended rate in this file uses), not a
+    fabricated league-average value."""
+    batted = dt[helpers.is_batted_ball(dt["type"])].copy()
+
+    stat_fns = {
+        "exit_velo_sum": lambda df: df["launch_speed"],
+        "barrel": lambda df: helpers.is_barrel(df["launch_speed_angle"]),
+        "xba_sum": lambda df: df["estimated_ba_using_speedangle"],
+        "xwoba_sum": lambda df: df["estimated_woba_using_speedangle"],
+    }
+    rate_fns = {
+        "exit_velo": lambda agg: agg["exit_velo_sum"] / agg["n"],
+        "barrel_rate": lambda agg: agg["barrel"] / agg["n"],
+        "xba": lambda agg: agg["xba_sum"] / agg["n"],
+        "xwoba": lambda agg: agg["xwoba_sum"] / agg["n"],
+    }
+    windows = config.WHOPS_WTB_WINDOWS
+
+    r_blended, r_full = _blend_windows(batted, windows, "R", stat_fns, rate_fns)
+    l_blended, l_full = _blend_windows(batted, windows, "L", stat_fns, rate_fns)
+
+    r_blended = r_blended.rename(
+        columns={"exit_velo": "Exit_Velo_R", "barrel_rate": "Barrel_Rate_R", "xba": "xBA_R", "xwoba": "xwOBA_R"}
+    )
+    l_blended = l_blended.rename(
+        columns={"exit_velo": "Exit_Velo_L", "barrel_rate": "Barrel_Rate_L", "xba": "xBA_L", "xwoba": "xwOBA_L"}
+    )
+
+    result = r_full.rename(columns={"n": "bb_rfull"})
+    result = result.merge(r_blended, on="batter", how="left")
+    result = result.merge(l_full.rename(columns={"n": "bb_lfull"}), on="batter", how="left")
+    result = result.merge(l_blended, on="batter", how="left")
+    result = result.fillna(0)
+
+    result["bbt"] = result["bb_lfull"] + result["bb_rfull"]
+    result["bbtl"] = result["bb_lfull"] / result["bbt"]
+    result["bbtr"] = result["bb_rfull"] / result["bbt"]
+
+    for stat in ("Exit_Velo", "Barrel_Rate", "xBA", "xwOBA"):
+        result[stat] = result[f"{stat}_R"] * result["bbtr"] + result[f"{stat}_L"] * result["bbtl"]
+
+    result = result.rename(columns={"batter": "key_mlbam"})
+    return result[["key_mlbam", "Exit_Velo", "Barrel_Rate", "xBA", "xwOBA"]]
+
+
+def compute_pitch_family_rates(dt: pd.DataFrame) -> pd.DataFrame:
+    """Recency-windowed at-bat hit rate, split by the PA-ENDING pitch's
+    family (fastball/breaking/offspeed - helpers.pitch_type_family) instead
+    of by opposing-pitcher throwing hand - the same WAVE formula
+    (hit_sum / n, config.WAVE_WINDOWS) computed a third way via
+    _blend_windows/_side_window_agg's generalized `column` parameter
+    (column="pitch_family" here instead of the default "p_throws").
+
+    This is the batter half of the pitch-type-specific platoon matchup
+    (matchup.py's _pitch_arsenal_multiplier is the other half, using the
+    opposing starter's own arsenal mix - pitchers.compute_pitch_arsenal):
+    a batter who reliably ends ABs on fastballs successfully is plausibly a
+    real fastball hitter, independent of the handedness platoon WAVE_L/
+    WAVE_R already capture. Known, deliberate simplification, same
+    category as helpers.estimate_rbi's documented tradeoffs: this credits
+    the PA's OUTCOME to whichever pitch happened to end it, not to every
+    pitch actually seen during the PA (e.g. five sliders taken before a
+    fastball is put in play credits the fastball alone) - a real proxy,
+    not a full per-pitch swing-decision model (that's plate-discipline
+    territory, a separate signal, not this one).
+
+    Returns [key_mlbam, Fastball_WAVE, Breaking_WAVE, Offspeed_WAVE]. A
+    batter who has never ended a PA on a given family contributes 0 to
+    that family (same fillna(0) precedent every other blended rate in this
+    file uses, not a fabricated league-average value)."""
+    families = dt.assign(pitch_family=helpers.pitch_type_family(dt["pitch_type"]))
+    families = families[families["pitch_family"].notna()]
+
+    stat_fns = {"hit": lambda df: helpers.is_hit(df["events"])}
+    rate_fns = {"rate": lambda agg: agg["hit"] / agg["n"]}
+    windows = config.WAVE_WINDOWS
+
+    blended = {}
+    full = {}
+    for family in ("fastball", "breaking", "offspeed"):
+        family_blended, family_full = _blend_windows(
+            families, windows, family, stat_fns, rate_fns, column="pitch_family"
+        )
+        blended[family] = family_blended.rename(columns={"rate": family})
+        full[family] = family_full.rename(columns={"n": f"{family}_n"})
+
+    result = full["fastball"]
+    result = result.merge(blended["fastball"], on="batter", how="left")
+    result = result.merge(full["breaking"], on="batter", how="outer")
+    result = result.merge(blended["breaking"], on="batter", how="left")
+    result = result.merge(full["offspeed"], on="batter", how="outer")
+    result = result.merge(blended["offspeed"], on="batter", how="left")
+    result = result.fillna(0)
+
+    result = result.rename(
+        columns={"fastball": "Fastball_WAVE", "breaking": "Breaking_WAVE", "offspeed": "Offspeed_WAVE"}
+    )
+    result = result.rename(columns={"batter": "key_mlbam"})
+    return result[["key_mlbam", "Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE"]]
+
+
+def compute_plate_discipline(all_pitches: pd.DataFrame) -> pd.DataFrame:
+    """Recency-windowed plate discipline: Whiff_Rate (whiffs / swings -
+    given the batter offers at a pitch, how often they miss entirely) and
+    Chase_Rate (chases / real out-of-zone pitches seen - given a pitch is
+    genuinely outside the strike zone, how often they swing at it anyway),
+    blended across config.WAVE_WINDOWS (reused, not a new dedicated window
+    scheme - same reasoning compute_quality_of_contact's own docstring
+    gives for reusing an existing window set rather than inventing an
+    unvalidated new one: this is a batter-intrinsic quality metric like
+    WAVE, not matchup-dependent, so WAVE's own recency philosophy is the
+    natural fit).
+
+    `all_pitches` must be pipeline.build_all_pitch_events's output - EVERY
+    real pitch the batter saw, not the PA-ending-pitch-only frame `dt`
+    provides - swing/whiff/chase are fundamentally about every single
+    pitch a batter saw, not just the one that happened to end the PA (the
+    exact "that's plate-discipline territory, a separate signal" distinction
+    compute_pitch_family_rates's own docstring already draws).
+
+    No throws-side split (unlike WAVE/quality-of-contact/pitch-family
+    rates) - mirrors pitchers.compute_pitch_arsenal's own "windowed rate
+    from ALL pitches, single population" shape rather than hitters.py's
+    platoon-split machinery, since a real per-pitch swing decision doesn't
+    need a same/opposite-handed distinction to be a meaningful signal on
+    its own (a real backtest could still surface a platoon split in
+    swing decisions later, revisit if so).
+
+    Returns [key_mlbam, Whiff_Rate, Chase_Rate]. A batter with zero real
+    swings (or zero real out-of-zone pitches seen) in a window contributes
+    0 to that rate - the same fillna(0) "no data reads as an honest 0,
+    never a fabricated value" precedent every other blended rate in this
+    project uses, even though a literal 0% miss/chase rate is an
+    unavoidably ambiguous edge case for a genuinely tiny sample (same
+    caveat PAVE-style ratios already carry when their own denominator is
+    small)."""
+    classified = all_pitches.assign(
+        swing=helpers.is_swing(all_pitches["description"]),
+        whiff=helpers.is_whiff(all_pitches["description"]),
+        out_of_zone=helpers.is_out_of_zone(all_pitches["zone"]),
+        chase=helpers.is_chase(all_pitches["description"], all_pitches["zone"]),
+    )
+
+    stats = ("swing", "whiff", "out_of_zone", "chase")
+    latest = classified["game_date"].max()
+    blended = {"Whiff_Rate": None, "Chase_Rate": None}
+
+    for days_back, weight in config.WAVE_WINDOWS:
+        window_df = _slice_by_days(classified, latest, days_back)
+        agg = window_df.groupby("batter", as_index=False)[list(stats)].sum()
+        base = agg[["batter"]]
+        window_rates = {
+            "Whiff_Rate": (agg["whiff"] / agg["swing"]).fillna(0),
+            "Chase_Rate": (agg["chase"] / agg["out_of_zone"]).fillna(0),
+        }
+        for name, rate in window_rates.items():
+            contribution = base.assign(value=rate.values).set_index("batter")["value"] * weight
+            blended[name] = contribution if blended[name] is None else blended[name].add(contribution, fill_value=0)
+
+    result = pd.DataFrame(blended)
+    result.index.name = "batter"
+    result = result.reset_index()
+    result = result.rename(columns={"batter": "key_mlbam"})
+    return result[["key_mlbam", "Whiff_Rate", "Chase_Rate"]]
+
+
 def compute_game_hit_probability(data_with_game_id: pd.DataFrame) -> pd.DataFrame:
     """Rate of *games* (not at-bats) with >=1 hit, blended across windows.
     This is the closest existing analog to a Beat-the-Streak pick probability."""
@@ -331,6 +545,7 @@ def assemble_hitters(
     names: pd.DataFrame,
     latest_team: pd.DataFrame,
     lineup_consistency: pd.DataFrame | None = None,
+    all_pitches: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Build the final hitter output table (equivalent to the original script's `WAVE` dataframe).
 
@@ -341,10 +556,20 @@ def assemble_hitters(
     null (not filled to 0) for a batter with no recorded starts - a null
     correctly fails the "top half of the order" qualifier downstream,
     whereas a 0 would look like the best possible batting slot.
+
+    `all_pitches` (pipeline.build_all_pitch_events's output - EVERY real
+    pitch, not `dt`'s PA-ending-only frame) is likewise optional so
+    existing callers/tests are unaffected; when given, it adds
+    Whiff_Rate/Chase_Rate (compute_plate_discipline) - the same optional-
+    input shape pitchers.assemble_pitchers's own `pitch_arsenal` parameter
+    uses, for the same reason (a per-PITCH signal genuinely needs a
+    different input than every PA-level signal here).
     """
     wave = compute_wave(dt)
     wtb = compute_wtb(dt)
     extended_dk_rates = compute_extended_dk_rates(dt)
+    quality_of_contact = compute_quality_of_contact(dt)
+    pitch_family_rates = compute_pitch_family_rates(dt)
     game_hit_prob = compute_game_hit_probability(data_with_game_id)
     last_game = compute_last_game_dates(data_with_game_id)
 
@@ -352,6 +577,8 @@ def assemble_hitters(
         wtb[["key_mlbam", "pa_lfull", "pa_rfull", "Expected_Bases"]], on="key_mlbam", how="left"
     )
     hitters = hitters.merge(extended_dk_rates, on="key_mlbam", how="left")
+    hitters = hitters.merge(quality_of_contact, on="key_mlbam", how="left")
+    hitters = hitters.merge(pitch_family_rates, on="key_mlbam", how="left")
     hitters = hitters.merge(game_hit_prob, on="key_mlbam", how="left")
     hitters = hitters.merge(names, on="key_mlbam", how="left")
     hitters = hitters.merge(latest_team, on="key_mlbam", how="left")
@@ -359,15 +586,21 @@ def assemble_hitters(
     hitters["Consistency"] = hitters["Game_Hit_Probability"] - hitters["probability"]
     hitters["Approach"] = hitters["Game_Hit_Probability"] * hitters["probability"]
 
-    hitters = hitters[
-        [
-            "key_mlbam", "name_first", "name_last", "team",
-            "pa_lfull", "pa_rfull",
-            "WAVE", "WAVE_L", "WAVE_R", "probability_L", "probability_R", "probability",
-            "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
-            "Expected_BB", "Expected_HBP", "Expected_RBI",
-        ]
-    ].fillna(0)
+    columns = [
+        "key_mlbam", "name_first", "name_last", "team",
+        "pa_lfull", "pa_rfull",
+        "WAVE", "WAVE_L", "WAVE_R", "probability_L", "probability_R", "probability",
+        "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
+        "Expected_BB", "Expected_HBP", "Expected_RBI",
+        "Exit_Velo", "Barrel_Rate", "xBA", "xwOBA",
+        "Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE",
+    ]
+    if all_pitches is not None:
+        plate_discipline = compute_plate_discipline(all_pitches)
+        hitters = hitters.merge(plate_discipline, on="key_mlbam", how="left")
+        columns = columns + ["Whiff_Rate", "Chase_Rate"]
+
+    hitters = hitters[columns].fillna(0)
 
     # Merged AFTER the fillna(0) block above (like lineup_consistency below)
     # rather than before - a missing/NaT Last_Game_Date must stay NaT, not

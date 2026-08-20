@@ -10,7 +10,16 @@ def _at_bats(batter, throws, rows):
     """rows: list of (game_date, events) tuples, or (game_date, events,
     bat_score, post_bat_score) 4-tuples when a row needs a real RBI delta -
     bat_score/post_bat_score default to (0, 0) (Expected_RBI == 0) when
-    omitted, so existing 2-tuple call sites are unaffected."""
+    omitted, so existing 2-tuple call sites are unaffected.
+
+    Every row also gets the batted-ball-quality columns
+    (compute_quality_of_contact) defaulted to null/not-a-batted-ball (type
+    != "X") - none of these existing call sites specify real Statcast
+    exit-velocity/xBA data, so none of their at-bats should be counted as
+    a real batted ball (see _batted_balls below for that dedicated case) -
+    and pitch_type defaulted to null too (compute_pitch_family_rates), so
+    none of these existing call sites' at-bats count toward any pitch
+    family either (see _family_at_bats below for that dedicated case)."""
     result = []
     for row in rows:
         if len(row) == 4:
@@ -21,8 +30,120 @@ def _at_bats(batter, throws, rows):
         result.append({
             "batter": batter, "game_date": pd.Timestamp(date), "events": events, "p_throws": throws,
             "bat_score": bat_score, "post_bat_score": post_bat_score,
+            "type": pd.NA, "launch_speed": pd.NA, "estimated_ba_using_speedangle": pd.NA,
+            "estimated_woba_using_speedangle": pd.NA, "launch_speed_angle": pd.NA,
+            "pitch_type": pd.NA,
         })
     return result
+
+
+def _batted_balls(batter, throws, rows):
+    """rows: list of (game_date, launch_speed, launch_speed_angle, xba, xwoba)
+    5-tuples - each becomes a real ball-in-play row (type="X") for
+    hitters.compute_quality_of_contact. events is a fixed "field_out" (an
+    arbitrary real batted-ball outcome - compute_quality_of_contact never
+    reads `events` at all, only the batted-ball-quality columns)."""
+    result = []
+    for date, launch_speed, launch_speed_angle, xba, xwoba in rows:
+        result.append({
+            "batter": batter, "game_date": pd.Timestamp(date), "events": "field_out", "p_throws": throws,
+            "bat_score": 0, "post_bat_score": 0,
+            "type": "X", "launch_speed": launch_speed, "estimated_ba_using_speedangle": xba,
+            "estimated_woba_using_speedangle": xwoba, "launch_speed_angle": launch_speed_angle,
+            "pitch_type": pd.NA,
+        })
+    return result
+
+
+def _family_at_bats(batter, throws, rows):
+    """rows: list of (game_date, pitch_type, events) tuples - each becomes
+    a real completed-PA row tagged with a real Statcast pitch_type code for
+    hitters.compute_pitch_family_rates (see helpers.PITCH_TYPE_FAMILY for
+    which family each code maps to)."""
+    result = []
+    for date, pitch_type, events in rows:
+        result.append({
+            "batter": batter, "game_date": pd.Timestamp(date), "events": events, "p_throws": throws,
+            "bat_score": 0, "post_bat_score": 0,
+            "type": pd.NA, "launch_speed": pd.NA, "estimated_ba_using_speedangle": pd.NA,
+            "estimated_woba_using_speedangle": pd.NA, "launch_speed_angle": pd.NA,
+            "pitch_type": pitch_type,
+        })
+    return result
+
+
+def _pitches_seen(batter, rows):
+    """rows: list of (game_date, description, zone) tuples - each becomes
+    a real pitch row for hitters.compute_plate_discipline
+    (pipeline.build_all_pitch_events's own shape - no PA-ending filter,
+    every real pitch the batter saw)."""
+    return [
+        {"batter": batter, "game_date": pd.Timestamp(date), "description": description, "zone": zone}
+        for date, description, zone in rows
+    ]
+
+
+def test_compute_plate_discipline_exact_arithmetic_all_windows():
+    # Windows relative to latest=2026-06-20 (config.WAVE_WINDOWS: full/81d/
+    # 30d/10d, cutoffs 2026-03-31/05-21/06-10).
+    rows = _pitches_seen(1, [
+        ("2026-03-15", "swinging_strike", 12),  # only full: swing+whiff, out-of-zone+chase
+        ("2026-05-01", "foul", 5),               # in 81d: swing, contact, in-zone (not chase-eligible)
+        ("2026-05-25", "ball", 13),               # in 30d: take, out-of-zone (not a chase, no swing)
+        ("2026-06-15", "swinging_strike", 11),    # in 10d: swing+whiff, out-of-zone+chase
+    ])
+    all_pitches = pd.DataFrame(rows)
+
+    result = hitters.compute_plate_discipline(all_pitches).set_index("key_mlbam")
+
+    # full (4 pitches): swings=3 (03-15,05-01,06-15), whiffs=2 (03-15,06-15) -> 2/3
+    # 81d (05-01,05-25,06-15): swings=2 (05-01,06-15), whiffs=1 (06-15) -> 1/2
+    # 30d (05-25,06-15): swings=1 (06-15), whiffs=1 -> 1.0
+    # 10d (06-15): swings=1, whiffs=1 -> 1.0
+    expected_whiff = (2 / 3) * 0.150 + (1 / 2) * 0.250 + 1.0 * 0.275 + 1.0 * 0.325
+    assert result.loc[1, "Whiff_Rate"] == pytest.approx(expected_whiff)
+
+    # full: out_of_zone=3 (03-15,05-25,06-15), chases=2 (03-15,06-15) -> 2/3
+    # 81d: out_of_zone=2 (05-25,06-15), chases=1 (06-15) -> 1/2
+    # 30d: out_of_zone=2 (05-25,06-15), chases=1 (06-15) -> 1/2
+    # 10d: out_of_zone=1 (06-15), chases=1 -> 1.0
+    expected_chase = (2 / 3) * 0.150 + (1 / 2) * 0.250 + (1 / 2) * 0.275 + 1.0 * 0.325
+    assert result.loc[1, "Chase_Rate"] == pytest.approx(expected_chase)
+
+
+def test_compute_plate_discipline_foul_tip_is_contact_not_a_whiff():
+    # A foul tip is real Statcast contact (the bat touched the ball) - must
+    # count as a swing, but never as a whiff.
+    rows = _pitches_seen(1, [("2026-06-15", "foul_tip", 5)])
+    all_pitches = pd.DataFrame(rows)
+
+    result = hitters.compute_plate_discipline(all_pitches).set_index("key_mlbam")
+
+    assert result.loc[1, "Whiff_Rate"] == 0
+
+
+def test_compute_plate_discipline_take_in_zone_is_neither_swing_nor_chase():
+    # A called strike inside the real zone: not a swing, not out-of-zone -
+    # contributes to neither Whiff_Rate's nor Chase_Rate's denominator.
+    rows = _pitches_seen(1, [("2026-06-15", "called_strike", 5)])
+    all_pitches = pd.DataFrame(rows)
+
+    result = hitters.compute_plate_discipline(all_pitches).set_index("key_mlbam")
+
+    assert result.loc[1, "Whiff_Rate"] == 0
+    assert result.loc[1, "Chase_Rate"] == 0
+
+
+def test_compute_plate_discipline_absent_batter_not_in_output():
+    # A batter who never appears in all_pitches at all has no real
+    # underlying data - absent from the output entirely (same "absence,
+    # not a fabricated zero" precedent every other blended rate in this
+    # file establishes), not present with a 0.
+    all_pitches = pd.DataFrame(_pitches_seen(1, [("2026-06-15", "ball", 5)]))
+
+    result = hitters.compute_plate_discipline(all_pitches)
+
+    assert 2 not in set(result["key_mlbam"])
 
 
 def test_compute_wave_blends_windows_and_converts_to_probability():
@@ -121,6 +242,109 @@ def test_compute_extended_dk_rates_blends_platoon_share():
     assert result.loc[1, "Expected_BB"] == pytest.approx(0.25 * config.WTB_TRIALS_PER_GAME)
 
 
+def test_compute_quality_of_contact_exact_arithmetic_all_windows():
+    # All 5 batted balls land within 7 days of the latest date (2026-06-20),
+    # so they're included in every one of config.WHOPS_WTB_WINDOWS
+    # (7d/15d/30d/full) - weights sum to 1.0, so the blended rate equals
+    # the raw mean/rate exactly, same technique
+    # test_compute_extended_dk_rates_exact_arithmetic_all_windows uses.
+    rows = _batted_balls(1, "R", [
+        ("2026-06-16", 90.0, 3, 0.20, 0.25),
+        ("2026-06-17", 95.0, 4, 0.30, 0.35),
+        ("2026-06-18", 100.0, 6, 0.40, 0.45),  # real barrel (launch_speed_angle == 6)
+        ("2026-06-19", 105.0, 5, 0.50, 0.55),
+        ("2026-06-20", 110.0, 2, 0.60, 0.65),
+    ])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_quality_of_contact(dt).set_index("key_mlbam")
+
+    assert result.loc[1, "Exit_Velo"] == pytest.approx(100.0)  # mean(90,95,100,105,110)
+    assert result.loc[1, "Barrel_Rate"] == pytest.approx(0.2)  # 1 barrel / 5 batted balls
+    assert result.loc[1, "xBA"] == pytest.approx(0.4)  # mean(0.2..0.6)
+    assert result.loc[1, "xwOBA"] == pytest.approx(0.45)  # mean(0.25..0.65)
+
+
+def test_compute_quality_of_contact_excludes_non_batted_ball_events():
+    # A strikeout/walk has no real batted-ball data (type != "X") - must
+    # not crash on the missing launch columns. A batter with real at-bats
+    # but ZERO real batted balls on either side has no anchoring row on
+    # either side (same "anchored on batters with a real full-season row
+    # on that side" precedent WAVE/WTB/compute_extended_dk_rates already
+    # establish) - absent from this function's own output entirely, not
+    # present-with-a-zero. assemble_hitters's own left-join + fillna(0) is
+    # what actually turns that absence into a real 0 for such a batter in
+    # the real output table (see test_assemble_hitters_output_columns_and_derived_fields).
+    rows = _at_bats(1, "R", [("2026-06-15", "strikeout"), ("2026-06-16", "walk")])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_quality_of_contact(dt)
+
+    assert result.empty
+
+
+def test_compute_quality_of_contact_blends_platoon_share():
+    # Batter faces both sides with very different exit velo - isolate the
+    # bbtl/bbtr platoon-share blend the same way
+    # test_compute_extended_dk_rates_blends_platoon_share does.
+    rows = _batted_balls(1, "R", [("2026-06-19", 100.0, 6, 0.5, 0.5), ("2026-06-19", 100.0, 6, 0.5, 0.5)])
+    rows += _batted_balls(1, "L", [("2026-06-19", 50.0, 0, 0.1, 0.1), ("2026-06-19", 50.0, 0, 0.1, 0.1)])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_quality_of_contact(dt).set_index("key_mlbam")
+
+    # 2 batted balls each side -> bbtr = bbtl = 0.5; blended Exit_Velo = 100*0.5 + 50*0.5 = 75
+    assert result.loc[1, "Exit_Velo"] == pytest.approx(75.0)
+
+
+def test_compute_pitch_family_rates_exact_arithmetic_all_windows():
+    # Windows relative to latest=2026-06-20 (config.WAVE_WINDOWS: full/81d/
+    # 30d/10d, cutoffs 2026-03-31/05-21/06-10).
+    rows = _family_at_bats(1, "R", [
+        ("2026-03-15", "FF", "single"),      # only full (before 81d cutoff)
+        ("2026-05-01", "FF", "field_out"),   # in 81d, not 30d/10d
+        ("2026-05-25", "FF", "single"),      # in 30d, not 10d
+        ("2026-06-15", "FF", "single"),      # in 10d
+    ])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_pitch_family_rates(dt).set_index("key_mlbam")
+
+    # full: n=4, hits=3 -> 0.75; 81d: n=3, hits=2 -> 2/3; 30d: n=2, hits=2 -> 1.0; 10d: n=1, hits=1 -> 1.0
+    expected = 0.75 * 0.150 + (2 / 3) * 0.250 + 1.0 * 0.275 + 1.0 * 0.325
+    assert result.loc[1, "Fastball_WAVE"] == pytest.approx(expected)
+    assert result.loc[1, "Breaking_WAVE"] == 0
+    assert result.loc[1, "Offspeed_WAVE"] == 0
+
+
+def test_compute_pitch_family_rates_excludes_unclassifiable_pitch_types():
+    # A pitchout ("PO") and a real null pitch_type have no real family -
+    # same "absent from this function's own output entirely" precedent
+    # compute_quality_of_contact's non-batted-ball test establishes.
+    rows = _family_at_bats(1, "R", [("2026-06-15", "PO", "single"), ("2026-06-16", None, "single")])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_pitch_family_rates(dt)
+
+    assert result.empty
+
+
+def test_compute_pitch_family_rates_family_absent_reads_zero_not_dropped():
+    # A batter with real data in ONE family only (breaking) must still
+    # appear in the output, with the other two families at a real 0 - not
+    # silently dropped from the whole table just because one family has no
+    # data (the union-merge across all three families, not an anchor on
+    # any single one).
+    rows = _family_at_bats(1, "R", [("2026-06-18", "SL", "single")])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_pitch_family_rates(dt).set_index("key_mlbam")
+
+    assert result.loc[1, "Breaking_WAVE"] > 0
+    assert result.loc[1, "Fastball_WAVE"] == 0
+    assert result.loc[1, "Offspeed_WAVE"] == 0
+
+
 def test_compute_game_hit_probability_blends_game_level_hit_rate():
     rows = [
         {"batter": 1, "game_id": 1, "game_date": pd.Timestamp("2026-03-12"), "events": "field_out"},
@@ -201,13 +425,29 @@ def test_assemble_hitters_output_columns_and_derived_fields():
         "key_mlbam", "name_first", "name_last", "team", "PA_L", "PA_R",
         "WAVE", "WAVE_L", "WAVE_R", "probability_L", "probability_R", "probability",
         "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
-        "Expected_BB", "Expected_HBP", "Expected_RBI", "Last_Game_Date",
+        "Expected_BB", "Expected_HBP", "Expected_RBI",
+        "Exit_Velo", "Barrel_Rate", "xBA", "xwOBA",
+        "Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE", "Last_Game_Date",
     ]
     row = result.iloc[0]
     assert row["name_last"] == "Player"
     assert row["Consistency"] == pytest.approx(row["Game_Hit_Probability"] - row["probability"])
     assert row["Approach"] == pytest.approx(row["Game_Hit_Probability"] * row["probability"])
     assert row["Last_Game_Date"] == pd.Timestamp("2026-06-16")
+    # Neither at-bat in this fixture is a real batted ball (see _at_bats's
+    # docstring) - quality-of-contact should read 0 (via assemble_hitters's
+    # final fillna(0), since compute_quality_of_contact itself returns no
+    # row at all for a batter with zero batted balls - see the dedicated
+    # test for that), not a fabricated value.
+    assert row["Exit_Velo"] == 0
+    assert row["Barrel_Rate"] == 0
+    assert row["xBA"] == 0
+    assert row["xwOBA"] == 0
+    # Neither at-bat has a real pitch_type either - same "0, not a
+    # fabricated value" convention for pitch-family rates.
+    assert row["Fastball_WAVE"] == 0
+    assert row["Breaking_WAVE"] == 0
+    assert row["Offspeed_WAVE"] == 0
 
 
 def test_compute_last_game_dates_most_recent_completed_event():
@@ -256,6 +496,38 @@ def test_assemble_hitters_merges_lineup_consistency_when_provided():
     row = result.iloc[0]
     assert row["avg_batting_order"] == pytest.approx(2.5)
     assert row["start_rate"] == pytest.approx(0.8)
+
+
+def test_assemble_hitters_merges_plate_discipline_when_all_pitches_provided():
+    dt = pd.DataFrame(_at_bats(1, "R", [("2026-06-15", "single"), ("2026-06-16", "field_out")]))
+    data_with_game_id = pd.DataFrame([
+        {"batter": 1, "game_id": 1, "game_date": pd.Timestamp("2026-06-15"), "events": "single"},
+        {"batter": 1, "game_id": 2, "game_date": pd.Timestamp("2026-06-16"), "events": "field_out"},
+    ])
+    names = pd.DataFrame([{"key_mlbam": 1, "name_first": "Test", "name_last": "Player"}])
+    latest_team = pd.DataFrame([{"key_mlbam": 1, "team": "NYY"}])
+    all_pitches = pd.DataFrame(_pitches_seen(1, [("2026-06-15", "swinging_strike", 12)]))
+
+    result = hitters.assemble_hitters(dt, data_with_game_id, names, latest_team, all_pitches=all_pitches)
+
+    assert "Whiff_Rate" in result.columns and "Chase_Rate" in result.columns
+    row = result.iloc[0]
+    assert row["Whiff_Rate"] == pytest.approx(1.0)
+    assert row["Chase_Rate"] == pytest.approx(1.0)
+
+
+def test_assemble_hitters_omits_plate_discipline_columns_when_all_pitches_not_provided():
+    dt = pd.DataFrame(_at_bats(1, "R", [("2026-06-15", "single"), ("2026-06-16", "field_out")]))
+    data_with_game_id = pd.DataFrame([
+        {"batter": 1, "game_id": 1, "game_date": pd.Timestamp("2026-06-15"), "events": "single"},
+        {"batter": 1, "game_id": 2, "game_date": pd.Timestamp("2026-06-16"), "events": "field_out"},
+    ])
+    names = pd.DataFrame([{"key_mlbam": 1, "name_first": "Test", "name_last": "Player"}])
+    latest_team = pd.DataFrame([{"key_mlbam": 1, "team": "NYY"}])
+
+    result = hitters.assemble_hitters(dt, data_with_game_id, names, latest_team)
+
+    assert "Whiff_Rate" not in result.columns and "Chase_Rate" not in result.columns
 
 
 def test_assemble_hitters_lineup_consistency_missing_batter_is_null_not_zero():

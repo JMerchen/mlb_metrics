@@ -32,6 +32,7 @@ def _write_daily_csvs(data_dir):
         "probability_L": 0.6, "probability_R": 0.6, "probability": 0.6,
         "Game_Hit_Probability": 0.70, "Consistency": 0.1, "Approach": 0.4, "Expected_Bases": 1.5,
         "Expected_BB": 0.3, "Expected_HBP": 0.1, "Expected_RBI": 0.4,
+        "Exit_Velo": 90.0, "Barrel_Rate": 0.08, "xBA": 0.25, "xwOBA": 0.32,
     }])
     pave = pd.DataFrame([{
         "key_mlbam": 99, "name_first": "Test", "name_last": "Pitcher", "team": "NYY",

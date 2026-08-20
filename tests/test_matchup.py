@@ -257,3 +257,137 @@ def test_final_probability_stays_within_zero_one():
     result = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df).set_index("key_mlbam")
 
     assert 0.0 <= result.loc[1, "Matchup_Hit_Probability"] <= 1.0
+
+
+def test_league_arsenal_mix_recovers_real_mean_from_pave():
+    pave = pd.DataFrame([
+        {"Fastball_Rate": 0.6, "Breaking_Rate": 0.3, "Offspeed_Rate": 0.1},
+        {"Fastball_Rate": 0.4, "Breaking_Rate": 0.3, "Offspeed_Rate": 0.3},
+    ])
+
+    result = matchup._league_arsenal_mix(pave)
+
+    assert result == pytest.approx({"fastball": 0.5, "breaking": 0.3, "offspeed": 0.2})
+
+
+def test_league_arsenal_mix_falls_back_when_columns_missing():
+    from mlb_metrics import config
+
+    pave = pd.DataFrame([{"key_mlbam": 1, "PAVE": 0.27}])  # no arsenal columns at all
+
+    result = matchup._league_arsenal_mix(pave)
+
+    assert result == config.MATCHUP_LEAGUE_ARSENAL_FALLBACK
+
+
+def test_pitch_arsenal_multiplier_zero_batter_data_stays_float_and_neutral():
+    # Real bug found via a live retrain (GitHub Actions): the original
+    # implementation divided by `vs_league.replace(0, pd.NA)`, which
+    # silently upcast the Series to `object` dtype whenever it hit a real
+    # zero - every op downstream then ran through Python's own operators
+    # instead of numpy's, and a later `(1 - matchup_ab_rate) ** 3.5` on a
+    # real row produced a genuine Python `complex` value that crashed
+    # `.clip(0, 1)` with a TypeError. A batter with zero real data in
+    # every pitch family (vs_league == vs_starter == 0, a real 0/0) is
+    # exactly the case that used to trigger the replace() - must resolve
+    # to a real float64 1.0 (neutral), never an object-dtype NA.
+    matchup_df = pd.DataFrame([{
+        "Fastball_WAVE": 0.0, "Breaking_WAVE": 0.0, "Offspeed_WAVE": 0.0,
+        "starter_fastball_rate": 0.6, "starter_breaking_rate": 0.3, "starter_offspeed_rate": 0.1,
+    }])
+    league_mix = {"fastball": 0.55, "breaking": 0.30, "offspeed": 0.15}
+
+    result = matchup._pitch_arsenal_multiplier(matchup_df, league_mix)
+
+    assert result.dtype == float
+    assert result.iloc[0] == pytest.approx(1.0)
+
+
+def test_pitch_arsenal_multiplier_is_a_noop_when_batter_columns_missing():
+    matchup_df = pd.DataFrame([
+        {"starter_fastball_rate": 0.7, "starter_breaking_rate": 0.2, "starter_offspeed_rate": 0.1}
+    ])
+    league_mix = {"fastball": 0.55, "breaking": 0.30, "offspeed": 0.15}
+
+    result = matchup._pitch_arsenal_multiplier(matchup_df, league_mix)
+
+    assert (result == 1.0).all()
+
+
+def test_pitch_arsenal_multiplier_is_a_noop_when_starter_columns_missing():
+    matchup_df = pd.DataFrame([
+        {"Fastball_WAVE": 0.35, "Breaking_WAVE": 0.25, "Offspeed_WAVE": 0.30}
+    ])
+    league_mix = {"fastball": 0.55, "breaking": 0.30, "offspeed": 0.15}
+
+    result = matchup._pitch_arsenal_multiplier(matchup_df, league_mix)
+
+    assert (result == 1.0).all()
+
+
+def test_pitch_arsenal_multiplier_exact_ratio_at_full_weight(monkeypatch):
+    from mlb_metrics import config
+
+    monkeypatch.setattr(config, "MATCHUP_PITCH_ARSENAL_WEIGHT", 1.0)
+    matchup_df = pd.DataFrame([{
+        "Fastball_WAVE": 0.40, "Breaking_WAVE": 0.20, "Offspeed_WAVE": 0.10,
+        "starter_fastball_rate": 0.80, "starter_breaking_rate": 0.10, "starter_offspeed_rate": 0.10,
+    }])
+    league_mix = {"fastball": 0.55, "breaking": 0.30, "offspeed": 0.15}
+
+    result = matchup._pitch_arsenal_multiplier(matchup_df, league_mix)
+
+    # vs_starter = .40*.80 + .20*.10 + .10*.10 = .35
+    # vs_league  = .40*.55 + .20*.30 + .10*.15 = .295
+    # ratio = .35/.295 = 1.186440678 -> clipped to (0.85, 1.15) -> 1.15
+    assert result.iloc[0] == pytest.approx(config.MATCHUP_PITCH_ARSENAL_CLIP[1])
+
+
+def test_pitch_arsenal_multiplier_ships_at_zero_weight_by_default():
+    # Same batter/starter data as the full-weight test above, but at the
+    # real shipped default (0.0) - must be an exact no-op regardless of
+    # how skewed the ratio would otherwise be.
+    matchup_df = pd.DataFrame([{
+        "Fastball_WAVE": 0.40, "Breaking_WAVE": 0.20, "Offspeed_WAVE": 0.10,
+        "starter_fastball_rate": 0.80, "starter_breaking_rate": 0.10, "starter_offspeed_rate": 0.10,
+    }])
+    league_mix = {"fastball": 0.55, "breaking": 0.30, "offspeed": 0.15}
+
+    result = matchup._pitch_arsenal_multiplier(matchup_df, league_mix)
+
+    assert result.iloc[0] == pytest.approx(1.0)
+
+
+def test_compute_matchup_hit_probability_applies_pitch_arsenal_at_nonzero_weight(monkeypatch):
+    from mlb_metrics import config
+
+    monkeypatch.setattr(config, "MATCHUP_PITCH_ARSENAL_WEIGHT", 1.0)
+    wave = pd.DataFrame([{
+        "key_mlbam": 1, "team": "NYY", "WAVE": 0.30,
+        "Fastball_WAVE": 0.40, "Breaking_WAVE": 0.20, "Offspeed_WAVE": 0.10,
+    }])
+    # Two pitchers in the pool so the league-average mix (used as the
+    # neutral baseline) genuinely differs from the probable starter's own
+    # skewed-fastball mix - a real, nonzero multiplier, not a trivial
+    # single-row no-op.
+    pave = pd.DataFrame([
+        {"key_mlbam": 999, "PAVE": 0.27, "PAVE_PLUS": 1.0,
+         "Fastball_Rate": 0.80, "Breaking_Rate": 0.10, "Offspeed_Rate": 0.10},
+        {"key_mlbam": 1000, "PAVE": 0.27, "PAVE_PLUS": 1.0,
+         "Fastball_Rate": 0.30, "Breaking_Rate": 0.50, "Offspeed_Rate": 0.20},
+    ])
+    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.297}])
+    schedule_df = pd.DataFrame([{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999}])
+
+    result = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df).set_index("key_mlbam")
+    baseline = matchup.compute_matchup_hit_probability(
+        wave.drop(columns=["Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE"]), pave, confidence, schedule_df
+    ).set_index("key_mlbam")
+
+    # league_mix = mean of the two pitchers = fastball .55/breaking .30/offspeed .15.
+    # vs_starter = .40*.80 + .20*.10 + .10*.10 = .35
+    # vs_league  = .40*.55 + .20*.30 + .10*.15 = .295
+    # ratio = .35/.295 = 1.186440678 -> clipped to (0.85, 1.15) -> 1.15,
+    # applied on top of (not instead of) the platoon/park-adjusted rate the
+    # baseline call already produces.
+    assert result.loc[1, "Matchup_Hit_Probability"] != pytest.approx(baseline.loc[1, "Matchup_Hit_Probability"])

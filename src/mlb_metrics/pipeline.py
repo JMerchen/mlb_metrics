@@ -27,11 +27,68 @@ from mlb_metrics import (
 def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
     """Completed at-bat events with batter/p_throws, used by WAVE/WHOPS/WTB.
     Carries bat_score/post_bat_score too (helpers.estimate_rbi, via
-    hitters.compute_extended_dk_rates) - both already exist on every raw
-    Statcast row, so no extra fetch/join is needed to add them here."""
+    hitters.compute_extended_dk_rates), and the real batted-ball-quality
+    columns (type, launch_speed, estimated_ba_using_speedangle,
+    estimated_woba_using_speedangle, launch_speed_angle) used by
+    hitters.compute_quality_of_contact - all of these already exist on
+    every raw Statcast row (data.completed_events's own output is already
+    one row per completed PA, and for a ball-in-play PA that row IS the
+    real batted-ball-quality row), so no extra fetch/join is needed to add
+    any of them here. The quality-of-contact columns are simply null on a
+    non-batted-ball PA (a strikeout/walk/HBP never had a batted ball) -
+    helpers.is_batted_ball is what filters those out downstream.
+
+    Also carries `pitch_type` (the PA-ending pitch's own Statcast code),
+    used by hitters.compute_pitch_family_rates - same "already on every
+    real row, no extra fetch" reasoning as the quality-of-contact columns.
+
+    A `df` missing one or more of these optional columns entirely (never
+    happens with a real pybaseball.statcast() pull - see
+    data.fetch_statcast_range's docstring - but does happen with an older/
+    narrower synthetic fixture, e.g. this project's own pre-existing test
+    fixtures built before this feature existed) degrades those columns to
+    null rather than raising - the same "missing optional input becomes an
+    honest null, not a crash" precedent Bullpen_PAVE/Park_Factor/etc.
+    already establish elsewhere in this pipeline."""
+    quality_columns = [
+        "type", "launch_speed", "estimated_ba_using_speedangle",
+        "estimated_woba_using_speedangle", "launch_speed_angle", "pitch_type",
+    ]
+    missing = [c for c in quality_columns if c not in df.columns]
+    if missing:
+        df = df.assign(**{c: pd.NA for c in missing})
     return data.completed_events(
-        df, ["game_date", "batter", "events", "p_throws", "bat_score", "post_bat_score"]
+        df, ["game_date", "batter", "events", "p_throws", "bat_score", "post_bat_score"] + quality_columns
     )
+
+
+def build_all_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
+    """Every real pitch thrown (not filtered down to one row per completed
+    PA) - needed for pitchers.compute_pitch_arsenal's per-pitch usage-mix
+    windowing and hitters.compute_plate_discipline's per-pitch swing/whiff/
+    chase windowing. Every other pitcher/hitter metric in this pipeline
+    only needs the PA-ENDING pitch (data.completed_events); both of these
+    signals are fundamentally about every pitch thrown/seen, not just the
+    ones that happened to end a plate appearance - a pitcher's real
+    fastball/breaking/offspeed usage share (or a batter's real swing/whiff/
+    chase rate) would be badly distorted by only counting PA-ending
+    pitches (a putaway pitch is disproportionately a breaking/offspeed
+    pitch and disproportionately a swing, not representative of the full
+    mix either consumer needs).
+
+    No null-filtering here - `batter`/`description` are never null on a
+    real row (confirmed against the actual persisted data), and
+    `pitch_type`/`zone` (the two columns that DO have real, ~0.4% nulls -
+    mostly pitchouts/Statcast's own "couldn't classify" rows) are each
+    filtered by their own consumer (helpers.pitch_type_family/
+    is_out_of_zone), not pre-filtered here - dropping on `pitch_type`
+    unconditionally would wrongly exclude real plate-discipline-relevant
+    pitches that have no pitch_type but a perfectly real description/zone."""
+    columns = ["game_date", "batter", "pitcher", "pitch_type", "description", "zone"]
+    missing = [c for c in columns if c not in df.columns]
+    if missing:
+        df = df.assign(**{c: pd.NA for c in missing})
+    return df[columns]
 
 
 def build_pitcher_events(df: pd.DataFrame) -> pd.DataFrame:
@@ -66,12 +123,17 @@ def compute_outputs(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     pdf_with_role = build_pitcher_events_with_role(data_with_game_id, roles)
     bullpen_pave = pitchers.compute_bullpen_pave(pdf_with_role)
 
+    all_pitches = build_all_pitch_events(df)
+    pitch_arsenal = pitchers.compute_pitch_arsenal(all_pitches)
+
     batting_order = data.assign_batting_order(data_with_game_id)
     lineup_consistency = lineup.compute_lineup_consistency(batting_order, latest_batter_team)
 
     return {
-        "wave": hitters.assemble_hitters(dt, data_with_game_id, names, latest_batter_team, lineup_consistency),
-        "pave": pitchers.assemble_pitchers(pdf, names, latest_pitcher_team),
+        "wave": hitters.assemble_hitters(
+            dt, data_with_game_id, names, latest_batter_team, lineup_consistency, all_pitches
+        ),
+        "pave": pitchers.assemble_pitchers(pdf, names, latest_pitcher_team, pitch_arsenal),
         "confidence": teams.assemble_team_metrics(data_with_game_id, bullpen_pave),
     }
 

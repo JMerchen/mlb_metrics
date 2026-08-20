@@ -394,6 +394,45 @@ MATCHUP_PARK_FACTOR_CLIP = (0.85, 1.15)
 # solo read was weak here) once more dates accumulate.
 MATCHUP_PARK_FACTOR_WEIGHT = 1.0
 
+# Pitch-type-specific platoon matchup: does this batter's own real
+# fastball/breaking/offspeed hit-rate split (hitters.compute_pitch_family_rates)
+# suggest a better/worse-than-average day against THIS starter's own real
+# pitch-mix (pitchers.compute_pitch_arsenal), independent of the
+# handedness platoon adjustment above (a batter can have a real fastball/
+# breaking-ball split that a same-handed vs. opposite-handed platoon split
+# doesn't capture at all). Same clip-then-blend shape as
+# MATCHUP_PARK_FACTOR_CLIP - one small-sample outlier pitcher's mix (a
+# reliever with a handful of tracked pitches) shouldn't swing a
+# probability further than a real arsenal skew would.
+MATCHUP_PITCH_ARSENAL_CLIP = (0.85, 1.15)
+
+# Same role as PITCHER_MATCHUP_WEIGHT_GRID - swept by a real backtest
+# before choosing MATCHUP_PITCH_ARSENAL_WEIGHT below. 0.0 is the built-in
+# null hypothesis (multiplier == 1.0 exactly, not an approximation of it).
+MATCHUP_PITCH_ARSENAL_WEIGHT_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
+
+# Real league-average pitch-family usage mix, used as the neutral baseline
+# a batter's own family rates are compared against (the same role
+# MATCHUP_LEAGUE_PAVE_FALLBACK plays for the handedness-platoon blend) -
+# computed once directly from the real persisted data/raw/statcast_2026.parquet
+# (helpers.pitch_type_family over every real classified pitch, 2026-08-19:
+# 307,172 fastball / 167,553 breaking / 81,627 offspeed of 556,352
+# classified pitches) rather than assumed; matchup._league_arsenal_mix
+# recovers the real mean directly from whatever `pave` it's given at
+# runtime and only falls back to this constant when that can't yield one
+# (empty pave, or a test fixture missing the Fastball_Rate/Breaking_Rate/
+# Offspeed_Rate columns).
+MATCHUP_LEAGUE_ARSENAL_FALLBACK = {"fastball": 0.5521, "breaking": 0.3012, "offspeed": 0.1467}
+
+# Ships at 0.0 (informational-only, exactly reproduces the pre-arsenal
+# matchup rate) until a real backtest earns a nonzero default - same
+# "ship conservatively" precedent as PITCHER_MATCHUP_OFFENSE_WEIGHT, not
+# MATCHUP_PARK_FACTOR_WEIGHT's (that one earned its 1.0 default from a
+# real backtest BEFORE shipping; this one hasn't been backtested yet).
+# Re-run once a real matchup-weight backtest exists and update this
+# comment with the real numbers, honestly, either direction.
+MATCHUP_PITCH_ARSENAL_WEIGHT = 0.0
+
 # --- Automated Game Picks ---
 #
 # Predicts a winner for each of today's games from team-level metrics (not
@@ -759,6 +798,20 @@ DFS_PITCHER_RIDGE_ALPHA_GRID = [0.1, 0.3, 1, 3, 10, 30, 100]
 # hitter model (ML_WALK_FORWARD_MIN_TRAIN_DATES_HITTER/_TEST_BLOCK_DATES_HITTER
 # above, reused rather than duplicated).
 HITTER_HIT_LOGIT_C_GRID = [0.01, 0.03, 0.1, 0.3, 1, 3, 10]
+
+# HistGradientBoostingClassifier's second-candidate grid for the same
+# hitter hit-probability model - literally DFS_HITTER_GBM_PARAM_GRID's
+# values (same order-of-magnitude row/fold count on this signal), not a
+# freshly invented grid. train_hitter_hit_model.py runs this alongside
+# LogisticRegression above and keeps whichever wins by walk-forward CV
+# score, mirroring train_dfs_ml_models.py's own Ridge-vs-GBM selection for
+# DK_Points_Hitter (quant-analytics item #2 - "model family").
+HITTER_HIT_GBM_PARAM_GRID = {
+    "max_depth": [2, 3],
+    "learning_rate": [0.03, 0.1],
+    "max_iter": [100, 200],
+    "min_samples_leaf": [50, 200],
+}
 
 # Game-pick win-probability model (scripts/train_game_pick_model.py) - fit +
 # report phase only, mirrors the hitter-side model above but not wired into

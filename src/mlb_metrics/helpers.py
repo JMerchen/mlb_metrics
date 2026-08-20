@@ -110,6 +110,147 @@ def is_official_at_bat(events: pd.Series) -> pd.Series:
     return (~events.isin(NON_AT_BAT_EVENTS)).astype(int)
 
 
+def is_batted_ball(type_col: pd.Series) -> pd.Series:
+    """A pitch that was put in play ("X", Statcast's own pitch-result code
+    for the `type` column) - the subset of completed-PA rows
+    (data.completed_events's own output) that carry real batted-ball data
+    (launch_speed/launch_angle/estimated_ba_using_speedangle/
+    estimated_woba_using_speedangle/launch_speed_angle). A strikeout/walk/
+    HBP has none of these populated - averaging over them unfiltered would
+    silently bias every quality-of-contact rate toward 0/NaN, not measure
+    contact quality at all.
+
+    Returns a boolean mask, unlike every other classifier in this file
+    (which return 0/1 int Series meant to be summed via a stat_fns entry) -
+    this is meant for FILTERING `dt` down to batted-ball rows before
+    windowing/blending (see hitters.compute_quality_of_contact), not for
+    counting."""
+    return type_col == "X"
+
+
+def is_barrel(launch_speed_angle: pd.Series) -> pd.Series:
+    """Statcast's own real quality-of-contact bucket (`launch_speed_angle`,
+    an integer 0-6 assigned to every batted ball) - 6 is Statcast's own
+    definition of a "barrel" (the launch-speed/launch-angle combination
+    most correlated with extra-base value). No literal `barrel` boolean
+    column exists on a real Statcast row; this IS the real barrel
+    classification (not an approximation reconstructed from the raw
+    launch_speed/launch_angle formula).
+
+    A real gap confirmed against the actual persisted data (not just a
+    synthetic-test edge case): some real batted-ball rows have a null
+    launch_speed_angle even though Statcast otherwise tracked the batted
+    ball - the `== 6` comparison against a pandas nullable-dtype column
+    returns pd.NA (not False) for those rows (three-valued comparison
+    logic), which `.astype(int)` alone cannot convert - fillna(False)
+    resolves "no tracked quality bucket" to "not a barrel" before casting,
+    the same "missing data reads as a real, honest 0, never a crash or a
+    fabricated value" precedent every other classifier here follows."""
+    return (launch_speed_angle == 6).fillna(False).astype(int)
+
+
+PITCH_TYPE_FAMILY = {
+    # Fastballs: thrown hard and relatively straight, or with modest cut/sink.
+    "FF": "fastball", "SI": "fastball", "FC": "fastball", "FA": "fastball",
+    # Breaking balls: sharp lateral/downward break off a fastball-speed arm action.
+    "SL": "breaking", "ST": "breaking", "CU": "breaking", "KC": "breaking",
+    "SV": "breaking", "CS": "breaking",
+    # Offspeed: same arm action as a fastball, thrown noticeably slower to
+    # disrupt timing (changeups/splitters) or a handful of rare novelty
+    # pitches with no real fastball/breaking analog.
+    "CH": "offspeed", "FS": "offspeed", "FO": "offspeed", "EP": "offspeed",
+    "KN": "offspeed",
+    # Deliberately unmapped (pitch_type_family returns NaN for these, same
+    # as any code not listed at all): "PO" (pitchout - not a real pitch to
+    # the batter) and "UN"/null (Statcast couldn't classify it). A rare/
+    # unclassifiable pitch_type is dropped from arsenal-mix/pitch-family
+    # windowing rather than guessed into a family - see
+    # pitchers.compute_pitch_arsenal and hitters.compute_pitch_family_rates.
+}
+
+
+def pitch_type_family(pitch_type: pd.Series) -> pd.Series:
+    """Groups Statcast's real `pitch_type` codes into the same three-bucket
+    fastball/breaking/offspeed scheme Baseball Savant's own pitch-arsenal
+    pages use, confirmed against every real code observed in the actual
+    persisted `data/raw/statcast_2026.parquet` (FF/SI/SL/CH/ST/FC/CU/FS/KC/
+    SV/EP/FA/FO/KN/CS/PO/UN, plus real nulls - see PITCH_TYPE_FAMILY above
+    for the exact mapping). Returns NaN (not a fabricated fourth bucket) for
+    any code not in the mapping, including real nulls - about 0.4% of real
+    pitches in the persisted data, mostly pitchouts and Statcast's own rare
+    "couldn't classify" rows.
+
+    Unlike `is_batted_ball`/`is_barrel` above, this returns the family
+    label itself (a string, or NaN), not a 0/1 count - it's meant for
+    grouping/filtering (`dt.assign(pitch_family=...)`, then window by that
+    column) rather than direct summation."""
+    return pitch_type.map(PITCH_TYPE_FAMILY)
+
+
+# Real Statcast `description` codes for a pitch where the batter's bat
+# genuinely never moved - confirmed against every real code observed in
+# `data/raw/statcast_2026.parquet` (ball/called_strike/blocked_ball/
+# automatic_ball/hit_by_pitch/automatic_strike/pitchout, plus real nulls).
+# `is_swing` is defined as the complement of this set (same "define what's
+# excluded, everything else counts" pattern is_official_at_bat already
+# uses for NON_AT_BAT_EVENTS) - a bunt attempt (foul_bunt/missed_bunt/
+# bunt_foul_tip) IS counted as a swing here (the batter did swing/offer at
+# the pitch, even with bunt mechanics) - a real, documented simplification
+# (bunts are ~0.25% of real pitches in the persisted data, not worth a
+# separate bucket for this project's purposes).
+TAKE_DESCRIPTIONS = {
+    "ball", "called_strike", "blocked_ball", "automatic_ball",
+    "hit_by_pitch", "automatic_strike", "pitchout",
+}
+
+# Real Statcast `description` codes for a genuine swing-and-miss - a
+# `foul_tip` is deliberately NOT included: Statcast classifies it as
+# contact (the bat touched the ball), the same real distinction
+# Baseball Savant's own Whiff% methodology makes.
+WHIFF_DESCRIPTIONS = {"swinging_strike", "swinging_strike_blocked", "swinging_pitchout", "missed_bunt"}
+
+
+def is_swing(description: pd.Series) -> pd.Series:
+    """Whether the batter offered at this pitch (any real description code
+    not in TAKE_DESCRIPTIONS) - the denominator for Whiff_Rate
+    (hitters.compute_plate_discipline)."""
+    return (~description.isin(TAKE_DESCRIPTIONS)).astype(int)
+
+
+def is_whiff(description: pd.Series) -> pd.Series:
+    """A genuine swing-and-miss (WHIFF_DESCRIPTIONS above) - the numerator
+    for Whiff_Rate. A subset of is_swing's real 1s, never the complement of
+    a take (foul balls/balls in play are real swings that aren't misses)."""
+    return description.isin(WHIFF_DESCRIPTIONS).astype(int)
+
+
+# Statcast's own real zone classification: 1-9 is the actual 3x3 strike
+# zone grid, 11-14 are the four real "chase" quadrants just outside it
+# (confirmed against the actual persisted zone value_counts - no other
+# codes exist on a real classified pitch). Using Statcast's own zone
+# rather than reconstructing "outside the zone" from plate_x/plate_z/
+# sz_top/sz_bot - this IS the real classification, not an approximation.
+OUT_OF_ZONE_CODES = {11, 12, 13, 14}
+
+
+def is_out_of_zone(zone: pd.Series) -> pd.Series:
+    """Whether the pitch was real Statcast-classified as outside the
+    strike zone - the denominator for Chase_Rate (a real null zone, ~0.4%
+    of pitches, reads as False here via pandas' own NA-comparison
+    semantics on the `.isin` call, not a crash - same "missing data is
+    excluded, not guessed" precedent every other classifier in this file
+    follows)."""
+    return zone.isin(OUT_OF_ZONE_CODES).astype(int)
+
+
+def is_chase(description: pd.Series, zone: pd.Series) -> pd.Series:
+    """A swing at a pitch outside the real strike zone - the numerator for
+    Chase_Rate. Real, not an approximation: both is_swing and
+    is_out_of_zone are already real Statcast classifications, this is
+    just their conjunction."""
+    return ((is_swing(description) == 1) & (is_out_of_zone(zone) == 1)).astype(int)
+
+
 def estimate_rbi(df: pd.DataFrame) -> pd.Series:
     """Runs driven in on this completed plate appearance, approximated as
     `post_bat_score - bat_score` on the PA's own final-pitch row (the one

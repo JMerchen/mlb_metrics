@@ -7,6 +7,38 @@ import pytest
 from mlb_metrics import pipeline
 
 
+def test_build_all_pitch_events_keeps_every_row_no_pre_filtering():
+    # No pre-filter on pitch_type/zone here - a row with a null pitch_type
+    # but a perfectly real description/zone (e.g. a real ball/strike call)
+    # must still come through, since hitters.compute_plate_discipline
+    # needs it even though pitchers.compute_pitch_arsenal (which filters
+    # on pitch_type itself) would drop it downstream.
+    df = pd.DataFrame([
+        {"game_date": pd.Timestamp("2026-06-15"), "batter": 10, "pitcher": 1, "pitch_type": "FF", "description": "ball", "zone": 5},
+        {"game_date": pd.Timestamp("2026-06-15"), "batter": 10, "pitcher": 1, "pitch_type": None, "description": "called_strike", "zone": None},
+        {"game_date": pd.Timestamp("2026-06-16"), "batter": 20, "pitcher": 2, "pitch_type": "SL", "description": "swinging_strike", "zone": 12},
+    ])
+
+    result = pipeline.build_all_pitch_events(df)
+
+    assert len(result) == 3
+    assert list(result.columns) == ["game_date", "batter", "pitcher", "pitch_type", "description", "zone"]
+    assert set(result["pitcher"]) == {1, 2}
+
+
+def test_build_all_pitch_events_degrades_gracefully_when_columns_missing():
+    # An older/narrower synthetic df predating pitch_type/description/zone
+    # - degrades every missing column to null rather than a KeyError, same
+    # "missing optional input becomes an honest null" precedent
+    # build_pitch_events already establishes for its own quality columns.
+    df = pd.DataFrame([{"game_date": pd.Timestamp("2026-06-15"), "batter": 10, "pitcher": 1}])
+
+    result = pipeline.build_all_pitch_events(df)
+
+    assert len(result) == 1
+    assert list(result.columns) == ["game_date", "batter", "pitcher", "pitch_type", "description", "zone"]
+
+
 def test_run_excludes_games_on_or_after_as_of_date(monkeypatch, tmp_path):
     """The pipeline must only ever compute metrics from games strictly
     before --as-of-date, regardless of what the fetch/persist layer hands
@@ -161,8 +193,10 @@ def _minimal_outputs():
             # dfs_ml.build_hitter_features (pipeline.run's Model_Hit_Probability
             # tier) requires every dfs_ml.HITTER_FEATURE_COLUMNS column to
             # exist on wave - a real outputs["wave"] always carries these
-            # (hitters.compute_extended_dk_rates), so this fixture must too.
+            # (hitters.compute_extended_dk_rates/compute_quality_of_contact),
+            # so this fixture must too.
             "Expected_BB": 0.3, "Expected_HBP": 0.05, "Expected_RBI": 0.5,
+            "Exit_Velo": 90.0, "Barrel_Rate": 0.08, "xBA": 0.25, "xwOBA": 0.32,
         },
     ])
     # PAVE/PAVE_PLUS chosen so this fixture's Matchup_Hit_Probability clears
@@ -337,6 +371,7 @@ def test_run_model_shortlist_excludes_heuristic_favorite_outside_model_top_n(mon
                 "PA_L": 0, "PA_R": 40, "WAVE": 0.30, "probability_L": 0, "probability_R": 0.60, "probability": 0.60,
                 "Game_Hit_Probability": 0.60, "Consistency": 0.0, "Approach": 0.36, "Expected_Bases": 1.0,
                 "Expected_BB": 0.3, "Expected_HBP": 0.05, "Expected_RBI": 0.5,
+                "Exit_Velo": 90.0, "Barrel_Rate": 0.08, "xBA": 0.25, "xwOBA": 0.32,
             }
             for key in range(1, 11)
         ]
@@ -345,6 +380,7 @@ def test_run_model_shortlist_excludes_heuristic_favorite_outside_model_top_n(mon
             "PA_L": 0, "PA_R": 40, "WAVE": 0.40, "probability_L": 0, "probability_R": 0.95, "probability": 0.95,
             "Game_Hit_Probability": 0.95, "Consistency": 0.0, "Approach": 0.9025, "Expected_Bases": 1.5,
             "Expected_BB": 0.3, "Expected_HBP": 0.05, "Expected_RBI": 0.5,
+            "Exit_Velo": 90.0, "Barrel_Rate": 0.08, "xBA": 0.25, "xwOBA": 0.32,
         })
         wave = pd.DataFrame(rows)
         pave = pd.DataFrame([{
