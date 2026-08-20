@@ -178,7 +178,11 @@ def test_compute_wave_blends_windows_and_converts_to_probability():
     rows += _at_bats(3, "L", [("2026-06-15", "field_out"), ("2026-06-15", "field_out")])
 
     dt = pd.DataFrame(rows)
-    wave = hitters.compute_wave(dt).set_index("key_mlbam")
+    # Pinned to the exact-null-hypothesis shrinkage_strength=0.0 - this test
+    # is about the window-blend/platoon-share math, not shrinkage (which has
+    # its own dedicated test below), and must stay independent of whatever
+    # config.WAVE_SHRINKAGE_STRENGTH's live default happens to be.
+    wave = hitters.compute_wave(dt, shrinkage_strength=0.0).set_index("key_mlbam")
 
     assert wave.loc[1, "WAVE_R"] == pytest.approx(0.9)
     assert wave.loc[1, "WAVE_L"] == 0
@@ -381,7 +385,11 @@ def test_compute_game_hit_probability_blends_game_level_hit_rate():
     ]
     data_with_game_id = pd.DataFrame(rows)
 
-    result = hitters.compute_game_hit_probability(data_with_game_id).set_index("key_mlbam")
+    # Pinned to the exact-null-hypothesis shrinkage_strength=0.0 - this test
+    # is about the window-blend math, not shrinkage (which has its own
+    # dedicated test below), and must stay independent of whatever
+    # config.GAME_HIT_PROB_SHRINKAGE_STRENGTH's live default happens to be.
+    result = hitters.compute_game_hit_probability(data_with_game_id, shrinkage_strength=0.0).set_index("key_mlbam")
 
     # full=3/4, 81d=3/3, 30d=2/2, 10d=1/1
     expected = (3 / 4) * 0.175 + 1.0 * 0.225 + 1.0 * 0.275 + 1.0 * 0.325
