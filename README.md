@@ -1125,6 +1125,63 @@ This completes quant-analytics item #4 ("decision theory for the actual
 game structure") in full: streak-aware optimal stopping + same-game
 diversification.
 
+### Market benchmark confirmation (`scripts/debug_espn_odds.py`)
+
+Quant-analytics item #6, slice 1 of at least 2 - "no market benchmark."
+Unlike the NFL side's "FantasyPros ECR" precedent (which turns out not to
+be a scrape at all - it's `nflreadpy` pulling a static CSV snapshot from a
+GitHub mirror), no equivalent trick exists for MLB, and this project had
+zero HTTP client dependency before this slice. Given the user's explicit
+choice to pursue a real free source rather than an API key, real web
+research (this repo's own sandbox blocks every odds-site domain directly,
+so a real community project's source was read via `raw.githubusercontent.com`
+instead) found something better than HTML scraping: ESPN's unofficial but
+public, keyless, structured-JSON `site.api.espn.com/apis/site/v2/sports/
+baseball/mlb/scoreboard` and `.../summary?event={id}` endpoints, which
+still serve a real `pickcenter` array of moneyline odds. Per this
+project's established `debug_nfl_data.py` pattern, this slice is
+**confirmation-only**: a real dispatched script (`debug_espn_odds.py`,
+`.github/workflows/debug_espn_odds.yml` - this sandbox can't reach ESPN
+directly, but the Actions runner can) settles the real shape before any
+ingestion logic gets written against assumed schemas. `requirements.txt`
+gained its first HTTP client dependency, `requests`.
+
+**Real findings** (GitHub Actions run 32516808493, 2026-08-21, `days_back`
+default of 5):
+
+- **Schema confirmed and stable.** Every real game on both dates queried
+  (`20260821`, 15 events; `20260816`, 15 events) had exactly one
+  `pickcenter` row (`provider.name="DraftKings"`, `id="100"`) with real
+  `details`, `overUnder`, `spread`, `overOdds`/`underOdds`, and
+  `awayTeamOdds`/`homeTeamOdds` objects carrying real `moneyLine` fields -
+  e.g. away=+240/home=-261 (Cardinals at Phillies) de-vigging to a real
+  home win probability of 0.7108 via the standard proportional method
+  (`moneyline_to_implied_probability` + `devig`, both hand-sanity-checked
+  before the dispatch, e.g. `-150` → exactly 0.6).
+- **Team abbreviation crosswalk needed, but small.** ESPN uses `ARI` and
+  `CHW`; this project's `schedule.TEAM_ID_TO_ABBREV` uses `AZ` and `CWS`.
+  All other 28 real abbreviations matched exactly. Only these two need a
+  mapping when this gets wired in for real.
+- **Historical depth confirmed at 5 days back, not further.** The
+  `20260816` query returned real `pickcenter`/moneyline data for games
+  that had already been played by dispatch time - a genuinely encouraging
+  sign for building a "beat the closing line" backtest, since the single
+  biggest open risk going in was whether ESPN drops odds once a game
+  finishes. This dispatch only tested exactly 5 days back, though - real
+  depth beyond that (weeks/months, i.e. enough for a real historical
+  backtest across this project's full holdout window) is still
+  unconfirmed and would need its own real check before a backtest is
+  promised.
+
+**Honest bottom line:** this slice is a real GO on the schema/crosswalk
+front (both are simple and stable) and a real, but only partially
+confirmed, GO on historical depth (5 days back verified; further back is
+not yet known). Slice 2 - wiring a real `Market_Home_Win_Probability`
+column into `pipeline.py`/`game_evaluation.py` as a logged side-by-side
+comparison, and a real historical "beat the closing line" backtest once
+depth is confirmed further back - is a plausible next step but not yet
+scoped or committed to.
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our
