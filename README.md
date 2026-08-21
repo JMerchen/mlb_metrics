@@ -993,6 +993,86 @@ decides which of the top-ranked candidates become the 0-2 picks shown as
 change (landing two new uncalibrated thresholds in one change would make
 a good or bad outcome hard to attribute to either).
 
+### Decision theory: streak-aware optimal stopping (`decision_theory.py`)
+
+Quant-analytics item #4 ("decision theory for the actual game
+structure"), slice 1 of 2 (a real correlation/joint-risk treatment
+between same-day picks is the deferred other half). Every signal above
+answers "how likely is a hit today" - none of them ever asked the
+genuinely different question Beat the Streak's own rules pose: **given
+the current streak, is today's best pick good enough to risk it, or is
+sitting out worth more than playing a marginal day?**
+`config.DAILY_PICK_MIN_PROBABILITY` (0.77) is a single fixed bar applied
+identically every day, with zero awareness of streak length or how many
+days remain - `predictions.select_picks` makes each day's decision
+completely fresh. A real multi-day streak simulator already existed
+(`evaluation.streak_progression`), but purely retrospectively - it scores
+history after the fact, with no feedback into the day's own decision.
+
+This is a genuine finite-horizon **optimal-stopping / dynamic-programming
+problem** - the same "reservation threshold" shape as the classic
+asset-selling/secretary problem - not something to approximate with a
+hand-tuned heuristic. `decision_theory.solve_reservation_thresholds`
+solves it exactly via backward induction: state = current streak `s`;
+each of `horizon` remaining days has a real probability `p` (drawn from
+the actual empirical sample of historical daily probabilities, not a
+fitted distribution) of extending the streak; terminal utility (season
+end) = the streak length itself (a deliberately simple, monotonic
+utility - no discrete MLB.com prize-threshold modeling this slice, per
+explicit choice). The Bellman recursion yields a closed-form decision
+rule: PLAY iff `p > (V(s) - V(0)) / (V(s+gain) - V(0))` - a reservation
+threshold that's provably non-decreasing in `s` (a longer streak needs a
+better pick to risk it) and non-increasing as the horizon shrinks (less
+time left to recover a reset lowers today's opportunity cost of sitting
+out - a real, slightly counterintuitive result, not glossed over).
+`gain` (picks-that-hit on a real non-reset day) is itself estimated from
+real history (`decision_theory.estimate_gain`), not assumed to always
+equal `config.DAILY_PICK_MAX`.
+
+**Real backtest** (`scripts/backtest_streak_decision.py` - unlike every
+prior slice, this needs no GitHub Actions dispatch at all:
+`data/predictions/predictions.csv` is already checked into the repo and
+readable with zero network dependency): loaded 71 real resolved days,
+real empirical `gain=1.3125`. Solving the DP against this real history
+and replaying it two ways - today's static 0.77 rule vs. the DP rule -
+plus a bootstrap (1,000 resamples of the real historical `(p, outcome)`
+day-pairs, reshuffling day order - consistent with the DP's own stated
+days-are-i.i.d. simplification):
+
+| | single real path | bootstrap mean final streak |
+|---|---|---|
+| Status quo (p&gt;=0.77) | final=4, longest=8, played 55/71 days | 1.258 |
+| DP rule (streak/horizon-aware) | final=6, longest=8, played 71/71 days | 1.800 |
+
+DP beat the status quo in 228/1,000 bootstrap resamples vs. 53 losses
+(719 ties) - a real, if modest, edge on this history: **GO** for further
+validation, not yet for live wiring (see below). **Reported honestly**:
+in this specific real window the DP rule played every single day - not a
+bug, a real mathematical property (at streak `s=0` the reservation
+threshold is *always exactly 0*, since a failed play at `s=0` costs
+nothing - there's nothing to protect), combined with this window's real
+streaks never exceeding 8, at which point even the highest threshold
+encountered (0.7856) still cleared against that day's real `p=0.908`.
+The "protect an established big streak" behavior is real and provably
+present in the model (see `tests/test_decision_theory.py`'s dedicated
+hand-computed case, `s=5` correctly choosing to sit out a `p=0.3` day),
+but this particular thin, modest-streak real history never actually
+exercised it - an honest limitation of a 71-day backtest, not a flaw in
+the reasoning.
+
+**Deliberately not wired into `pipeline.run()`/`predictions.select_picks`
+this slice** - informational/backtest-only, the same "validate offline
+first, live wiring is a separate later decision" precedent
+`train_hitter_hit_model.py`'s own docstring and `Matchup_Hit_Probability`'s
+`weight=0.0` ship-conservatively pattern already established elsewhere in
+this project. Also explicitly out of scope: a "1 pick vs. 2 picks"
+decision (only binary PLAY-today's-existing-2-pick-rule/SIT this slice);
+correlation/joint modeling between two same-day picks (item #4's other,
+separate sub-problem - `p` is taken as the day's already-computed real
+probability, not reopening that question here); and the i.i.d.-across-days
+assumption is a real, stated simplification (serial correlation across
+days - e.g. a league-wide hot/cold week - isn't modeled).
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our
