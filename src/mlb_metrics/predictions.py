@@ -32,6 +32,43 @@ LEGACY_MODEL_VERSION = "legacy"
 JOINT_PROBABILITY_GATE_COLUMNS = ["probability", "Game_Hit_Probability", "Matchup_Hit_Probability"]
 
 
+def _diversify_second_pick(ranked: pd.DataFrame, rank_column: str, margin: float) -> pd.DataFrame:
+    """Quant-analytics item #4, slice 2: `ranked` is already sorted best-
+    to-worst by `rank_column`. If the #1 and #2 rows share a real
+    `game_pk`, look further down `ranked` (in order) for the first row
+    from a DIFFERENT game whose `rank_column` value is within `margin` of
+    the original #2's own value - if one exists, move it up into the #2
+    slot (the original #2 is demoted to right after it; everyone else
+    keeps their relative order). `#1` is never touched. Returns `ranked`
+    unchanged if there's nothing to diversify (fewer than 2 rows, #1/#2
+    already in different games, either game_pk is null/unknown, or no
+    close-enough different-game alternative exists further down the
+    list - never sacrifices real expected value to force a diversification
+    that isn't nearly free)."""
+    if len(ranked) < 2:
+        return ranked
+
+    top_game = ranked.iloc[0]["game_pk"]
+    second_game = ranked.iloc[1]["game_pk"]
+    if pd.isna(top_game) or pd.isna(second_game) or top_game != second_game:
+        return ranked
+
+    second_score = ranked.iloc[1][rank_column]
+    candidate_position = None
+    for position in range(2, len(ranked)):
+        row = ranked.iloc[position]
+        if pd.notna(row["game_pk"]) and row["game_pk"] != top_game and row[rank_column] >= second_score - margin:
+            candidate_position = position
+            break
+    if candidate_position is None:
+        return ranked
+
+    order = list(range(len(ranked)))
+    order.remove(candidate_position)
+    order.insert(1, candidate_position)
+    return ranked.iloc[order].reset_index(drop=True)
+
+
 def select_picks(
     hitters: pd.DataFrame,
     date,
@@ -46,6 +83,7 @@ def select_picks(
     max_days_since_last_game: int = config.HITTER_MAX_DAYS_SINCE_LAST_GAME,
     teams_playing_today: set[str] | None = None,
     model_version: str = config.HITTER_MODEL_VERSION,
+    same_game_diversification_margin: float = config.SAME_GAME_DIVERSIFICATION_MARGIN,
 ) -> pd.DataFrame:
     """Rank a computed hitters table (the wave.csv-equivalent output of
     hitters.assemble_hitters) by `rank_metric` (defaults to `metric`) and
@@ -131,6 +169,14 @@ def select_picks(
     evaluation._combined_probability). `Matchup_Hit_Probability` is NaN
     whenever `hitters` doesn't carry it (no schedule/matchup data that
     day, or a historical wave.csv-only replay - see git_backtest.py).
+
+    `same_game_diversification_margin` (quant-analytics item #4, slice 2)
+    is a #2-pick-only tie-break: column-gated on a real `game_pk` being
+    present on `hitters` (see pipeline.run) - a no-op whenever it's
+    absent, same convention as the lineup/model-shortlist qualifiers
+    above. See `_diversify_second_pick`'s own docstring for the real
+    rule. 0.0 (the live default) is the exact null hypothesis - today's
+    unmodified single-column ranking, bit-for-bit.
     """
     qualified = hitters[(hitters["PA_L"] + hitters["PA_R"]) >= min_plate_appearances].copy()
     if "avg_batting_order" in qualified.columns:
@@ -157,7 +203,10 @@ def select_picks(
             if gate_column in qualified.columns:
                 qualified = qualified[qualified[gate_column] >= min_probability]
 
-    picks = qualified.sort_values(rank_metric or metric, ascending=False).head(top_n).reset_index(drop=True)
+    ranked = qualified.sort_values(rank_metric or metric, ascending=False).reset_index(drop=True)
+    if "game_pk" in ranked.columns and same_game_diversification_margin > 0:
+        ranked = _diversify_second_pick(ranked, rank_metric or metric, same_game_diversification_margin)
+    picks = ranked.head(top_n).reset_index(drop=True)
 
     picks["rank"] = picks.index + 1
     picks["date"] = pd.Timestamp(date)

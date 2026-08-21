@@ -305,6 +305,14 @@ def run(
             pick_pool["Matchup_Approach"] = pick_pool["Approach"] * pick_pool["Matchup_Hit_Probability"]
             rank_metric = "Matchup_Approach"
 
+            # Quant-analytics item #4, slice 2: schedule_df already carries
+            # a real game_pk per team (schedule.normalize_schedule) - merged
+            # in so predictions.select_picks's same-game diversification
+            # tie-break (column-gated, see that function's own docstring)
+            # can actually detect two candidates sharing a real game.
+            if "game_pk" in schedule_df.columns:
+                pick_pool = pick_pool.merge(schedule_df[["team", "game_pk"]], on="team", how="left")
+
             hitter_features = dfs_ml.build_hitter_features(
                 outputs["wave"], outputs["pave"], outputs["confidence"], schedule_df, matchup_probability
             )
