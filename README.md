@@ -1073,6 +1073,58 @@ probability, not reopening that question here); and the i.i.d.-across-days
 assumption is a real, stated simplification (serial correlation across
 days - e.g. a league-wide hot/cold week - isn't modeled).
 
+### Same-game diversification (`predictions._diversify_second_pick`)
+
+Quant-analytics item #4, slice 2 of 2 - the deferred other half of the
+streak-aware stopping rule above: "correlation from being in the same
+game/weather." No weather data exists anywhere in this project (confirmed
+by a real search - this slice can only address same-game correlation).
+`game_pk` exists in raw Statcast and `schedule.normalize_schedule`'s
+output, but was discarded before reaching `predictions.select_picks` -
+`matchup.compute_matchup_hit_probability` returned only `[key_mlbam,
+Matchup_Hit_Probability]`. A real local query against
+`data/raw/statcast_2026.parquet` found 6 of 71 real two-pick days
+(≈8.5%) had both picks in the same real game - real, but too thin to fit
+an actual correlation coefficient from (statistically indefensible with
+n=6).
+
+Instead, `config.SAME_GAME_DIVERSIFICATION_MARGIN` (new, ships at **0.0
+- the exact null hypothesis**) and `predictions._diversify_second_pick`
+use a robust, sign-only argument: same-game correlation (shared weather/
+park/pitching-matchup quality) can only ever raise the chance both picks
+miss together relative to independence, never lower it - so when the #2
+pick shares a game with #1, and a comparably-ranked candidate from a
+DIFFERENT game exists within `margin`, preferring it is a real
+improvement whose direction doesn't depend on knowing the exact
+correlation magnitude. Only ever touches the #2 slot; #1 is never
+affected; a missing `game_pk` column (every historical wave.csv-only
+replay) is a no-op, same convention as every other optional qualifier in
+`select_picks`. `pipeline.py` now merges `schedule_df`'s real `game_pk`
+into `pick_pool` so live runs can actually use this.
+
+**Real backtest** (`scripts/backtest_same_game_diversification.py`,
+GitHub Actions run 32513681638, 2026-08-21, the SAME final
+`ML_FINAL_HOLDOUT_DATES` (20) holdout window
+`train_hitter_hit_model.py`/`backtest_selection_rule.py` validate
+against): **a clean, honest NO-GO by construction** - of the 20 real
+holdout dates (only 3 with a scored pick pair at all), **zero** had a
+real same-game #1/#2 pair under today's unmodified ranking. Every margin
+in the sweep (`0, 0.02, 0.05, 0.1`) produced byte-identical results
+(`top_2_BOTH_hit_rate=0.6667`, the real `require_all=True` "both must
+hit" Beat the Streak rule) because there was nothing for a nonzero margin
+to possibly change in this particular window - not a failure of the
+method, a real, honest reflection of how rare same-game pairs are within
+this specific 20-date slice (contrast with the broader 71-date
+`predictions.csv` sample above, which did show 6 real same-game pairs -
+different, larger window, same underlying real rarity). The machinery
+ships tested and ready to re-run as more real history accumulates;
+`SAME_GAME_DIVERSIFICATION_MARGIN` stays at its null-hypothesis default
+until a real backtest earns otherwise.
+
+This completes quant-analytics item #4 ("decision theory for the actual
+game structure") in full: streak-aware optimal stopping + same-game
+diversification.
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our

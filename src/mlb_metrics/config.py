@@ -305,6 +305,23 @@ HITTER_MODEL_VERSION = "v4-model-shortlist"
 DAILY_PICK_MAX = 2
 DAILY_PICK_MIN_PROBABILITY = 0.77
 
+# Quant-analytics item #4, slice 2 ("decision theory for the actual game
+# structure" - correlation from being in the same game): predictions.
+# select_picks's #2-pick diversification tie-break. When the #1 and #2
+# ranked candidates share a real game_pk, and a candidate from a
+# DIFFERENT game ranks within this margin of the original #2's own
+# rank_metric value, the different-game candidate is preferred instead -
+# same-game correlation (shared weather/park/pitching-matchup quality)
+# can only ever raise the chance both picks miss together, never lower
+# it, so diversifying when it's nearly free is a real, robust
+# improvement whose direction doesn't depend on knowing the exact
+# correlation magnitude. 0.0 (the live default) is the exact null
+# hypothesis - today's unmodified single-column ranking, bit-for-bit -
+# until a real backtest earns a nonzero value (see
+# scripts/backtest_same_game_diversification.py and README's "Same-game
+# diversification" section for the real go/no-go numbers once run).
+SAME_GAME_DIVERSIFICATION_MARGIN = 0.0
+
 # --- Lineup awareness ---
 #
 # Backtesting found ~30% of logged top-5 picks had zero at-bats on the day

@@ -293,6 +293,81 @@ def test_select_picks_model_hit_probability_logged_and_defaults_to_na():
     assert pd.isna(picks_without.iloc[0]["Model_Hit_Probability"])
 
 
+def _hitters_with_game_pk(rows):
+    """rows: list of (key_mlbam, ghp, game_pk). Same shape as _hitters
+    (min_probability=0 assumed by callers - see below) plus a game_pk
+    column for quant-analytics item #4, slice 2's diversification tests."""
+    hitters = _hitters([(key, 0, 40, ghp) for key, ghp, _ in rows])
+    hitters["game_pk"] = [game_pk for _, _, game_pk in rows]
+    return hitters
+
+
+# Shared fixture for the diversification tests below: #1 (key=1, ghp=0.90)
+# and #2 (key=2, ghp=0.85) share game_pk=100; key=3 (ghp=0.80, game_pk=200)
+# is a close different-game alternative to #2 (0.85-0.80=0.05); key=4
+# (ghp=0.60, game_pk=300) is a distant, irrelevant different-game candidate.
+_DIVERSIFICATION_ROWS = [(1, 0.90, 100), (2, 0.85, 100), (3, 0.80, 200), (4, 0.60, 300)]
+
+
+def test_select_picks_diversification_default_margin_is_a_noop():
+    hitters = _hitters_with_game_pk(_DIVERSIFICATION_ROWS)
+
+    picks = predictions.select_picks(hitters, "2026-06-20", top_n=4, min_plate_appearances=30, min_probability=0)
+
+    # 0.0 (the live default) reproduces today's exact single-column
+    # ranking, even though game_pk is present and #1/#2 share a game.
+    assert list(picks["key_mlbam"]) == [1, 2, 3, 4]
+    assert list(picks["rank"]) == [1, 2, 3, 4]
+
+
+def test_select_picks_diversification_swaps_in_a_close_different_game_candidate():
+    hitters = _hitters_with_game_pk(_DIVERSIFICATION_ROWS)
+
+    # margin=0.06 clears the real 0.05 gap between #2 (0.85, game 100) and
+    # key=3 (0.80, game 200) - key=3 should be promoted into the #2 slot,
+    # demoting the original #2 (key=2) to #3. key=4 (game 300, ghp=0.60)
+    # is untouched either way - too far down to matter here.
+    picks = predictions.select_picks(
+        hitters, "2026-06-20", top_n=4, min_plate_appearances=30, min_probability=0,
+        same_game_diversification_margin=0.06,
+    )
+
+    assert list(picks["key_mlbam"]) == [1, 3, 2, 4]
+    assert list(picks["rank"]) == [1, 2, 3, 4]
+    # #1 is untouched - still the real best candidate, its own probability unchanged.
+    assert picks.iloc[0]["key_mlbam"] == 1
+    assert picks.iloc[0]["predicted_probability"] == 0.90
+
+
+def test_select_picks_diversification_does_not_swap_when_no_close_alternative_exists():
+    hitters = _hitters_with_game_pk(_DIVERSIFICATION_ROWS)
+
+    # margin=0.03 does NOT clear the real 0.05 gap - no real expected
+    # value should be sacrificed to force a diversification that isn't
+    # nearly free, so the original ranking survives unchanged.
+    picks = predictions.select_picks(
+        hitters, "2026-06-20", top_n=4, min_plate_appearances=30, min_probability=0,
+        same_game_diversification_margin=0.03,
+    )
+
+    assert list(picks["key_mlbam"]) == [1, 2, 3, 4]
+
+
+def test_select_picks_diversification_is_a_noop_without_game_pk_column():
+    hitters = _hitters([(1, 0, 40, 0.90), (2, 0, 40, 0.85), (3, 0, 40, 0.80), (4, 0, 40, 0.60)])
+
+    # No game_pk column at all (every historical wave.csv-only replay,
+    # e.g. git_backtest.py) - column-gated, same convention as
+    # avg_batting_order/Model_Hit_Probability above, even with a real
+    # nonzero margin passed in.
+    picks = predictions.select_picks(
+        hitters, "2026-06-20", top_n=4, min_plate_appearances=30, min_probability=0,
+        same_game_diversification_margin=0.06,
+    )
+
+    assert list(picks["key_mlbam"]) == [1, 2, 3, 4]
+
+
 def test_select_picks_rank_metric_chooses_differently_than_metric_but_reports_metric():
     # Player 2 has the higher Game_Hit_Probability, but player 1 has the
     # higher Approach (Game_Hit_Probability * probability) once ranked on a
