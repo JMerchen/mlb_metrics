@@ -20,7 +20,7 @@ import pandas as pd
 
 from mlb_metrics import (
     config, data, dfs_ml, evaluation, game_evaluation, game_picks, game_predictions,
-    hitters, lineup, matchup, pitchers, predictions, schedule, teams,
+    hitters, lineup, market_odds, matchup, pitchers, predictions, schedule, teams,
 )
 
 
@@ -338,7 +338,21 @@ def run(
             win_probabilities = game_picks.compute_game_win_probabilities(
                 outputs["confidence"], outputs["pave"], schedule_games_df
             )
-            todays_game_picks = game_predictions.select_game_picks(win_probabilities, as_of_date)
+            # A real market-odds fetch failure must never suppress real
+            # game-pick logging - deliberately a separate try/except from
+            # schedule_games_df's own above, not shared with it. Quant-
+            # analytics item #6, slice 2 (market_odds.py).
+            try:
+                market_probabilities = market_odds.fetch_market_home_win_probabilities(as_of_date)
+            except Exception as exc:
+                print(
+                    f"WARNING: failed to fetch real ESPN market odds for {as_of_date} ({exc}); "
+                    f"logging today's game picks without a market comparison."
+                )
+                market_probabilities = None
+            todays_game_picks = game_predictions.select_game_picks(
+                win_probabilities, as_of_date, market_probabilities=market_probabilities
+            )
             game_predictions.append_game_predictions(todays_game_picks, game_predictions_log_path)
 
         write_game_picks_export(game_predictions_log_path, output_dir)

@@ -17,6 +17,11 @@ whether odds survive past game day at all) via a GitHub Actions runner
 with real internet access, rather than writing ingestion logic against
 guessed shapes.
 
+Note: as of slice 2, the real ingestion (moneyline math, fetch functions,
+team-abbreviation crosswalk) lives in mlb_metrics.market_odds - this
+script now just re-exercises it for diagnostic printing, it doesn't
+duplicate the logic anymore.
+
 Usage:
     python scripts/debug_espn_odds.py                  # today's real MLB slate
     python scripts/debug_espn_odds.py --days-back 5     # a real date 5 days ago (historical-odds check)
@@ -28,41 +33,10 @@ import json
 import os
 import sys
 
-import requests
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from mlb_metrics.market_odds import devig, fetch_scoreboard, fetch_summary, moneyline_to_implied_probability
 from mlb_metrics.schedule import TEAM_ID_TO_ABBREV
-
-SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard"
-SUMMARY_URL = "https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/summary"
-
-
-def moneyline_to_implied_probability(moneyline: float) -> float:
-    """Standard American-odds-to-implied-probability conversion."""
-    if moneyline < 0:
-        return -moneyline / (-moneyline + 100)
-    return 100 / (moneyline + 100)
-
-
-def devig(home_implied: float, away_implied: float) -> float:
-    """Standard proportional de-vig - normalizes both sides' implied
-    probabilities to sum to 1.0, removing the bookmaker's overround. The
-    simplest, most defensible de-vig method, not the only one that
-    exists."""
-    return home_implied / (home_implied + away_implied)
-
-
-def fetch_scoreboard(date: str) -> dict:
-    resp = requests.get(SCOREBOARD_URL, params={"dates": date}, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
-
-
-def fetch_summary(event_id: str) -> dict:
-    resp = requests.get(SUMMARY_URL, params={"event": event_id}, timeout=30)
-    resp.raise_for_status()
-    return resp.json()
 
 
 def _real_espn_abbrevs(scoreboard: dict) -> set:

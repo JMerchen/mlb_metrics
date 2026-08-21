@@ -1,3 +1,5 @@
+import math
+
 import pandas as pd
 import pytest
 
@@ -5,11 +7,12 @@ from mlb_metrics import game_evaluation
 
 
 def _pick(date, game_pk, home_team, away_team, predicted_winner, predicted_probability, actual_winner, game_played,
-          metric="GamePick_Win_Probability"):
+          metric="GamePick_Win_Probability", market_home_win_probability=None):
     return {
         "date": date, "game_pk": game_pk, "home_team": home_team, "away_team": away_team,
         "predicted_winner": predicted_winner, "predicted_probability": predicted_probability,
         "metric": metric, "actual_winner": actual_winner, "game_played": game_played,
+        "market_home_win_probability": market_home_win_probability,
     }
 
 
@@ -148,3 +151,87 @@ def test_build_game_picks_export_no_resolved_games_yet():
     assert pd.isna(summary.loc[0, "accuracy"])
     assert summary.loc[0, "current_streak"] == 0
     assert summary.loc[0, "best_streak"] == 0
+
+
+def test_build_game_picks_export_market_metrics_are_nan_with_no_real_market_data():
+    # _predictions() logs no market_home_win_probability values at all -
+    # every game predates quant-analytics item #6 slice 2's real wiring.
+    # market_accuracy/etc must be honestly NaN, never a fabricated number.
+    picks, summary = game_evaluation.build_game_picks_export(_predictions())
+
+    assert summary.loc[0, "n_market_resolved"] == 0
+    assert pd.isna(summary.loc[0, "market_accuracy"])
+    assert pd.isna(summary.loc[0, "market_brier_score"])
+    assert pd.isna(summary.loc[0, "market_log_loss"])
+    assert summary.loc[0, "n_beat_closing_line_compared"] == 0
+    assert pd.isna(summary.loc[0, "beat_closing_line_rate"])
+    assert "market_home_win_probability" in picks.columns
+
+
+def test_build_game_picks_export_market_metrics_missing_column_migration():
+    # A log written before slice 2's column existed at all (not just null
+    # values) must not crash - same migration convention as
+    # above_threshold's own missing-column case.
+    rows = [
+        {"date": "2026-07-18", "game_pk": 1, "home_team": "NYY", "away_team": "BOS", "predicted_winner": "NYY",
+         "predicted_probability": 0.65, "metric": "GamePick_Win_Probability", "actual_winner": "NYY", "game_played": 1},
+    ]
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    assert "market_home_win_probability" not in df.columns
+
+    picks, summary = game_evaluation.build_game_picks_export(df)
+
+    assert summary.loc[0, "n_market_resolved"] == 0
+    assert pd.isna(summary.loc[0, "market_accuracy"])
+
+
+def _market_comparison_rows():
+    # Three above-threshold, resolved games with real market data:
+    #  - pk 1: model home prob 0.90, market 0.60 - model's squared error
+    #    (0.01) beats the market's (0.16) -> a real model win.
+    #  - pk 2: model favors home at 0.60 (home prob 0.60), market favors
+    #    home much less (0.30); the away team (SF) actually wins - model's
+    #    squared error (0.36) is worse than the market's (0.09) -> a real
+    #    market win.
+    #  - pk 3: model home prob 0.75, market ALSO exactly 0.75 - a real
+    #    exact tie, excluded from both sides of the rate.
+    rows = [
+        _pick("2026-07-18", 1, "NYY", "BOS", "NYY", 0.90, "NYY", 1, market_home_win_probability=0.60),
+        _pick("2026-07-19", 2, "LAD", "SF", "LAD", 0.60, "SF", 1, market_home_win_probability=0.30),
+        _pick("2026-07-20", 3, "HOU", "SEA", "HOU", 0.75, "HOU", 1, market_home_win_probability=0.75),
+    ]
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    return df
+
+
+def test_build_game_picks_export_market_accuracy_brier_log_loss():
+    picks, summary = game_evaluation.build_game_picks_export(_market_comparison_rows())
+
+    # All three market picks (NYY, SF, HOU) match the real actual winners.
+    assert summary.loc[0, "n_market_resolved"] == 3
+    assert summary.loc[0, "market_accuracy"] == pytest.approx(1.0)
+
+    expected_market_brier = ((0.60 - 1) ** 2 + (0.70 - 1) ** 2 + (0.75 - 1) ** 2) / 3
+    assert summary.loc[0, "market_brier_score"] == pytest.approx(expected_market_brier)
+
+    expected_market_log_loss = -(math.log(0.60) + math.log(0.70) + math.log(0.75)) / 3
+    assert summary.loc[0, "market_log_loss"] == pytest.approx(expected_market_log_loss)
+
+
+def test_build_game_picks_export_beat_closing_line_rate_excludes_ties():
+    picks, summary = game_evaluation.build_game_picks_export(_market_comparison_rows())
+
+    # pk 3's exact tie is excluded from the comparison base entirely -
+    # only pk 1 (model win) and pk 2 (market win) count.
+    assert summary.loc[0, "n_beat_closing_line_compared"] == 2
+    assert summary.loc[0, "beat_closing_line_rate"] == pytest.approx(0.5)
+
+
+def test_build_game_picks_export_picks_out_includes_market_column():
+    picks, summary = game_evaluation.build_game_picks_export(_market_comparison_rows())
+
+    assert "market_home_win_probability" in picks.columns
+    by_pk = picks.set_index("game_pk")
+    assert by_pk.loc[1, "market_home_win_probability"] == pytest.approx(0.60)

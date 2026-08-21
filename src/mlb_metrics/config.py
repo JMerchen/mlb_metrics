@@ -869,6 +869,21 @@ GAME_PICK_LOGIT_C_GRID = [0.01, 0.03, 0.1, 0.3, 1, 3, 10]
 GAME_PICK_ML_WALK_FORWARD_MIN_TRAIN_DATES = 40
 GAME_PICK_ML_WALK_FORWARD_TEST_BLOCK_DATES = 15
 
+# Market benchmark (ESPN odds, mlb_metrics.market_odds) - quant-analytics
+# item #6, slice 2. "DraftKings" is the only provider seen in every real
+# pickcenter row slice 1's confirmation dispatch found (GitHub Actions run
+# 32516808493, 2026-08-21); market_odds._parse_pickcenter_row falls back
+# to the first available row rather than dropping a game outright if this
+# is ever absent for a real game. MARKET_ODDS_BACKFILL_DAYS_BACK bounds
+# scripts/backfill_market_odds.py's default lookback to the real depth
+# that same dispatch actually confirmed ESPN still serves odds for
+# (checked 2026-08-16, 5 days before the dispatch) - depth beyond that is
+# unconfirmed, so it isn't the default, though a caller may still pass a
+# larger --days-back and let dates beyond what ESPN retains simply come
+# back empty rather than being blocked outright.
+MARKET_ODDS_PREFERRED_PROVIDER = "DraftKings"
+MARKET_ODDS_BACKFILL_DAYS_BACK = 5
+
 # Age Curves HR9's year-blocked CV (age_curve_ml.YearBlockedSplit) trains
 # only on seasons strictly before AGE_CURVE_HR9_TEST_YEAR_START (a
 # conservative, no-lookahead choice for a single GLOBAL regression model -

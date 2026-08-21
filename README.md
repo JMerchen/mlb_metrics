@@ -1182,6 +1182,63 @@ comparison, and a real historical "beat the closing line" backtest once
 depth is confirmed further back - is a plausible next step but not yet
 scoped or committed to.
 
+### Real market wiring + "beat the closing line" (`market_odds.py`)
+
+Quant-analytics item #6, slice 2 - promotes slice 1's confirmation-only
+script into a real module (`src/mlb_metrics/market_odds.py`) and wires it
+in as a logged, non-fatal comparison column, not a model input.
+`pipeline.run()` fetches real ESPN market odds once per run in a
+**separate** try/except from the schedule fetch, so a market-fetch
+failure can never suppress real game-pick logging - the core feature
+stays reliable even when ESPN is unreachable that day.
+`game_predictions.select_game_picks` gained an optional
+`market_probabilities` param and the log gained a real
+`market_home_win_probability` column (migrated cleanly for older logs, no
+data loss). `game_evaluation.build_game_picks_export` now reports the
+market's own accuracy/Brier/log-loss the same way it already reports the
+model's (same `evaluation.py` function-reuse pattern, not a
+reimplementation), plus the item's literal stated goal: a real
+**`beat_closing_line_rate`** - the fraction of resolved, market-available
+games where the model's squared error against the real outcome (on a
+common home-win-probability basis, not each side's own predicted-winner
+basis) is strictly lower than the market's, with exact ties excluded from
+both sides of the rate so it can never hide a tiny real comparison base.
+`scripts/backfill_market_odds.py` (+ `.github/workflows/backfill_market_odds.yml`)
+one-time-seeds the confirmed-reachable historical window using the same
+dependency-injected-fetch pattern `game_predictions.resolve_game_predictions`
+already established, so it's unit tested without real network. The
+dashboard's History table picks up the raw column for free (data-driven
+`buildTable`), and `renderGamePickStats` gained a real "Beat Closing Line"
+summary tile.
+
+**Real backfill** (GitHub Actions run 32519740032, 2026-08-21, the
+default 5-day-back window, i.e. 2026-08-16 through 2026-08-20 - the exact
+depth slice 1 confirmed ESPN still serves odds for):
+
+- Real market data landed for **12 of 159** total resolved, above-threshold
+  game picks - thin, exactly as expected from a first 5-day seed, not
+  padded or extrapolated.
+- **`market_accuracy` = 50.0%** on those 12 games, vs. this project's own
+  **`accuracy` = 53.5%** across all 159 resolved games (different
+  populations - the model's own 159-game number is NOT a fair comparison
+  to the market's 12-game one; the real apples-to-apples comparison is
+  `beat_closing_line_rate` below).
+- **`beat_closing_line_rate` = 33.3%** (4 real model wins vs. 8 real
+  market wins, zero ties, n=12 compared) - a real, honest **NO-GO** on
+  this specific thin sample: the market beat this project's model on a
+  real head-to-head Brier comparison more often than the reverse. n=12 is
+  far too small to be statistically meaningful either way (a single
+  extra game changes the rate by over 8 points) - this is a real starting
+  number to track forward as `pipeline.run()` accumulates more real
+  market-compared games day by day, not a final verdict on whether the
+  model has a real edge over the closing line.
+
+This completes quant-analytics item #6 ("no market benchmark") slice 2:
+the market benchmark now exists, is logged, and is being compared
+honestly - "we beat the closing line" is now a real, trackable number
+(currently answered "not yet, on the data logged so far"), not an
+unanswerable claim.
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our
