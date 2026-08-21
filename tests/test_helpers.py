@@ -97,3 +97,34 @@ def test_shrink_rate_pulls_low_n_hard_toward_prior_and_high_n_barely():
     # further toward the 0.25 prior than the high-n player did.
     assert abs(low_n.iloc[0] - 0.25) < abs(high_n.iloc[0] - 0.25)
     assert (0.50 - low_n.iloc[0]) > (0.50 - high_n.iloc[0])
+
+
+def test_wilson_ci_matches_hand_derived_formula():
+    # Independent hand-implementation of the real Wilson score formula
+    # (not calling statsmodels) for count=50, n=100, z=1.959963984540054
+    # (the exact 97.5th percentile of the standard normal, alpha=0.05):
+    #   center = (phat + z^2/(2n)) / (1 + z^2/n)
+    #   halfwidth = (z / (1 + z^2/n)) * sqrt(phat*(1-phat)/n + z^2/(4n^2))
+    # phat=0.5, z^2=3.841458820694124:
+    #   center = (0.5 + 0.019207294...) / 1.038414588... = 0.5
+    #   halfwidth = 0.5 - 0.4038315303659956 = 0.0961684696340044
+    ci_low, ci_high = helpers.wilson_ci(pd.Series([50]), pd.Series([100]))
+    assert ci_low.iloc[0] == pytest.approx(0.4038315303659956)
+    assert ci_high.iloc[0] == pytest.approx(0.5961684696340044)
+
+
+def test_wilson_ci_n_zero_is_the_widest_honest_bound_not_a_crash():
+    ci_low, ci_high = helpers.wilson_ci(pd.Series([0]), pd.Series([0]))
+    assert ci_low.iloc[0] == 0.0
+    assert ci_high.iloc[0] == 1.0
+
+
+def test_wilson_ci_count_equals_n_is_not_a_naive_wald_interval():
+    # A naive Wald interval (phat +/- z*sqrt(phat(1-phat)/n)) gives exactly
+    # [1.0, 1.0] when every trial succeeded - Wilson correctly pulls the
+    # upper bound below 1.0, the real, standard reason Wilson is preferred
+    # over Wald for small/extreme-rate samples.
+    ci_low, ci_high = helpers.wilson_ci(pd.Series([5]), pd.Series([5]))
+    assert ci_high.iloc[0] == pytest.approx(1.0)
+    assert ci_low.iloc[0] == pytest.approx(0.5655175352168251)
+    assert ci_low.iloc[0] < 1.0

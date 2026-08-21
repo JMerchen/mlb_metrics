@@ -81,16 +81,45 @@ return
 
 }
 
+// Quant-analytics item #3, slice 3 ("confidence intervals"): fold any
+// "<X>_CI_Low"/"<X>_CI_High" pair - alongside a matching bare "<X>"
+// column - into ONE formatted cell on X ("28.4% (22.1%-35.2%)"),
+// dropping the two raw CI columns from the table entirely, rather than
+// showing three separate raw, unformatted numbers. Data-driven (keys
+// present on data[0]), so this is a no-op for any table with no CI
+// columns (e.g. Top PAVE Players) - and forward-compatible: any future
+// column following this same naming convention gets folded in for free.
+const allKeys =
+Object.keys(
+data[0]
+)
+const ciBases =
+allKeys
+.filter(
+k=>k.endsWith("_CI_Low")
+)
+.map(
+k=>k.slice(0, -"_CI_Low".length)
+)
+.filter(
+base=>allKeys.includes(base) && allKeys.includes(base + "_CI_High")
+)
+const hiddenKeys =
+new Set(
+ciBases.flatMap(base=>[base + "_CI_Low", base + "_CI_High"])
+)
+const columns =
+allKeys.filter(k=>!hiddenKeys.has(k))
+const pct =
+v=>(Number(v) * 100).toFixed(1) + "%"
+
 let html =
 "<table>"
 
 html +=
 "<tr>"
 
-Object
-.keys(
-data[0]
-)
+columns
 .forEach(
 c=>
 html +=
@@ -106,14 +135,15 @@ row=>{
 html +=
 "<tr>"
 
-Object
-.values(
-row
-)
+columns
 .forEach(
-v=>
-html +=
-`<td>${v}</td>`
+c=>{
+if(ciBases.includes(c)){
+html += `<td>${pct(row[c])} (${pct(row[c + "_CI_Low"])}-${pct(row[c + "_CI_High"])})</td>`
+} else {
+html += `<td>${row[c]}</td>`
+}
+}
 )
 
 html +=

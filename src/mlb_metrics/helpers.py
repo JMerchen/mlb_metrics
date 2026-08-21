@@ -9,7 +9,9 @@ Classification logic (which events count as a hit, an official at-bat, etc.)
 is unchanged from the original.
 """
 
+import numpy as np
 import pandas as pd
+from statsmodels.stats.proportion import proportion_confint
 
 HIT_EVENTS = {"single", "double", "triple", "home_run"}
 ON_BASE_EVENTS = HIT_EVENTS | {"walk", "hit_by_pitch"}
@@ -274,6 +276,28 @@ def shrink_rate(count: pd.Series, n: pd.Series, prior_rate: float, prior_strengt
     AND n=0) intentionally still divides to NaN - every caller already
     `.fillna(0)`s downstream, matching every other rate in this file."""
     return (count + prior_strength * prior_rate) / (n + prior_strength)
+
+
+def wilson_ci(count: pd.Series, n: pd.Series, alpha: float = 0.05) -> tuple[pd.Series, pd.Series]:
+    """Real Wilson score confidence interval for a binomial proportion -
+    quant-analytics item #3, slice 3 ("uncertainty quantification":
+    confidence intervals). Reuses statsmodels.stats.proportion.
+    proportion_confint(method="wilson") - an established, exact formula,
+    not hand-derived - rather than adding a new dependency (statsmodels
+    is already a core project requirement, used elsewhere for Logit
+    significance reports).
+
+    Deliberately computed on the RAW empirical count/n - NEVER
+    shrink_rate's shrunk point estimate above. A confidence interval
+    describes the sampling uncertainty of the empirical estimator
+    itself; shrink_rate's output is a Bayesian point-estimate correction
+    toward a prior, a complementary (not competing) treatment of the
+    same small-sample problem - see quant-analytics item #3's "Bayesian
+    shrinkage" README section. n=0 gets (0.0, 1.0) - "no information,
+    could be anywhere" - the honest bound, not a NaN/crash."""
+    n_safe = n.replace(0, np.nan)
+    ci_low, ci_high = proportion_confint(count, n_safe, alpha=alpha, method="wilson")
+    return ci_low.fillna(0.0), ci_high.fillna(1.0)
 
 
 def estimate_rbi(df: pd.DataFrame) -> pd.Series:

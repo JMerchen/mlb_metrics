@@ -76,7 +76,11 @@ def _blend_windows(dt: pd.DataFrame, windows, side: str, stat_fns: dict, rate_fn
 
     rate_fns: dict of name -> function(window_agg_df) -> per-batter rate Series.
     Returns (blended_df, full_season_counts) where blended_df has columns
-    [batter, *rate_fns.keys()] and full_season_counts has [batter, n].
+    [batter, *rate_fns.keys()] and full_season_counts has
+    [batter, n, *stat_fns.keys()] - the RAW (unshrunk) full-season counts,
+    exposed so a caller can compute a real confidence interval on the
+    full-season rate (see compute_wave) without re-deriving them from
+    `dt` a second time.
     """
     latest = dt["game_date"].max()
     blended = {name: None for name in rate_fns}
@@ -92,7 +96,7 @@ def _blend_windows(dt: pd.DataFrame, windows, side: str, stat_fns: dict, rate_fn
                 contribution if blended[name] is None else blended[name].add(contribution, fill_value=0)
             )
         if days_back is None:
-            full_counts = agg[["batter", "n"]]
+            full_counts = agg[["batter", "n"] + list(stat_fns.keys())]
 
     result = pd.DataFrame(blended)
     result.index.name = "batter"
@@ -103,7 +107,8 @@ def _blend_windows(dt: pd.DataFrame, windows, side: str, stat_fns: dict, rate_fn
 def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None) -> pd.DataFrame:
     """Recency-weighted at-bat hit rate vs L/R pitching, converted to a
     per-game hit probability. Returns key_mlbam, WAVE, WAVE_L, WAVE_R,
-    l_at_bat, r_at_bat, probability, probability_L, probability_R.
+    l_at_bat, r_at_bat, probability, probability_L, probability_R,
+    WAVE_CI_Low, WAVE_CI_High, probability_CI_Low, probability_CI_High.
 
     `shrinkage_strength` (real-unit at-bats; None -> config.WAVE_SHRINKAGE_STRENGTH)
     pulls each per-window rate toward the real league-average AB hit rate
@@ -114,7 +119,20 @@ def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None) -> p
     uses) via helpers.shrink_rate - see quant-analytics item #3's
     "Bayesian shrinkage" README section. 0.0 (the live default) is the
     exact null hypothesis: bit-for-bit identical to the unshrunk
-    hit/n division this function always used before."""
+    hit/n division this function always used before.
+
+    `WAVE_CI_Low`/`WAVE_CI_High` (quant-analytics item #3, slice 3): a
+    real Wilson-score confidence interval (helpers.wilson_ci) on the
+    COMBINED (both-hands pooled), RAW full-season hit rate - the one
+    component of this blend that's a single, well-defined binomial
+    proportion, unlike WAVE itself (a blend of 4 overlapping, nested
+    recency windows with no closed-form interval - see README's
+    "Confidence intervals" section). Independent of `shrinkage_strength`:
+    the interval describes the raw estimator's sampling uncertainty, not
+    the shrunk point estimate. `probability_CI_Low`/`probability_CI_High`
+    are the same interval pushed through the monotonic
+    1-(1-rate)**trials transform (valid, since that transform is
+    strictly increasing over [0,1])."""
     strength = config.WAVE_SHRINKAGE_STRENGTH if shrinkage_strength is None else shrinkage_strength
     league_rate = helpers.is_hit(dt["events"]).sum() / len(dt) if len(dt) else 0.0
     stat_fns = {"hit": lambda df: helpers.is_hit(df["events"])}
@@ -123,9 +141,13 @@ def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None) -> p
     r_blended, r_full = _blend_windows(dt, config.WAVE_WINDOWS, "R", stat_fns, rate_fns)
     l_blended, l_full = _blend_windows(dt, config.WAVE_WINDOWS, "L", stat_fns, rate_fns)
 
-    wave = r_full.rename(columns={"n": "r_at_bat"})
+    # Renamed per-side up front (not just "n") - both r_full/l_full now
+    # also carry a raw "hit" column (widened _blend_windows return), so
+    # merging them without renaming would collide into pandas' hit_x/hit_y
+    # merge suffixes.
+    wave = r_full.rename(columns={"n": "r_at_bat", "hit": "r_hit"})
     wave = wave.merge(r_blended.rename(columns={"rate": "WAVE_R"}), on="batter", how="left")
-    wave = wave.merge(l_full.rename(columns={"n": "l_at_bat"}), on="batter", how="left")
+    wave = wave.merge(l_full.rename(columns={"n": "l_at_bat", "hit": "l_hit"}), on="batter", how="left")
     wave = wave.merge(l_blended.rename(columns={"rate": "WAVE_L"}), on="batter", how="left")
     wave = wave.fillna(0)
 
@@ -139,10 +161,17 @@ def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None) -> p
     wave["probability_L"] = 1 - (1 - wave["WAVE_L"]) ** config.WAVE_TRIALS_PER_GAME
     wave["probability_R"] = 1 - (1 - wave["WAVE_R"]) ** config.WAVE_TRIALS_PER_GAME
 
+    total_hit = wave["r_hit"] + wave["l_hit"]
+    total_ab = wave["r_at_bat"] + wave["l_at_bat"]
+    wave["WAVE_CI_Low"], wave["WAVE_CI_High"] = helpers.wilson_ci(total_hit, total_ab)
+    wave["probability_CI_Low"] = 1 - (1 - wave["WAVE_CI_Low"]) ** config.WAVE_TRIALS_PER_GAME
+    wave["probability_CI_High"] = 1 - (1 - wave["WAVE_CI_High"]) ** config.WAVE_TRIALS_PER_GAME
+
     return wave[
         [
             "key_mlbam", "WAVE", "WAVE_L", "WAVE_R", "l_at_bat", "r_at_bat",
             "probability", "probability_L", "probability_R",
+            "WAVE_CI_Low", "WAVE_CI_High", "probability_CI_Low", "probability_CI_High",
         ]
     ]
 
@@ -467,13 +496,24 @@ def compute_plate_discipline(all_pitches: pd.DataFrame) -> pd.DataFrame:
 def compute_game_hit_probability(data_with_game_id: pd.DataFrame, shrinkage_strength: float | None = None) -> pd.DataFrame:
     """Rate of *games* (not at-bats) with >=1 hit, blended across windows.
     This is the closest existing analog to a Beat-the-Streak pick probability.
+    Returns key_mlbam, Game_Hit_Probability, Game_Hit_Probability_CI_Low,
+    Game_Hit_Probability_CI_High.
 
     `shrinkage_strength` (real-unit games; None -> config.GAME_HIT_PROB_SHRINKAGE_STRENGTH)
     is the games-unit analog of compute_wave's own shrinkage param - see
     that function's docstring and quant-analytics item #3's "Bayesian
     shrinkage" README section. 0.0 (the live default) is the exact null
     hypothesis, bit-for-bit identical to this function's original
-    had_hit/game division."""
+    had_hit/game division.
+
+    `Game_Hit_Probability_CI_Low`/`_CI_High` (quant-analytics item #3,
+    slice 3): a real Wilson-score confidence interval (helpers.wilson_ci)
+    on the RAW full-season "games with a hit" rate - unlike
+    Game_Hit_Probability itself (a blend of 4 overlapping, nested
+    recency windows with no closed-form interval), the full-season
+    component is a single, well-defined binomial proportion. Independent
+    of `shrinkage_strength` - see compute_wave's own docstring for the
+    same reasoning."""
     strength = config.GAME_HIT_PROB_SHRINKAGE_STRENGTH if shrinkage_strength is None else shrinkage_strength
     completed = data_with_game_id[data_with_game_id["events"].isin(config.COUNTED_EVENTS)][
         ["game_date", "batter", "events", "game_id"]
@@ -486,16 +526,25 @@ def compute_game_hit_probability(data_with_game_id: pd.DataFrame, shrinkage_stre
     league_rate = game_hits["had_hit"].sum() / len(game_hits) if len(game_hits) else 0.0
 
     blended = None
+    full_counts = None
     for days_back, weight in config.GAME_HIT_PROB_WINDOWS:
         window_games = _slice_by_days(game_hits, latest, days_back)
         agg = window_games.groupby("batter", as_index=False)[["had_hit", "game"]].sum()
         rate = helpers.shrink_rate(agg["had_hit"], agg["game"], league_rate, strength).fillna(0)
         contribution = agg[["batter"]].assign(rate=rate.values).set_index("batter")["rate"] * weight
         blended = contribution if blended is None else blended.add(contribution, fill_value=0)
+        if days_back is None:
+            full_counts = agg[["batter", "had_hit", "game"]]
 
     result = blended.reset_index()
     result.columns = ["batter", "Game_Hit_Probability"]
-    return result.rename(columns={"batter": "key_mlbam"})
+    result = result.merge(full_counts, on="batter", how="left").fillna(0)
+    result["Game_Hit_Probability_CI_Low"], result["Game_Hit_Probability_CI_High"] = helpers.wilson_ci(
+        result["had_hit"], result["game"]
+    )
+    return result[
+        ["batter", "Game_Hit_Probability", "Game_Hit_Probability_CI_Low", "Game_Hit_Probability_CI_High"]
+    ].rename(columns={"batter": "key_mlbam"})
 
 
 def compute_last_game_dates(data_with_game_id: pd.DataFrame) -> pd.DataFrame:
@@ -612,7 +661,9 @@ def assemble_hitters(
         "key_mlbam", "name_first", "name_last", "team",
         "pa_lfull", "pa_rfull",
         "WAVE", "WAVE_L", "WAVE_R", "probability_L", "probability_R", "probability",
-        "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
+        "WAVE_CI_Low", "WAVE_CI_High", "probability_CI_Low", "probability_CI_High",
+        "Game_Hit_Probability", "Game_Hit_Probability_CI_Low", "Game_Hit_Probability_CI_High",
+        "Consistency", "Approach", "Expected_Bases",
         "Expected_BB", "Expected_HBP", "Expected_RBI",
         "Exit_Velo", "Barrel_Rate", "xBA", "xwOBA",
         "Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE",

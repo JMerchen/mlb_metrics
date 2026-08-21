@@ -870,6 +870,75 @@ hit-probability model was retrained afterward via the normal
 `ml_training_update.yml` weekly job so its training features reflect the
 shrunk values.
 
+### Confidence intervals on the full-season rate (`helpers.wilson_ci`)
+
+Quant-analytics item #3 ("uncertainty quantification"), slice 3 of 3 -
+the last piece, after shrinkage and calibration above. Every probability
+this site produces was a bare point estimate with no interval anywhere.
+
+The real complication: `WAVE`/`probability` and `Game_Hit_Probability`
+are each a blend of 4 **overlapping, nested** recency windows
+(`config.WAVE_WINDOWS`/`GAME_HIT_PROB_WINDOWS` - the 10-day window's
+at-bats are a literal subset of the 30-day window's, which are a subset
+of the 81-day window's, which are a subset of the full-season window's).
+Those windows aren't independent samples, so there's no valid
+closed-form confidence interval for the *blended* number itself. But
+each blend's **full-season component** - real hits over real at-bats, or
+real hit-games over real total-games, pooled across the whole season
+with no recency weighting - genuinely is a single, well-defined binomial
+proportion, with an exact, standard interval formula: the Wilson score
+interval (`helpers.wilson_ci`, reusing
+`statsmodels.stats.proportion.proportion_confint(method="wilson")` -
+statsmodels is already a core project dependency, used elsewhere for
+`Logit` significance reports, so this adds no new dependency).
+
+**Deliberately excluded** (confirmed via `AskUserQuestion` rather than
+fabricating an approximate interval for either): `Approach`
+(`Game_Hit_Probability * probability`, a product of two already-blended
+heuristics with no clean n) and `Consistency` (their difference);
+`Matchup_Hit_Probability` (log5-combined with two multiplicative
+adjustments - no clean n survives into it either); and
+`Model_Hit_Probability` (the ML classifier's raw score - would need
+bootstrap or conformal prediction, a separate, larger undertaking). Same
+"don't ship fake precision" discipline slice 2 already followed when
+calibration didn't earn a win. Only the combined (both-hands pooled)
+full-season rate gets an interval - no separate `WAVE_L`/`WAVE_R`-side
+intervals, keeping the new columns minimal.
+
+**Computed on the RAW empirical count/n, never the shrunk point
+estimate.** A confidence interval describes the sampling uncertainty of
+the empirical estimator itself; `helpers.shrink_rate`'s shrunk output
+(above) is a Bayesian point-estimate correction toward a league prior -
+a complementary, not competing, treatment of the same small-sample
+problem. `WAVE_CI_Low`/`WAVE_CI_High` and
+`Game_Hit_Probability_CI_Low`/`_CI_High` are identical no matter what
+`WAVE_SHRINKAGE_STRENGTH`/`GAME_HIT_PROB_SHRINKAGE_STRENGTH` are set to.
+`probability_CI_Low`/`_CI_High` are the same `WAVE` interval pushed
+through the existing `1 - (1-rate)**WAVE_TRIALS_PER_GAME` transform -
+valid because that transform is strictly increasing over `[0, 1]`, so
+transforming a valid interval's endpoints gives a valid interval for the
+transformed quantity too, not an approximation.
+
+Purely additive: `dfs_ml.HITTER_FEATURE_COLUMNS` is an explicit
+allow-list (`hitter_feature_matrix`'s `.reindex(columns=...)`), so the
+new columns don't touch the trained hitter hit-probability model at all -
+**no retrain needed**, unlike shrinkage and calibration above. On the
+dashboard, `WAVE`/`probability`/`Game_Hit_Probability` had no dedicated,
+by-name display anywhere in `docs/app.js` - they only ever reached the
+page through the generic "Top WAVE Players" table (`buildTable`), which
+rendered every column as a raw, unformatted number. `buildTable` now
+folds any `<X>_CI_Low`/`<X>_CI_High` pair into their point column `X`'s
+own cell (`"28.4% (22.1%-35.2%)"`, the same `%`-formatting idiom used
+everywhere else on the dashboard) instead of three separate raw columns -
+a data-driven, forward-compatible widening (a no-op for any table with
+no CI columns, e.g. Top PAVE Players; any future column following this
+same naming convention gets folded in automatically).
+
+This completes quant-analytics item #3 ("uncertainty quantification") in
+full: Bayesian shrinkage for small-sample hitters, isotonic/Platt
+calibration of the raw model output, and confidence intervals on the
+full-season rate.
+
 ### Wiring the model into Our Picks (`pipeline.py`, `predictions.py`)
 
 `pipeline.run()` resolves `predictions.select_picks`'s `rank_metric`
