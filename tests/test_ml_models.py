@@ -1,9 +1,39 @@
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.linear_model import Ridge
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.linear_model import LogisticRegression, Ridge
 
 from mlb_metrics import ml_models
+
+
+class _OverconfidentClassifier(ClassifierMixin, BaseEstimator):
+    """Wraps a real LogisticRegression but deliberately exaggerates its
+    predicted probabilities away from 0.5 (raised to a power > 1 in
+    log-odds space) - a synthetic stand-in for a genuinely overconfident
+    classifier (e.g. an under-regularized gradient-boosted model), so
+    test_fit_calibrated_improves_brier_score_for_an_overconfident_classifier
+    below can assert a REAL, deterministic before/after calibration
+    improvement rather than relying on incidental real-world overfitting
+    behavior. Implements get_params/set_params (required by
+    sklearn.base.clone, which ml_models.fit_calibrated uses)."""
+
+    def __init__(self, exaggeration: float = 4.0):
+        self.exaggeration = exaggeration
+
+    def fit(self, X, y):
+        self.base_ = LogisticRegression().fit(X, y)
+        self.classes_ = self.base_.classes_
+        return self
+
+    def predict_proba(self, X):
+        p = np.clip(self.base_.predict_proba(X)[:, 1], 1e-6, 1 - 1e-6)
+        logit = np.log(p / (1 - p))
+        exaggerated = 1 / (1 + np.exp(-logit * self.exaggeration))
+        return np.column_stack([1 - exaggerated, exaggerated])
+
+    def predict(self, X):
+        return (self.predict_proba(X)[:, 1] >= 0.5).astype(int)
 
 
 def test_walk_forward_date_split_never_puts_future_in_train():
@@ -55,6 +85,53 @@ def test_grid_search_walk_forward_selects_best_alpha_and_respects_split():
     # unregularized (tiny-alpha) fit over one crushed toward 0 by alpha=1000.
     assert search.best_params_["alpha"] == 0.001
     assert search.n_splits_ == ml_models.WalkForwardDateSplit(dates, 10, 5).get_n_splits()
+
+
+def test_fit_calibrated_uses_the_walk_forward_splitter_not_a_default_cv():
+    rng = np.random.RandomState(0)
+    n_dates, rows_per_date = 30, 10
+    dates = np.repeat([f"2026-01-{d:02d}" for d in range(1, n_dates + 1)], rows_per_date)
+    x = rng.normal(size=len(dates))
+    y = rng.binomial(1, 1 / (1 + np.exp(-x)))
+    X = pd.DataFrame({"x": x})
+
+    base = LogisticRegression().fit(X, y)
+    calibrated = ml_models.fit_calibrated(base, X, pd.Series(y), dates, "sigmoid", min_train_dates=10, test_block_dates=5)
+
+    # A real, catchable regression: if fit_calibrated silently fell back to
+    # a default CV (e.g. passing an int instead of the WalkForwardDateSplit
+    # instance) instead of actually wiring in the date-respecting splitter,
+    # the number of internally fit calibrators would no longer match
+    # WalkForwardDateSplit's own fold count for these exact dates/params.
+    expected_folds = ml_models.WalkForwardDateSplit(dates, 10, 5).get_n_splits()
+    assert len(calibrated.calibrated_classifiers_) == expected_folds
+
+
+def test_fit_calibrated_improves_brier_score_for_an_overconfident_classifier():
+    rng = np.random.RandomState(0)
+    n_dates, rows_per_date = 30, 60
+    dates = np.repeat([f"2026-01-{d:02d}" for d in range(1, n_dates + 1)], rows_per_date)
+    x = rng.normal(size=len(dates))
+    true_p = 1 / (1 + np.exp(-x))
+    y = rng.binomial(1, true_p)
+    X = pd.DataFrame({"x": x})
+
+    overconfident = _OverconfidentClassifier(exaggeration=4.0).fit(X, y)
+    raw_proba = overconfident.predict_proba(X)[:, 1]
+    raw_brier_vs_truth = np.mean((raw_proba - true_p) ** 2)
+
+    calibrated = ml_models.fit_calibrated(
+        overconfident, X, pd.Series(y), dates, "isotonic", min_train_dates=10, test_block_dates=5
+    )
+    calibrated_proba = calibrated.predict_proba(X)[:, 1]
+    calibrated_brier_vs_truth = np.mean((calibrated_proba - true_p) ** 2)
+
+    # Calibration is scored against known GROUND-TRUTH probabilities here
+    # (not just observed 0/1 outcomes) - a real, deterministic confirmation
+    # that isotonic recalibration measurably corrects the deliberately
+    # exaggerated raw scores toward the true generating probability, not
+    # just "the numbers moved somewhere."
+    assert calibrated_brier_vs_truth < raw_brier_vs_truth
 
 
 def test_evaluate_predictions_exact_arithmetic():

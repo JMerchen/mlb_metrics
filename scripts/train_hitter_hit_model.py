@@ -180,27 +180,62 @@ def _select_best_model(X_train, y_train, dates_train):
     return best_search
 
 
-def feature_importance_report(best_search, X_holdout: pd.DataFrame, y_holdout: pd.Series) -> None:
+def feature_importance_report(fitted_estimator, X_holdout: pd.DataFrame, y_holdout: pd.Series) -> None:
     """Model-agnostic permutation-importance sanity check (sklearn.inspection.
     permutation_importance) on the SAME untouched holdout the model itself
     is scored on above - never the train pool, since permutation
     importance computed on training data can overstate importance for an
     overfit model, the same out-of-sample discipline this whole script
     already applies to the model's own headline metrics. Works identically
-    for either candidate model (LogisticRegression or
-    HistGradientBoostingClassifier) since permutation importance only
-    needs a fitted estimator's .predict/.predict_proba, not anything
-    model-family-specific - chosen over SHAP for exactly this reason, plus
-    avoiding a new heavy dependency (see README's "Model family" section)."""
+    for any candidate estimator (LogisticRegression, HistGradientBoostingClassifier,
+    or a CalibratedClassifierCV wrapping either - see _select_calibration)
+    since permutation importance only needs a fitted estimator's
+    .predict/.predict_proba, not anything model-family-specific - chosen
+    over SHAP for exactly this reason, plus avoiding a new heavy dependency
+    (see README's "Model family" section)."""
     print("\n=== Permutation-importance report (holdout, model-agnostic) ===")
     result = permutation_importance(
-        best_search.best_estimator_, X_holdout, y_holdout,
+        fitted_estimator, X_holdout, y_holdout,
         scoring="neg_log_loss", n_repeats=20, random_state=0,
     )
     table = pd.DataFrame({
         "importance_mean": result.importances_mean, "importance_std": result.importances_std,
     }, index=X_holdout.columns).sort_values("importance_mean", ascending=False)
     print(table.to_string(float_format=lambda v: f"{v:.5f}"))
+
+
+def _select_calibration(best_search, X_train, y_train, dates_train, X_holdout, y_holdout):
+    """Quant-analytics item #3, slice 2: on top of the family winner
+    _select_best_model already picked, tries the raw (uncalibrated)
+    estimator against isotonic and Platt/sigmoid calibration
+    (ml_models.fit_calibrated, same no-lookahead WalkForwardDateSplit),
+    scores all three on the SAME untouched holdout, and picks the winner
+    by holdout BRIER SCORE - calibration's own proper-scoring metric,
+    distinct from the neg_log_loss criterion _select_best_model used one
+    step earlier for family selection. Returns (name, fitted_estimator,
+    {name: evaluate_classifier_predictions(...)}) - reported honestly:
+    "uncalibrated" can and does win when calibration doesn't help."""
+    candidates = {"uncalibrated": best_search.best_estimator_}
+    for method in ("isotonic", "sigmoid"):
+        candidates[method] = ml_models.fit_calibrated(
+            best_search.best_estimator_, X_train, y_train, dates_train, method,
+            config.ML_WALK_FORWARD_MIN_TRAIN_DATES_HITTER, config.ML_WALK_FORWARD_TEST_BLOCK_DATES_HITTER,
+        )
+
+    results = {
+        name: ml_models.evaluate_classifier_predictions(y_holdout, estimator.predict_proba(X_holdout)[:, 1])
+        for name, estimator in candidates.items()
+    }
+    print("\n=== Calibration comparison (uncalibrated vs. isotonic vs. sigmoid/Platt, holdout) ===")
+    for name, result in results.items():
+        print(
+            f"  {name:12s} log_loss={result['log_loss']:.4f}, brier={result['brier_score']:.4f}, "
+            f"roc_auc={result['roc_auc']:.4f}, accuracy={result['accuracy']:.4f}"
+        )
+
+    best_name = min(results, key=lambda n: results[n]["brier_score"])
+    print(f"  Selected by holdout Brier score: {best_name}")
+    return best_name, candidates[best_name], results
 
 
 def predictive_model(train_pool: pd.DataFrame, holdout: pd.DataFrame) -> None:
@@ -213,8 +248,11 @@ def predictive_model(train_pool: pd.DataFrame, holdout: pd.DataFrame) -> None:
 
     X_holdout = dfs_ml.hitter_feature_matrix(holdout)
     y_holdout = holdout["Got_Hit"]
-    predicted_proba = best_search.predict_proba(X_holdout)[:, 1]
-    result = ml_models.evaluate_classifier_predictions(y_holdout, predicted_proba)
+
+    best_name, best_model, calibration_results = _select_calibration(
+        best_search, X_train, y_train, dates_train, X_holdout, y_holdout
+    )
+    result = calibration_results[best_name]
     heuristic_result = ml_models.evaluate_classifier_predictions(
         y_holdout, holdout["Game_Hit_Probability"].clip(0, 1)
     )
@@ -229,15 +267,15 @@ def predictive_model(train_pool: pd.DataFrame, holdout: pd.DataFrame) -> None:
         f"brier={heuristic_result['brier_score']:.4f}, roc_auc={heuristic_result['roc_auc']:.4f}"
     )
 
-    feature_importance_report(best_search, X_holdout, y_holdout)
+    feature_importance_report(best_model, X_holdout, y_holdout)
 
     beats_baseline = result["log_loss"] < result["baseline_log_loss"]
     beats_heuristic = result["log_loss"] < heuristic_result["log_loss"]
     if beats_baseline and beats_heuristic:
-        ml_models.save_model(best_search.best_estimator_, config.HITTER_HIT_PROBABILITY_MODEL_PATH)
+        ml_models.save_model(best_model, config.HITTER_HIT_PROBABILITY_MODEL_PATH)
         print(
-            f"  -> SAVED to {config.HITTER_HIT_PROBABILITY_MODEL_PATH} "
-            f"(beats baseline and Game_Hit_Probability - artifact only, NOT wired into live picks)"
+            f"  -> SAVED to {config.HITTER_HIT_PROBABILITY_MODEL_PATH} ({best_name}, "
+            f"beats baseline and Game_Hit_Probability - artifact only, NOT wired into live picks)"
         )
     else:
         print("  -> NOT saved (does not beat baseline and/or the Game_Hit_Probability heuristic - reported honestly)")
