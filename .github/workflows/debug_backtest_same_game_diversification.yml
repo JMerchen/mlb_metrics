@@ -1,0 +1,46 @@
+name: Debug backtest_same_game_diversification
+
+# One-off runner for scripts/backtest_same_game_diversification.py against
+# real persisted Statcast. Exists because the interactive dev sandbox's
+# egress policy blocks github.com, which pybaseball's chadwick_register()
+# (data.get_name_register(), needed by pipeline.compute_outputs, needed by
+# dfs_backtest._compute_date_outputs) fetches from - this workflow runner
+# has normal internet access, mirroring the debug_backtest_selection_rule.yml
+# precedent for exactly this situation.
+
+on:
+  workflow_dispatch:
+    inputs:
+      holdout_dates:
+        description: "Number of trailing dates to backtest (defaults to config.ML_FINAL_HOLDOUT_DATES)"
+        required: false
+      margin_grid:
+        description: "Comma-separated same_game_diversification_margin candidates"
+        required: false
+        default: "0,0.02,0.05,0.1"
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run same-game diversification backtest
+        run: |
+          args=(--margin-grid "${{ inputs.margin_grid }}")
+          if [ -n "${{ inputs.holdout_dates }}" ]; then
+            args+=(--holdout-dates "${{ inputs.holdout_dates }}")
+          fi
+          python scripts/backtest_same_game_diversification.py "${args[@]}"
