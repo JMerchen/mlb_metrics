@@ -1,0 +1,58 @@
+name: Backfill market odds
+
+# One-time (re-runnable) seed for scripts/backfill_market_odds.py - quant-
+# analytics item #6 ("no market benchmark"), slice 2. Fills in real ESPN
+# market_home_win_probability values on data/predictions/game_predictions.csv
+# for the confirmed-reachable historical window, then commits the result -
+# this actually mutates real logged data, unlike debug_espn_odds.yml's
+# diagnostic-only printing. This project's own dev sandbox blocks every
+# odds-site domain directly; this workflow runner has normal internet
+# access.
+
+on:
+  workflow_dispatch:
+    inputs:
+      days_back:
+        description: "How many real resolved dates back to backfill (real depth beyond ~5 days is unconfirmed)"
+        required: false
+        default: "5"
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas
+
+      - name: Backfill real ESPN market odds
+        run: |
+          if [ -n "${{ inputs.days_back }}" ]; then
+            python scripts/backfill_market_odds.py --days-back "${{ inputs.days_back }}"
+          else
+            python scripts/backfill_market_odds.py
+          fi
+
+      - name: Commit updates
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          git add data/predictions/game_predictions.csv
+
+          git commit -m "Backfill real ESPN market odds" || echo "No changes"
+
+          git push
