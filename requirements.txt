@@ -8,3 +8,4 @@ statsmodels
 joblib
 pulp
 nflreadpy
+requests
