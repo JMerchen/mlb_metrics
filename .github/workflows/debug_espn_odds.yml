@@ -1,0 +1,44 @@
+name: Debug ESPN odds
+
+# One-off diagnostic for scripts/debug_espn_odds.py - quant-analytics item
+# #6 ("no market benchmark"), slice 1. Confirms the real shape of ESPN's
+# public, keyless scoreboard/summary API responses (pickcenter moneylines,
+# real team abbreviations, whether odds survive past game day) before any
+# ingestion logic gets written against assumed shapes - same reasoning as
+# debug_nfl_data.yml/debug_statsapi.yml. This project's own dev sandbox
+# blocks every ESPN/odds-site domain directly; this workflow runner has
+# normal internet access.
+
+on:
+  workflow_dispatch:
+    inputs:
+      days_back:
+        description: "Also check a real date this many days in the past (tests whether odds survive past game day)"
+        required: false
+        default: "5"
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas
+
+      - name: Print real ESPN odds response shapes
+        run: |
+          if [ -n "${{ inputs.days_back }}" ]; then
+            python scripts/debug_espn_odds.py --days-back "${{ inputs.days_back }}"
+          else
+            python scripts/debug_espn_odds.py
+          fi
