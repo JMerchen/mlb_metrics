@@ -736,26 +736,68 @@ season), but a genuinely healthier-looking result than the last run, and
 one real data point that shrinkage's shipped defaults didn't hurt the
 downstream model.
 
+### Calibrating the raw model output: isotonic/Platt (`ml_models.fit_calibrated`)
+
+Quant-analytics item #3 ("uncertainty quantification"), slice 2 of 3
+(shrinkage → calibration → confidence intervals). `Model_Hit_Probability`
+is the one genuine ML classifier score in this project - unlike
+`probability`/`Game_Hit_Probability`/`Matchup_Hit_Probability` (all
+hand-derived real-rate formulas), a classifier's raw `predict_proba`
+output has no guarantee of being well-calibrated (GBMs especially are
+known to run over/underconfident). `ml_models.fit_calibrated` wraps the
+walk-forward-selected model in `sklearn.calibration.CalibratedClassifierCV`
+(isotonic or sigmoid/Platt), refit through the SAME no-lookahead
+`WalkForwardDateSplit` every other walk-forward fit in this project
+already uses. `train_hitter_hit_model.py` now scores uncalibrated vs.
+isotonic vs. sigmoid on the untouched holdout and keeps whichever wins by
+**Brier score** (calibration's own proper-scoring metric) - reported
+honestly either direction.
+
+**Real run** (GitHub Actions run 32448967312, 2026-08-21, same holdout as
+the "Refreshed after shipping shrinkage" numbers above):
+
+| candidate | log_loss | brier | roc_auc | accuracy |
+|---|---|---|---|---|
+| uncalibrated | 0.6764 | **0.2417** | 0.5770 | 0.5733 |
+| isotonic | 0.6769 | 0.2420 | 0.5728 | 0.5743 |
+| sigmoid (Platt) | 0.6764 | **0.2417** | 0.5749 | 0.5733 |
+
+**A real, honest NO-GO**: `uncalibrated` wins the Brier-score comparison
+(tied with sigmoid, both beating isotonic) - this GBM's raw probabilities
+were already reasonably calibrated on this holdout, so calibration didn't
+earn its keep here. The shipped artifact is the plain uncalibrated model,
+identical in kind to every prior run. Isotonic and sigmoid calibration
+are each an ENSEMBLE of separately-fit per-fold models (not a single
+monotonic transform of the one uncalibrated estimator's own scores), so
+their ROC AUC isn't expected to match the uncalibrated model's exactly
+even when calibration doesn't help - the small AUC spread above (0.5728-
+0.5770) is real and expected, not a bug. `ml_models.fit_calibrated`
+itself stays in place and gets tried on every future retrain - a
+different holdout window or feature set could still earn a calibrated
+win later, and this comparison now runs automatically every time.
+
 **Permutation-importance report** (`sklearn.inspection.permutation_importance`,
 same untouched holdout, chosen over SHAP specifically to avoid adding a
 new heavy dependency to a project that has never needed one beyond
 scikit-learn/statsmodels): a real, model-agnostic sanity check on what the
 winning GBM is actually learning from, computed independently of the
-significance report's own Logit coefficients above. Top real features by
-mean importance: `Game_Hit_Probability` (0.00245), `Consistency`
-(0.00108), `PA_L` (0.00060), `PA_R` (0.00058), `Whiff_Rate` (0.00046),
-`Offspeed_WAVE` (0.00018), `Park_Factor` (0.00016), `WAVE_R` (0.00014),
-`Fastball_WAVE` (0.00013), `xBA` (0.00009) - every other feature's
-importance rounds to ~0.0000-0.00002, several slightly negative (expected
-sampling noise for a genuinely uninformative feature, not evidence of
-active harm). **A real, honest divergence worth flagging**: `Whiff_Rate`
-ranking 5th here roughly matches its own significance in the Logit above,
-but `Matchup_Hit_Probability` (highly significant there, coef 0.1069,
-p<0.0001) ranks near the very bottom here (0.00002), and `Chase_Rate`
-(significant in the Logit's combined model) barely registers (0.00005).
-GBM's tree splits absorb correlated signal differently than a linear
-model's coefficients do - this isn't evidence either method is wrong, just
-that "which features matter" genuinely depends on which model family is
+significance report's own Logit coefficients above. **Refreshed alongside
+the calibration comparison above** (same GitHub Actions run 32448967312):
+top real features by mean importance: `Game_Hit_Probability` (0.00361),
+`Consistency` (0.00254), `PA_L` (0.00091), `Whiff_Rate` (0.00085),
+`Park_Factor` (0.00063), `PA_R` (0.00036), `Offspeed_WAVE` (0.00014),
+`Chase_Rate` (0.00013), `Fastball_WAVE` (0.00012), `Bullpen_PAVE`
+(0.00011), `xBA` (0.00010) - every other feature's importance rounds to
+~0.0000-0.00002, several slightly negative (expected sampling noise for a
+genuinely uninformative feature, not evidence of active harm). **A real,
+honest divergence worth flagging**: `Whiff_Rate` ranking 4th here roughly
+matches its own significance in the Logit above, but
+`Matchup_Hit_Probability` (highly significant there, coef 0.0862
+individually / 0.0539 combined, p<0.0001/p=0.0174) ranks near the very
+bottom here (0.00005). GBM's tree splits absorb correlated signal
+differently than a linear model's coefficients do - this isn't evidence
+either method is wrong, just that "which features matter" genuinely
+depends on which model family is
 asking, a real quant lesson this comparison surfaces rather than papering
 over.
 
