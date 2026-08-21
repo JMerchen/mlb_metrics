@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from mlb_metrics import config, game_predictions
 
@@ -231,3 +232,88 @@ def test_resolve_game_predictions_migrates_a_log_written_before_model_version_ex
     resolved = game_predictions.resolve_game_predictions(log_path, fetch_results, pd.Timestamp("2026-07-21"))
 
     assert resolved.iloc[0]["model_version"] == game_predictions.LEGACY_MODEL_VERSION
+
+
+def _market_probabilities(rows):
+    """rows: list of dicts with home_team, away_team, market_home_win_probability."""
+    return pd.DataFrame(rows)
+
+
+def test_select_game_picks_merges_a_matching_market_probability():
+    win_probs = _win_probabilities([
+        {"game_pk": 1, "date": pd.Timestamp("2026-07-22"), "home_team": "NYY", "away_team": "BOS",
+         "home_win_probability": 0.65},
+    ])
+    market = _market_probabilities([
+        {"home_team": "NYY", "away_team": "BOS", "market_home_win_probability": 0.62, "market_provider": "DraftKings"},
+    ])
+
+    picks = game_predictions.select_game_picks(win_probs, pd.Timestamp("2026-07-22"), market_probabilities=market)
+
+    assert picks.iloc[0]["market_home_win_probability"] == pytest.approx(0.62)
+
+
+def test_select_game_picks_market_probability_is_nan_when_no_match():
+    win_probs = _win_probabilities([
+        {"game_pk": 1, "date": pd.Timestamp("2026-07-22"), "home_team": "NYY", "away_team": "BOS",
+         "home_win_probability": 0.65},
+    ])
+    # Market data exists for a different game entirely - a real "ESPN
+    # doesn't have this matchup" case, not a crash.
+    market = _market_probabilities([
+        {"home_team": "LAD", "away_team": "SF", "market_home_win_probability": 0.55, "market_provider": "DraftKings"},
+    ])
+
+    picks = game_predictions.select_game_picks(win_probs, pd.Timestamp("2026-07-22"), market_probabilities=market)
+
+    assert pd.isna(picks.iloc[0]["market_home_win_probability"])
+
+
+def test_select_game_picks_market_probability_is_nan_when_none_given():
+    win_probs = _win_probabilities([
+        {"game_pk": 1, "date": pd.Timestamp("2026-07-22"), "home_team": "NYY", "away_team": "BOS",
+         "home_win_probability": 0.65},
+    ])
+
+    picks = game_predictions.select_game_picks(win_probs, pd.Timestamp("2026-07-22"))
+
+    assert "market_home_win_probability" in picks.columns
+    assert pd.isna(picks.iloc[0]["market_home_win_probability"])
+
+
+def test_append_game_predictions_migrates_a_log_written_before_market_column_existed(tmp_path):
+    log_path = str(tmp_path / "game_predictions.csv")
+    legacy_log = pd.DataFrame([{
+        "date": pd.Timestamp("2026-07-19"), "game_pk": 1, "home_team": "NYY", "away_team": "BOS",
+        "predicted_winner": "NYY", "predicted_probability": 0.65, "metric": "GamePick_Win_Probability",
+        "actual_winner": "NYY", "game_played": 1, "model_version": "v1", "above_threshold": True,
+    }])
+    legacy_log.to_csv(log_path, index=False)
+    assert "market_home_win_probability" not in legacy_log.columns
+
+    new_pick = game_predictions.select_game_picks(
+        _win_probabilities([{"game_pk": 2, "date": pd.Timestamp("2026-07-20"), "home_team": "LAD",
+                              "away_team": "SF", "home_win_probability": 0.65}]),
+        pd.Timestamp("2026-07-20"),
+    )
+    combined = game_predictions.append_game_predictions(new_pick, log_path)
+
+    row1 = combined[combined["game_pk"] == 1].iloc[0]
+    assert pd.isna(row1["market_home_win_probability"])
+
+
+def test_resolve_game_predictions_migrates_a_log_written_before_market_column_existed(tmp_path):
+    log_path = str(tmp_path / "game_predictions.csv")
+    legacy_log = pd.DataFrame([{
+        "date": pd.Timestamp("2026-07-20"), "game_pk": 1, "home_team": "NYY", "away_team": "BOS",
+        "predicted_winner": "NYY", "predicted_probability": 0.65, "metric": "GamePick_Win_Probability",
+        "actual_winner": pd.NA, "game_played": pd.NA,
+    }])
+    legacy_log.to_csv(log_path, index=False)
+
+    def fetch_results(date):
+        return pd.DataFrame([{"game_pk": 1, "status": "Final", "home_score": 5, "away_score": 3}])
+
+    resolved = game_predictions.resolve_game_predictions(log_path, fetch_results, pd.Timestamp("2026-07-21"))
+
+    assert pd.isna(resolved.iloc[0]["market_home_win_probability"])

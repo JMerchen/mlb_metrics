@@ -1732,11 +1732,21 @@ s.accuracy && s.accuracy !== ""
 const stat = (value, label) =>
 `<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div></div>`
 
+// Quant-analytics item #6, slice 2 - "beat the closing line," the
+// item's literal stated goal. "-" (same convention as accuracy above)
+// until n_beat_closing_line_compared clears 0, i.e. until real ESPN
+// market odds have actually been logged/backfilled for resolved games.
+const beatClosingLine =
+s.beat_closing_line_rate && s.n_beat_closing_line_compared > 0
+? (Number(s.beat_closing_line_rate) * 100).toFixed(1) + "%"
+: "-"
+
 el.innerHTML =
 stat(s.current_streak || 0, "Current Streak") +
 stat(s.best_streak || 0, "Best Streak") +
 stat(accuracy, "Accuracy") +
-stat(s.n_games_resolved || 0, "Games Tracked")
+stat(s.n_games_resolved || 0, "Games Tracked") +
+stat(beatClosingLine, "Beat Closing Line")
 
 }
 

@@ -16,6 +16,7 @@ from mlb_metrics import config
 GAME_PREDICTION_COLUMNS = [
     "date", "game_pk", "home_team", "away_team", "predicted_winner",
     "predicted_probability", "above_threshold", "metric", "actual_winner", "game_played", "model_version",
+    "market_home_win_probability",
 ]
 
 # Same purpose as predictions.LEGACY_MODEL_VERSION - tagged onto any row
@@ -30,6 +31,7 @@ def select_game_picks(
     min_probability: float = config.GAME_PICK_MIN_PROBABILITY,
     metric: str = "GamePick_Win_Probability",
     model_version: str = config.GAME_PICK_MODEL_VERSION,
+    market_probabilities: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Turn game_picks.compute_game_win_probabilities' output into the
     day's logged games - EVERY scheduled game, not just the ones that clear
@@ -44,7 +46,15 @@ def select_game_picks(
     config.GAME_PICK_MODEL_VERSION) is stamped onto every row so
     game_evaluation.py/the dashboard can segment accuracy by which
     win-probability logic actually produced a pick - same reasoning as
-    predictions.select_picks' own model_version."""
+    predictions.select_picks' own model_version.
+
+    `market_probabilities` (default None - unchanged behavior for every
+    existing caller/test) is market_odds.fetch_market_home_win_probabilities'
+    output, a real DataFrame keyed by (home_team, away_team) with a
+    market_home_win_probability column - left-merged in when given, so a
+    day with no market data (fetch failed, or the caller doesn't pass one)
+    still logs picks normally with that column all-NaN. Quant-analytics
+    item #6, slice 2 - see market_odds.py."""
     df = win_probabilities.copy()
     favors_home = df["home_win_probability"] >= 0.5
     df["predicted_winner"] = df["home_team"].where(favors_home, df["away_team"])
@@ -57,6 +67,15 @@ def select_game_picks(
     picks["actual_winner"] = pd.NA
     picks["game_played"] = pd.NA
     picks["model_version"] = model_version
+
+    if market_probabilities is not None and not market_probabilities.empty:
+        picks = picks.merge(
+            market_probabilities[["home_team", "away_team", "market_home_win_probability"]],
+            on=["home_team", "away_team"],
+            how="left",
+        )
+    else:
+        picks["market_home_win_probability"] = pd.NA
 
     return picks[GAME_PREDICTION_COLUMNS]
 
@@ -77,6 +96,10 @@ def append_game_predictions(picks: pd.DataFrame, log_path: str) -> pd.DataFrame:
             # the old hard filter select_game_picks used to apply - True is
             # the factually correct backfill, not an arbitrary default.
             existing["above_threshold"] = True
+        if "market_home_win_probability" not in existing.columns:
+            # A log written before slice 2 genuinely has no real market
+            # data for those rows - NaN, not a guess.
+            existing["market_home_win_probability"] = pd.NA
         combined = pd.concat([picks, existing], ignore_index=True)
     else:
         combined = picks
@@ -119,6 +142,8 @@ def resolve_game_predictions(log_path: str, fetch_results_fn, as_of_date) -> pd.
         log["model_version"] = LEGACY_MODEL_VERSION  # migrate a log written before model_version existed
     if "above_threshold" not in log.columns:
         log["above_threshold"] = True  # migrate a log written before above_threshold existed (see append_game_predictions)
+    if "market_home_win_probability" not in log.columns:
+        log["market_home_win_probability"] = pd.NA  # migrate a log written before slice 2's market column existed
     # A log with no resolved games yet round-trips actual_winner as an
     # all-null float64 column (empty strings -> NaN on read) - cast back to
     # object so assigning a team abbreviation string into it doesn't raise.
