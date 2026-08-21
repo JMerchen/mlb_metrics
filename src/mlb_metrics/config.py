@@ -29,6 +29,20 @@ WAVE_WINDOWS = [
 # probability: probability = 1 - (1 - rate) ** WAVE_TRIALS_PER_GAME.
 WAVE_TRIALS_PER_GAME = 3.5
 
+# Quant-analytics item #3, slice 1 ("uncertainty quantification" -
+# Bayesian shrinkage for small-sample hitters): real-unit (at-bats)
+# pseudo-observation strength for helpers.shrink_rate, applied to each
+# per-window at-bat hit rate inside hitters.compute_wave BEFORE blending.
+# Earned via a real full-season backtest (scripts/backtest_shrinkage.py,
+# dispatched via .github/workflows/debug_backtest_shrinkage.yml against
+# the full persisted 2026 season, n=33,035 PA-gated hitter-dates): swept
+# {0, 25, 50}, strength=50 beat strength=0 (unshrunk) on the PA-gated
+# population's log_loss (0.6798 vs. 0.6908) - see README's "Bayesian
+# shrinkage for small-sample hitters" section for the full numbers,
+# including the full (unfiltered) population where the unshrunk log_loss
+# blows up to 0.9468 on the small-sample rows this constant targets.
+WAVE_SHRINKAGE_STRENGTH = 50.0
+
 # PAVE (pitcher hits-allowed rate, converted from a per-PA rate to a
 # per-AB rate by excluding walks/HBP only - NOT strikeouts, which are
 # real at-bats; see pitchers.py's module docstring for the real bug this
@@ -52,6 +66,19 @@ GAME_HIT_PROB_WINDOWS = [
     (30, 0.275),
     (10, 0.325),
 ]
+
+# Same shrinkage treatment as WAVE_SHRINKAGE_STRENGTH above, but in
+# real-unit GAMES (not at-bats) - Game_Hit_Probability's own sample size
+# is a game count, typically much smaller than WAVE's at-bat count for
+# the same player, so this is deliberately its own separate constant
+# rather than reusing WAVE_SHRINKAGE_STRENGTH's value. Earned via the
+# same real full-season backtest as WAVE_SHRINKAGE_STRENGTH above
+# (n=33,035 PA-gated hitter-dates): swept {0, 25, 50}, strength=25 beat
+# strength=0 (unshrunk) on the PA-gated population's log_loss (0.6752
+# vs. 0.6983) - see README's "Bayesian shrinkage for small-sample
+# hitters" section for the full numbers. See
+# hitters.compute_game_hit_probability and scripts/backtest_shrinkage.py.
+GAME_HIT_PROB_SHRINKAGE_STRENGTH = 25.0
 
 # hitters.compute_current_hit_streaks: a batter whose most recent game is
 # more than this many days before the latest game_date in the data is

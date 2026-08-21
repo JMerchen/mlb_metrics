@@ -21,6 +21,8 @@ import os
 import joblib
 import numpy as np
 import pandas as pd
+from sklearn.base import clone
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.metrics import accuracy_score, brier_score_loss, log_loss, roc_auc_score
 from sklearn.model_selection import GridSearchCV
 
@@ -133,6 +135,29 @@ def evaluate_classifier_predictions(actual: pd.Series, predicted_proba: pd.Serie
         "baseline_log_loss": log_loss(actual, baseline_proba, labels=[0, 1]),
         "n": n,
     }
+
+
+def fit_calibrated(fitted_estimator, X, y, dates, method: str, min_train_dates: int, test_block_dates: int) -> CalibratedClassifierCV:
+    """Quant-analytics item #3, slice 2 ("uncertainty quantification" -
+    isotonic/Platt calibration on top of the raw model output): wraps a
+    classifier in sklearn's CalibratedClassifierCV(method=...), refit via
+    the SAME no-lookahead WalkForwardDateSplit every other walk-forward fit
+    in this project uses - calibration is fit only on data strictly before
+    each internal fold's own test block, never leaking a later date into
+    an earlier fold's calibration, the identical discipline
+    grid_search_walk_forward already enforces for hyperparameter search.
+
+    `fitted_estimator` only supplies the hyperparameters, via
+    sklearn.base.clone (returns a fresh UNFIT clone with the same params,
+    never mutates the original) - CalibratedClassifierCV needs to fit its
+    own base estimator once per internal fold, it can't reuse an
+    already-fitted one without the deprecated cv="prefit" path. `method`
+    is "isotonic" or "sigmoid" (Platt scaling) - the caller decides which,
+    this function doesn't pick one a priori."""
+    splitter = WalkForwardDateSplit(dates, min_train_dates, test_block_dates)
+    calibrated = CalibratedClassifierCV(clone(fitted_estimator), method=method, cv=splitter)
+    calibrated.fit(X, y)
+    return calibrated
 
 
 def save_model(model, path: str) -> None:

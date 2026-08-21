@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from mlb_metrics import hitters
+from mlb_metrics import config, hitters
 
 LATEST = "2026-06-20"
 
@@ -178,7 +178,11 @@ def test_compute_wave_blends_windows_and_converts_to_probability():
     rows += _at_bats(3, "L", [("2026-06-15", "field_out"), ("2026-06-15", "field_out")])
 
     dt = pd.DataFrame(rows)
-    wave = hitters.compute_wave(dt).set_index("key_mlbam")
+    # Pinned to the exact-null-hypothesis shrinkage_strength=0.0 - this test
+    # is about the window-blend/platoon-share math, not shrinkage (which has
+    # its own dedicated test below), and must stay independent of whatever
+    # config.WAVE_SHRINKAGE_STRENGTH's live default happens to be.
+    wave = hitters.compute_wave(dt, shrinkage_strength=0.0).set_index("key_mlbam")
 
     assert wave.loc[1, "WAVE_R"] == pytest.approx(0.9)
     assert wave.loc[1, "WAVE_L"] == 0
@@ -195,6 +199,63 @@ def test_compute_wave_blends_windows_and_converts_to_probability():
     assert wave.loc[3, "WAVE_R"] == pytest.approx(1.0)
     assert wave.loc[3, "WAVE_L"] == pytest.approx(0.0)
     assert wave.loc[3, "WAVE"] == pytest.approx(0.5)
+
+
+def test_compute_wave_shrinkage_pulls_low_n_toward_league_rate_more_than_high_n():
+    # Every row lands on the same date (2026-06-15, within 10 days of
+    # LATEST), so all four WAVE windows (full/81/30/10) see the exact same
+    # at-bats and their weights sum to 1.0 - the blended output equals
+    # helpers.shrink_rate's own per-window result exactly, making this
+    # hand-computable end to end through compute_wave, not just at the
+    # helpers.shrink_rate unit-test level.
+    rows = _at_bats(1, "R", [("2026-06-15", "single")] * 2)  # 2 AB, 2 hits: raw rate 1.0
+    rows += _at_bats(2, "R", [("2026-06-15", "single")] * 10 + [("2026-06-15", "field_out")] * 10)  # 20 AB, 10 hits: raw rate 0.5
+    dt = pd.DataFrame(rows)
+
+    # league_rate = (2 hits + 10 hits) / (2 AB + 20 AB) = 12/22
+    wave = hitters.compute_wave(dt, shrinkage_strength=10.0).set_index("key_mlbam")
+
+    # Batter 1: (2 + 10*12/22) / (2 + 10) = (2 + 60/11) / 12
+    expected_1 = (2 + 10 * (12 / 22)) / (2 + 10)
+    # Batter 2: (10 + 10*12/22) / (20 + 10)
+    expected_2 = (10 + 10 * (12 / 22)) / (20 + 10)
+    assert wave.loc[1, "WAVE_R"] == pytest.approx(expected_1)
+    assert wave.loc[2, "WAVE_R"] == pytest.approx(expected_2)
+
+    # Batter 1 (n=2, raw rate 1.0) got pulled much further from its raw rate
+    # than batter 2 (n=20, raw rate 0.5) - the real small-sample-shrinkage
+    # behavior, not just "some number changed."
+    assert abs(1.0 - wave.loc[1, "WAVE_R"]) > abs(0.5 - wave.loc[2, "WAVE_R"])
+
+
+def test_compute_wave_ci_is_the_real_wilson_interval_on_raw_counts_not_shrinkage_dependent():
+    # Same fixture as the shrinkage test above (single-date trick, all
+    # windows collapse to the raw rate) - batter 1: 2 AB/2 hits, batter 2:
+    # 20 AB/10 hits.
+    rows = _at_bats(1, "R", [("2026-06-15", "single")] * 2)
+    rows += _at_bats(2, "R", [("2026-06-15", "single")] * 10 + [("2026-06-15", "field_out")] * 10)
+    dt = pd.DataFrame(rows)
+
+    # Real Wilson score interval, hand-derived independently (not via
+    # helpers.wilson_ci itself) for count=2,n=2 and count=10,n=20,
+    # z=1.959963984540054 (alpha=0.05):
+    #   batter 1 (2/2): (0.34238022750665303, 1.0)
+    #   batter 2 (10/20): (0.2992980081982123, 0.7007019918017877)
+    for strength in (0.0, 10.0, 50.0):
+        wave = hitters.compute_wave(dt, shrinkage_strength=strength).set_index("key_mlbam")
+        # The CI is computed on the RAW hit/AB counts, never the shrunk
+        # WAVE point estimate - it must be IDENTICAL regardless of
+        # shrinkage_strength, the core design decision this slice makes.
+        assert wave.loc[1, "WAVE_CI_Low"] == pytest.approx(0.34238022750665303)
+        assert wave.loc[1, "WAVE_CI_High"] == pytest.approx(1.0)
+        assert wave.loc[2, "WAVE_CI_Low"] == pytest.approx(0.2992980081982123)
+        assert wave.loc[2, "WAVE_CI_High"] == pytest.approx(0.7007019918017877)
+
+        # probability_CI_* is the exact monotonic transform of WAVE_CI_*,
+        # not an independently (re-)computed interval.
+        trials = config.WAVE_TRIALS_PER_GAME
+        assert wave.loc[1, "probability_CI_Low"] == pytest.approx(1 - (1 - wave.loc[1, "WAVE_CI_Low"]) ** trials)
+        assert wave.loc[1, "probability_CI_High"] == pytest.approx(1 - (1 - wave.loc[1, "WAVE_CI_High"]) ** trials)
 
 
 def test_wave_excludes_batters_with_no_full_season_at_bats_vs_rhp():
@@ -354,11 +415,68 @@ def test_compute_game_hit_probability_blends_game_level_hit_rate():
     ]
     data_with_game_id = pd.DataFrame(rows)
 
-    result = hitters.compute_game_hit_probability(data_with_game_id).set_index("key_mlbam")
+    # Pinned to the exact-null-hypothesis shrinkage_strength=0.0 - this test
+    # is about the window-blend math, not shrinkage (which has its own
+    # dedicated test below), and must stay independent of whatever
+    # config.GAME_HIT_PROB_SHRINKAGE_STRENGTH's live default happens to be.
+    result = hitters.compute_game_hit_probability(data_with_game_id, shrinkage_strength=0.0).set_index("key_mlbam")
 
     # full=3/4, 81d=3/3, 30d=2/2, 10d=1/1
     expected = (3 / 4) * 0.175 + 1.0 * 0.225 + 1.0 * 0.275 + 1.0 * 0.325
     assert result.loc[1, "Game_Hit_Probability"] == pytest.approx(expected)
+
+
+def test_compute_game_hit_probability_shrinkage_pulls_low_n_toward_league_rate_more_than_high_n():
+    # All games on the same recent date so every window (full/81/30/10)
+    # sees the identical game set and weights sum to 1.0 - same trick as
+    # the WAVE shrinkage test above, makes this hand-computable exactly.
+    rows = [
+        {"batter": 1, "game_id": i, "game_date": pd.Timestamp("2026-06-15"), "events": "single"}
+        for i in range(2)
+    ]  # 2 games, 2 hits: raw rate 1.0
+    rows += [
+        {"batter": 2, "game_id": 100 + i, "game_date": pd.Timestamp("2026-06-15"), "events": "single"}
+        for i in range(10)
+    ] + [
+        {"batter": 2, "game_id": 200 + i, "game_date": pd.Timestamp("2026-06-15"), "events": "field_out"}
+        for i in range(10)
+    ]  # 20 games, 10 hits: raw rate 0.5
+    data_with_game_id = pd.DataFrame(rows)
+
+    # league_rate = (2 + 10) / (2 + 20) = 12/22
+    result = hitters.compute_game_hit_probability(data_with_game_id, shrinkage_strength=10.0).set_index("key_mlbam")
+
+    expected_1 = (2 + 10 * (12 / 22)) / (2 + 10)
+    expected_2 = (10 + 10 * (12 / 22)) / (20 + 10)
+    assert result.loc[1, "Game_Hit_Probability"] == pytest.approx(expected_1)
+    assert result.loc[2, "Game_Hit_Probability"] == pytest.approx(expected_2)
+    assert abs(1.0 - result.loc[1, "Game_Hit_Probability"]) > abs(0.5 - result.loc[2, "Game_Hit_Probability"])
+
+
+def test_compute_game_hit_probability_ci_is_the_real_wilson_interval_on_raw_counts_not_shrinkage_dependent():
+    rows = [
+        {"batter": 1, "game_id": i, "game_date": pd.Timestamp("2026-06-15"), "events": "single"}
+        for i in range(2)
+    ]  # 2 games, 2 hits
+    rows += [
+        {"batter": 2, "game_id": 100 + i, "game_date": pd.Timestamp("2026-06-15"), "events": "single"}
+        for i in range(10)
+    ] + [
+        {"batter": 2, "game_id": 200 + i, "game_date": pd.Timestamp("2026-06-15"), "events": "field_out"}
+        for i in range(10)
+    ]  # 20 games, 10 hits
+    data_with_game_id = pd.DataFrame(rows)
+
+    # Same hand-derived Wilson bounds as the compute_wave CI test above
+    # (identical count/n pairs: 2/2 and 10/20).
+    for strength in (0.0, 10.0, 50.0):
+        result = hitters.compute_game_hit_probability(
+            data_with_game_id, shrinkage_strength=strength
+        ).set_index("key_mlbam")
+        assert result.loc[1, "Game_Hit_Probability_CI_Low"] == pytest.approx(0.34238022750665303)
+        assert result.loc[1, "Game_Hit_Probability_CI_High"] == pytest.approx(1.0)
+        assert result.loc[2, "Game_Hit_Probability_CI_Low"] == pytest.approx(0.2992980081982123)
+        assert result.loc[2, "Game_Hit_Probability_CI_High"] == pytest.approx(0.7007019918017877)
 
 
 def test_compute_current_hit_streaks_counts_trailing_hits_only():
@@ -424,7 +542,9 @@ def test_assemble_hitters_output_columns_and_derived_fields():
     assert list(result.columns) == [
         "key_mlbam", "name_first", "name_last", "team", "PA_L", "PA_R",
         "WAVE", "WAVE_L", "WAVE_R", "probability_L", "probability_R", "probability",
-        "Game_Hit_Probability", "Consistency", "Approach", "Expected_Bases",
+        "WAVE_CI_Low", "WAVE_CI_High", "probability_CI_Low", "probability_CI_High",
+        "Game_Hit_Probability", "Game_Hit_Probability_CI_Low", "Game_Hit_Probability_CI_High",
+        "Consistency", "Approach", "Expected_Bases",
         "Expected_BB", "Expected_HBP", "Expected_RBI",
         "Exit_Velo", "Barrel_Rate", "xBA", "xwOBA",
         "Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE", "Last_Game_Date",

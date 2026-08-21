@@ -9,7 +9,9 @@ Classification logic (which events count as a hit, an official at-bat, etc.)
 is unchanged from the original.
 """
 
+import numpy as np
 import pandas as pd
+from statsmodels.stats.proportion import proportion_confint
 
 HIT_EVENTS = {"single", "double", "triple", "home_run"}
 ON_BASE_EVENTS = HIT_EVENTS | {"walk", "hit_by_pitch"}
@@ -249,6 +251,53 @@ def is_chase(description: pd.Series, zone: pd.Series) -> pd.Series:
     is_out_of_zone are already real Statcast classifications, this is
     just their conjunction."""
     return ((is_swing(description) == 1) & (is_out_of_zone(zone) == 1)).astype(int)
+
+
+def shrink_rate(count: pd.Series, n: pd.Series, prior_rate: float, prior_strength: float) -> pd.Series:
+    """Empirical-Bayes (Beta-Binomial) shrinkage of a rate toward
+    `prior_rate`, weighted by `prior_strength` real-unit pseudo-
+    observations (at-bats for hitters.compute_wave, games for
+    hitters.compute_game_hit_probability - never an abstract 0-1 weight).
+    A low-n player's rate gets pulled hard toward the league prior; a
+    high-n player's barely moves, since `prior_strength` pseudo-counts
+    matter less and less relative to a growing real `n`. This is the
+    real fix for quant-analytics item #3's own headline example: today,
+    a 15-PA rookie and a 500-PA veteran run through the identical
+    `count/n` division with zero sample-size-aware treatment, gated only
+    by a hard external PA cutoff (config.BACKTEST_MIN_PLATE_APPEARANCES)
+    that either fully excludes or fully includes a player with nothing in
+    between.
+
+    `prior_strength=0` returns the EXACT unshrunk `count/n` - the same
+    "0 = exact null hypothesis, reproduces today's heuristic exactly, not
+    just an approximation of it" contract
+    PITCHER_MATCHUP_OFFENSE_WEIGHT/MATCHUP_PITCH_ARSENAL_WEIGHT already
+    establish elsewhere in this project. A genuine 0/0 (prior_strength=0
+    AND n=0) intentionally still divides to NaN - every caller already
+    `.fillna(0)`s downstream, matching every other rate in this file."""
+    return (count + prior_strength * prior_rate) / (n + prior_strength)
+
+
+def wilson_ci(count: pd.Series, n: pd.Series, alpha: float = 0.05) -> tuple[pd.Series, pd.Series]:
+    """Real Wilson score confidence interval for a binomial proportion -
+    quant-analytics item #3, slice 3 ("uncertainty quantification":
+    confidence intervals). Reuses statsmodels.stats.proportion.
+    proportion_confint(method="wilson") - an established, exact formula,
+    not hand-derived - rather than adding a new dependency (statsmodels
+    is already a core project requirement, used elsewhere for Logit
+    significance reports).
+
+    Deliberately computed on the RAW empirical count/n - NEVER
+    shrink_rate's shrunk point estimate above. A confidence interval
+    describes the sampling uncertainty of the empirical estimator
+    itself; shrink_rate's output is a Bayesian point-estimate correction
+    toward a prior, a complementary (not competing) treatment of the
+    same small-sample problem - see quant-analytics item #3's "Bayesian
+    shrinkage" README section. n=0 gets (0.0, 1.0) - "no information,
+    could be anywhere" - the honest bound, not a NaN/crash."""
+    n_safe = n.replace(0, np.nan)
+    ci_low, ci_high = proportion_confint(count, n_safe, alpha=alpha, method="wilson")
+    return ci_low.fillna(0.0), ci_high.fillna(1.0)
 
 
 def estimate_rbi(df: pd.DataFrame) -> pd.Series:

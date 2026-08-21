@@ -723,26 +723,81 @@ sklearn class produces `Model_Hit_Probability`, and a model-family swap
 under the same artifact schema isn't a version-worthy event under this
 project's own convention.
 
+**Refreshed after shipping shrinkage** (GitHub Actions run 32424947608,
+2026-08-20, immediately after `WAVE_SHRINKAGE_STRENGTH`/
+`GAME_HIT_PROB_SHRINKAGE_STRENGTH` shipped nonzero above): GBM still wins
+the CV comparison (`cv_score=-0.6745` vs. Logit's `-0.6755`) and this time
+it's a clean win on the holdout too, not the mixed result the immediately
+prior run reported - log_loss 0.6773 (vs. 0.6795 before) and ROC AUC
+0.5723 (vs. 0.5654 before, now beating the `Game_Hit_Probability`
+heuristic's own 0.6797/0.5639 on both metrics). Not a controlled
+before/after comparison (the holdout window also moved forward with the
+season), but a genuinely healthier-looking result than the last run, and
+one real data point that shrinkage's shipped defaults didn't hurt the
+downstream model.
+
+### Calibrating the raw model output: isotonic/Platt (`ml_models.fit_calibrated`)
+
+Quant-analytics item #3 ("uncertainty quantification"), slice 2 of 3
+(shrinkage → calibration → confidence intervals). `Model_Hit_Probability`
+is the one genuine ML classifier score in this project - unlike
+`probability`/`Game_Hit_Probability`/`Matchup_Hit_Probability` (all
+hand-derived real-rate formulas), a classifier's raw `predict_proba`
+output has no guarantee of being well-calibrated (GBMs especially are
+known to run over/underconfident). `ml_models.fit_calibrated` wraps the
+walk-forward-selected model in `sklearn.calibration.CalibratedClassifierCV`
+(isotonic or sigmoid/Platt), refit through the SAME no-lookahead
+`WalkForwardDateSplit` every other walk-forward fit in this project
+already uses. `train_hitter_hit_model.py` now scores uncalibrated vs.
+isotonic vs. sigmoid on the untouched holdout and keeps whichever wins by
+**Brier score** (calibration's own proper-scoring metric) - reported
+honestly either direction.
+
+**Real run** (GitHub Actions run 32448967312, 2026-08-21, same holdout as
+the "Refreshed after shipping shrinkage" numbers above):
+
+| candidate | log_loss | brier | roc_auc | accuracy |
+|---|---|---|---|---|
+| uncalibrated | 0.6764 | **0.2417** | 0.5770 | 0.5733 |
+| isotonic | 0.6769 | 0.2420 | 0.5728 | 0.5743 |
+| sigmoid (Platt) | 0.6764 | **0.2417** | 0.5749 | 0.5733 |
+
+**A real, honest NO-GO**: `uncalibrated` wins the Brier-score comparison
+(tied with sigmoid, both beating isotonic) - this GBM's raw probabilities
+were already reasonably calibrated on this holdout, so calibration didn't
+earn its keep here. The shipped artifact is the plain uncalibrated model,
+identical in kind to every prior run. Isotonic and sigmoid calibration
+are each an ENSEMBLE of separately-fit per-fold models (not a single
+monotonic transform of the one uncalibrated estimator's own scores), so
+their ROC AUC isn't expected to match the uncalibrated model's exactly
+even when calibration doesn't help - the small AUC spread above (0.5728-
+0.5770) is real and expected, not a bug. `ml_models.fit_calibrated`
+itself stays in place and gets tried on every future retrain - a
+different holdout window or feature set could still earn a calibrated
+win later, and this comparison now runs automatically every time.
+
 **Permutation-importance report** (`sklearn.inspection.permutation_importance`,
 same untouched holdout, chosen over SHAP specifically to avoid adding a
 new heavy dependency to a project that has never needed one beyond
 scikit-learn/statsmodels): a real, model-agnostic sanity check on what the
 winning GBM is actually learning from, computed independently of the
-significance report's own Logit coefficients above. Top real features by
-mean importance: `Game_Hit_Probability` (0.00245), `Consistency`
-(0.00108), `PA_L` (0.00060), `PA_R` (0.00058), `Whiff_Rate` (0.00046),
-`Offspeed_WAVE` (0.00018), `Park_Factor` (0.00016), `WAVE_R` (0.00014),
-`Fastball_WAVE` (0.00013), `xBA` (0.00009) - every other feature's
-importance rounds to ~0.0000-0.00002, several slightly negative (expected
-sampling noise for a genuinely uninformative feature, not evidence of
-active harm). **A real, honest divergence worth flagging**: `Whiff_Rate`
-ranking 5th here roughly matches its own significance in the Logit above,
-but `Matchup_Hit_Probability` (highly significant there, coef 0.1069,
-p<0.0001) ranks near the very bottom here (0.00002), and `Chase_Rate`
-(significant in the Logit's combined model) barely registers (0.00005).
-GBM's tree splits absorb correlated signal differently than a linear
-model's coefficients do - this isn't evidence either method is wrong, just
-that "which features matter" genuinely depends on which model family is
+significance report's own Logit coefficients above. **Refreshed alongside
+the calibration comparison above** (same GitHub Actions run 32448967312):
+top real features by mean importance: `Game_Hit_Probability` (0.00361),
+`Consistency` (0.00254), `PA_L` (0.00091), `Whiff_Rate` (0.00085),
+`Park_Factor` (0.00063), `PA_R` (0.00036), `Offspeed_WAVE` (0.00014),
+`Chase_Rate` (0.00013), `Fastball_WAVE` (0.00012), `Bullpen_PAVE`
+(0.00011), `xBA` (0.00010) - every other feature's importance rounds to
+~0.0000-0.00002, several slightly negative (expected sampling noise for a
+genuinely uninformative feature, not evidence of active harm). **A real,
+honest divergence worth flagging**: `Whiff_Rate` ranking 4th here roughly
+matches its own significance in the Logit above, but
+`Matchup_Hit_Probability` (highly significant there, coef 0.0862
+individually / 0.0539 combined, p<0.0001/p=0.0174) ranks near the very
+bottom here (0.00005). GBM's tree splits absorb correlated signal
+differently than a linear model's coefficients do - this isn't evidence
+either method is wrong, just that "which features matter" genuinely
+depends on which model family is
 asking, a real quant lesson this comparison surfaces rather than papering
 over.
 
@@ -754,6 +809,135 @@ docstring and the "Wiring the model into Our Picks" section below for why.
 includes `scripts/train_hitter_hit_model.py` alongside the three DFS/
 age-curve models, so this artifact stays current instead of being frozen
 at its original training date.
+
+### Bayesian shrinkage for small-sample hitters (`helpers.shrink_rate`, `hitters.compute_wave`/`compute_game_hit_probability`)
+
+Quant-analytics item #3 ("uncertainty quantification"), slice 1 of 3
+(shrinkage → calibration → confidence intervals). Before this slice, a
+15-PA rookie and a 500-PA veteran ran through the exact same `count / n`
+division inside `compute_wave` and `compute_game_hit_probability` - the
+only sample-size protection anywhere was a hard external gate
+(`config.BACKTEST_MIN_PLATE_APPEARANCES`) that fully excludes a player
+below the line and fully includes one above it, with nothing in between.
+`helpers.shrink_rate` adds real Beta-Binomial empirical-Bayes shrinkage:
+`(count + prior_strength * prior_rate) / (n + prior_strength)`, where
+`prior_strength` is a real-unit pseudo-observation count (at-bats for
+`compute_wave`, games for `compute_game_hit_probability`) - not an
+abstract 0-1 weight - pulling a low-`n` player's rate toward a real
+league-average rate (computed from the same already-loaded data, no new
+fetch, no lookahead) while barely moving a high-`n` veteran's. As with
+every other tunable weight in this codebase, `prior_strength=0.0` is the
+exact null hypothesis - byte-for-byte identical to the unshrunk rate, not
+an approximation of it - so both constants shipped at `0.0` until a real
+backtest earned a nonzero default.
+
+**Real backtest results** (`scripts/backtest_shrinkage.py`, dispatched via
+`.github/workflows/debug_backtest_shrinkage.yml` against the full
+persisted 2026 season - GitHub Actions run 32415595512, 2026-08-20):
+swept `{0, 25, 50}` for each constant independently through the real
+no-lookahead historical reconstruction (`dfs_backtest.assemble_hitter_hit_log`),
+scored against real `Got_Hit` outcomes.
+
+| strength | WAVE full-pop log_loss (n=37,744) | WAVE PA-gated log_loss (n=33,035) | Game_Hit_Probability full-pop log_loss | Game_Hit_Probability PA-gated log_loss |
+|---|---|---|---|---|
+| 0 (unshrunk) | 0.9468 | 0.6908 | 1.2024 | 0.6983 |
+| 25 | 0.6831 | 0.6805 | 0.6776 | **0.6752** |
+| 50 | 0.6821 | **0.6798** | 0.6786 | 0.6762 |
+
+(Game_Hit_Probability's own best PA-gated value was strength=25 at
+0.6752, edging out strength=50's 0.6762.) The **full unfiltered
+population's** log_loss at `strength=0` is dramatically worse than the
+PA-gated subset (0.9468 vs. 0.6908 for WAVE; 1.2024 vs. 0.6983 for
+Game_Hit_Probability) - real evidence of exactly the problem this slice
+targets, since that population includes the small-sample rows a hard PA
+gate excludes from live picks today but that an unshrunk rate still
+handles badly. On the PA-gated population - the real go/no-go bar, since
+that's what live Beat the Streak picks are actually exposed to -
+shrinkage was a clean win for both signals, so:
+
+- `config.WAVE_SHRINKAGE_STRENGTH` shipped at **50.0** (log_loss 0.6798 vs.
+  0.6908 unshrunk).
+- `config.GAME_HIT_PROB_SHRINKAGE_STRENGTH` shipped at **25.0** (log_loss
+  0.6752 vs. 0.6983 unshrunk).
+
+`config.BACKTEST_MIN_PLATE_APPEARANCES`'s hard gate stays in place
+unremoved - it still serves an "insufficient data to trust even a shrunk
+estimate at all" role that shrinkage alone doesn't replace. Since these
+are real, earned nonzero defaults that change `WAVE`/`Game_Hit_Probability`
+values (and everything downstream: `Approach`, `Consistency`,
+`Matchup_Hit_Probability`, `Model_Hit_Probability`), the hitter
+hit-probability model was retrained afterward via the normal
+`ml_training_update.yml` weekly job so its training features reflect the
+shrunk values.
+
+### Confidence intervals on the full-season rate (`helpers.wilson_ci`)
+
+Quant-analytics item #3 ("uncertainty quantification"), slice 3 of 3 -
+the last piece, after shrinkage and calibration above. Every probability
+this site produces was a bare point estimate with no interval anywhere.
+
+The real complication: `WAVE`/`probability` and `Game_Hit_Probability`
+are each a blend of 4 **overlapping, nested** recency windows
+(`config.WAVE_WINDOWS`/`GAME_HIT_PROB_WINDOWS` - the 10-day window's
+at-bats are a literal subset of the 30-day window's, which are a subset
+of the 81-day window's, which are a subset of the full-season window's).
+Those windows aren't independent samples, so there's no valid
+closed-form confidence interval for the *blended* number itself. But
+each blend's **full-season component** - real hits over real at-bats, or
+real hit-games over real total-games, pooled across the whole season
+with no recency weighting - genuinely is a single, well-defined binomial
+proportion, with an exact, standard interval formula: the Wilson score
+interval (`helpers.wilson_ci`, reusing
+`statsmodels.stats.proportion.proportion_confint(method="wilson")` -
+statsmodels is already a core project dependency, used elsewhere for
+`Logit` significance reports, so this adds no new dependency).
+
+**Deliberately excluded** (confirmed via `AskUserQuestion` rather than
+fabricating an approximate interval for either): `Approach`
+(`Game_Hit_Probability * probability`, a product of two already-blended
+heuristics with no clean n) and `Consistency` (their difference);
+`Matchup_Hit_Probability` (log5-combined with two multiplicative
+adjustments - no clean n survives into it either); and
+`Model_Hit_Probability` (the ML classifier's raw score - would need
+bootstrap or conformal prediction, a separate, larger undertaking). Same
+"don't ship fake precision" discipline slice 2 already followed when
+calibration didn't earn a win. Only the combined (both-hands pooled)
+full-season rate gets an interval - no separate `WAVE_L`/`WAVE_R`-side
+intervals, keeping the new columns minimal.
+
+**Computed on the RAW empirical count/n, never the shrunk point
+estimate.** A confidence interval describes the sampling uncertainty of
+the empirical estimator itself; `helpers.shrink_rate`'s shrunk output
+(above) is a Bayesian point-estimate correction toward a league prior -
+a complementary, not competing, treatment of the same small-sample
+problem. `WAVE_CI_Low`/`WAVE_CI_High` and
+`Game_Hit_Probability_CI_Low`/`_CI_High` are identical no matter what
+`WAVE_SHRINKAGE_STRENGTH`/`GAME_HIT_PROB_SHRINKAGE_STRENGTH` are set to.
+`probability_CI_Low`/`_CI_High` are the same `WAVE` interval pushed
+through the existing `1 - (1-rate)**WAVE_TRIALS_PER_GAME` transform -
+valid because that transform is strictly increasing over `[0, 1]`, so
+transforming a valid interval's endpoints gives a valid interval for the
+transformed quantity too, not an approximation.
+
+Purely additive: `dfs_ml.HITTER_FEATURE_COLUMNS` is an explicit
+allow-list (`hitter_feature_matrix`'s `.reindex(columns=...)`), so the
+new columns don't touch the trained hitter hit-probability model at all -
+**no retrain needed**, unlike shrinkage and calibration above. On the
+dashboard, `WAVE`/`probability`/`Game_Hit_Probability` had no dedicated,
+by-name display anywhere in `docs/app.js` - they only ever reached the
+page through the generic "Top WAVE Players" table (`buildTable`), which
+rendered every column as a raw, unformatted number. `buildTable` now
+folds any `<X>_CI_Low`/`<X>_CI_High` pair into their point column `X`'s
+own cell (`"28.4% (22.1%-35.2%)"`, the same `%`-formatting idiom used
+everywhere else on the dashboard) instead of three separate raw columns -
+a data-driven, forward-compatible widening (a no-op for any table with
+no CI columns, e.g. Top PAVE Players; any future column following this
+same naming convention gets folded in automatically).
+
+This completes quant-analytics item #3 ("uncertainty quantification") in
+full: Bayesian shrinkage for small-sample hitters, isotonic/Platt
+calibration of the raw model output, and confidence intervals on the
+full-season rate.
 
 ### Wiring the model into Our Picks (`pipeline.py`, `predictions.py`)
 
