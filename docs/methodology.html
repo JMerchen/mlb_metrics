@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8">
+
+<title>MLB Metrics - Methodology</title>
+
+<link
+rel="icon"
+type="image/svg+xml"
+href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTQiIGZpbGw9IiNmMmE5M2MiLz48cGF0aCBkPSJNMTAgNCBDMTQgMTAsIDE0IDIyLCAxMCAyOCIgc3Ryb2tlPSIjMGIwZDEwIiBzdHJva2Utd2lkdGg9IjEuOCIgZmlsbD0ibm9uZSIvPjxwYXRoIGQ9Ik0yMiA0IEMxOCAxMCwgMTggMjIsIDIyIDI4IiBzdHJva2U9IiMwYjBkMTAiIHN0cm9rZS13aWR0aD0iMS44IiBmaWxsPSJub25lIi8+PC9zdmc+">
+
+<link
+rel="stylesheet"
+href="./style.css">
+
+<style>
+/* This page's own documentation-layout styles - a reference/glossary
+page shaped very differently from every other page's data tables, so
+these live here rather than in the shared stylesheet. Built entirely
+from style.css's shared :root tokens (--bg-card, --border, --text-dim,
+--accent, --radius) so it still visually matches every other page. */
+.methodologyIntro{
+opacity:.75;
+max-width:760px;
+}
+.toc{
+display:flex;
+flex-wrap:wrap;
+gap:8px;
+margin:16px 0 32px;
+padding:0;
+list-style:none;
+}
+.toc a{
+display:inline-block;
+padding:6px 12px;
+border:1px solid var(--border);
+border-radius:var(--radius-sm);
+color:var(--text-dim);
+text-decoration:none;
+font-size:13px;
+}
+.toc a:hover{
+color:var(--text);
+border-color:var(--border-strong);
+}
+.methodCategory{
+margin:36px 0;
+scroll-margin-top:16px;
+}
+.methodCategory h2{
+border-bottom:1px solid var(--border);
+padding-bottom:10px;
+}
+.methodCategoryNote{
+opacity:.7;
+font-size:13.5px;
+max-width:760px;
+margin:-4px 0 16px;
+}
+.methodGrid{
+display:grid;
+grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));
+gap:16px;
+}
+.methodCard{
+background:var(--bg-card);
+border:1px solid var(--border);
+border-radius:var(--radius);
+padding:16px 18px;
+scroll-margin-top:16px;
+}
+.methodCard h3{
+margin:0 0 8px;
+font-size:16px;
+font-weight:600;
+color:var(--text);
+text-transform:none;
+letter-spacing:normal;
+}
+.methodLabel{
+font-size:11px;
+font-weight:600;
+text-transform:uppercase;
+letter-spacing:.05em;
+color:var(--text-dim);
+margin:10px 0 4px;
+}
+.methodLabel:first-of-type{
+margin-top:0;
+}
+.methodCard p{
+margin:0 0 4px;
+font-size:13.5px;
+line-height:1.5;
+color:var(--text);
+}
+.methodCard code{
+font-family:var(--font-mono);
+font-size:12.5px;
+background:var(--bg-raised);
+border-radius:4px;
+padding:1px 4px;
+word-break:break-word;
+overflow-wrap:anywhere;
+}
+.methodLink{
+display:inline-block;
+margin-top:10px;
+font-size:13px;
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="siteHeader">
+
+<div class="brandRow">
+<svg class="brandMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+<circle cx="16" cy="16" r="14" fill="#f2a93c"/>
+<path d="M10 4 C14 10, 14 22, 10 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
+<path d="M22 4 C18 10, 18 22, 22 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
+</svg>
+<h1>MLB <span class="brandAccent">Metrics</span></h1>
+</div>
+
+<div class="tabGroup pageTabs">
+<a class="tabButton" href="./index.html">Predictive Metrics</a>
+<a class="tabButton" href="./age-curves.html">Age Curves</a>
+<a class="tabButton" href="./dfs.html">DFS Rankings</a>
+<a class="tabButton" href="./nfl.html">NFL</a>
+<a class="tabButton active" href="./methodology.html">Methodology</a>
+</div>
+
+</div>
+
+<p class="methodologyIntro">
+Every statistical, machine-learning, optimization, and domain-specific
+method actually used somewhere in this project's code - not what each
+feature predicts, but the real technique behind it, in case this site is
+useful for learning the theory itself. Each entry: what the method is in
+general, how this project specifically uses it (with the real file/
+function), and a link to learn more. For real results, backtest numbers,
+and full implementation detail on any of these, see the
+<a href="https://github.com/JMerchen/mlb_metrics#readme" style="color:inherit">README</a>
+- this page is the theory reference, the README is the results record.
+</p>
+
+<ul class="toc">
+<li><a href="#estimation">Statistical Estimation &amp; Smoothing</a></li>
+<li><a href="#models">Regression &amp; Classification Models</a></li>
+<li><a href="#validation">Model Validation</a></li>
+<li><a href="#calibration">Probability Calibration</a></li>
+<li><a href="#significance">Statistical Significance Testing</a></li>
+<li><a href="#metrics">Evaluation Metrics</a></li>
+<li><a href="#resampling">Resampling</a></li>
+<li><a href="#decision">Decision Theory &amp; Optimization</a></li>
+<li><a href="#risk">Portfolio &amp; Risk Concepts</a></li>
+<li><a href="#sabermetrics">Sabermetric Domain Formulas</a></li>
+<li><a href="#betting">Sports-Betting Math</a></li>
+<li><a href="#engineering">Data &amp; Feature Engineering</a></li>
+</ul>
+
+<section class="methodCategory" id="estimation">
+<h2>Statistical Estimation &amp; Smoothing</h2>
+<div class="methodGrid">
+
+<div class="methodCard" id="shrinkage">
+<h3>Empirical-Bayes (Beta-Binomial) Shrinkage</h3>
+<p class="methodLabel">What it is</p>
+<p>A way to estimate a rate (like a hit rate) from a small sample without
+over-trusting it. Instead of using the raw observed rate, it's pulled
+toward a "prior" rate (usually the population/league average), weighted
+by how many real observations back it up - a batter with 3 at-bats gets
+pulled hard toward league average; one with 300 barely moves. The prior
+itself is estimated from the data ("empirical"), not asserted from
+theory.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>helpers.shrink_rate</code> shrinks every small-sample hitter hit
+rate toward the league rate, weighted by <code>config.WAVE_SHRINKAGE_STRENGTH</code>
+real pseudo-observations. Used in <code>hitters.compute_wave</code> and
+<code>compute_game_hit_probability</code> so a hitter with 5 at-bats
+against lefties doesn't get an absurd extreme rate just from noise.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Empirical_Bayes_method" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="wilson-ci">
+<h3>Wilson Score Confidence Interval</h3>
+<p class="methodLabel">What it is</p>
+<p>A confidence interval for a proportion (a rate out of n trials) that
+stays well-behaved at small n and near 0%/100% - unlike the simpler
+normal-approximation interval, which can produce nonsense bounds outside
+[0, 1] on small samples.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>helpers.wilson_ci</code> wraps <code>statsmodels</code>'s Wilson
+implementation. Computed on the raw (unshrunk) hit/at-bat counts in
+<code>hitters.compute_wave</code>/<code>compute_game_hit_probability</code> -
+deliberately never on the shrunk point estimate above, since shrinkage
+already borrows strength from the prior and isn't a plain sample
+proportion anymore.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Binomial_proportion_confidence_interval" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="moving-window">
+<h3>Weighted Moving-Window Averaging</h3>
+<p class="methodLabel">What it is</p>
+<p>Blending several time windows of different lengths (e.g. last 7 days,
+last 30 days, full season) into one number using fixed weights, so a
+signal reflects both recent form and a larger, more stable sample. A
+simplified relative of exponential smoothing, using a handful of discrete
+windows with hand-set weights rather than one continuously-decaying
+weight.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>hitters._blend_windows</code>/<code>_side_window_agg</code> is
+the shared engine behind WAVE, WTB/WHOPS, pitch-family rates,
+plate-discipline rates, and batted-ball-quality signals - each computes a
+rate per <code>config.WAVE_WINDOWS</code> window, split by opposing
+throwing hand, then blends by fixed weight.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Moving_average" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="zscore">
+<h3>Z-Score Standardization</h3>
+<p class="methodLabel">What it is</p>
+<p>Rescaling a value to "how many standard deviations from the mean" it
+is: <code>(x - mean) / std</code>. Puts variables of very different raw
+scales onto one comparable axis.</p>
+<p class="methodLabel">How we use it</p>
+<p>Two real uses: <code>teams.py</code>'s <code>normalize()</code> helper
+puts team-strength composites (Pythagorean strength, SOS, confidence) on
+a common ~1.0-centered scale before they're blended into one game-pick
+signal; separately, <code>scripts/train_hitter_hit_model.py</code>/
+<code>train_game_pick_model.py</code> z-score features before fitting
+<code>statsmodels.Logit</code> purely so the resulting coefficients are
+comparable across features of very different natural scales.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Standard_score" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+</div>
+</section>
+
+<section class="methodCategory" id="models">
+<h2>Regression &amp; Classification Models</h2>
+<p class="methodCategoryNote">
+Every model here is grid-searched against at least one real alternative
+on identical, no-lookahead cross-validation, and only shipped if it also
+beats a naive baseline and the existing heuristic on an untouched
+holdout - see Model Validation below.
+</p>
+<div class="methodGrid">
+
+<div class="methodCard" id="logistic-regression">
+<h3>Logistic Regression</h3>
+<p class="methodLabel">What it is</p>
+<p>A linear model for binary outcomes: it fits a weighted sum of features
+and squashes it through the sigmoid function into a 0-1 probability. The
+workhorse baseline classifier in applied statistics - simple, fast, and
+its coefficients are directly interpretable.</p>
+<p class="methodLabel">How we use it</p>
+<p>A candidate model (vs. gradient boosting) for "does this hitter get a
+hit today" (<code>scripts/train_hitter_hit_model.py</code>) and for
+game-level home-win probability (<code>scripts/train_game_pick_model.py</code>).</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Logistic_regression" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="ridge-regression">
+<h3>Ridge Regression</h3>
+<p class="methodLabel">What it is</p>
+<p>Ordinary linear regression with an L2 penalty added on the
+coefficients, shrinking them toward zero. Trades a little bias for lower
+variance - useful when features are correlated or numerous relative to
+the sample size, both common here.</p>
+<p class="methodLabel">How we use it</p>
+<p>A candidate model (vs. gradient boosting) for DK fantasy point
+projections (<code>scripts/train_dfs_ml_models.py</code>, both hitters
+and the pitcher <code>Expected_H_Allowed</code>/<code>Expected_BB</code>
+components) and for next-season HR9 projection
+(<code>scripts/train_age_curve_hr9_model.py</code>).</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Ridge_regression" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="gradient-boosting">
+<h3>Gradient Boosting (Histogram-Based)</h3>
+<p class="methodLabel">What it is</p>
+<p>An ensemble method that builds many shallow decision trees in
+sequence, each one fitting the residual errors of the ones before it. Can
+capture nonlinear relationships and feature interactions that a linear
+model can't, at the cost of interpretability. "Histogram-based" bins
+continuous features first, trading a little precision for large speed
+gains on bigger datasets.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>sklearn.ensemble.HistGradientBoostingClassifier</code>/
+<code>Regressor</code> is the alternative candidate in every model
+selection above - it's the one that actually won and shipped for HR9
+projection (beating the KNN baseline, see below), while logistic
+regression/Ridge have won the others so far.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Gradient_boosting" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="knn">
+<h3>k-Nearest Neighbors</h3>
+<p class="methodLabel">What it is</p>
+<p>A non-parametric method that predicts by finding the k most similar
+historical examples (by distance on some metric) and looking at what
+actually happened to them, rather than fitting any equation. Simple, and
+naturally gives a real empirical distribution of outcomes, not just one
+point estimate.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>age_curve.find_comparables</code> is a hand-implemented 1-D KNN:
+for a given player-age-metric, it finds the k closest historical Lahman
+seasons by that one metric and reports what those comparable players
+actually did the next season (mean, 25th/75th percentile) -
+<code>project_next_season</code>. Deliberately hand-rolled rather than
+pulling in <code>sklearn.neighbors</code> for one simple 1-D lookup.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+</div>
+</section>
+
+<section class="methodCategory" id="validation">
+<h2>Model Validation</h2>
+<div class="methodGrid">
+
+<div class="methodCard" id="walk-forward">
+<h3>Walk-Forward (Time-Blocked) Cross-Validation</h3>
+<p class="methodLabel">What it is</p>
+<p>Cross-validation adapted for time-ordered data: instead of randomly
+shuffling rows into folds (which would let a model "see the future"),
+each fold trains only on an earlier block of time and tests on the block
+immediately after it, then the training window rolls forward. The only
+CV scheme that doesn't leak future information into training for
+sequential data.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>ml_models.WalkForwardDateSplit</code> blocks by calendar date
+(used for every daily hitter/game model); <code>age_curve_ml.YearBlockedSplit</code>
+does the identical thing blocked by season instead, for year-level
+Lahman data. Both plug directly into <code>sklearn.model_selection.GridSearchCV</code>
+as a custom <code>cv=</code> splitter.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Cross-validation_(statistics)" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="holdout">
+<h3>Train / Holdout Split</h3>
+<p class="methodLabel">What it is</p>
+<p>Setting aside a final chunk of data that no amount of model selection
+or hyperparameter tuning is ever allowed to touch, then evaluating the
+already-chosen model on it exactly once. The single honest estimate of
+real-world performance - anything tuned using the holdout itself isn't a
+real holdout anymore.</p>
+<p class="methodLabel">How we use it</p>
+<p>Every <code>scripts/train_*.py</code> carves off the LAST N distinct
+dates (<code>config.ML_FINAL_HOLDOUT_DATES</code> and its per-model
+variants) before any grid search runs, and reports final numbers only
+from that untouched block - not from cross-validation folds reused for
+reporting.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Training,_validation,_and_test_data_sets" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="leakage">
+<h3>Data Leakage Prevention</h3>
+<p class="methodLabel">What it is</p>
+<p>A named failure mode, not a technique in itself: a model that
+accidentally has access to information it wouldn't have in the real
+world at prediction time (most often, something from the future).
+Leakage inflates validation numbers in a way that quietly disappears the
+moment the model is used for real - the single most common way a
+backtest lies.</p>
+<p class="methodLabel">How we use it</p>
+<p>The whole pipeline is built around an explicit "as of date" cutoff
+(<code>pipeline.run()</code>'s own module docstring) - every feature is
+computed strictly before the date being predicted, walk-forward CV never
+trains on a later date than it tests, and the holdout dates are excluded
+from every stage of model selection, not just final scoring.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Leakage_(machine_learning)" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+</div>
+</section>
+
+<section class="methodCategory" id="calibration">
+<h2>Probability Calibration</h2>
+<p class="methodCategoryNote">
+A model can rank outcomes well (good AUC) while still being over- or
+under-confident in its actual probability numbers. Calibration fixes the
+numbers without touching the ranking.
+</p>
+<div class="methodGrid">
+
+<div class="methodCard" id="isotonic">
+<h3>Isotonic Regression</h3>
+<p class="methodLabel">What it is</p>
+<p>A non-parametric calibration method: it fits the best possible
+non-decreasing (monotonic) step function mapping raw model scores to
+corrected probabilities. Flexible - it can fix almost any shape of
+miscalibration - but needs more data than a parametric method to avoid
+overfitting the correction itself.</p>
+<p class="methodLabel">How we use it</p>
+<p>One of two candidate calibration methods in
+<code>ml_models.fit_calibrated</code>
+(<code>sklearn.calibration.CalibratedClassifierCV(method="isotonic")</code>),
+refit through the same walk-forward splitter as the underlying model.
+Selected in <code>scripts/train_hitter_hit_model.py:_select_calibration</code>
+by comparing holdout Brier score against the uncalibrated and sigmoid
+options.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Isotonic_regression" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="platt">
+<h3>Platt Scaling (Sigmoid Calibration)</h3>
+<p class="methodLabel">What it is</p>
+<p>A parametric calibration method: fits a single logistic (sigmoid)
+curve mapping raw model scores to corrected probabilities. Needs less
+data than isotonic regression to calibrate reliably, but can only correct
+a sigmoid-shaped miscalibration pattern.</p>
+<p class="methodLabel">How we use it</p>
+<p>The other candidate in <code>ml_models.fit_calibrated</code>
+(<code>method="sigmoid"</code>), same selection process as isotonic
+above.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Platt_scaling" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+</div>
+</section>
+
+<section class="methodCategory" id="significance">
+<h2>Statistical Significance Testing</h2>
+<div class="methodGrid">
+
+<div class="methodCard" id="wald">
+<h3>Logistic Regression Coefficient Significance (Wald Test)</h3>
+<p class="methodLabel">What it is</p>
+<p>After fitting a logistic regression, each coefficient comes with a
+standard error; dividing the coefficient by its standard error gives a
+z-statistic, which converts to a p-value - the probability of seeing a
+coefficient this large by chance if the true effect were zero. This is
+what separates "this feature looks predictive in this sample" from "this
+feature is actually predictive."</p>
+<p class="methodLabel">How we use it</p>
+<p><code>statsmodels.api.Logit</code>, fit once per feature alone and
+once with all features together, in
+<code>scripts/train_hitter_hit_model.py</code>/<code>train_game_pick_model.py</code>'s
+<code>significance_report</code>. This is real inference (fit on full
+history, not the holdout) - it answers "which features matter and in
+which direction," a different question from the walk-forward accuracy
+numbers above.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Wald_test" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+</div>
+</section>
+
+<section class="methodCategory" id="metrics">
+<h2>Evaluation Metrics</h2>
+<div class="methodGrid">
+
+<div class="methodCard" id="brier">
+<h3>Brier Score</h3>
+<p class="methodLabel">What it is</p>
+<p>Mean squared error between a predicted probability and the actual
+binary outcome (0 or 1). Lower is better; 0 is perfect; a model that
+always predicts 0.5 scores 0.25 on a 50/50 outcome. Rewards both good
+ranking AND good calibration at once.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>evaluation.brier_score</code>/<code>ml_models.evaluate_classifier_predictions</code> -
+the primary metric used to pick between calibration methods, and the
+basis for <code>game_evaluation._beat_closing_line_rate</code>'s
+per-game model-vs-market comparison.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Brier_score" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="logloss">
+<h3>Log Loss (Cross-Entropy)</h3>
+<p class="methodLabel">What it is</p>
+<p>Negative log-likelihood of the actual outcome under the predicted
+probability. Like Brier score, it rewards calibrated probabilities - but
+it punishes a confident, wrong prediction (e.g. predicting 1% when the
+outcome happens) far more severely than Brier does, since the loss blows
+up as predicted probability approaches the wrong extreme.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>evaluation.log_loss</code>/<code>ml_models.evaluate_classifier_predictions</code> -
+the primary metric used to select model FAMILY (logistic regression vs.
+gradient boosting) before calibration is even considered.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Cross-entropy" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="rocauc">
+<h3>ROC AUC</h3>
+<p class="methodLabel">What it is</p>
+<p>The probability that a classifier ranks a random positive example
+above a random negative one. Measures pure ranking/discrimination ability
+- unlike Brier/log loss, it's completely insensitive to whether the
+predicted probabilities themselves are well-calibrated.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>ml_models.evaluate_classifier_predictions</code> reports it
+alongside log loss for every classifier, as a check on whether a model
+that scores worse on log loss might still be separating outcomes better
+(or vice versa).</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Receiver_operating_characteristic" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="permutation-importance">
+<h3>Permutation Feature Importance</h3>
+<p class="methodLabel">What it is</p>
+<p>A model-agnostic way to measure how much each feature actually
+matters: shuffle one feature's values (breaking its real relationship to
+the outcome) and see how much the model's performance drops. A bigger
+drop means the model was relying on that feature more.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>scripts/train_hitter_hit_model.py:feature_importance_report</code>
+via <code>sklearn.inspection.permutation_importance</code>, computed only
+on the untouched holdout - chosen deliberately over SHAP to avoid adding
+a new dependency for one report.</p>
+<a class="methodLink" href="https://scikit-learn.org/stable/modules/permutation_importance.html" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="calibration-diagram">
+<h3>Calibration / Reliability Diagrams</h3>
+<p class="methodLabel">What it is</p>
+<p>A diagnostic that bins predictions by predicted probability and
+compares each bin's average predicted probability to that bin's actual
+outcome rate. A perfectly calibrated model's points fall on the diagonal
+- systematic over- or under-confidence shows up as a visible bend away
+from it.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>evaluation.calibration_table</code> - the same underlying idea
+that motivates fitting isotonic/Platt calibration in the first place
+(above), used here as a plain diagnostic table rather than a correction.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Calibration_(statistics)" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="pearson">
+<h3>Pearson Correlation Coefficient</h3>
+<p class="methodLabel">What it is</p>
+<p>A number from -1 to 1 measuring the strength and direction of a
+LINEAR relationship between two variables. 0 means no linear
+relationship (though a real nonlinear one could still exist).</p>
+<p class="methodLabel">How we use it</p>
+<p><code>ml_models.evaluate_predictions</code> reports it between
+predicted and actual values for every regression target (DK points,
+HR9), as a simple, standard companion to mean absolute error.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Pearson_correlation_coefficient" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+</div>
+</section>
+
+<section class="methodCategory" id="resampling">
+<h2>Resampling</h2>
+<div class="methodGrid">
+
+<div class="methodCard" id="bootstrap">
+<h3>Bootstrap Resampling</h3>
+<p class="methodLabel">What it is</p>
+<p>Estimating the sampling distribution of a statistic by repeatedly
+drawing new samples, WITH replacement, from the real observed data
+itself, rather than assuming a theoretical distribution. Especially
+useful when the real underlying data-generating process is unknown or
+hard to model directly.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>scripts/backtest_streak_decision.py</code> resamples real
+historical (probability, outcome) day-pairs 1,000 times to compare the
+decision-theory play/sit rule against the status-quo rule under many
+plausible real day-orderings, reporting the real win rate and mean/median
+final streak across resamples - a genuine nonparametric bootstrap, no
+distribution assumed on the underlying probabilities.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Bootstrapping_(statistics)" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+</div>
+</section>
+
+<section class="methodCategory" id="decision">
+<h2>Decision Theory &amp; Optimization</h2>
+<div class="methodGrid">
+
+<div class="methodCard" id="bellman">
+<h3>Dynamic Programming / Bellman Optimal Stopping</h3>
+<p class="methodLabel">What it is</p>
+<p>A way to solve sequential decision problems by working BACKWARD from
+the end: define the value of being in each state on the final day, then
+recursively define the value of each state one day earlier as the best
+of "stop now" vs. "the expected value of continuing," given tomorrow's
+already-solved values. This is Bellman's optimality principle - it
+collapses an exponentially large decision tree into one manageable pass
+through states and days.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>decision_theory.solve_reservation_thresholds</code> models "risk
+today's Beat the Streak pick, or protect the streak I already have" as a
+finite-horizon optimal-stopping problem: state = current streak length,
+recursion runs backward from the end of the remaining days. Because the
+next day's values are already known, the optimal action collapses to a
+closed-form probability threshold - <code>should_play</code> just
+compares today's real predicted probability against it.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Bellman_equation" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="milp">
+<h3>Mixed-Integer (0/1) Linear Programming</h3>
+<p class="methodLabel">What it is</p>
+<p>Optimization where some or all decision variables are restricted to
+integers (here, strictly 0 or 1 - "include this player, or don't"),
+subject to linear constraints, maximizing a linear objective. Unlike a
+greedy heuristic, a real solver considers the whole combinatorial space
+at once and is guaranteed to find the true optimum under a shared budget
+constraint - a locally-good pick can foreclose a better global
+combination, which is exactly what a greedy approach would miss.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>dfs_optimizer.solve_optimal_lineup</code> - one binary variable
+per player, objective = maximize total projected points (or ceiling, or
+value), constraints = salary cap and exact roster-slot counts per
+position, solved via PuLP's CBC solver. A real 0/1 knapsack-with-groups
+problem. <code>nfl_dfs_optimizer.py</code> reuses this same function
+directly rather than reimplementing it.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Integer_programming" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+</div>
+</section>
+
+<section class="methodCategory" id="risk">
+<h2>Portfolio &amp; Risk Concepts</h2>
+<div class="methodGrid">
+
+<div class="methodCard" id="diversification">
+<h3>Diversification (Correlation-Aware Tie-Breaking)</h3>
+<p class="methodLabel">What it is</p>
+<p>The general finance idea that combining imperfectly-correlated bets
+reduces the risk of them all failing together, compared to betting the
+same underlying risk twice. Formally this requires estimating a real
+correlation or covariance between the bets.</p>
+<p class="methodLabel">How we use it</p>
+<p><b>Honestly labeled as a proxy, not the real thing</b>:
+<code>predictions._diversify_second_pick</code> never estimates an actual
+correlation. It's a sign-only heuristic: if a day's #1 and #2 picks share
+the same real game, and a comparably-ranked pick from a DIFFERENT game
+exists nearby, prefer it - because shared-game correlation can only ever
+raise the chance both picks miss together, never lower it, so the
+direction of the swap is safe even without knowing the real magnitude.
+Gated at 0.0 (a no-op) in production until backtest evidence justifies
+turning it on.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Diversification_(finance)" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="semideviation">
+<h3>Semi-Deviation (One-Sided Volatility)</h3>
+<p class="methodLabel">What it is</p>
+<p>Like standard deviation, but computed using only the deviations on one
+side of the mean (e.g. only above-mean values). Isolates "upside spread"
+or "downside spread" separately, rather than treating both directions as
+equally undesirable the way plain variance does.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>dfs_ceiling.compute_upside_deviation</code> computes only the
+above-mean spread of a player's historical game log. Combined as
+<code>mean + k * upside_deviation</code> - deliberately the mirror image
+of a risk-averse Sharpe-ratio-style penalty: this project's "boom
+score" is risk-SEEKING (rewards upside spread), since a DFS
+tournament lineup wants explosive ceiling games, not smooth/low-variance
+ones.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Downside_risk" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="percentile">
+<h3>Percentile-Based Signal Design</h3>
+<p class="methodLabel">What it is</p>
+<p>Using a specific percentile (quantile) of a real historical
+distribution - rather than the mean - as the number you actually care
+about. The 90th percentile answers "what's a real, plausible GREAT game
+for this player," a genuinely different question than "what's typical."</p>
+<p class="methodLabel">How we use it</p>
+<p><code>dfs_ceiling.compute_ceiling_percentiles</code> takes the
+<code>config.DFS_CEILING_PERCENTILE</code>-th (default 90th) percentile
+of a player's real modeled DK points history (falling back to a
+position-group percentile for players with too little history of their
+own) as the "ceiling" signal for tournament-style lineup building.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Quantile" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+</div>
+</section>
+
+<section class="methodCategory" id="sabermetrics">
+<h2>Sabermetric Domain Formulas</h2>
+<div class="methodGrid">
+
+<div class="methodCard" id="pythagorean">
+<h3>Pythagorean Expectation</h3>
+<p class="methodLabel">What it is</p>
+<p>Bill James' formula estimating a team's "true" win percentage from
+its runs scored and allowed - <code>RS^exp / (RS^exp + RA^exp)</code> -
+on the idea that runs scored/allowed are a more stable, less
+luck-affected signal than actual win/loss record over a partial season.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>teams.compute_strength_metrics</code> computes this per rolling
+window (with a custom-tuned exponent, <code>config.PYTHAGOREAN_EXPONENT</code>,
+not the classic 2), feeding the "Pythagorean strength"/"Pythagorean
+confidence" signals in <code>game_picks.py</code>.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Pythagorean_expectation" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="log5">
+<h3>log5</h3>
+<p class="methodLabel">What it is</p>
+<p>Also Bill James: an odds-ratio formula for combining two independent
+rates (a batter's rate against all pitchers, a pitcher's rate allowed to
+all batters) into the rate expected specifically in that matchup, given
+each side's rate relative to the league average.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>matchup._log5</code> combines a batter's WAVE hit rate with the
+opposing pitcher's blended PAVE allowed-rate into a real matchup-specific
+hit probability in <code>compute_matchup_hit_probability</code>.</p>
+<a class="methodLink" href="https://sabr.org/research/matchup-probabilities-major-league-baseball" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="park-factor">
+<h3>Park Factor</h3>
+<p class="methodLabel">What it is</p>
+<p>A per-venue adjustment for how much a ballpark inflates or suppresses
+scoring relative to a league-average park, so a hitter's raw numbers
+aren't unfairly credited/blamed for the park they happen to play in.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>teams.compute_park_factors</code> - each venue's average
+combined runs per game, normalized to the across-all-venues mean (1.0 =
+neutral), used to scale matchup rates in <code>matchup._park_factor_multiplier</code>.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Park_effects" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="fip">
+<h3>FIP (Fielding Independent Pitching)</h3>
+<p class="methodLabel">What it is</p>
+<p>A pitcher-evaluation stat built only from outcomes a pitcher directly
+controls (home runs, walks/HBP, strikeouts), deliberately excluding balls
+in play - since what happens to a ball in play depends heavily on the
+defense behind the pitcher, not just the pitcher. A cleaner signal of
+pitcher skill than ERA for that reason.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>age_curve.build_historical_pitcher_seasons</code> computes real
+FIP (<code>(13*HR + 3*(BB+HBP) - 2*SO)/IP + config.FIP_CONSTANT</code>) as
+an age-curve feature/label, used in place of ERA for exactly this
+reason.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Fielding_independent_pitching" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="statcast">
+<h3>Statcast-Derived Metrics (xBA, xwOBA, Barrel Rate, wOBA)</h3>
+<p class="methodLabel">What it is</p>
+<p>MLB's own tracking-data-based metrics: "expected" stats
+(<code>xBA</code>/<code>xwOBA</code>) model what a batted ball's outcome
+SHOULD have been given its exit velocity/launch angle, independent of
+whether a fielder happened to make a great play; "barrel" is a specific,
+officially-defined combination of exit velocity and launch angle known to
+produce great outcomes; wOBA weights every plate-appearance outcome by
+its real run value rather than counting a single and a home run equally.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>hitters.compute_quality_of_contact</code> consumes these as
+Statcast's own precomputed per-pitch columns directly (not
+independently re-derived) - averaged/rated over real batted-ball events
+and recency-window-blended, same as every other windowed signal here.</p>
+<a class="methodLink" href="https://www.mlb.com/glossary/statcast" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+</div>
+</section>
+
+<section class="methodCategory" id="betting">
+<h2>Sports-Betting Math</h2>
+<div class="methodGrid">
+
+<div class="methodCard" id="devig">
+<h3>Moneyline Implied Probability &amp; De-Vig</h3>
+<p class="methodLabel">What it is</p>
+<p>American moneyline odds convert to an "implied probability" per side,
+but a real two-sided book's implied probabilities always sum to MORE
+than 100% - the extra is the bookmaker's built-in margin (the "vig" or
+"overround"). De-vigging normalizes both sides back down so they sum to
+exactly 100%, recovering the book's actual best real estimate of the true
+probability.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>market_odds.moneyline_to_implied_probability</code> (standard
+American-odds conversion) and <code>devig</code> (proportional
+normalization) turn real ESPN/DraftKings moneylines into a real
+<code>market_home_win_probability</code>, logged alongside this
+project's own model probability as an honest external benchmark - "did
+we beat the closing line," not just our own heuristic.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Vigorish" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+</div>
+</section>
+
+<section class="methodCategory" id="engineering">
+<h2>Data &amp; Feature Engineering</h2>
+<div class="methodGrid">
+
+<div class="methodCard" id="minmax">
+<h3>Min-Max Scaling</h3>
+<p class="methodLabel">What it is</p>
+<p>Linearly rescaling a value into a fixed target range using
+<code>(x - min) / (max - min)</code>. Unlike z-scoring, the result has a
+known, bounded range - useful when the target itself is naturally
+bounded.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>estimated_salary.compute_estimated_salary</code> (and its NFL
+counterpart) rescales projected fantasy points into a plausible DraftKings
+salary range, clipped at a real floor/ceiling and rounded to the nearest
+real salary increment.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Feature_scaling" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="idempotence">
+<h3>Idempotent Dedup Keys</h3>
+<p class="methodLabel">What it is</p>
+<p>Designing a write/append operation so running it twice with the same
+input produces the same result as running it once - usually by deduping
+on a real natural key rather than blindly appending. Makes a daily
+pipeline safe to re-run without corrupting its own history.</p>
+<p class="methodLabel">How we use it</p>
+<p>Every append-only log in this project dedupes on a real composite key
+before writing - predictions on <code>(date, key_mlbam, metric)</code>
+(<code>predictions.append_predictions</code>), game picks on
+<code>(date, game_pk, metric)</code> (<code>game_predictions.append_game_predictions</code>),
+keeping the LAST (most-resolved) row on a collision so a re-run never
+clobbers an already-known real outcome.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Idempotence" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+</div>
+</section>
+
+</div>
+
+</body>
+
+</html>
