@@ -9,7 +9,10 @@ beyond outcome-rate-only signals; see that module's docstring for why), and
 compute_pitch_family_rates (WAVE split by the PA-ending pitch's fastball/
 breaking/offspeed family instead of by pitcher handedness - the batter half
 of matchup.py's pitch-type-specific platoon matchup, see that function's
-own docstring), and compute_plate_discipline (real per-pitch Whiff_Rate/
+own docstring), compute_home_road_split (WAVE split by home/road instead
+of by pitcher handedness - same wave-logic small-sample guard applied to
+a batter's home/away performance, see that function's own docstring), and
+compute_plate_discipline (real per-pitch Whiff_Rate/
 Chase_Rate - unlike every other function here, built from EVERY pitch a
 batter saw, not just the PA-ending one, since a swing decision is a
 per-pitch signal, not a per-PA one).
@@ -428,6 +431,62 @@ def compute_pitch_family_rates(dt: pd.DataFrame) -> pd.DataFrame:
     return result[["key_mlbam", "Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE"]]
 
 
+def compute_home_road_split(dt: pd.DataFrame) -> pd.DataFrame:
+    """Recency-windowed at-bat hit rate, split by whether the PA happened
+    at HOME or on the ROAD instead of by opposing-pitcher throwing hand -
+    the same WAVE formula (hit_sum / n, config.WAVE_WINDOWS) computed a
+    fourth way via _blend_windows/_side_window_agg's generalized `column`
+    parameter (column="home_road" here), same pattern
+    compute_pitch_family_rates already established for pitch-type family.
+
+    Wave-logic follow-up (2026-08-24): "for each of our features, they
+    should be taken with wave logic (someone... might randomly struggle
+    versus lefties or at home)" - a batter's home/road split needs the
+    exact same small-sample-noise guard the platoon split already gets
+    (a recency-blended rate across multiple windows), not a flat
+    season-long home-vs-away average.
+
+    `inning_topbot` ("Bot" = bottom of the inning = the HOME team is
+    batting, "Top" = the AWAY team is batting) directly tells us, per PA,
+    which side of the split that PA belongs to - no need to resolve the
+    batter's own team identity or cross-reference home_team/away_team at
+    all. A row with a missing/unrecognized inning_topbot value (an older/
+    narrower synthetic fixture, or pipeline.build_pitch_events's own
+    missing-column-degrades-to-null fallback) contributes to neither
+    split - same "unclassifiable rows are excluded, not guessed" precedent
+    compute_pitch_family_rates's own pitch_type handling establishes.
+
+    Returns [key_mlbam, WAVE_Home, WAVE_Away]. A batter who has only ever
+    been observed on one side of the split contributes a real 0 for the
+    other - same fillna(0) precedent every other blended rate in this
+    file uses, not a fabricated league-average value."""
+    home_road = dt.assign(
+        home_road=dt["inning_topbot"].map({"Bot": "home", "Top": "away"})
+    )
+    home_road = home_road[home_road["home_road"].notna()]
+
+    stat_fns = {"hit": lambda df: helpers.is_hit(df["events"])}
+    rate_fns = {"rate": lambda agg: agg["hit"] / agg["n"]}
+    windows = config.WAVE_WINDOWS
+
+    blended = {}
+    full = {}
+    for side, label in (("home", "Home"), ("away", "Away")):
+        side_blended, side_full = _blend_windows(home_road, windows, side, stat_fns, rate_fns, column="home_road")
+        blended[label] = side_blended.rename(columns={"rate": label})
+        full[label] = side_full.rename(columns={"n": f"{label}_n"})
+
+    result = full["Home"]
+    result = result.merge(blended["Home"], on="batter", how="left")
+    result = result.merge(full["Away"], on="batter", how="outer")
+    result = result.merge(blended["Away"], on="batter", how="left")
+    result = result.fillna(0)
+
+    result = result.rename(columns={"Home": "WAVE_Home", "Away": "WAVE_Away"})
+    result = result.rename(columns={"batter": "key_mlbam"})
+    return result[["key_mlbam", "WAVE_Home", "WAVE_Away"]]
+
+
 def compute_plate_discipline(all_pitches: pd.DataFrame) -> pd.DataFrame:
     """Recency-windowed plate discipline: Whiff_Rate (whiffs / swings -
     given the batter offers at a pitch, how often they miss entirely) and
@@ -641,6 +700,7 @@ def assemble_hitters(
     extended_dk_rates = compute_extended_dk_rates(dt)
     quality_of_contact = compute_quality_of_contact(dt)
     pitch_family_rates = compute_pitch_family_rates(dt)
+    home_road_split = compute_home_road_split(dt)
     game_hit_prob = compute_game_hit_probability(data_with_game_id)
     last_game = compute_last_game_dates(data_with_game_id)
 
@@ -650,6 +710,7 @@ def assemble_hitters(
     hitters = hitters.merge(extended_dk_rates, on="key_mlbam", how="left")
     hitters = hitters.merge(quality_of_contact, on="key_mlbam", how="left")
     hitters = hitters.merge(pitch_family_rates, on="key_mlbam", how="left")
+    hitters = hitters.merge(home_road_split, on="key_mlbam", how="left")
     hitters = hitters.merge(game_hit_prob, on="key_mlbam", how="left")
     hitters = hitters.merge(names, on="key_mlbam", how="left")
     hitters = hitters.merge(latest_team, on="key_mlbam", how="left")
@@ -667,6 +728,7 @@ def assemble_hitters(
         "Expected_BB", "Expected_HBP", "Expected_RBI",
         "Exit_Velo", "Barrel_Rate", "xBA", "xwOBA",
         "Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE",
+        "WAVE_Home", "WAVE_Away",
     ]
     if all_pitches is not None:
         plate_discipline = compute_plate_discipline(all_pitches)

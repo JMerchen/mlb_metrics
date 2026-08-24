@@ -45,7 +45,7 @@ not just the blended point total.
 
 import pandas as pd
 
-from mlb_metrics import config, data, dfs, dfs_ml, game_picks_backtest, helpers, matchup, pipeline, pitcher_form
+from mlb_metrics import config, data, dfs, dfs_ml, game_picks_backtest, helpers, matchup, pipeline, pitcher_form, teams
 
 
 def derive_historical_team_schedule(persisted_statcast: pd.DataFrame) -> pd.DataFrame:
@@ -345,7 +345,22 @@ def assemble_hitter_hit_log(raw_dir: str = "data/raw", season: int | None = None
     `days=None` (the default) replays the full persisted history, matching
     assemble_ml_training_rows's own default reasoning: a growing historical
     log benefits from as much real data as possible, while a daily
-    incremental run passes an explicit `days` to stay cheap."""
+    incremental run passes an explicit `days` to stay cheap.
+
+    Also carries two EXPLORATORY candidate columns, Days_Rest and
+    Umpire_Factor - real feature-search follow-up (2026-08-24): "test
+    feature significance before committing to the model." Neither is part
+    of dfs_ml.HITTER_FEATURE_COLUMNS, so build_hitter_features and the
+    live model are completely unaffected by their presence here - see
+    scripts/train_hitter_hit_model.py's significance report for whether
+    either candidate clears a real bar before going anywhere near the
+    live feature set. Days_Rest is Statcast's own real
+    batter_days_since_prev_game for that date's game (already a real,
+    no-lookahead fact about the past - no derivation needed).
+    Umpire_Factor is teams.compute_umpire_factor computed from history
+    STRICTLY BEFORE this date (same no-lookahead discipline as every
+    other feature here), joined onto each batter via that date's real
+    home-plate umpire."""
     season = season or config.SEASON_START.year
     persisted = data.load_persisted_statcast(raw_dir, season)
     if persisted is None:
@@ -374,9 +389,31 @@ def assemble_hitter_hit_log(raw_dir: str = "data/raw", season: int | None = None
             data.completed_events(day_events, ["game_date", "batter", "events"])
         )
 
+        # Exploratory candidates (see module docstring) - Days_Rest is a
+        # real fact about that date's game itself; Umpire_Factor uses
+        # history strictly before `date`, same no-lookahead slice every
+        # other feature in this function already uses.
+        if "batter_days_since_prev_game" in day_events.columns:
+            days_rest = day_events.groupby("batter", as_index=False)["batter_days_since_prev_game"].first()
+            days_rest = days_rest.rename(columns={"batter": "key_mlbam", "batter_days_since_prev_game": "Days_Rest"})
+        else:
+            days_rest = pd.DataFrame(columns=["key_mlbam", "Days_Rest"])
+
+        if "umpire" in day_events.columns:
+            history = persisted[persisted["game_date"] < date]
+            umpire_factor = teams.compute_umpire_factor(history)
+            todays_umpire = day_events[["batter", "umpire"]].drop_duplicates(subset="batter")
+            todays_umpire = todays_umpire.rename(columns={"batter": "key_mlbam"})
+            todays_umpire = todays_umpire.merge(umpire_factor, on="umpire", how="left")[["key_mlbam", "Umpire_Factor"]]
+        else:
+            todays_umpire = pd.DataFrame(columns=["key_mlbam", "Umpire_Factor"])
+
         scored = hitter_features.merge(got_hit, on="key_mlbam", how="inner")
         if scored.empty:
             continue
+
+        scored = scored.merge(days_rest, on="key_mlbam", how="left")
+        scored = scored.merge(todays_umpire, on="key_mlbam", how="left")
 
         # On a doubleheader date, todays_schedule/matchup_probability each
         # carry one row per game_pk for the doubleheader team - since
@@ -393,7 +430,10 @@ def assemble_hitter_hit_log(raw_dir: str = "data/raw", season: int | None = None
         scored["date"] = date
         scored["Total_PA"] = scored["PA_L"] + scored["PA_R"]
         rows.append(
-            scored[["date"] + name_columns + dfs_ml.HITTER_FEATURE_COLUMNS + ["Total_PA", "Got_Hit"]]
+            scored[
+                ["date"] + name_columns + dfs_ml.HITTER_FEATURE_COLUMNS
+                + ["Total_PA", "Days_Rest", "Umpire_Factor", "Got_Hit"]
+            ]
         )
 
     return pd.concat(rows, ignore_index=True) if rows else pd.DataFrame()

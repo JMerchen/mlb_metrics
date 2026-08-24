@@ -21,10 +21,12 @@ Methodology (no-lookahead, nested holdout - see the Plan this followed):
    window (dfs_backtest.backtest_dfs_projections with the same `days`).
 5. A model is only saved to its live-serving path
    (config.DFS_*_MODEL_PATH, loaded by dfs_ml.apply_ml_overrides) if it
-   clears the naive baseline on the holdout AND does at least as well as
-   the existing heuristic - otherwise the heuristic keeps serving live
-   traffic and this prints why, honestly, rather than shipping a model
-   that doesn't actually help.
+   does at least as well as the existing heuristic - "our current
+   model" for this signal - on the holdout (2026-08-24 policy: "as long
+   as it beats our current model, save it"; the naive baseline is still
+   printed for context but is no longer a required bar). Otherwise the
+   heuristic keeps serving live traffic and this prints why, honestly,
+   rather than shipping a model that doesn't actually help.
 
 Needs data/raw/statcast_<season>.parquet (see scripts/wave.py).
 
@@ -93,12 +95,16 @@ def train_hitter_model(train_rows: pd.DataFrame, holdout: pd.DataFrame, heuristi
     X_holdout = dfs_ml.hitter_feature_matrix(holdout)
     predicted = pd.Series(best_search.predict(X_holdout)).clip(lower=0)
     result = ml_models.evaluate_predictions(holdout["Actual_DK_Points_Modeled"], predicted)
-    beats_baseline = _report("Model (holdout)", result)
+    _report("Model (holdout)", result)
     print(f"  Heuristic (holdout) MAE: {heuristic_mae:.4f}")
 
-    if beats_baseline and result["mae"] <= heuristic_mae:
+    # Save gate (2026-08-24 policy: "as long as it beats our current
+    # model, save it" - the naive baseline is still printed above for
+    # context by _report, but is no longer a required bar. "Our current
+    # model" is the live heuristic (dfs.py) this artifact would replace.
+    if result["mae"] <= heuristic_mae:
         ml_models.save_model(best_search.best_estimator_, config.DFS_HITTER_MODEL_PATH)
-        print(f"  -> SAVED to {config.DFS_HITTER_MODEL_PATH} (beats baseline and heuristic - now live)")
+        print(f"  -> SAVED to {config.DFS_HITTER_MODEL_PATH} (beats the heuristic - now live)")
     else:
         print("  -> NOT saved (heuristic keeps serving - see dfs.py's docstring, this is reported honestly)")
 
@@ -120,12 +126,13 @@ def _train_pitcher_component(
     X_holdout = dfs_ml.pitcher_feature_matrix(holdout)
     predicted = pd.Series(search.predict(X_holdout)).clip(lower=0)
     result = ml_models.evaluate_predictions(holdout[target_col], predicted)
-    beats_baseline = _report("Model (holdout)", result)
+    _report("Model (holdout)", result)
     print(f"  Heuristic (holdout) MAE: {heuristic_mae:.4f}")
 
-    if beats_baseline and result["mae"] <= heuristic_mae:
+    # Save gate (2026-08-24 policy: see train_hitter_model's own comment above.
+    if result["mae"] <= heuristic_mae:
         ml_models.save_model(search.best_estimator_, model_path)
-        print(f"  -> SAVED to {model_path} (beats baseline and heuristic - now live)")
+        print(f"  -> SAVED to {model_path} (beats the heuristic - now live)")
     else:
         print("  -> NOT saved (heuristic keeps serving - see dfs.py's docstring, this is reported honestly)")
 

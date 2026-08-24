@@ -16,6 +16,16 @@ picks) couldn't answer with confidence:
    std) is excluded and reported as such rather than crashing on a
    divide-by-zero.
 
+   Also tests CANDIDATE_FEATURE_COLUMNS (Days_Rest, Umpire_Factor) -
+   real feature-search follow-up (2026-08-24): "use the identified
+   features that we can use... test feature significance before
+   committing to the model." Neither is part of
+   dfs_ml.HITTER_FEATURE_COLUMNS yet; they're carried by
+   dfs_backtest.assemble_hitter_hit_log purely as exploratory columns
+   (see that function's docstring) and included in this same
+   significance report so a real p-value decides whether either earns a
+   permanent place in the model, rather than guessing.
+
 2. **Walk-forward-validated predictive model** (ml_models.py's
    WalkForwardDateSplit machinery, the SAME no-lookahead, nested-holdout
    methodology scripts/train_dfs_ml_models.py already uses for the three
@@ -117,6 +127,19 @@ def _fit_logit_report(y: pd.Series, X: pd.DataFrame, label: str):
     return table, result
 
 
+#  Exploratory candidates (2026-08-24 feature-search follow-up - "use the
+# identified features that we can use... test feature significance
+# before committing to the model"): real, already-persisted signal
+# (dfs_backtest.assemble_hitter_hit_log's own Days_Rest/Umpire_Factor
+# columns - see its docstring) that is NOT part of
+# dfs_ml.HITTER_FEATURE_COLUMNS - tested here, alongside the live feature
+# set, purely to decide whether either earns a permanent place in the
+# model. Nothing here changes what the live model actually uses until a
+# candidate clears a real bar and is deliberately added to
+# HITTER_FEATURE_COLUMNS in a follow-up change.
+CANDIDATE_FEATURE_COLUMNS = ["Days_Rest", "Umpire_Factor"]
+
+
 def significance_report(rows: pd.DataFrame) -> None:
     print("\n=== Feature significance report (statsmodels.Logit, full history) ===")
     y = rows["Got_Hit"]
@@ -129,7 +152,17 @@ def significance_report(rows: pd.DataFrame) -> None:
     # which is why the walk-forward model below isn't affected). .astype
     # (float) only retags the dtype; every value is already numeric.
     X = _standardize(dfs_ml.hitter_feature_matrix(rows).astype(float))
+
+    # Same fillna(0)-for-not-yet-computable convention as hitter_feature_matrix
+    # (a real 0 Days_Rest is indistinguishable here from "no prior game on
+    # record yet" - an honest known rough edge for an EXPLORATORY column,
+    # not something worth a bespoke encoding before we even know whether
+    # this candidate has any real signal at all).
+    candidates = _standardize(rows[CANDIDATE_FEATURE_COLUMNS].astype(float).fillna(0))
+    X = pd.concat([X, candidates], axis=1)
+
     print(f"  n={len(rows)}, base hit rate={y.mean():.4f}")
+    print(f"  Candidate features under test (not yet in the live model): {CANDIDATE_FEATURE_COLUMNS}")
 
     print("\n  -- Individually (one univariate Logit per feature) --")
     univariate_rows = []
@@ -269,16 +302,20 @@ def predictive_model(train_pool: pd.DataFrame, holdout: pd.DataFrame) -> None:
 
     feature_importance_report(best_model, X_holdout, y_holdout)
 
-    beats_baseline = result["log_loss"] < result["baseline_log_loss"]
+    # Save gate (2026-08-24 policy: "as long as it beats our current
+    # model, save it" - naive baseline still printed above for context,
+    # no longer a required bar. "Our current model" is the
+    # Game_Hit_Probability heuristic - the only thing live for this
+    # signal (this artifact itself is NOT wired into live picks).
     beats_heuristic = result["log_loss"] < heuristic_result["log_loss"]
-    if beats_baseline and beats_heuristic:
+    if beats_heuristic:
         ml_models.save_model(best_model, config.HITTER_HIT_PROBABILITY_MODEL_PATH)
         print(
             f"  -> SAVED to {config.HITTER_HIT_PROBABILITY_MODEL_PATH} ({best_name}, "
-            f"beats baseline and Game_Hit_Probability - artifact only, NOT wired into live picks)"
+            f"beats Game_Hit_Probability - artifact only, NOT wired into live picks)"
         )
     else:
-        print("  -> NOT saved (does not beat baseline and/or the Game_Hit_Probability heuristic - reported honestly)")
+        print("  -> NOT saved (does not beat the Game_Hit_Probability heuristic - reported honestly)")
 
 
 def main():

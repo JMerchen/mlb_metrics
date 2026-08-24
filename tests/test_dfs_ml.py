@@ -15,6 +15,7 @@ def _wave_row(key_mlbam, team, **overrides):
         "Exit_Velo": 90.0, "Barrel_Rate": 0.08, "xBA": 0.25, "xwOBA": 0.32,
         "Fastball_WAVE": 0.30, "Breaking_WAVE": 0.20, "Offspeed_WAVE": 0.15,
         "Whiff_Rate": 0.22, "Chase_Rate": 0.28,
+        "WAVE_Home": 0.32, "WAVE_Away": 0.24,
     }
     row.update(overrides)
     return row
@@ -47,6 +48,8 @@ def test_build_hitter_features_joins_matchup_ingredients():
     assert result.loc[1, "Chase_Rate"] == pytest.approx(0.28)
     assert result.loc[1, "Expected_Bases"] == pytest.approx(1.5)
     assert result.loc[1, "Fastball_WAVE"] == pytest.approx(0.30)
+    assert result.loc[1, "WAVE_Home"] == pytest.approx(0.32)
+    assert result.loc[1, "WAVE_Away"] == pytest.approx(0.24)
     assert result.loc[1, "starter_fastball_rate"] == pytest.approx(0.60)
     assert result.loc[1, "starter_breaking_rate"] == pytest.approx(0.25)
     assert result.loc[1, "starter_offspeed_rate"] == pytest.approx(0.15)
@@ -75,6 +78,8 @@ def test_build_hitter_features_falls_back_to_null_when_pitch_family_columns_miss
     assert pd.isna(result.loc[1, "Fastball_WAVE"])
     assert pd.isna(result.loc[1, "starter_fastball_rate"])
     assert pd.isna(result.loc[1, "Whiff_Rate"])
+    assert pd.isna(result.loc[1, "WAVE_Home"])
+    assert pd.isna(result.loc[1, "WAVE_Away"])
 
 
 def test_build_hitter_features_falls_back_to_wave_when_wave_l_r_missing():

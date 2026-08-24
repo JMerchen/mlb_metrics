@@ -119,16 +119,24 @@ def main():
     X_holdout = holdout[age_curve_ml.FEATURE_COLUMNS]
     predicted = pd.Series(best_search.predict(X_holdout))
     result = ml_models.evaluate_predictions(holdout["next_HR9"], predicted)
-    beats_baseline = result["mae"] < result["baseline_mae"]
     print(
         f"\n=== Model (holdout) ===\nMAE {result['mae']:.4f} vs. naive-baseline MAE {result['baseline_mae']:.4f}, "
         f"correlation {result['correlation']:.3f} (n={result['n']})"
     )
     print(f"Heuristic (KNN, same holdout) MAE: {heuristic_mae:.4f}, correlation {heuristic_corr:.3f}")
 
-    if beats_baseline and result["mae"] <= heuristic_mae:
+    # Save gate (2026-08-24 policy: "as long as it beats our current
+    # model, save it" - the naive baseline is still printed above for
+    # context, but is no longer a required bar. "Our current model" is
+    # KNN - the actual comparator this script always evaluates against
+    # (note: unlike the other train_*.py save gates, this artifact isn't
+    # currently loaded/consulted anywhere in src/ - "now live" below was
+    # inaccurate and is corrected to match the other artifact-only
+    # scripts' own honest wording; wiring it live is a separate,
+    # unstarted task).
+    if result["mae"] <= heuristic_mae:
         ml_models.save_model(best_search.best_estimator_, config.AGE_CURVE_HR9_MODEL_PATH)
-        print(f"\n-> SAVED to {config.AGE_CURVE_HR9_MODEL_PATH} (beats baseline and KNN - now live for HR9)")
+        print(f"\n-> SAVED to {config.AGE_CURVE_HR9_MODEL_PATH} (beats KNN - artifact only, NOT wired into live picks)")
     else:
         print("\n-> NOT saved (KNN keeps serving HR9 - reported honestly, see age_curve_ml.py's module docstring)")
 

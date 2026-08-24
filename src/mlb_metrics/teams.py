@@ -13,7 +13,7 @@ docstring), so the same per-team row shape fits it directly.
 import numpy as np
 import pandas as pd
 
-from mlb_metrics import config
+from mlb_metrics import config, helpers
 
 # Team "bases" valuation for offensive_edge counts a walk as a base; this is
 # deliberately different from helpers.total_bases (used for hitter WTB/PAVE),
@@ -186,6 +186,33 @@ def compute_park_factors(data: pd.DataFrame) -> pd.DataFrame:
     league_avg = venue["runs_per_game_at_home"].mean()
     venue["Park_Factor"] = venue["runs_per_game_at_home"] / league_avg
     return venue[["team", "Park_Factor"]]
+
+
+def compute_umpire_factor(data: pd.DataFrame) -> pd.DataFrame:
+    """One row per real home-plate umpire (Statcast's own `umpire` id -
+    real, not derived): Umpire_Factor - that umpire's own real hit rate on
+    completed at-bats (config.COUNTED_EVENTS), normalized to the
+    across-all-umpires average (mean 1.0, same ratio convention as
+    Park_Factor/PAVE_PLUS). Exploratory candidate feature (2026-08-24
+    feature-search follow-up - "test feature significance before
+    committing to the model"): NOT yet wired into any live signal - see
+    scripts/train_hitter_hit_model.py's significance report for whether a
+    real bar was cleared before this goes anywhere near
+    dfs_ml.HITTER_FEATURE_COLUMNS.
+
+    A row with a missing/null umpire (an older/narrower synthetic fixture)
+    is excluded from the average entirely, not counted as a real 0."""
+    completed = data[data["events"].isin(config.COUNTED_EVENTS)][["umpire", "events"]].copy()
+    completed = completed[completed["umpire"].notna()]
+    if completed.empty:
+        return pd.DataFrame(columns=["umpire", "Umpire_Factor"])
+
+    completed["hit"] = helpers.is_hit(completed["events"])
+    league_avg = completed["hit"].mean()
+
+    per_umpire = completed.groupby("umpire", as_index=False)["hit"].mean()
+    per_umpire["Umpire_Factor"] = per_umpire["hit"] / league_avg
+    return per_umpire[["umpire", "Umpire_Factor"]]
 
 
 def build_team_record(data: pd.DataFrame) -> pd.DataFrame:

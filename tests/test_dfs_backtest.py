@@ -189,6 +189,16 @@ def _game_rows(game_pk, date, events, pitcher=99, batter=1, home_team="NYY", awa
     return rows
 
 
+def _game_rows_with_umpire_and_rest(game_pk, date, events, umpire, days_rest, pitcher=99, batter=1, home_team="NYY", away_team="BOS"):
+    """Same shape as _game_rows, plus real `umpire`/`batter_days_since_prev_game`
+    columns for the Days_Rest/Umpire_Factor exploratory-candidate tests."""
+    rows = _game_rows(game_pk, date, events, pitcher=pitcher, batter=batter, home_team=home_team, away_team=away_team)
+    for row in rows:
+        row["umpire"] = umpire
+        row["batter_days_since_prev_game"] = days_rest
+    return rows
+
+
 def _multi_game_statcast(n_games=6, gap_days=5):
     # teams.compute_home_run_stats needs at least one "home_run" event to
     # appear so its homer/non_homer pivot has both columns.
@@ -348,7 +358,7 @@ def test_assemble_hitter_hit_log_has_expected_schema_and_no_lookahead(tmp_path):
     assert not result.empty
     expected_cols = {
         "date", "key_mlbam", "name_first", "name_last", "team",
-        *dfs_ml.HITTER_FEATURE_COLUMNS, "Total_PA", "Got_Hit",
+        *dfs_ml.HITTER_FEATURE_COLUMNS, "Total_PA", "Days_Rest", "Umpire_Factor", "Got_Hit",
     }
     assert set(result.columns) == expected_cols
 
@@ -359,6 +369,33 @@ def test_assemble_hitter_hit_log_has_expected_schema_and_no_lookahead(tmp_path):
 
     assert (result["Total_PA"] == result["PA_L"] + result["PA_R"]).all()
     assert result["Got_Hit"].isin([0, 1]).all()
+
+
+def test_assemble_hitter_hit_log_populates_days_rest_and_umpire_factor(tmp_path):
+    # Real columns present on the raw persisted data -> both exploratory
+    # candidates should populate with real, non-null values (not just
+    # gracefully degrade to null, which the general schema test above
+    # already covers implicitly for a fixture that lacks them).
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    events = ["strikeout"] * 5 + ["field_out"] * 6 + ["walk"] * 3 + ["single"] * 4 + ["double"] * 1 + ["home_run"] * 1
+    rows = []
+    for i in range(6):
+        date = pd.Timestamp("2026-05-01") + pd.Timedelta(days=i * 5)
+        rows.extend(_game_rows_with_umpire_and_rest(i + 1, date, events, umpire=f"Ump {i % 2}", days_rest=4))
+    pd.DataFrame(rows).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    result = dfs_backtest.assemble_hitter_hit_log(str(raw_dir), season=2026, days=None)
+
+    assert not result.empty
+    assert (result["Days_Rest"] == 4).all()
+    # The very first SCORED date's umpire ("Ump 1", game 2) has never
+    # appeared in history yet (only game 1's "Ump 0" has been played) -
+    # a real, honest NaN for a genuine cold start, not a bug. Every later
+    # date's umpire has real prior history by then (both umpires alternate
+    # and repeat), so those must be real, non-null values.
+    assert pd.isna(result.sort_values("date").iloc[0]["Umpire_Factor"])
+    assert result.sort_values("date").iloc[1:]["Umpire_Factor"].notna().all()
 
 
 def test_assemble_hitter_hit_log_no_leaked_outcome_in_feature_columns():

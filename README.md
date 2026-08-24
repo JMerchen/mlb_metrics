@@ -1550,6 +1550,260 @@ Full test suite: 658 passed (no test changes needed - existing tests
 either pass `min_edge` explicitly or use a fixture with a wide enough
 margin to clear the new default).
 
+### Real follow-up: game-pick probability calibration (2026-08-24, not shipped)
+
+Direct follow-up to the `KELLY_MIN_EDGE` sanity-check above: on the 93
+real games with both a model probability and a real de-vigged market
+price, the model's `home_win_probability` was measurably narrower than
+the market's on the exact same games (std 0.0347, max 63.7% vs. the
+market's std 0.0588, max 72.7%) - the concrete mechanical cause of the
+false-edge problem, not just "the model disagrees with the market
+sometimes." A deeper, separate problem was also found: model and market
+agree on which team is even favored on only 72.0% of those 93 games -
+calibration can rescale confidence magnitude, but can't fix disagreement
+about *who's* favored.
+
+`ml_models.fit_probability_calibration` (isotonic or sigmoid/Platt, see
+`scripts/train_game_pick_calibration.py`) was built to rescale the
+heuristic's own raw probability against real resolved outcomes, wired
+live via `game_picks.apply_calibration` (called from `pipeline.run()`
+and the backtest reconstruction of "what today's live code would
+produce") with the same graceful-degradation contract every other
+optional ML artifact in this project already uses - falls back to the
+raw, uncalibrated heuristic when no artifact exists or hasn't cleared
+its own bar.
+
+**Real dispatched result** (GitHub Actions run 32759747063, full
+persisted log, 143 distinct dates, 1,578 train-pool rows / 274 final
+holdout rows - 111 rows with a NaN raw probability, a genuine missing-
+composite-data date, dropped before fitting): walk-forward CV picked
+sigmoid (tied with isotonic at mean log_loss=0.6903). On the real,
+untouched final holdout, calibrated (sigmoid) log_loss=0.6864 beat the
+raw heuristic's 0.6933 - but did **not** beat the naive always-predict-
+base-rate baseline (0.6814), so it was correctly **not saved** under
+this project's strict "must beat both" bar. Notably, the calibrated
+probability's spread on this holdout was narrower than the raw
+heuristic's (std 0.0344 vs. 0.0641), the opposite direction of the
+correction that's actually needed - a real sign this particular
+population/fit isn't the fix, not a bug in the calibration code itself.
+
+**Status: not shipped, reported honestly.** `game_picks.apply_calibration`
+and the training script both stay live in the codebase (graceful no-op
+until a real artifact clears the bar), but no artifact exists yet at
+`config.GAME_PICK_CALIBRATION_MODEL_PATH`. The deeper favored-team-
+disagreement finding (72.0% agreement) is a real, separate open
+question a rescaling fix can't address on its own.
+
+### Real infra fix: per-month Statcast persistence (2026-08-24)
+
+Backfilling the real 2025 season (`scripts/backfill_statcast_season.py`,
+built so this project's historical training data - independent of any
+market-odds history - isn't limited to the current season only) produced
+a single ~110.6MB `data/raw/statcast_2025.parquet`, and GitHub's real
+push limit rejected it outright ("GH001: Large files detected...exceeds
+GitHub's file size limit of 100.00 MB", a hard rejection, not a soft
+warning) - all 742,080 fetched pitch rows were lost when the runner tore
+down. The live production season's own `statcast_2026.parquet` was
+already at 85MB with roughly half the season elapsed, putting the daily
+pipeline's own commit step on the same real path to failure.
+
+Fix: `data.persist_raw_statcast`/`load_persisted_statcast` now split by
+real calendar month (`data/raw/statcast_<season>_<month>.parquet`)
+instead of one file per season, keeping the exact same `(raw_dir,
+season)` signature and still returning one combined DataFrame - none of
+this project's ~20 existing callers needed changes. The real
+`statcast_2026.parquet` was migrated (579,217 rows, byte-exact verified)
+into 6 per-month files (~4-20MB each); a legacy-fallback read path keeps
+this project's existing synthetic test fixtures (which write directly to
+the old single-file layout) working unchanged.
+
+Re-running the 2025 backfill after the fix succeeded cleanly: **742,080
+real pitch rows across 190 distinct dates, 2,531 distinct games**, split
+into 7 per-month files (largest 21.5MB), pushed without incident.
+
+### Real infra fix: retry-with-rebase on every workflow's final push (2026-08-24)
+
+`ml_training_update.yml`'s own training run - 50+ minutes of real work
+before it ever reaches its final `git push` - lost that entire run's
+trained artifacts to a plain non-fast-forward push rejection **twice in
+a row** in practice (real GitHub Actions runs 32759747063 and
+32766340800, both racing against a concurrent code push to the same
+branch elsewhere in this same session). A single `git push` with no
+retry was never going to survive a long-running job racing a human/
+Claude actively pushing code to the same branch.
+
+Fix: every workflow that commits+pushes generated output now retries
+with a `git pull --rebase` between attempts (up to 5), not just
+`ml_training_update.yml` - `backfill_statcast_season.yml`,
+`daily_update.yml` (the core PRODUCTION pipeline, which runs on `main`
+and can just as easily race a concurrent PR merge), `backtest.yml`,
+`age_curves_update.yml`, `backfill_market_odds.yml`, and
+`build_nfl_bestball_rankings.yml`. Safe in every case: each workflow's
+commit step only ever touches its own specific path(s)
+(`data/models/`, `data/raw/`, `docs/data/*.csv`, etc.), so rebasing onto
+whatever else landed on the branch never has a real conflict to resolve.
+
+### Save-gate policy change: drop the naive-baseline requirement (2026-08-24)
+
+Every `train_*.py` script that fits a candidate ML replacement for an
+existing heuristic (`train_game_pick_calibration.py`,
+`train_game_pick_model.py`, `train_hitter_hit_model.py`,
+`train_dfs_ml_models.py`, `train_age_curve_hr9_model.py`) previously
+required a candidate to beat BOTH a naive always-predict-the-base-rate
+baseline AND the existing heuristic before saving - exactly what
+rejected the calibration result above (it beat the heuristic but not
+the baseline). Explicit user direction: "our goal should be to get more
+and more accurate, so as long as it beats our current model, save it."
+The naive-baseline requirement is dropped from all five gates - the
+naive baseline is still computed and printed for context (it's a useful
+sanity signal), but no longer blocks a save. A candidate now saves
+whenever it beats whatever's actually live for that signal today (the
+heuristic, or KNN for HR9).
+
+**Known limitation, not addressed by this change**: none of these five
+scripts currently compare a new candidate against a *previously-saved*
+ML artifact if one already exists (`hitter_hit_probability_model.joblib`
+and `age_curve_hr9_model.joblib` both already exist) - each retrain only
+re-compares against the heuristic/KNN, same as before. A retrain could
+in theory overwrite an already-good saved model with a new one that
+still beats the heuristic but is worse than what it's replacing. Real,
+open follow-up, not fixed here.
+
+**Also found and corrected while touching this code**: `train_age_curve_hr9_model.py`'s
+save message claimed a saved artifact was "now live for HR9" - false
+found via grep across `src/` (`AGE_CURVE_HR9_MODEL_PATH` is referenced
+only in `config.py` and the training script itself, never loaded or
+consulted by `age_curve.py`/`age_curve_ml.py`). Corrected to the same
+honest "artifact only, NOT wired into live picks" wording every other
+non-wired script already uses. Wiring it live is a separate, unstarted
+task.
+
+### Real feature-gap audit: home/road, day/night, weather, rest, umpire (2026-08-24)
+
+Direct answer to "have we taken into account home/road splits, day/night
+splits, weather, or other common features" for the game-pick model
+(`game_picks.GAME_PICK_FEATURE_COLUMNS`, 10 composite/bullpen/starter
+columns) - checked against the codebase and the real persisted Statcast
+schema (119 columns), not assumed:
+
+- **Home/road**: no explicit home-field-advantage term anywhere.
+  `compute_game_win_probabilities` is a pure `home_rating / (home_rating
+  + away_rating)` ratio with no home-field intercept/boost - real MLB
+  home teams win ~53-54% historically, and none of that prior is baked
+  in beyond whatever the composite ratings happen to encode (nothing
+  home/away-specific). The hitter-level DFS model does carry `is_home`
+  as a feature; the game-pick model does not carry anything equivalent.
+- **Day/night**: not used anywhere. Real Statcast doesn't carry a direct
+  `day_night` column, but `sv_id`'s embedded timestamp could derive it
+  (or `game_type`/schedule fetch, unconfirmed without more digging) -
+  no dedicated column has been built.
+- **Weather**: real Statcast's 119 real columns (confirmed directly
+  against `data/raw/statcast_2026_08.parquet`) carry no temperature,
+  wind, humidity, or roof/dome column at all - not filtered out, never
+  present. A weather feature would need a separate real data source
+  (e.g. a stadium-keyed weather API), not something already sitting
+  unused in persisted data like the batted-ball-quality/pitch-arsenal
+  features earlier quant-analytics items found. Month-as-weather-proxy
+  is unused too.
+- **Rest days**: real, confirmed, unused. `batter_days_since_prev_game`/
+  `batter_days_until_next_game`/`pitcher_days_since_prev_game`/
+  `pitcher_days_until_next_game` are real columns already sitting in
+  every persisted Statcast row (confirmed via grep - zero references
+  anywhere in `src/`) - the exact same "sitting unused in already-
+  persisted data" pattern quant-analytics item #1 found for batted-ball
+  quality and pitch arsenal.
+- **Umpire**: real, confirmed, unused. Statcast's own `umpire` column
+  (home-plate umpire ID) is never referenced in `src/` - some umpires
+  are real, well-documented hitter's/pitcher's umps.
+
+None of this is built yet - reported as a real, verified gap audit, not
+a commitment. Rest days and umpire are the most promising next slice
+(real signal already sitting in persisted data, zero new fetch needed,
+same low-cost pattern every prior quant-analytics item has followed);
+weather would be the most expensive (a genuinely new external data
+source, not just an unused column).
+
+### Real build: hitter home/road split with wave logic (2026-08-24)
+
+Direct follow-up to the feature-gap audit above. Explicit user direction:
+"for each of our features, they should be taken with wave logic (someone
+or a whole team might randomly struggle versus lefties or at home, for
+example)" - a home/road split needs the exact same small-sample-noise
+guard the platoon split (`WAVE_L`/`WAVE_R`) already gets, not a flat
+season-long home-vs-away average that a short unlucky/lucky stretch could
+distort.
+
+`hitters.compute_home_road_split` (`WAVE_Home`/`WAVE_Away`) reuses
+`_blend_windows`/`_side_window_agg`'s already-generalized `column`
+parameter (previously proven for `compute_pitch_family_rates`'s pitch-type
+split) - same `config.WAVE_WINDOWS` recency blend WAVE itself uses, no new
+window scheme. The split key is Statcast's own `inning_topbot` ("Bot" =
+bottom of the inning = the home team batting, "Top" = away) - directly
+tells us, per PA, which side of the split it belongs to, with no need to
+resolve the batter's own team identity. Wired into
+`dfs_ml.HITTER_FEATURE_COLUMNS` (widening the hitter model's schema,
+same "MUST be retired, not left in place" policy this project has applied
+to every prior schema-widening slice - `hitter_hit_probability_model.joblib`
+retired here too).
+
+**Scope, honestly**: this is the hitter-level half of "someone... might
+randomly struggle... at home." The team-level half ("a whole team might
+randomly struggle... at home") - a real home-field-advantage term for
+`game_picks.compute_game_win_probabilities`, recency-windowed the same
+way - is real, separate follow-up work: it needs team game-by-game
+home/away win/loss history (not currently assembled anywhere in this
+project) rather than reusing existing per-PA infrastructure, so it isn't
+bundled into this same change. Day/night is still unbuilt too (see the
+audit above - Statcast carries no reliable, timezone-safe day/night
+signal for historical PAs; a real derivation needs a new data source,
+not just an unused column).
+
+Full test suite: 678 passed (3 new - exact windowed arithmetic mirroring
+`compute_pitch_family_rates`'s own test shape, unrecognized-`inning_topbot`
+exclusion, and side-absent-reads-zero-not-dropped).
+
+### Real build: rest days + umpire factor, tested before committing (2026-08-24)
+
+Direct follow-up to the feature-gap audit's other two identified,
+already-persisted-and-unused signals. Explicit user direction this time:
+"use the identified features that we can use (whether derived or not).
+Do a feature search and test feature significance before committing to
+the model" - unlike `WAVE_Home`/`WAVE_Away` above (wired straight into
+`dfs_ml.HITTER_FEATURE_COLUMNS`), these two go through a real
+significance test FIRST, and only get wired into the live model if they
+clear a real bar.
+
+- `teams.compute_umpire_factor`: one row per real home-plate umpire
+  (Statcast's own `umpire` id), that umpire's real hit rate allowed
+  normalized to the across-all-umpires league average - same ratio
+  convention as `Park_Factor`.
+- `dfs_backtest.assemble_hitter_hit_log` now also carries two EXPLORATORY
+  candidate columns, NOT part of `HITTER_FEATURE_COLUMNS` (so the live
+  model's schema and every existing caller are completely unaffected):
+  `Days_Rest` (Statcast's own real `batter_days_since_prev_game` for
+  that date's game - already a real, no-lookahead fact, no derivation
+  needed) and `Umpire_Factor` (computed from history STRICTLY BEFORE
+  that date, same no-lookahead discipline every other feature here
+  already follows, joined via that date's real home-plate umpire).
+- `scripts/train_hitter_hit_model.py`'s existing significance report
+  (`CANDIDATE_FEATURE_COLUMNS`) now tests both candidates - univariate
+  AND combined with the full live feature set - alongside every existing
+  feature, on the same real historical log, via the same
+  `statsmodels.Logit` methodology already used for every other
+  significance check in this project.
+
+**Decision deferred to real dispatched numbers, not guessed**: neither
+candidate is added to `HITTER_FEATURE_COLUMNS` in this change - that
+only happens in an honest follow-up once a real GitHub Actions dispatch
+reports their actual p-values. Reported here regardless of outcome, same
+"non-significant is a real, useful answer" discipline the rest of this
+project's significance reports already follow.
+
+Full test suite: 682 passed (6 new - `compute_umpire_factor`'s own exact
+arithmetic/missing-umpire/empty-input cases, plus
+`assemble_hitter_hit_log`'s schema and real-value-population coverage
+for both candidates).
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our

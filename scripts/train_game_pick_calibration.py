@@ -21,11 +21,13 @@ other side looks like value that isn't real.
 This script fits ml_models.fit_probability_calibration (isotonic or
 sigmoid/Platt - both are candidates, picked via real walk-forward CV, not
 guessed) on top of the EXISTING heuristic's own raw home_win_probability,
-against real resolved outcomes - a rescaling, not a new model. Same real
-"must clear a bar before shipping" discipline as train_game_pick_model.py:
+against real resolved outcomes - a rescaling, not a new model. Save gate
+(2026-08-24 policy - "as long as it beats our current model, save it"):
 saved to config.GAME_PICK_CALIBRATION_MODEL_PATH ONLY if the calibrated
-probability beats BOTH a naive baseline AND the raw (uncalibrated)
-heuristic on an untouched final holdout - reported honestly either way.
+probability beats the raw (uncalibrated) heuristic - the current live
+model for this signal - on an untouched final holdout; the naive
+baseline is still reported for context but is no longer a required bar.
+Reported honestly either way.
 
 **Scope**: unlike train_game_pick_model.py's saved-but-unwired artifact,
 THIS artifact IS wired live (game_picks.apply_calibration, called from
@@ -168,22 +170,28 @@ def main():
     )
     print(f"  Spread (std): calibrated={calibrated_proba.std():.4f}, raw={holdout['home_win_probability'].std():.4f}")
 
-    beats_baseline = calibrated_result["log_loss"] < calibrated_result["baseline_log_loss"]
+    # Save gate (2026-08-24 policy: "our goal is to get more and more
+    # accurate, so as long as it beats our current model, save it" - the
+    # naive always-predict-base-rate baseline is still printed above for
+    # context, but is no longer a REQUIRED bar to clear. "Our current
+    # model" here is the raw, uncalibrated heuristic - what's actually
+    # live via game_picks.apply_calibration today whenever no calibration
+    # artifact exists yet (its own graceful-degradation fallback).
     beats_raw = calibrated_result["log_loss"] < raw_result["log_loss"]
-    if beats_baseline and beats_raw:
+    if beats_raw:
         final_calibrator = ml_models.fit_probability_calibration(
             rows["home_win_probability"], rows["Home_Won"], method=best_method
         )
         ml_models.save_model(final_calibrator, config.GAME_PICK_CALIBRATION_MODEL_PATH)
         print(
             f"\n  -> SAVED to {config.GAME_PICK_CALIBRATION_MODEL_PATH} "
-            f"(beats baseline and the raw heuristic on the real holdout - refit on the FULL log "
+            f"(beats the raw heuristic on the real holdout - refit on the FULL log "
             f"before saving, same as train_game_pick_model.py's own pattern; wired live via "
             f"game_picks.apply_calibration)"
         )
     else:
         print(
-            "\n  -> NOT saved (does not beat baseline and/or the raw heuristic on the real holdout - "
+            "\n  -> NOT saved (does not beat the raw heuristic on the real holdout - "
             "reported honestly). Any existing artifact at "
             f"{config.GAME_PICK_CALIBRATION_MODEL_PATH} is left untouched, not deleted - only a real "
             "improvement overwrites it."

@@ -4,8 +4,33 @@ Historically the pipeline pulled the full season from Statcast fresh on every
 run and discarded it after computing that day's metrics - nothing was ever
 saved, so there was no way to re-run the pipeline against a past date or
 build a backtest. `persist_raw_statcast`/`load_persisted_statcast` fix that by
-appending each day's pull to a per-season parquet file that gets committed
+appending each day's pull to a persisted parquet dataset that gets committed
 alongside the output CSVs.
+
+Persisted per real calendar MONTH (data/raw/statcast_<season>_<month>.parquet),
+not one file per season - a real, confirmed problem, not a hypothetical one:
+backfilling the real 2025 season produced a single ~110.6MB file, and
+GitHub rejects any single committed file over 100MB outright (`git push`
+fails with "GH001: Large files detected", not a soft warning) - the
+production daily pipeline's own statcast_2026.parquet was already at 85MB
+with roughly half that season elapsed, so this was on a real path to
+breaking the LIVE daily commit too, not just one-off historical backfills.
+Splitting by month keeps every real file comfortably under that limit
+(the 2025 season's real per-month files ran ~15-20MB each) without
+changing any caller's contract - load_persisted_statcast/persist_raw_statcast
+keep the exact same (raw_dir, season) signature and still return one
+combined DataFrame for the whole season, so every one of this project's
+existing callers (game_picks_backtest.py, dfs_backtest.py, dfs_ceiling.py,
+pipeline.py, and every scripts/*.py that reads persisted Statcast) needed
+zero changes.
+
+load_persisted_statcast also reads the legacy pre-split single-file layout
+(data/raw/statcast_<season>.parquet) if present, purely so this project's
+existing small synthetic test fixtures (which write directly to that exact
+filename, bypassing persist_raw_statcast entirely) keep working unchanged -
+persist_raw_statcast itself never writes that layout anymore. The real
+data/raw/statcast_2026.parquet was migrated to the new per-month layout
+and removed in the same change that added this split.
 """
 
 import os
@@ -28,37 +53,69 @@ def fetch_statcast_range(start_dt, end_dt) -> pd.DataFrame:
     return df
 
 
-def raw_statcast_path(raw_dir: str, season: int) -> str:
+def _month_path(raw_dir: str, season: int, month: int) -> str:
+    return os.path.join(raw_dir, f"statcast_{season}_{month:02d}.parquet")
+
+
+def _legacy_season_path(raw_dir: str, season: int) -> str:
+    """The old, pre-split single-file-per-season path - no longer written
+    (see module docstring), but still read as a fallback for this
+    project's existing test fixtures that write directly to it."""
     return os.path.join(raw_dir, f"statcast_{season}.parquet")
 
 
+def _month_paths(raw_dir: str, season: int) -> list[str]:
+    """Every already-persisted per-month file for `season`, sorted -
+    real month files only, never the legacy single-file layout (that's
+    handled separately by load_persisted_statcast)."""
+    if not os.path.isdir(raw_dir):
+        return []
+    prefix = f"statcast_{season}_"
+    return sorted(
+        os.path.join(raw_dir, name)
+        for name in os.listdir(raw_dir)
+        if name.startswith(prefix) and name.endswith(".parquet")
+    )
+
+
 def load_persisted_statcast(raw_dir: str, season: int) -> pd.DataFrame | None:
-    path = raw_statcast_path(raw_dir, season)
-    if not os.path.exists(path):
+    frames = [pd.read_parquet(path) for path in _month_paths(raw_dir, season)]
+    legacy_path = _legacy_season_path(raw_dir, season)
+    if os.path.exists(legacy_path):
+        frames.append(pd.read_parquet(legacy_path))
+    if not frames:
         return None
-    df = pd.read_parquet(path)
-    df["game_date"] = pd.to_datetime(df["game_date"])
-    return df
+    combined = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]
+    combined["game_date"] = pd.to_datetime(combined["game_date"])
+    return combined
 
 
 def persist_raw_statcast(df: pd.DataFrame, raw_dir: str, season: int) -> pd.DataFrame:
-    """Merge `df` into the persisted raw dataset for `season`, dedupe by pitch, and save.
+    """Splits `df` by real calendar month and merges/dedupes/writes each
+    month into its own persisted file (see module docstring for why -
+    never one big per-season file). A real pitch only ever belongs to one
+    calendar month, so dedup (by PITCH_KEY_COLUMNS) is naturally
+    month-local; no cross-month duplicate is possible.
 
-    Returns the full merged dataset (existing history + new rows).
+    Returns the full merged season (every persisted month, concatenated) -
+    the same contract this function has always had, just backed by
+    multiple files internally now.
     """
     os.makedirs(raw_dir, exist_ok=True)
-    path = raw_statcast_path(raw_dir, season)
+    df = df.copy()
+    df["game_date"] = pd.to_datetime(df["game_date"])
+    key_columns = [c for c in PITCH_KEY_COLUMNS if c in df.columns]
 
-    existing = load_persisted_statcast(raw_dir, season)
-    combined = pd.concat([existing, df], ignore_index=True) if existing is not None else df.copy()
+    for month, month_df in df.groupby(df["game_date"].dt.month):
+        path = _month_path(raw_dir, season, int(month))
+        existing = pd.read_parquet(path) if os.path.exists(path) else None
+        combined = pd.concat([existing, month_df], ignore_index=True) if existing is not None else month_df.copy()
+        if key_columns:
+            combined = combined.drop_duplicates(subset=key_columns, keep="last")
+        combined = combined.sort_values("game_date").reset_index(drop=True)
+        combined.to_parquet(path, index=False)
 
-    key_columns = [c for c in PITCH_KEY_COLUMNS if c in combined.columns]
-    if key_columns:
-        combined = combined.drop_duplicates(subset=key_columns, keep="last")
-    combined = combined.sort_values("game_date").reset_index(drop=True)
-
-    combined.to_parquet(path, index=False)
-    return combined
+    return load_persisted_statcast(raw_dir, season)
 
 
 _name_register_cache: pd.DataFrame | None = None
