@@ -60,17 +60,24 @@ def _print_confidence_banner(log_path: str) -> None:
     rate = summary.loc[0, "beat_closing_line_rate"] if not summary.empty else float("nan")
     rate_str = f"{rate:.1%}" if pd.notna(rate) else "n/a"
 
-    print("=" * 72)
-    print(f"Real beat_closing_line_rate so far: {rate_str} (n={n} real market-compared games)")
+    # flush=True on every line here: this banner MUST appear before any
+    # later SystemExit message (which Python writes straight to stderr,
+    # unbuffered) in a real CI log - stdout is block-buffered when not
+    # attached to a terminal, so without an explicit flush this banner
+    # can print AFTER a later refusal message despite running first,
+    # confirmed for real via a GitHub Actions dispatch (run 32679390305).
+    print("=" * 72, flush=True)
+    print(f"Real beat_closing_line_rate so far: {rate_str} (n={n} real market-compared games)", flush=True)
     if n < config.KELLY_MIN_GAMES_FOR_CONFIDENCE:
         print(
             f"WARNING: n={n} is well below a real statistically meaningful sample "
             f"(config.KELLY_MIN_GAMES_FOR_CONFIDENCE={config.KELLY_MIN_GAMES_FOR_CONFIDENCE}). "
             "The numbers below are real, honestly computed edges - NOT a validated betting "
             "strategy. Do not size real money off this until beat_closing_line_rate has real "
-            "statistical power behind it."
+            "statistical power behind it.",
+            flush=True,
         )
-    print("=" * 72)
+    print("=" * 72, flush=True)
 
 
 def _load_target_date_picks(log_path: str, target_date: pd.Timestamp) -> pd.DataFrame:
