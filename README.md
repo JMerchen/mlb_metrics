@@ -1404,6 +1404,100 @@ Full test suite: 650 passed (across `test_game_predictions.py`,
 including a real end-to-end pipeline test that advises a bet in units on
 day 1 and resolves it into a real positive unit profit on day 2).
 
+### Quant-analytics item #5: backtest scope and statistical significance (`evaluation.py`)
+
+Every real backtest rate this dashboard reports - `beat_closing_line_rate`,
+`market_accuracy`, `win_rate_on_advised_bets`, `day_survival_rate` - is a
+sample statistic computed from a real but often small `n`. A 12-game 33%
+"beat the market" rate and a 1,200-game 33% rate are not the same amount
+of evidence, and a bare percentage on a dashboard can't tell them apart -
+this was flagged directly in this project's own README as an open gap
+("item #5 ... was explicitly skipped") back when it was still true. This
+slice closes it: every rate-based backtest metric now ships with a real
+measure of whether its sample size actually supports trusting it.
+
+**Three new statistics primitives (`evaluation.py`)**, each a thin,
+verified wrapper around an established library - not a hand-derived
+formula:
+- `wilson_confidence_interval(successes, n, alpha=0.05)` - a scalar Wilson
+  score CI, reusing `helpers.wilson_ci` (quant-analytics item #3's own
+  per-row vectorized version) rather than reimplementing the same formula
+  a second time.
+- `binomial_significance(successes, n, null_probability=0.5)` - a
+  two-sided exact binomial test p-value via `scipy.stats.binomtest`.
+- `mean_significance(values, null_value=0.0)` - a one-sample two-sided
+  t-test p-value via `scipy.stats.ttest_1samp`, for testing a real mean
+  (not a count) against a null.
+
+**Which metric gets which test, and why (this is the part that's easy to
+get statistically wrong)**:
+- `beat_closing_line_rate` gets BOTH a Wilson CI and a real
+  `binomial_significance` p-value against a null of 0.5. This is a
+  genuinely well-posed null: "whose squared error is lower on this game"
+  is a symmetric coin flip under "no real skill difference between the
+  model and the market," so 0.5 is the honest null, not just a convenient
+  one.
+- `market_accuracy` and `day_survival_rate` get a Wilson CI only, no
+  p-value. A raw accuracy rate does NOT have a fair 0.5 null - real MLB
+  home teams win somewhat more than half their games, so "vs. a coin
+  flip" would misrepresent what "no skill" actually looks like here.
+- `win_rate_on_advised_bets` gets a Wilson CI only, no `binomial_significance`
+  p-value either - deliberately, even though it's a win/loss rate. Advised
+  bets are placed at different real moneylines, so a win/loss count alone
+  can't tell a good -150 favorite bet apart from a bad one; a 55% win rate
+  on -150 favorites and a 55% win rate on +150 underdogs are very
+  different real outcomes a win-rate-only test can't distinguish.
+- Real bet profitability instead gets `roi_p_value` - a `mean_significance`
+  t-test on every advised bet's real `bet_profit_units` against a null of
+  0 (breaking even). This is the correctly-posed test for "did the
+  advised bets actually make money, or is this within noise": each bet's
+  real profit already prices in its real moneyline, which a win-rate test
+  throws away.
+
+**Wiring**: `game_evaluation._market_comparison_metrics`/
+`_beat_closing_line_rate`/`_bet_pnl_metrics` each compute and return their
+metric's CI (and p-value, where one applies) alongside the rate itself;
+`build_game_picks_export`'s summary row gains
+`market_accuracy_ci_low/high`, `beat_closing_line_rate_ci_low/high`,
+`beat_closing_line_rate_p_value`, `win_rate_on_advised_bets_ci_low/high`,
+and `roi_p_value`. `evaluation.build_beat_the_streak_export`'s summary
+gains `day_survival_rate_ci_low/high`. No migration guard needed anywhere
+here - unlike the per-row picks table, these summary rows are always
+computed fresh from the full log on every pipeline run, never read back
+from a persisted CSV.
+
+**Dashboard**: `renderGamePickStats`/`renderStreakStats` gained a shared
+`ciLabel`/`significanceLabel` formatter pair; the Win Rate, P&L, Beat
+Closing Line, and Day Survival Rate tiles each now show a small sub-line
+under their headline number - e.g. "95% CI 14–61%" or
+"not significant (p=0.29)" - so a thin sample never reads as more certain
+than it actually is. Verified via a local static-server + headless
+Chromium screenshot pass against real formula output (computed via the
+real `evaluation.*` functions themselves, not hand-typed numbers) written
+into synthetic summary CSVs.
+
+**Methodology page**: two new cards ("Exact Binomial Test," "One-Sample
+t-Test") in the existing Statistical Significance Testing section
+(alongside the Wald Test card), and the existing Wilson Score Confidence
+Interval card's "How we use it" now also documents this scalar reuse.
+
+**New dependency**: `scipy` added explicitly to `requirements.txt` -
+it was already present transitively (both `scikit-learn` and
+`statsmodels` depend on it), but `evaluation.py` now imports it directly,
+so it's declared honestly rather than relied upon silently.
+
+**Honest non-goal**: no significance testing was added for the DFS ML
+holdout comparisons (log_loss/MAE vs. baseline) - those are continuous-
+error metrics, not binomial rates or a simple one-sample mean, and need a
+different real tool (e.g. a paired test between the model's and the
+baseline's per-row errors) - a real, more involved follow-up, not this
+slice.
+
+Full test suite: 657 passed (7 new/updated tests across
+`test_evaluation.py`, `test_game_evaluation.py` - hand-computed cases for
+all three new primitives, plus real CI/p-value assertions wired through
+`build_beat_the_streak_export`/`build_game_picks_export`'s summary rows).
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our

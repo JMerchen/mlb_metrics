@@ -67,6 +67,58 @@ def test_calibration_table_covers_every_resolved_row():
     assert table["n"].sum() == 6
 
 
+def test_wilson_confidence_interval_matches_helpers_wilson_ci_hand_derived_case():
+    # Same count=50, n=100 case tests/test_helpers.py hand-derives the
+    # Wilson formula for - this is a scalar wrapper around
+    # helpers.wilson_ci, so it must produce the exact same numbers.
+    ci_low, ci_high = evaluation.wilson_confidence_interval(50, 100)
+    assert ci_low == pytest.approx(0.4038315303659956)
+    assert ci_high == pytest.approx(0.5961684696340044)
+
+
+def test_wilson_confidence_interval_n_zero_is_the_widest_honest_bound():
+    ci_low, ci_high = evaluation.wilson_confidence_interval(0, 0)
+    assert ci_low == 0.0
+    assert ci_high == 1.0
+
+
+def test_binomial_significance_exact_null_rate_is_maximally_insignificant():
+    # 6 of 12 successes IS the null (0.5) exactly - a two-sided exact
+    # binomial test must return p=1.0, zero evidence against the null.
+    assert evaluation.binomial_significance(6, 12, null_probability=0.5) == pytest.approx(1.0)
+
+
+def test_binomial_significance_extreme_rate_is_significant():
+    # 0 of 12 successes against a null of 0.5 - vanishingly unlikely
+    # under the null (two-sided exact binomial: 2 * 0.5^12).
+    p = evaluation.binomial_significance(0, 12, null_probability=0.5)
+    assert p == pytest.approx(2 * (0.5**12))
+
+
+def test_binomial_significance_n_zero_is_nan_not_a_fabricated_pvalue():
+    assert math.isnan(evaluation.binomial_significance(0, 0))
+
+
+def test_mean_significance_matches_scipy_ttest_1samp_directly():
+    # Reuse-not-reimplement: verify the wiring (right values passed to
+    # scipy in the right shape) rather than re-deriving the t-distribution
+    # by hand, same spirit as wilson_ci's own tests trusting statsmodels'
+    # formula and only checking a hand-derived case once elsewhere.
+    from scipy.stats import ttest_1samp as _ttest_1samp
+
+    values = pd.Series([1.0, 2.0, 3.0, -1.5])
+    expected = float(_ttest_1samp(values, 0.0).pvalue)
+    assert evaluation.mean_significance(values, null_value=0.0) == pytest.approx(expected)
+
+
+def test_mean_significance_fewer_than_two_real_values_is_nan():
+    assert math.isnan(evaluation.mean_significance(pd.Series([5.0]), null_value=0.0))
+    assert math.isnan(evaluation.mean_significance(pd.Series([], dtype=float), null_value=0.0))
+    # A NaN mixed in with only one real value still leaves just 1 real
+    # sample after dropna - not enough to estimate a variance.
+    assert math.isnan(evaluation.mean_significance(pd.Series([5.0, None]), null_value=0.0))
+
+
 def test_outcome_col_parameter_works_with_a_different_column_name():
     # Same fixture, but the outcome lives in "actual_correct" instead of
     # "actual_hit" - the shape game_evaluation.py's game-pick scoring needs
@@ -263,6 +315,13 @@ def test_build_beat_the_streak_export_picks_table_status_and_summary():
     assert summary.loc[0, "longest_streak"] == 3
     assert summary.loc[0, "current_streak"] == 2
     assert summary.loc[0, "model_version"] == "all_time"  # unfiltered (model_version=None) default label
+
+    # Quant-analytics item #5: day_survival_rate's real CI, over the
+    # 4-of-5 non-reset days streak_progression established above (reset
+    # == [False, False, True, False, False]).
+    expected_ci_low, expected_ci_high = evaluation.wilson_confidence_interval(4, 5)
+    assert summary.loc[0, "day_survival_rate_ci_low"] == pytest.approx(expected_ci_low)
+    assert summary.loc[0, "day_survival_rate_ci_high"] == pytest.approx(expected_ci_high)
 
 
 def test_recommended_picks_blends_probability_and_matchup_not_just_ghp():

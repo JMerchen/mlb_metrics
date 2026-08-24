@@ -475,6 +475,19 @@ letter-spacing:.03em;
 
 }
 
+/* Quant-analytics item #5: the real Wilson CI / significance p-value note
+under a stat tile's value - a small font so it reads as supporting detail,
+not a second headline number. */
+.streakStat .sub{
+
+font-size:11px;
+
+color:var(--text-dim);
+
+margin-top:6px;
+
+}
+
 .todaysPicks{
 
 display:flex;

@@ -6,6 +6,9 @@ and log loss.
 
 import numpy as np
 import pandas as pd
+from scipy.stats import binomtest, ttest_1samp
+
+from mlb_metrics import helpers
 
 
 def resolved_only(predictions: pd.DataFrame, outcome_col: str = "actual_hit") -> pd.DataFrame:
@@ -60,6 +63,71 @@ def log_loss(predictions: pd.DataFrame, eps: float = 1e-6, outcome_col: str = "a
     p = resolved["predicted_probability"].clip(eps, 1 - eps)
     y = resolved[outcome_col]
     return float(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p)))
+
+
+def wilson_confidence_interval(successes: int, n: int, alpha: float = 0.05) -> tuple[float, float]:
+    """Scalar Wilson score confidence interval for one aggregate backtest
+    rate (accuracy, beat_closing_line_rate, win_rate_on_advised_bets,
+    day_survival_rate, ...) - quant-analytics item #5 ("backtest scope
+    and statistical significance"): the honest answer to "is n big
+    enough to trust this rate," not just reporting the rate itself. A
+    12-game 33% "beat the market" rate and a 1200-game 33% rate are NOT
+    the same amount of evidence, and a bare percentage on a dashboard
+    can't tell them apart.
+
+    Reuses helpers.wilson_ci (quant-analytics item #3's per-row
+    vectorized version, already proven against
+    statsmodels.stats.proportion.proportion_confint) by wrapping the
+    scalar successes/n in a length-1 Series and unwrapping the result -
+    not a second implementation of the same formula. n=0 returns
+    (0.0, 1.0), the same "no information, could be anywhere" contract
+    helpers.wilson_ci already establishes."""
+    low, high = helpers.wilson_ci(pd.Series([successes]), pd.Series([n]), alpha=alpha)
+    return float(low.iloc[0]), float(high.iloc[0])
+
+
+def binomial_significance(successes: int, n: int, null_probability: float = 0.5) -> float:
+    """Two-sided exact binomial test p-value: given only `n` real
+    trials, is the observed rate distinguishable from `null_probability`
+    (default 0.5 - a coin flip, i.e. "no real skill difference")? A
+    small p-value means the observed rate would be unlikely if the null
+    were actually true. Uses scipy.stats.binomtest - the exact test, not
+    a normal approximation (unreliable at the small n this project's
+    real backtests actually have, e.g. n=12) - not hand-derived.
+
+    0.5 is only a well-posed null for a genuinely symmetric comparison
+    (e.g. beat_closing_line_rate's "whose squared error was lower on
+    this game," where under "no skill difference" either side is
+    equally likely to win) - NOT for an unconditional accuracy rate
+    (home teams win somewhat more than half of real MLB games, so 0.5
+    isn't actually "no skill" there). Callers are responsible for only
+    using this where the null is real, not just convenient - see
+    game_evaluation.py's own callers for which metrics get a p-value at
+    all versus a confidence interval only. n=0 returns NaN, not a
+    fabricated 1.0 (no data is no evidence either way, not "certainly
+    the null")."""
+    if n == 0:
+        return float("nan")
+    return float(binomtest(successes, n, null_probability).pvalue)
+
+
+def mean_significance(values: pd.Series, null_value: float = 0.0) -> float:
+    """One-sample two-sided t-test p-value: is the real mean of `values`
+    (e.g. each advised bet's real bet_profit_units) distinguishable from
+    `null_value` (default 0.0 - "breaking even")? This is the honest
+    test for "did the advised bets actually make money, or is this
+    within noise" - deliberately NOT binomial_significance on
+    win_rate_on_advised_bets, which would silently throw away each bet's
+    real price (a -150 favorite winning 55% of the time and a +150
+    underdog winning 55% of the time are very different real outcomes
+    that a win-rate-only test can't tell apart; the real profit each bet
+    produced already prices that in). Needs at least 2 real resolved
+    values to estimate a variance; returns NaN otherwise, not a
+    fabricated p-value off a single data point."""
+    clean = pd.to_numeric(values, errors="coerce").dropna()
+    if len(clean) < 2:
+        return float("nan")
+    return float(ttest_1samp(clean, null_value).pvalue)
 
 
 def calibration_table(predictions: pd.DataFrame, n_bins: int = 10, outcome_col: str = "actual_hit") -> pd.DataFrame:
@@ -324,7 +392,17 @@ def build_beat_the_streak_export(
 
     progression = streak_progression(predictions, metric, max_picks, min_probability, model_version)
     n_days = len(progression)
-    survival_rate = float((~progression["reset"]).mean()) if n_days else float("nan")
+    survival_successes = int((~progression["reset"]).sum()) if n_days else 0
+    survival_rate = float(survival_successes / n_days) if n_days else float("nan")
+    # Quant-analytics item #5 ("backtest scope and statistical
+    # significance"): CI only here, deliberately no binomial_significance
+    # p-value - "recommended" picks are already gated on a high
+    # min_probability bar, so there's no real symmetric "no skill" null
+    # to test survival against the way beat_closing_line_rate has one
+    # (see game_evaluation.py's own choice of which metrics get a
+    # p-value). The CI still answers the real question a small n_days
+    # raises: how much could this rate move with more data.
+    survival_ci_low, survival_ci_high = wilson_confidence_interval(survival_successes, n_days)
 
     summary = pd.DataFrame(
         [
@@ -335,6 +413,8 @@ def build_beat_the_streak_export(
                 "min_probability": min_probability,
                 "n_days_resolved": n_days,
                 "day_survival_rate": survival_rate,
+                "day_survival_rate_ci_low": survival_ci_low,
+                "day_survival_rate_ci_high": survival_ci_high,
                 "longest_streak": int(progression["streak"].max()) if n_days else 0,
                 "current_streak": int(progression["streak"].iloc[-1]) if n_days else 0,
             }
