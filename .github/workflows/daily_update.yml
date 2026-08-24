@@ -69,4 +69,19 @@ jobs:
 
           git commit -m "Daily update" || echo "No changes"
 
-          git push
+          # Retry with a rebase before each attempt - same real push-race
+          # fix as ml_training_update.yml's own "Commit updates" step
+          # (confirmed twice in practice there, on a feature branch
+          # receiving concurrent code pushes - this runs on main, which
+          # can just as easily receive a concurrent PR merge).
+          branch=$(git rev-parse --abbrev-ref HEAD)
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              exit 0
+            fi
+            echo "Push attempt $attempt failed - pulling/rebasing and retrying..."
+            git pull --rebase origin "$branch"
+            sleep 5
+          done
+          echo "::error::Failed to push after 5 attempts"
+          exit 1

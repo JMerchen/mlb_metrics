@@ -1621,6 +1621,28 @@ Re-running the 2025 backfill after the fix succeeded cleanly: **742,080
 real pitch rows across 190 distinct dates, 2,531 distinct games**, split
 into 7 per-month files (largest 21.5MB), pushed without incident.
 
+### Real infra fix: retry-with-rebase on every workflow's final push (2026-08-24)
+
+`ml_training_update.yml`'s own training run - 50+ minutes of real work
+before it ever reaches its final `git push` - lost that entire run's
+trained artifacts to a plain non-fast-forward push rejection **twice in
+a row** in practice (real GitHub Actions runs 32759747063 and
+32766340800, both racing against a concurrent code push to the same
+branch elsewhere in this same session). A single `git push` with no
+retry was never going to survive a long-running job racing a human/
+Claude actively pushing code to the same branch.
+
+Fix: every workflow that commits+pushes generated output now retries
+with a `git pull --rebase` between attempts (up to 5), not just
+`ml_training_update.yml` - `backfill_statcast_season.yml`,
+`daily_update.yml` (the core PRODUCTION pipeline, which runs on `main`
+and can just as easily race a concurrent PR merge), `backtest.yml`,
+`age_curves_update.yml`, `backfill_market_odds.yml`, and
+`build_nfl_bestball_rankings.yml`. Safe in every case: each workflow's
+commit step only ever touches its own specific path(s)
+(`data/models/`, `data/raw/`, `docs/data/*.csv`, etc.), so rebasing onto
+whatever else landed on the branch never has a real conflict to resolve.
+
 ### Save-gate policy change: drop the naive-baseline requirement (2026-08-24)
 
 Every `train_*.py` script that fits a candidate ML replacement for an

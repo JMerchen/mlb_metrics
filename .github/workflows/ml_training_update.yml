@@ -64,4 +64,23 @@ jobs:
 
           git commit -m "ML signal training update" || echo "No changes"
 
-          git push
+          # Retry with a rebase before each attempt. This job runs 50+
+          # minutes of training before reaching this step, so a real code
+          # push to the same branch in the meantime easily wins the race
+          # (confirmed twice in practice: runs 32759747063 and 32766340800
+          # both lost a real trained-artifact commit to exactly this - a
+          # plain `git push` with no retry). data/models/ is the only path
+          # this step ever touches, so rebasing onto whatever else landed
+          # on the branch is always safe - nothing else in this repo
+          # commits to that same path.
+          branch=$(git rev-parse --abbrev-ref HEAD)
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              exit 0
+            fi
+            echo "Push attempt $attempt failed - pulling/rebasing and retrying..."
+            git pull --rebase origin "$branch"
+            sleep 5
+          done
+          echo "::error::Failed to push after 5 attempts"
+          exit 1
