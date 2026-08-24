@@ -1804,6 +1804,45 @@ arithmetic/missing-umpire/empty-input cases, plus
 `assemble_hitter_hit_log`'s schema and real-value-population coverage
 for both candidates).
 
+**Real dispatched result (GitHub Actions run 32775346481, full history,
+n=34,086 rows across 140 dates)** - neither candidate is added to
+`HITTER_FEATURE_COLUMNS`:
+
+- **`Days_Rest`**: univariate coef=-0.0300, p=**0.0064** (real, more rest
+  correlates with a LOWER hit probability - plausibly IL/injury-stint
+  rest rather than a true rust effect) - but combined with the full
+  existing feature set, coef flips to +0.0057, p=**0.8054** (not
+  significant). The univariate signal doesn't survive once the model
+  already accounts for everything else - likely confounded with
+  recency/playing-time signals already present (WAVE, `Last_Game_Date`-
+  adjacent features), not independent information. **Not added.**
+- **`Umpire_Factor`**: excluded from the report entirely - constant
+  (zero variance) in the real data. Root cause confirmed directly
+  against the real persisted file: Statcast's own `umpire` column is
+  **0 non-null out of 92,154 real rows** in `data/raw/statcast_2026_08.parquet`
+  - this project's real pybaseball/Statcast pull simply never populates
+  it, a genuine real-world data-availability gap in the public feed, not
+  a bug in `compute_umpire_factor` or the join logic. A real umpire
+  signal would need a different data source entirely (e.g. a dedicated
+  umpire-assignment feed) - out of scope here. **Cannot be tested, let
+  alone used, with this project's current data.**
+
+Real side note from the same report: `WAVE_Home`/`WAVE_Away` (already
+live, shipped in the previous change) are strongly significant
+univariately (p<0.0001 each) but not in the combined multivariate fit
+(p=0.44/0.97) - the same multicollinearity-with-`WAVE`/`WAVE_L`/`WAVE_R`
+pattern several other platoon-adjacent features already show in this
+report, not evidence against the feature (see the significance report's
+own docstring on standardization/collinearity).
+
+The hitter hit-probability model retrained successfully under the
+widened schema and saved (sigmoid calibration, beats `Game_Hit_Probability`
+- artifact only, not wired live). The game-pick calibration artifact
+also **finally saved** under the relaxed gate from the policy change
+above (beats the raw heuristic, 0.6864 vs 0.6933) - wired live via
+`game_picks.apply_calibration`, so live game picks are now genuinely
+rescaled starting from this run.
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our
