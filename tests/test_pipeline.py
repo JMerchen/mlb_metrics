@@ -611,13 +611,12 @@ def test_run_resolves_game_picks_across_two_runs(monkeypatch, tmp_path):
     logged = pd.read_csv(f"{predictions_dir}/game_predictions.csv")
     assert logged.loc[0, "actual_winner"] == "NYY"
     assert logged.loc[0, "game_played"] == 1
-    # A real bet was advised on NYY (home) - real, positive Kelly stake -
+    # A real bet was advised on NYY (home) - real, positive Kelly units -
     # and NYY winning for real resolves it into a real positive profit,
     # via game_predictions.resolve_game_predictions' own extended logic.
-    assert logged.loc[0, "bet_advised"] == True  # noqa: E712
+    assert logged.loc[0, "bet_units"] > 0
     assert logged.loc[0, "bet_team"] == "NYY"
-    assert logged.loc[0, "bet_stake_dollars"] > 0
-    assert logged.loc[0, "bet_profit_dollars"] > 0
+    assert logged.loc[0, "bet_profit_units"] > 0
 
     picks_export = pd.read_csv(f"{tmp_path}/out/game_picks_picks.csv")
     assert picks_export.loc[0, "status"] == "win"
@@ -626,7 +625,7 @@ def test_run_resolves_game_picks_across_two_runs(monkeypatch, tmp_path):
     assert summary_export.loc[0, "n_bets_advised"] == 1
     assert summary_export.loc[0, "bets_won"] == 1
     assert summary_export.loc[0, "win_rate_on_advised_bets"] == 1.0
-    assert summary_export.loc[0, "total_profit_dollars"] > 0
+    assert summary_export.loc[0, "total_profit_units"] > 0
 
     by_version = pd.read_csv(f"{tmp_path}/out/game_picks_summary_by_version.csv")
     assert set(by_version["model_version"]) == {"all_time", pipeline.config.GAME_PICK_MODEL_VERSION}

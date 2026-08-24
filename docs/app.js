@@ -1739,12 +1739,15 @@ const winRate = hasBets
 ? (Number(s.win_rate_on_advised_bets) * 100).toFixed(1) + "%"
 : "-"
 
+// Units, not dollars - the standard bankroll-agnostic sports-betting
+// convention (config.UNIT_SIZE_FRACTION of bankroll per unit). "u" suffix
+// matches how bettors actually write this ("+12.4u").
 const pnl = hasBets
-? (Number(s.total_profit_dollars) >= 0 ? "+" : "") + "$" + Number(s.total_profit_dollars).toFixed(2)
+? (Number(s.total_profit_units) >= 0 ? "+" : "") + Number(s.total_profit_units).toFixed(2) + "u"
 : "-"
 
 const pnlColor = hasBets
-? (Number(s.total_profit_dollars) >= 0 ? "var(--success)" : "var(--danger)")
+? (Number(s.total_profit_units) >= 0 ? "var(--success)" : "var(--danger)")
 : "inherit"
 
 // Quant-analytics item #6, slice 2 - "beat the closing line," the
@@ -1810,10 +1813,13 @@ p.predicted_probability && p.predicted_probability !== ""
 ? (Number(p.predicted_probability) * 100).toFixed(1) + "% predicted"
 : ""
 
-const betAdvised = p.bet_advised === "True" || p.bet_advised === "true"
+// bet_units is the real "was a bet advised" signal - 0 (or blank/NaN on
+// an older row) means no bet, any positive number is real units to risk.
+const betUnits = Number(p.bet_units)
+const betAdvised = betUnits > 0
 
 const betLine = betAdvised
-? `<div class="pickStatus">Bet advised: ${p.bet_team} @ ${p.bet_moneyline} ($${Number(p.bet_stake_dollars).toFixed(2)})</div>`
+? `<div class="pickStatus">Bet advised: ${p.bet_team} @ ${p.bet_moneyline} (${betUnits.toFixed(2)}u)</div>`
 : ""
 
 return `

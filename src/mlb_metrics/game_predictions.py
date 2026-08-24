@@ -11,11 +11,19 @@ scripts/recommend_bets.py's own private copy) - deliberately placed here
 rather than in kelly.py (which stays pure scalar math, no pandas/config)
 or a new module, since this IS the module that decides what goes into
 each day's logged game-pick row, and bet advice is now one more real,
-resolvable field on that same row (bet_advised/bet_side/bet_moneyline/
-bet_stake_dollars/bet_profit_dollars) - not a separate concern with its
-own lifecycle. scripts/recommend_bets.py calls this same function rather
-than keeping its own copy, so there's exactly one real implementation of
-"should a bet be advised on this game."
+resolvable field on that same row (bet_units/bet_side/bet_moneyline/
+bet_profit_units) - not a separate concern with its own lifecycle.
+scripts/recommend_bets.py calls this same function rather than keeping
+its own copy, so there's exactly one real implementation of "should a bet
+be advised on this game, and how many units."
+
+Bet sizing is tracked in UNITS, not dollars - the standard sports-betting
+convention (bettors report/compare performance in bankroll-agnostic
+"units risked/won" rather than dollars, since real bankroll size varies
+per person - see config.UNIT_SIZE_FRACTION). `bet_units` is also the
+single real signal for "was a bet advised at all": 0.0 means no bet, any
+positive value is real units to risk - no separate boolean, so a numeric
+column always tells the whole story on its own.
 """
 
 import os
@@ -28,8 +36,7 @@ GAME_PREDICTION_COLUMNS = [
     "date", "game_pk", "home_team", "away_team", "predicted_winner",
     "predicted_probability", "above_threshold", "metric", "actual_winner", "game_played", "model_version",
     "market_home_win_probability",
-    "bet_advised", "bet_side", "bet_team", "bet_moneyline", "bet_stake_fraction", "bet_stake_dollars",
-    "bet_profit_dollars",
+    "bet_units", "bet_side", "bet_team", "bet_moneyline", "bet_stake_fraction", "bet_profit_units",
 ]
 
 BET_ADVICE_COLUMNS = [
@@ -133,7 +140,7 @@ def select_game_picks(
     win probability clears `min_probability` ("real separation between the
     two teams") - the dashboard still publishes the complete slate and
     highlights the flagged games, but game_evaluation.build_game_picks_export's
-    real tracking is scoped to `bet_advised` (below), not `above_threshold` -
+    real tracking is scoped to `bet_units > 0` (below), not `above_threshold` -
     a model being confident in its own favorite is a different question
     from the market actually disagreeing with it. `predicted_winner` is
     whichever side (home_team/away_team) has the higher probability;
@@ -154,16 +161,17 @@ def select_game_picks(
     When `market_probabilities` also carries real `home_moneyline`/
     `away_moneyline` (the raw, vigged price - a defensive column check,
     not just an empty check, so any older caller/test still passing the
-    original 3-column de-vigged-only frame keeps working with
-    `bet_advised` simply staying False), calls `advise_bets` to decide
-    whether a real bet is advised on each game and logs the result
-    (`bet_advised`/`bet_side`/`bet_team`/`bet_moneyline`/`bet_stake_fraction`/
-    `bet_stake_dollars` - `bet_profit_dollars` stays null here, filled in
-    only once resolve_game_predictions later knows the real outcome).
-    `bet_stake_dollars = bet_stake_fraction * config.KELLY_REFERENCE_BANKROLL`,
-    a fixed NOTIONAL bankroll purely so logged dollar amounts are
-    comparable day to day, not a live/compounding one (see
-    config.KELLY_REFERENCE_BANKROLL's own docstring).
+    original 3-column de-vigged-only frame keeps working with `bet_units`
+    simply staying 0.0), calls `advise_bets` to decide whether a real bet
+    is advised on each game and logs the result (`bet_units`/`bet_side`/
+    `bet_team`/`bet_moneyline`/`bet_stake_fraction` - `bet_profit_units`
+    stays null here, filled in only once resolve_game_predictions later
+    knows the real outcome). `bet_units = bet_stake_fraction / config.UNIT_SIZE_FRACTION`
+    - the standard sports-betting "units risked" convention, bankroll-
+    agnostic by design (see config.UNIT_SIZE_FRACTION's own docstring).
+    `bet_units` IS the real "was a bet advised" signal: 0.0 for every game
+    with no real edge, a positive number of units otherwise - no separate
+    boolean.
 
     advise_bets returns at most one row per game_pk in the normal case,
     but `market_probabilities` matches by (home_team, away_team) only (see
@@ -224,17 +232,18 @@ def select_game_picks(
             on="game_pk",
             how="left",
         )
-        picks["bet_advised"] = picks["game_pk"].isin(advice["game_pk"])
-        picks["bet_stake_dollars"] = picks["bet_stake_fraction"] * config.KELLY_REFERENCE_BANKROLL
+        # bet_units is the real "was a bet advised" signal - 0.0 (not NaN)
+        # for every game with no real edge, so it's always a valid number,
+        # never a separate boolean to also check.
+        picks["bet_units"] = (picks["bet_stake_fraction"] / config.UNIT_SIZE_FRACTION).fillna(0.0)
     else:
-        picks["bet_advised"] = False
+        picks["bet_units"] = 0.0
         picks["bet_side"] = pd.NA
         picks["bet_team"] = pd.NA
         picks["bet_moneyline"] = pd.NA
         picks["bet_stake_fraction"] = pd.NA
-        picks["bet_stake_dollars"] = pd.NA
 
-    picks["bet_profit_dollars"] = pd.NA
+    picks["bet_profit_units"] = pd.NA
 
     return picks[GAME_PREDICTION_COLUMNS]
 
@@ -259,14 +268,14 @@ def append_game_predictions(picks: pd.DataFrame, log_path: str) -> pd.DataFrame:
             # A log written before slice 2 genuinely has no real market
             # data for those rows - NaN, not a guess.
             existing["market_home_win_probability"] = pd.NA
-        if "bet_advised" not in existing.columns:
+        if "bet_units" not in existing.columns:
             # A row logged before bet advice existed genuinely never had a
-            # bet advised - False is the factually correct backfill, not
-            # an arbitrary default (same reasoning as above_threshold's
-            # own backfill above).
-            existing["bet_advised"] = False
-            for col in ("bet_side", "bet_team", "bet_moneyline", "bet_stake_fraction",
-                        "bet_stake_dollars", "bet_profit_dollars"):
+            # bet advised - 0.0 is the factually correct backfill (0 units
+            # means no bet, same real signal a freshly-logged non-advised
+            # row would get), not an arbitrary default (same reasoning as
+            # above_threshold's own backfill above).
+            existing["bet_units"] = 0.0
+            for col in ("bet_side", "bet_team", "bet_moneyline", "bet_stake_fraction", "bet_profit_units"):
                 existing[col] = pd.NA
         combined = pd.concat([picks, existing], ignore_index=True)
     else:
@@ -312,13 +321,12 @@ def resolve_game_predictions(log_path: str, fetch_results_fn, as_of_date) -> pd.
         log["above_threshold"] = True  # migrate a log written before above_threshold existed (see append_game_predictions)
     if "market_home_win_probability" not in log.columns:
         log["market_home_win_probability"] = pd.NA  # migrate a log written before slice 2's market column existed
-    if "bet_advised" not in log.columns:
+    if "bet_units" not in log.columns:
         # A row logged before bet advice existed genuinely never had a bet
-        # advised - False is the factually correct backfill, not an
+        # advised - 0.0 units is the factually correct backfill, not an
         # arbitrary default (see append_game_predictions's identical guard).
-        log["bet_advised"] = False
-        for col in ("bet_side", "bet_team", "bet_moneyline", "bet_stake_fraction",
-                    "bet_stake_dollars", "bet_profit_dollars"):
+        log["bet_units"] = 0.0
+        for col in ("bet_side", "bet_team", "bet_moneyline", "bet_stake_fraction", "bet_profit_units"):
             log[col] = pd.NA
     # A log with no resolved games yet round-trips actual_winner as an
     # all-null float64 column (empty strings -> NaN on read) - cast back to
@@ -356,21 +364,21 @@ def resolve_game_predictions(log_path: str, fetch_results_fn, as_of_date) -> pd.
         log.loc[home_won, "actual_winner"] = log.loc[home_won, "home_team"]
         log.loc[away_won, "actual_winner"] = log.loc[away_won, "away_team"]
 
-        # Real money won/lost, only for newly-finalized rows where a bet
-        # was actually advised (bet_advised is never NaN - always True or
-        # False - but == True side-steps any object-dtype ambiguity after
-        # a real CSV round-trip, same convention this project's own tests
-        # already use for boolean columns read back from CSV).
-        advised_final = final & (log["bet_advised"] == True)  # noqa: E712
+        # Real units won/lost, only for newly-finalized rows where a real
+        # bet was advised (bet_units > 0 - a real positive stake, the
+        # single "was a bet advised" signal; a row can never be negative
+        # and pd.to_numeric handles any object-dtype float/NaN mix a real
+        # CSV round-trip can produce).
+        advised_final = final & (pd.to_numeric(log["bet_units"], errors="coerce") > 0)
         team_won = (home_won & (log["bet_team"] == log["home_team"])) | (
             away_won & (log["bet_team"] == log["away_team"])
         )
         bet_won = advised_final & team_won
         bet_lost = advised_final & ~team_won
-        log.loc[bet_won, "bet_profit_dollars"] = log.loc[bet_won, "bet_stake_dollars"] * log.loc[
+        log.loc[bet_won, "bet_profit_units"] = log.loc[bet_won, "bet_units"] * log.loc[
             bet_won, "bet_moneyline"
         ].apply(kelly.moneyline_to_net_odds)
-        log.loc[bet_lost, "bet_profit_dollars"] = -log.loc[bet_lost, "bet_stake_dollars"]
+        log.loc[bet_lost, "bet_profit_units"] = -log.loc[bet_lost, "bet_units"]
 
     log.to_csv(log_path, index=False)
     return log

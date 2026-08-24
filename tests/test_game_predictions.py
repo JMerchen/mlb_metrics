@@ -417,13 +417,13 @@ def test_select_game_picks_logs_a_real_advised_bet():
     )
 
     row = picks.iloc[0]
-    assert row["bet_advised"] == True  # noqa: E712
+    assert row["bet_units"] > 0  # bet_units IS the "was a bet advised" signal - 0 means no bet
     assert row["bet_side"] == "home"
     assert row["bet_team"] == "NYY"
     assert row["bet_moneyline"] == -150
     assert row["bet_stake_fraction"] > 0
-    assert row["bet_stake_dollars"] == pytest.approx(row["bet_stake_fraction"] * config.KELLY_REFERENCE_BANKROLL)
-    assert pd.isna(row["bet_profit_dollars"])  # not resolved yet
+    assert row["bet_units"] == pytest.approx(row["bet_stake_fraction"] / config.UNIT_SIZE_FRACTION)
+    assert pd.isna(row["bet_profit_units"])  # not resolved yet
 
 
 def test_select_game_picks_no_bet_advised_when_no_real_edge():
@@ -436,15 +436,14 @@ def test_select_game_picks_no_bet_advised_when_no_real_edge():
     picks = game_predictions.select_game_picks(win_probs, pd.Timestamp("2026-08-24"), market_probabilities=market)
 
     row = picks.iloc[0]
-    assert row["bet_advised"] == False  # noqa: E712
+    assert row["bet_units"] == 0.0
     assert pd.isna(row["bet_side"])
-    assert pd.isna(row["bet_stake_dollars"])
 
 
 def test_select_game_picks_no_bet_columns_without_moneylines_backward_compat():
     # game_picks_backtest.py and older tests pass either no market_probabilities
-    # at all, or the original 3-column de-vigged-only frame - bet_advised must
-    # stay False, not KeyError.
+    # at all, or the original 3-column de-vigged-only frame - bet_units must
+    # stay 0.0, not KeyError.
     win_probs = _win_probabilities([
         {"game_pk": 1, "date": pd.Timestamp("2026-08-24"), "home_team": "NYY", "away_team": "TOR",
          "home_win_probability": 0.70},
@@ -456,11 +455,10 @@ def test_select_game_picks_no_bet_columns_without_moneylines_backward_compat():
     picks = game_predictions.select_game_picks(win_probs, pd.Timestamp("2026-08-24"), market_probabilities=market)
 
     row = picks.iloc[0]
-    assert row["bet_advised"] == False  # noqa: E712
-    assert pd.isna(row["bet_stake_dollars"])
+    assert row["bet_units"] == 0.0
 
     picks_no_market = game_predictions.select_game_picks(win_probs, pd.Timestamp("2026-08-24"))
-    assert picks_no_market.iloc[0]["bet_advised"] == False  # noqa: E712
+    assert picks_no_market.iloc[0]["bet_units"] == 0.0
 
 
 def test_append_game_predictions_migrates_a_log_written_before_bet_columns_existed(tmp_path):
@@ -472,7 +470,7 @@ def test_append_game_predictions_migrates_a_log_written_before_bet_columns_exist
         "market_home_win_probability": pd.NA,
     }])
     legacy_log.to_csv(log_path, index=False)
-    assert "bet_advised" not in legacy_log.columns
+    assert "bet_units" not in legacy_log.columns
 
     new_pick = game_predictions.select_game_picks(
         _win_probabilities([{"game_pk": 2, "date": pd.Timestamp("2026-07-20"), "home_team": "LAD",
@@ -482,28 +480,27 @@ def test_append_game_predictions_migrates_a_log_written_before_bet_columns_exist
     combined = game_predictions.append_game_predictions(new_pick, log_path)
 
     row1 = combined[combined["game_pk"] == 1].iloc[0]
-    assert row1["bet_advised"] == False  # noqa: E712
-    assert pd.isna(row1["bet_profit_dollars"])
+    assert row1["bet_units"] == 0.0
+    assert pd.isna(row1["bet_profit_units"])
 
 
 # ---------------------------------------------------------------------
-# resolve_game_predictions - real money won/lost
+# resolve_game_predictions - real units won/lost
 # ---------------------------------------------------------------------
 
-def _advised_pick_row(game_pk, home_team, away_team, bet_side, bet_team, bet_moneyline, bet_stake_dollars):
+def _advised_pick_row(game_pk, home_team, away_team, bet_side, bet_team, bet_moneyline, bet_units):
     return {
         "date": pd.Timestamp("2026-07-20"), "game_pk": game_pk, "home_team": home_team, "away_team": away_team,
         "predicted_winner": home_team, "predicted_probability": 0.6, "metric": "GamePick_Win_Probability",
         "actual_winner": pd.NA, "game_played": pd.NA,
-        "bet_advised": True, "bet_side": bet_side, "bet_team": bet_team, "bet_moneyline": bet_moneyline,
-        "bet_stake_fraction": bet_stake_dollars / config.KELLY_REFERENCE_BANKROLL,
-        "bet_stake_dollars": bet_stake_dollars, "bet_profit_dollars": pd.NA,
+        "bet_units": bet_units, "bet_side": bet_side, "bet_team": bet_team, "bet_moneyline": bet_moneyline,
+        "bet_stake_fraction": bet_units * config.UNIT_SIZE_FRACTION, "bet_profit_units": pd.NA,
     }
 
 
 def test_resolve_game_predictions_computes_real_profit_on_a_winning_advised_bet(tmp_path):
     log_path = str(tmp_path / "game_predictions.csv")
-    picks = pd.DataFrame([_advised_pick_row(1, "NYY", "BOS", "home", "NYY", -150, 100.0)])
+    picks = pd.DataFrame([_advised_pick_row(1, "NYY", "BOS", "home", "NYY", -150, 3.0)])
     game_predictions.append_game_predictions(picks, log_path)
 
     def fetch_results(date):
@@ -511,13 +508,13 @@ def test_resolve_game_predictions_computes_real_profit_on_a_winning_advised_bet(
 
     resolved = game_predictions.resolve_game_predictions(log_path, fetch_results, pd.Timestamp("2026-07-21"))
 
-    # net odds b = 100/150 -> profit = 100 * (100/150) = 66.666...
-    assert resolved.iloc[0]["bet_profit_dollars"] == pytest.approx(100 * (100 / 150))
+    # net odds b = 100/150 -> profit = 3 * (100/150) = 2.0
+    assert resolved.iloc[0]["bet_profit_units"] == pytest.approx(3 * (100 / 150))
 
 
 def test_resolve_game_predictions_computes_real_loss_on_a_losing_advised_bet(tmp_path):
     log_path = str(tmp_path / "game_predictions.csv")
-    picks = pd.DataFrame([_advised_pick_row(1, "NYY", "BOS", "home", "NYY", -150, 100.0)])
+    picks = pd.DataFrame([_advised_pick_row(1, "NYY", "BOS", "home", "NYY", -150, 3.0)])
     game_predictions.append_game_predictions(picks, log_path)
 
     def fetch_results(date):
@@ -525,19 +522,20 @@ def test_resolve_game_predictions_computes_real_loss_on_a_losing_advised_bet(tmp
 
     resolved = game_predictions.resolve_game_predictions(log_path, fetch_results, pd.Timestamp("2026-07-21"))
 
-    assert resolved.iloc[0]["bet_profit_dollars"] == pytest.approx(-100.0)
+    assert resolved.iloc[0]["bet_profit_units"] == pytest.approx(-3.0)
 
 
 def test_resolve_game_predictions_leaves_profit_null_for_a_non_advised_resolved_game(tmp_path):
     log_path = str(tmp_path / "game_predictions.csv")
-    # A real select_game_picks row always has all 7 bet_* columns together
-    # (NaN when not advised) - matches that real shape, not a hand-trimmed one.
+    # A real select_game_picks row always has all 6 bet_* columns together
+    # (bet_units=0.0, rest NaN when not advised) - matches that real shape,
+    # not a hand-trimmed one.
     picks = pd.DataFrame([{
         "date": pd.Timestamp("2026-07-20"), "game_pk": 1, "home_team": "NYY", "away_team": "BOS",
         "predicted_winner": "NYY", "predicted_probability": 0.65, "metric": "GamePick_Win_Probability",
-        "actual_winner": pd.NA, "game_played": pd.NA, "bet_advised": False,
+        "actual_winner": pd.NA, "game_played": pd.NA, "bet_units": 0.0,
         "bet_side": pd.NA, "bet_team": pd.NA, "bet_moneyline": pd.NA,
-        "bet_stake_fraction": pd.NA, "bet_stake_dollars": pd.NA, "bet_profit_dollars": pd.NA,
+        "bet_stake_fraction": pd.NA, "bet_profit_units": pd.NA,
     }])
     game_predictions.append_game_predictions(picks, log_path)
 
@@ -546,4 +544,4 @@ def test_resolve_game_predictions_leaves_profit_null_for_a_non_advised_resolved_
 
     resolved = game_predictions.resolve_game_predictions(log_path, fetch_results, pd.Timestamp("2026-07-21"))
 
-    assert pd.isna(resolved.iloc[0]["bet_profit_dollars"])
+    assert pd.isna(resolved.iloc[0]["bet_profit_units"])

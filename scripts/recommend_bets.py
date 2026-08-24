@@ -28,6 +28,11 @@ meaningful sample (see the confidence banner this script always prints).
 This script shows real, honestly-computed numbers - it is not a proven
 betting strategy, and never claims to be.
 
+Stakes are reported in UNITS (config.UNIT_SIZE_FRACTION of bankroll per
+unit - the standard sports-betting convention, bankroll-agnostic by
+design), not dollars - `--bankroll` is optional and only adds a real
+dollar-amount column for convenience when actually placing a bet.
+
 Usage:
     python scripts/recommend_bets.py
     python scripts/recommend_bets.py --date 2026-08-24 --bankroll 1000
@@ -156,6 +161,11 @@ def main():
         )
         return
 
+    # Units - config.UNIT_SIZE_FRACTION of bankroll per unit, the standard
+    # bankroll-agnostic sports-betting convention. Always shown; a real
+    # dollar amount is only added when --bankroll is given, purely for
+    # convenience at the moment of actually placing the bet.
+    recommendations["units"] = recommendations["kelly_stake_fraction"] / config.UNIT_SIZE_FRACTION
     if args.bankroll is not None:
         recommendations["recommended_stake_dollars"] = recommendations["kelly_stake_fraction"] * args.bankroll
 

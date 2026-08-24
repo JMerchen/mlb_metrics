@@ -37,8 +37,8 @@ def build_game_picks_export(
     with a win/loss/not_played/pending status, most recent day first, plus
     that `above_threshold` flag so the dashboard can highlight the model's
     own confident picks alongside the rest. summary_row's real tracking
-    (`n_bets_advised`/`total_profit_dollars`/etc., see `_bet_pnl_metrics`
-    below) is scoped to `bet_advised` - NOT `above_threshold` - since the
+    (`n_bets_advised`/`total_profit_units`/etc., see `_bet_pnl_metrics`
+    below) is scoped to `bet_units > 0` - NOT `above_threshold` - since the
     real question worth tracking is "did the bets the market actually
     disagreed with make money," not "was the model's own favorite right."
     (`above_threshold` still flags/publishes every game, it just no longer
@@ -65,12 +65,11 @@ def build_game_picks_export(
         # Migrate a log written before slice 2's market column existed -
         # genuinely no real market data for those rows, NaN not a guess.
         picks["market_home_win_probability"] = pd.NA
-    if "bet_advised" not in picks.columns:
+    if "bet_units" not in picks.columns:
         # A row logged before bet advice existed genuinely never had a bet
-        # advised - False is the factually correct backfill, not a guess.
-        picks["bet_advised"] = False
-        for col in ("bet_side", "bet_team", "bet_moneyline", "bet_stake_fraction",
-                    "bet_stake_dollars", "bet_profit_dollars"):
+        # advised - 0.0 units is the factually correct backfill, not a guess.
+        picks["bet_units"] = 0.0
+        for col in ("bet_side", "bet_team", "bet_moneyline", "bet_stake_fraction", "bet_profit_units"):
             picks[col] = pd.NA
     picks["status"] = _classify_outcome(picks)
     picks["actual_correct"] = pd.NA
@@ -82,14 +81,14 @@ def build_game_picks_export(
     beat_closing_line_rate, n_beat_closing_line_compared = _beat_closing_line_rate(recommended)
     (
         n_bets_advised, bets_won, bets_lost, win_rate_on_advised_bets,
-        total_staked_dollars, total_profit_dollars, roi, current_bet_streak, best_bet_streak,
+        total_staked_units, total_profit_units, roi, current_bet_streak, best_bet_streak,
     ) = _bet_pnl_metrics(picks)
 
     picks_out = picks[
         [
             "date", "game_pk", "home_team", "away_team", "predicted_winner",
             "predicted_probability", "above_threshold", "status", "market_home_win_probability",
-            "bet_advised", "bet_side", "bet_team", "bet_moneyline", "bet_stake_dollars", "bet_profit_dollars",
+            "bet_units", "bet_side", "bet_team", "bet_moneyline", "bet_profit_units",
         ]
     ].sort_values("date", ascending=False).reset_index(drop=True)
 
@@ -102,8 +101,8 @@ def build_game_picks_export(
                 "bets_won": bets_won,
                 "bets_lost": bets_lost,
                 "win_rate_on_advised_bets": win_rate_on_advised_bets,
-                "total_staked_dollars": total_staked_dollars,
-                "total_profit_dollars": total_profit_dollars,
+                "total_staked_units": total_staked_units,
+                "total_profit_units": total_profit_units,
                 "roi": roi,
                 "current_bet_streak": current_bet_streak,
                 "best_bet_streak": best_bet_streak,
@@ -120,33 +119,34 @@ def build_game_picks_export(
 
 
 def _bet_pnl_metrics(picks: pd.DataFrame):
-    """Real money tracking, scoped to games where a bet was actually
-    ADVISED (game_predictions.advise_bets' real Kelly-edge gate cleared) -
-    NOT the model's own above_threshold confidence gate. This project's
-    real quant-facing question is "did the advised bets make money," not
-    "was the model's favorite pick accurate" - see build_game_picks_export's
-    own docstring. Scoped to bet_profit_dollars.notna() - real, resolved,
-    advised bets only; a still-pending advised bet doesn't count yet, and
-    a non-advised game never gets a bet_profit_dollars value at all (see
+    """Real units won/lost, scoped to games where a bet was actually
+    ADVISED (game_predictions.advise_bets' real Kelly-edge gate cleared,
+    i.e. bet_units > 0) - NOT the model's own above_threshold confidence
+    gate. This project's real quant-facing question is "did the advised
+    bets make money," not "was the model's favorite pick accurate" - see
+    build_game_picks_export's own docstring. Scoped to
+    bet_profit_units.notna() - real, resolved, advised bets only; a still-
+    pending advised bet doesn't count yet, and a non-advised game
+    (bet_units == 0) never gets a bet_profit_units value at all (see
     game_predictions.resolve_game_predictions)."""
-    resolved = picks[picks["bet_profit_dollars"].notna()].copy()
+    resolved = picks[picks["bet_profit_units"].notna()].copy()
     n_bets_advised = len(resolved)
     if n_bets_advised == 0:
         return 0, 0, 0, float("nan"), 0.0, 0.0, float("nan"), 0, 0
 
-    resolved["bet_profit_dollars"] = resolved["bet_profit_dollars"].astype(float)
-    resolved["bet_stake_dollars"] = resolved["bet_stake_dollars"].astype(float)
+    resolved["bet_profit_units"] = resolved["bet_profit_units"].astype(float)
+    resolved["bet_units"] = resolved["bet_units"].astype(float)
 
-    bets_won = int((resolved["bet_profit_dollars"] > 0).sum())
-    bets_lost = int((resolved["bet_profit_dollars"] < 0).sum())
+    bets_won = int((resolved["bet_profit_units"] > 0).sum())
+    bets_lost = int((resolved["bet_profit_units"] < 0).sum())
     win_rate = bets_won / n_bets_advised
-    total_staked = float(resolved["bet_stake_dollars"].sum())
-    total_profit = float(resolved["bet_profit_dollars"].sum())
+    total_staked = float(resolved["bet_units"].sum())
+    total_profit = float(resolved["bet_profit_units"].sum())
     roi = total_profit / total_staked if total_staked else float("nan")
 
     current_streak = 0
     best_streak = 0
-    for profit in resolved.sort_values("date")["bet_profit_dollars"]:
+    for profit in resolved.sort_values("date")["bet_profit_units"]:
         current_streak = current_streak + 1 if profit > 0 else 0
         best_streak = max(best_streak, current_streak)
 

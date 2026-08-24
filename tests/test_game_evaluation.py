@@ -8,15 +8,14 @@ from mlb_metrics import game_evaluation
 
 def _pick(date, game_pk, home_team, away_team, predicted_winner, predicted_probability, actual_winner, game_played,
           metric="GamePick_Win_Probability", market_home_win_probability=None,
-          bet_advised=False, bet_side=None, bet_team=None, bet_moneyline=None,
-          bet_stake_dollars=None, bet_profit_dollars=None):
+          bet_units=0.0, bet_side=None, bet_team=None, bet_moneyline=None, bet_profit_units=None):
     return {
         "date": date, "game_pk": game_pk, "home_team": home_team, "away_team": away_team,
         "predicted_winner": predicted_winner, "predicted_probability": predicted_probability,
         "metric": metric, "actual_winner": actual_winner, "game_played": game_played,
         "market_home_win_probability": market_home_win_probability,
-        "bet_advised": bet_advised, "bet_side": bet_side, "bet_team": bet_team, "bet_moneyline": bet_moneyline,
-        "bet_stake_dollars": bet_stake_dollars, "bet_profit_dollars": bet_profit_dollars,
+        "bet_units": bet_units, "bet_side": bet_side, "bet_team": bet_team, "bet_moneyline": bet_moneyline,
+        "bet_profit_units": bet_profit_units,
     }
 
 
@@ -59,7 +58,7 @@ def test_build_game_picks_export_min_probability_flags_but_does_not_drop():
     # Every game is still published, not just the ones clearing .63 - only
     # 0.65 (pk 1) and 0.7 (pk 3) are flagged above_threshold. above_threshold
     # is still published for the dashboard, it just no longer drives the
-    # headline scoring below (bet_advised does - see the bet-P&L tests).
+    # headline scoring below (bet_units does - see the bet-P&L tests).
     assert set(picks["game_pk"]) == {1, 2, 3, 4, 5}
     by_pk = picks.set_index("game_pk")
     assert by_pk.loc[1, "above_threshold"] == True  # noqa: E712
@@ -72,11 +71,11 @@ def test_build_game_picks_export_min_probability_flags_but_does_not_drop():
 def test_build_game_picks_export_only_bet_advised_games_affect_pnl_scoring():
     # A real win on a game where NO bet was advised must not move the P&L
     # numbers at all - above_threshold is irrelevant here too; only
-    # bet_advised (and a real resolved bet_profit_dollars) counts.
+    # bet_units > 0 (and a real resolved bet_profit_units) counts.
     rows = [
         _pick("2026-07-18", 1, "NYY", "BOS", "NYY", 0.90, "NYY", 1,
-              bet_advised=True, bet_side="home", bet_team="NYY", bet_moneyline=-150,
-              bet_stake_dollars=100.0, bet_profit_dollars=100 * (100 / 150)),  # advised, real win
+              bet_units=3.0, bet_side="home", bet_team="NYY", bet_moneyline=-150,
+              bet_profit_units=3 * (100 / 150)),  # advised, real win
         _pick("2026-07-19", 2, "LAD", "SF", "LAD", 0.50, "SF", 1),  # NOT advised, real loss - must not count
         _pick("2026-07-20", 3, "HOU", "SEA", "HOU", 0.85, "HOU", 1),  # NOT advised, real win - must not count
     ]
@@ -89,7 +88,7 @@ def test_build_game_picks_export_only_bet_advised_games_affect_pnl_scoring():
     assert summary.loc[0, "n_bets_advised"] == 1
     assert summary.loc[0, "bets_won"] == 1
     assert summary.loc[0, "win_rate_on_advised_bets"] == pytest.approx(1.0)
-    assert summary.loc[0, "total_profit_dollars"] == pytest.approx(100 * (100 / 150))
+    assert summary.loc[0, "total_profit_units"] == pytest.approx(3 * (100 / 150))
 
 
 def test_build_game_picks_export_ignores_other_metrics():
@@ -136,15 +135,15 @@ def test_build_game_picks_export_no_resolved_games_yet():
 def test_build_game_picks_export_bet_pnl_metrics_real_win_and_loss():
     rows = [
         _pick("2026-07-18", 1, "NYY", "BOS", "NYY", 0.65, "NYY", 1,
-              bet_advised=True, bet_side="home", bet_team="NYY", bet_moneyline=-150,
-              bet_stake_dollars=100.0, bet_profit_dollars=100 * (100 / 150)),  # win
+              bet_units=3.0, bet_side="home", bet_team="NYY", bet_moneyline=-150,
+              bet_profit_units=3 * (100 / 150)),  # win
         _pick("2026-07-19", 2, "LAD", "SF", "LAD", 0.6, "SF", 1,
-              bet_advised=True, bet_side="home", bet_team="LAD", bet_moneyline=-120,
-              bet_stake_dollars=50.0, bet_profit_dollars=-50.0),  # loss
+              bet_units=1.5, bet_side="home", bet_team="LAD", bet_moneyline=-120,
+              bet_profit_units=-1.5),  # loss
         _pick("2026-07-20", 3, "HOU", "SEA", "HOU", 0.7, "HOU", 1),  # never advised - excluded entirely
         _pick("2026-07-21", 4, "ATL", "PHI", "ATL", 0.62, None, None,
-              bet_advised=True, bet_side="home", bet_team="ATL", bet_moneyline=-130,
-              bet_stake_dollars=75.0, bet_profit_dollars=None),  # advised but still pending - excluded
+              bet_units=2.25, bet_side="home", bet_team="ATL", bet_moneyline=-130,
+              bet_profit_units=None),  # advised but still pending - excluded
     ]
     df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"])
@@ -155,10 +154,10 @@ def test_build_game_picks_export_bet_pnl_metrics_real_win_and_loss():
     assert summary.loc[0, "bets_won"] == 1
     assert summary.loc[0, "bets_lost"] == 1
     assert summary.loc[0, "win_rate_on_advised_bets"] == pytest.approx(0.5)
-    assert summary.loc[0, "total_staked_dollars"] == pytest.approx(150.0)
-    expected_profit = 100 * (100 / 150) - 50.0
-    assert summary.loc[0, "total_profit_dollars"] == pytest.approx(expected_profit)
-    assert summary.loc[0, "roi"] == pytest.approx(expected_profit / 150.0)
+    assert summary.loc[0, "total_staked_units"] == pytest.approx(4.5)
+    expected_profit = 3 * (100 / 150) - 1.5
+    assert summary.loc[0, "total_profit_units"] == pytest.approx(expected_profit)
+    assert summary.loc[0, "roi"] == pytest.approx(expected_profit / 4.5)
 
 
 def test_build_game_picks_export_bet_streak_is_plain_consecutive_wins():
@@ -168,14 +167,11 @@ def test_build_game_picks_export_bet_streak_is_plain_consecutive_wins():
     # streak used, just scored on profit>0 instead of correctness.
     rows = [
         _pick("2026-07-18", 1, "NYY", "BOS", "NYY", 0.65, "NYY", 1,
-              bet_advised=True, bet_team="NYY", bet_moneyline=-150, bet_stake_dollars=100.0,
-              bet_profit_dollars=66.67),
+              bet_units=3.0, bet_team="NYY", bet_moneyline=-150, bet_profit_units=2.0),
         _pick("2026-07-19", 2, "LAD", "SF", "LAD", 0.6, "SF", 1,
-              bet_advised=True, bet_team="LAD", bet_moneyline=-120, bet_stake_dollars=50.0,
-              bet_profit_dollars=-50.0),
+              bet_units=1.5, bet_team="LAD", bet_moneyline=-120, bet_profit_units=-1.5),
         _pick("2026-07-20", 3, "HOU", "SEA", "HOU", 0.7, "HOU", 1,
-              bet_advised=True, bet_team="HOU", bet_moneyline=-130, bet_stake_dollars=75.0,
-              bet_profit_dollars=57.69),
+              bet_units=2.25, bet_team="HOU", bet_moneyline=-130, bet_profit_units=1.73),
     ]
     df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"])
@@ -196,12 +192,12 @@ def test_build_game_picks_export_bet_columns_missing_migration():
     ]
     df = pd.DataFrame(rows)
     df["date"] = pd.to_datetime(df["date"])
-    assert "bet_advised" not in df.columns
+    assert "bet_units" not in df.columns
 
     picks, summary = game_evaluation.build_game_picks_export(df)
 
     assert summary.loc[0, "n_bets_advised"] == 0
-    assert "bet_advised" in picks.columns
+    assert "bet_units" in picks.columns
 
 
 def test_build_game_picks_export_market_metrics_are_nan_with_no_real_market_data():
