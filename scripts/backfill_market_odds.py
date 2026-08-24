@@ -40,7 +40,22 @@ def backfill_market_probabilities(log_path: str, fetch_fn, dates) -> pd.DataFram
     already uses for fetch_results_fn - so this is testable without real
     network. A date whose fetch fails is skipped (warned, not fatal) so
     one bad date can't block the rest. Writes the updated log back to
-    `log_path` and returns it."""
+    `log_path` and returns it.
+
+    Defended against a real doubleheader collision: market_odds.py matches
+    by (home_team, away_team) only (no date/game key - a disclosed,
+    pre-existing limitation, same one game_predictions.advise_bets already
+    guards against on the live bet-advice side). If `market` has more than
+    one row for the same team pair on a date, `.set_index(...).loc[key]`
+    stops returning a scalar for EVERY key that day (not just the
+    duplicated one) once the index itself is non-unique, and a naive
+    `.at[idx, col] = ...` assignment silently stores that non-scalar
+    object into the cell - it round-trips through `to_csv` as a garbled
+    string repr instead of a real float. Any duplicated team pair is
+    dropped from `market` before the lookup, with a warning, rather than
+    guessing which of the real games a plain team-pair match can't tell
+    apart - the same "drop both, don't guess" choice
+    game_predictions.select_game_picks already makes for advised bets."""
     log = pd.read_csv(log_path, parse_dates=["date"])
     if "market_home_win_probability" not in log.columns:
         log["market_home_win_probability"] = pd.NA
@@ -55,12 +70,23 @@ def backfill_market_probabilities(log_path: str, fetch_fn, dates) -> pd.DataFram
         if market is None or market.empty:
             continue
 
+        dupe_mask = market.duplicated(subset=["home_team", "away_team"], keep=False)
+        if dupe_mask.any():
+            dupe_matchups = sorted(set(zip(market.loc[dupe_mask, "home_team"], market.loc[dupe_mask, "away_team"])))
+            print(
+                f"WARNING: real ESPN market fetch for {date.date()} has more than one row for "
+                f"matchup(s) {dupe_matchups} (a real doubleheader collision - market_odds.py "
+                f"matches teams only, no date/game key); dropping those matchups for this "
+                f"backfill rather than guessing which value belongs to which real game."
+            )
+            market = market[~dupe_mask]
+
         market_by_matchup = market.set_index(["home_team", "away_team"])["market_home_win_probability"]
         day_mask = (log["date"] == date) & log["market_home_win_probability"].isna()
         for idx in log.index[day_mask]:
             key = (log.at[idx, "home_team"], log.at[idx, "away_team"])
             if key in market_by_matchup.index:
-                log.at[idx, "market_home_win_probability"] = market_by_matchup.loc[key]
+                log.at[idx, "market_home_win_probability"] = float(market_by_matchup.loc[key])
 
     log.to_csv(log_path, index=False)
     return log

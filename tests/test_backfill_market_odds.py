@@ -86,6 +86,45 @@ def test_backfill_leaves_an_unmatched_row_null(tmp_path):
     assert pd.isna(result.iloc[0]["market_home_win_probability"])
 
 
+def test_backfill_drops_a_real_doubleheader_collision_instead_of_corrupting_the_whole_day(tmp_path):
+    # A real bug found on 2026-08-17's actual backfilled data: CIN@STL
+    # played a real doubleheader that day, so the fetch returned TWO rows
+    # for the same (home_team, away_team) pair. set_index(...)["col"]
+    # over a non-unique index makes EVERY .loc[key] lookup that day return
+    # a Series instead of a scalar (not just CIN/STL's own lookup) - a
+    # naive assignment silently stores that Series object into the cell,
+    # which round-trips through CSV as a garbled string repr. The real
+    # fix: drop the duplicated matchup and warn, but every OTHER real
+    # matchup that day must still backfill correctly as a clean float.
+    module = _load_module()
+    log_path = str(tmp_path / "game_predictions.csv")
+    pd.DataFrame([
+        _log_row("2026-08-17", 1, "CIN", "STL"),
+        _log_row("2026-08-17", 2, "CIN", "STL"),  # the real doubleheader's second game
+        _log_row("2026-08-17", 3, "TB", "BAL"),
+    ]).to_csv(log_path, index=False)
+
+    def fake_fetch(date):
+        return pd.DataFrame([
+            {"home_team": "CIN", "away_team": "STL", "market_home_win_probability": 0.488215, "market_provider": "DraftKings"},
+            {"home_team": "CIN", "away_team": "STL", "market_home_win_probability": 0.481293, "market_provider": "DraftKings"},
+            {"home_team": "TB", "away_team": "BAL", "market_home_win_probability": 0.606631, "market_provider": "DraftKings"},
+        ])
+
+    result = module.backfill_market_probabilities(log_path, fake_fetch, [pd.Timestamp("2026-08-17")])
+
+    by_pk = result.set_index("game_pk")
+    # Both real CIN@STL rows are left null - a plain team-pair match
+    # genuinely can't tell which of the two real games gets which real
+    # probability, so honestly NA beats a guess.
+    assert pd.isna(by_pk.loc[1, "market_home_win_probability"])
+    assert pd.isna(by_pk.loc[2, "market_home_win_probability"])
+    # TB@BAL is unaffected by CIN/STL's collision - a clean real float,
+    # not a corrupted Series-repr string.
+    assert by_pk.loc[3, "market_home_win_probability"] == 0.606631
+    assert isinstance(by_pk.loc[3, "market_home_win_probability"], float)
+
+
 def test_backfill_one_bad_date_does_not_block_the_others(tmp_path):
     module = _load_module()
     log_path = str(tmp_path / "game_predictions.csv")
