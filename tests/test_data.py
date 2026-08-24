@@ -1,3 +1,5 @@
+import os
+
 import pandas as pd
 
 from mlb_metrics import data
@@ -36,6 +38,95 @@ def test_persist_raw_statcast_appends_and_dedupes_by_pitch(tmp_path):
 
 def test_load_persisted_statcast_returns_none_when_absent(tmp_path):
     assert data.load_persisted_statcast(str(tmp_path / "raw"), 2026) is None
+
+
+def test_persist_raw_statcast_splits_by_real_calendar_month(tmp_path):
+    # A real, confirmed problem (not hypothetical): backfilling the real
+    # 2025 season produced a single ~110.6MB file, and GitHub rejects any
+    # committed file over 100MB outright. Splitting by month keeps every
+    # real file comfortably under that.
+    raw_dir = str(tmp_path / "raw")
+    season = 2026
+    two_months = pd.DataFrame({
+        "game_pk": [1, 2],
+        "at_bat_number": [1, 1],
+        "pitch_number": [1, 1],
+        "game_date": pd.to_datetime(["2026-04-15", "2026-05-02"]),
+        "events": ["single", "walk"],
+    })
+
+    data.persist_raw_statcast(two_months, raw_dir, season)
+
+    assert os.path.exists(os.path.join(raw_dir, "statcast_2026_04.parquet"))
+    assert os.path.exists(os.path.join(raw_dir, "statcast_2026_05.parquet"))
+    # Never the old single-file-per-season layout - only the new split.
+    assert not os.path.exists(os.path.join(raw_dir, "statcast_2026.parquet"))
+
+    april_only = pd.read_parquet(os.path.join(raw_dir, "statcast_2026_04.parquet"))
+    assert len(april_only) == 1
+    assert april_only.iloc[0]["game_pk"] == 1
+
+
+def test_persist_raw_statcast_dedupes_within_a_month_not_across_months(tmp_path):
+    raw_dir = str(tmp_path / "raw")
+    season = 2026
+    april = pd.DataFrame({
+        "game_pk": [1], "at_bat_number": [1], "pitch_number": [1],
+        "game_date": pd.to_datetime(["2026-04-15"]), "events": ["single"],
+    })
+    data.persist_raw_statcast(april, raw_dir, season)
+
+    april_update = pd.DataFrame({
+        "game_pk": [1], "at_bat_number": [1], "pitch_number": [1],  # same pitch key
+        "game_date": pd.to_datetime(["2026-04-15"]), "events": ["double"],  # updated value
+    })
+    result = data.persist_raw_statcast(april_update, raw_dir, season)
+
+    assert len(result) == 1  # deduped, not appended
+    assert result.iloc[0]["events"] == "double"  # keep="last" wins
+
+
+def test_load_persisted_statcast_still_reads_the_legacy_single_file_layout(tmp_path):
+    # This project's existing small synthetic test fixtures (dozens of
+    # them, across many test files) write directly to the OLD
+    # statcast_<season>.parquet filename, bypassing persist_raw_statcast
+    # entirely - load_persisted_statcast must keep reading that layout as
+    # a fallback so none of them need updating, even though
+    # persist_raw_statcast itself never writes it anymore.
+    raw_dir = str(tmp_path / "raw")
+    os.makedirs(raw_dir)
+    legacy = pd.DataFrame({
+        "game_pk": [1], "at_bat_number": [1], "pitch_number": [1],
+        "game_date": pd.to_datetime(["2026-04-15"]), "events": ["single"],
+    })
+    legacy.to_parquet(os.path.join(raw_dir, "statcast_2026.parquet"), index=False)
+
+    result = data.load_persisted_statcast(raw_dir, 2026)
+
+    assert result is not None
+    assert len(result) == 1
+    assert result.iloc[0]["game_pk"] == 1
+
+
+def test_load_persisted_statcast_merges_legacy_file_and_new_month_files(tmp_path):
+    # An edge case (both layouts coexisting for the same season) that
+    # shouldn't happen in practice after migration, but the union logic
+    # is real code, not just an assumption - worth confirming directly.
+    raw_dir = str(tmp_path / "raw")
+    os.makedirs(raw_dir)
+    pd.DataFrame({
+        "game_pk": [1], "at_bat_number": [1], "pitch_number": [1],
+        "game_date": pd.to_datetime(["2026-03-30"]), "events": ["single"],
+    }).to_parquet(os.path.join(raw_dir, "statcast_2026.parquet"), index=False)
+    pd.DataFrame({
+        "game_pk": [2], "at_bat_number": [1], "pitch_number": [1],
+        "game_date": pd.to_datetime(["2026-04-15"]), "events": ["walk"],
+    }).to_parquet(os.path.join(raw_dir, "statcast_2026_04.parquet"), index=False)
+
+    result = data.load_persisted_statcast(raw_dir, 2026)
+
+    assert len(result) == 2
+    assert set(result["game_pk"]) == {1, 2}
 
 
 def _pitch(game_pk, game_date, home, away, at_bat_number, pitch_number=1):
