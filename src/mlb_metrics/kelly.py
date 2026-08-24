@@ -1,11 +1,15 @@
 """Kelly-criterion bet sizing - a follow-up to the market-benchmark work
 (quant-analytics item #6): turns "the model's probability disagrees with
 the market's real price" into an actual recommended stake, once
-`scripts/recommend_bets.py` has computed that edge for real.
+`game_predictions.advise_bets` (used by both `pipeline.run()` and
+`scripts/recommend_bets.py`) has computed that edge for real.
 
 Deliberately pure, no `mlb_metrics.config` import - config wiring (which
-Kelly fraction multiplier, which minimum edge) happens in the calling
-script, same separation `decision_theory.py` already establishes for
+Kelly fraction multiplier, which minimum edge) happens in the CALLER, not
+here: either a script's CLI args, or a library function's own
+config-defaulted parameters (`game_predictions.select_game_picks`'s
+`kelly_fraction_multiplier`/`min_edge` params) - never hardcoded inside
+this module, same separation `decision_theory.py` already establishes for
 this project's other real decision-theory module. Needs nothing beyond
 stdlib math - no `pandas` dependency either, since both functions here
 operate on plain scalars.

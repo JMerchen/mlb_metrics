@@ -1329,6 +1329,74 @@ slate first (this session's log happened to be stale); the underlying
 edge/Kelly math itself is separately verified via hand-computed unit
 tests (`tests/test_kelly.py`, `tests/test_recommend_bets.py`).
 
+### Game-picks tracking pivot: bet-advised + real money won/lost (`game_predictions.advise_bets`)
+
+Now that a real bet can be advised and sized, the Automated Game Picks
+dashboard's tracking pivots to match: **replaces** the old
+`above_threshold`-scoped accuracy/streak tracking (was the model's own
+favorite pick right) with `bet_advised`-scoped real money tracking (did
+the bets the market actually disagreed with make money) - the real
+question worth answering now, per direct user request. `above_threshold`
+still gets published on every row for context; it just no longer drives
+the headline scoring. `market_accuracy`/`market_brier_score`/
+`beat_closing_line_rate` are untouched - a genuinely separate "are we
+better forecasters than the market" question, not what changed here.
+
+**Shared logic, not duplicated**: the same real edge/Kelly decision that
+used to live only inside `scripts/recommend_bets.py` (`build_bet_recommendations`)
+moved into `game_predictions.advise_bets` - `pipeline.run()` now calls it
+directly on each day's real logged picks + fetched market odds, so the
+SAME real decision that would be reported by `recommend_bets.py` gets
+logged automatically as part of the daily pipeline, not just printed on
+manual request. `recommend_bets.py` now calls this same shared function
+instead of keeping its own copy.
+
+**New logged columns** (`game_predictions.GAME_PREDICTION_COLUMNS`):
+`bet_advised`, `bet_side`, `bet_team`, `bet_moneyline`,
+`bet_stake_fraction`, `bet_stake_dollars`, `bet_profit_dollars`.
+`bet_stake_dollars = bet_stake_fraction * config.KELLY_REFERENCE_BANKROLL`
+(a new constant, **1000, fixed and notional** - purely so logged dollar
+amounts are comparable day to day, not a live/compounding bankroll; a
+real bettor still sizes their own real stakes off their own real current
+bankroll via `recommend_bets.py --bankroll`, which this constant doesn't
+touch). `bet_profit_dollars` is filled in only once
+`resolve_game_predictions` knows the real outcome - real profit
+(`bet_stake_dollars * kelly.moneyline_to_net_odds(bet_moneyline)`) on a
+win, `-bet_stake_dollars` on a loss, and stays null for a non-advised or
+still-pending game (never a fabricated 0).
+
+**Defended against a real doubleheader edge case**: `market_odds.py`
+matches by `(home_team, away_team)` only (no date key - a disclosed,
+pre-existing limitation), so a real doubleheader could in principle
+produce two bet-advice rows for the same `game_pk`. `select_game_picks`
+checks for this explicitly and drops both rows for any `game_pk` that
+collides, with a warning, rather than picking one arbitrarily.
+
+**Honest non-goals**: no historical backfill - raw moneylines were never
+persisted for any of the 461 pre-existing logged rows, and ESPN's
+confirmed real odds depth is only ~5 days back anyway, so this tracks
+forward from when it shipped, same "accumulate forward" precedent
+`game_picks.py`'s own docstring already established. `KELLY_REFERENCE_BANKROLL`
+is a fixed notional number, not a real compounding-bankroll simulation -
+that's a real, more complex follow-up, not this slice.
+
+**Dashboard**: `renderGamePickStats` replaced its Current Streak/Best
+Streak/Accuracy/Games Tracked tiles with Bet Streak/Best Bet Streak/Win
+Rate/Bets Tracked/P&L ($, colored green/red by sign) - Beat Closing Line
+stays, unchanged. `renderTodaysGamePicks`'s "recommended" card highlight
+now reflects `bet_advised` instead of `above_threshold`, and an advised
+card shows the real bet line (team/moneyline/stake). Verified via a local
+static-server + headless Chromium screenshot pass against synthetic data
+matching the real new schema - tiles, the advised-bet highlight, and the
+bet columns in the History table (fully data-driven, no JS change needed
+there) all render correctly.
+
+Full test suite: 650 passed (31 new/updated tests across
+`test_game_predictions.py`, `test_game_evaluation.py`,
+`test_recommend_bets.py`, `test_pipeline.py` - including a real
+end-to-end pipeline test that advises a bet on day 1 and resolves it into
+a real positive profit on day 2).
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our
