@@ -1239,6 +1239,78 @@ honestly - "we beat the closing line" is now a real, trackable number
 (currently answered "not yet, on the data logged so far"), not an
 unanswerable claim.
 
+### Kelly-criterion bet sizing (`kelly.py`, `scripts/recommend_bets.py`)
+
+A follow-up to the market benchmark above: turns "the model's probability
+disagrees with the market's real price" into an actual recommended stake.
+Three real design decisions worth stating plainly, since they run against
+common intuition:
+
+- **"Favorite" is irrelevant.** A favorite's higher win probability is
+  already priced into its moneyline - betting favorites has no edge baked
+  in by itself. The real signal is whether THIS project's own probability
+  for a side diverges from what that side's real price implies, in either
+  direction (an underdog the model likes more than the market does is
+  just as real an edge as a favorite it likes more).
+- **Single straight bets only - never parlays.** A parlay compounds the
+  book's vig across every leg, and would need real joint-probability
+  modeling this project doesn't have (`predictions._diversify_second_pick`
+  is an explicit sign-only proxy, not a real correlation estimate) to
+  ever be justified. `recommend_bets.py` never constructs or considers
+  multi-leg bets.
+- **No execution layer, and realistically none is coming.** Retail
+  sportsbooks don't offer public betting APIs to individuals, and
+  actively limit/ban bettors who show a persistent edge.
+  `scripts/recommend_bets.py` is a report a human reads and places the
+  bet from manually - not an automated pipeline stage.
+
+**Mechanics**: `kelly.py` (pure, no `config` import, mirrors
+`decision_theory.py`'s own separation of math from config wiring) -
+`moneyline_to_net_odds` converts a real American moneyline to net odds
+`b`; `kelly_fraction(probability, moneyline, fraction)` computes
+`max((p*b - (1-p))/b, 0) * fraction` - clipped at 0 (no real edge means
+no bet, never a negative stake), scaled by
+`config.KELLY_FRACTION_MULTIPLIER` (half-Kelly by default - full Kelly is
+only growth-optimal if the probability estimate is exactly right, and
+this project's own estimates carry real error, per the Wilson CIs used
+throughout). Critically, the edge computation compares the model's
+probability against the REAL, VIGGED market price
+(`market_odds.moneyline_to_implied_probability` on the real raw
+moneyline - `market_odds.py` now carries `home_moneyline`/`away_moneyline`
+alongside the existing de-vigged `market_home_win_probability`), not the
+de-vigged one - a real bet is paid off at the real price, so Kelly's
+net-odds term has to come from that same real price. `config.KELLY_MIN_EDGE`
+(0.02) is a minimum-edge buffer against noise before any stake is even
+considered.
+
+`scripts/recommend_bets.py` reads that day's ALREADY-LOGGED game picks
+(real `predicted_probability`/`predicted_winner` from `pipeline.run()`)
+rather than recomputing from raw Statcast, and fetches fresh real market
+odds for that exact date. Two independent safety checks before anything
+is recommended: (1) the target date defaults to `schedule.today_local()`
+and the script HARD REFUSES (raises, doesn't silently fall back) if the
+log has no unresolved picks for that date - a real staleness bug was
+caught in design review here, since `market_odds.py` matches games by
+`(home_team, away_team)` only, with no date key, so silently defaulting
+to "whatever's logged" risked blending one day's model probability with a
+different day's real game; (2) a second, independent check against
+`schedule.fetch_todays_games`' real MLB Stats API status, skipping any
+game that isn't still `"Scheduled"`. It's mathematically provable that
+the script never recommends both sides of one game when `min_edge > 0`
+(the two sides' edges always sum to `-vig`, which is always negative for
+a real book) - kept as a defensive runtime check anyway, since real data
+anomalies are a more likely explanation than real arbitrage in this
+pipeline.
+
+**Honest current status - always printed, never hidden**: every run
+prints the real `beat_closing_line_rate`/`n_beat_closing_line_compared`
+from `game_evaluation.py` as a leading banner, with an explicit
+"NOT YET STATISTICALLY VALIDATED" warning while `n` stays below
+`config.KELLY_MIN_GAMES_FOR_CONFIDENCE` (100, a conservative round floor,
+not a formal power calculation) - which it currently does (n=12, see
+above). This script computes and shows real numbers; it does not claim
+they're a proven strategy.
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our

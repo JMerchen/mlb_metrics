@@ -112,6 +112,11 @@ def test_extract_market_row_reproduces_a_real_dispatch_confirmed_devig():
     assert row["away_team"] == "TOR"
     assert row["market_provider"] == "DraftKings"
     assert row["market_home_win_probability"] == pytest.approx(0.6476, abs=1e-4)
+    # Raw moneylines carried alongside the de-vigged probability - needed
+    # for real Kelly bet sizing (kelly.py), which must be evaluated
+    # against the real, vigged price, not the de-vigged one.
+    assert row["home_moneyline"] == -193
+    assert row["away_moneyline"] == 179
 
 
 def test_extract_market_row_applies_the_real_abbrev_fixup():
@@ -127,6 +132,8 @@ def test_extract_market_row_applies_the_real_abbrev_fixup():
     assert row["home_team"] == "ATL"
     assert row["away_team"] == "AZ"
     assert row["market_home_win_probability"] == pytest.approx(0.5363, abs=1e-4)
+    assert row["home_moneyline"] == -120
+    assert row["away_moneyline"] == 112
 
 
 def test_extract_market_row_returns_none_without_a_real_home_away_split():
