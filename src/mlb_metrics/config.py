@@ -884,6 +884,16 @@ GAME_PICK_ML_WALK_FORWARD_TEST_BLOCK_DATES = 15
 MARKET_ODDS_PREFERRED_PROVIDER = "DraftKings"
 MARKET_ODDS_BACKFILL_DAYS_BACK = 5
 
+# Kelly-criterion bet sizing (kelly.py, scripts/recommend_bets.py) - a
+# follow-up to the market benchmark above: turns "model probability
+# disagrees with the market" into an actual recommended stake. Single
+# straight bets only, sized against the REAL vigged price (see
+# recommend_bets.py's own comment on why this differs from
+# market_home_win_probability above).
+KELLY_FRACTION_MULTIPLIER = 0.5  # half-Kelly - full Kelly is only growth-optimal if the probability estimate is exactly right; this project's own probabilities carry real estimation error (see the Wilson CIs throughout this project), and full Kelly's downside variance is severe when the estimate is even slightly off. Half-Kelly is the standard practitioner default.
+KELLY_MIN_EDGE = 0.02  # minimum (model probability - real vigged market-implied probability) before recommending any stake at all - a buffer against noise in the model's own probability estimate, not a number backed by a formal calculation.
+KELLY_MIN_GAMES_FOR_CONFIDENCE = 100  # a conservative, round floor for scripts/recommend_bets.py's printed confidence banner - NOT a formal power-calculation result. Below this many real n_beat_closing_line_compared games (see game_evaluation.py), the script still shows the real computed edge/stake numbers but prints an explicit "not yet statistically validated" warning rather than hiding them - real numbers, honestly labeled, not a silent gate.
+
 # Age Curves HR9's year-blocked CV (age_curve_ml.YearBlockedSplit) trains
 # only on seasons strictly before AGE_CURVE_HR9_TEST_YEAR_START (a
 # conservative, no-lookahead choice for a single GLOBAL regression model -

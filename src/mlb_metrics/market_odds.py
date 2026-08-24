@@ -94,9 +94,15 @@ def _extract_market_row(event: dict, summary_json: dict):
     """Combines one real ESPN scoreboard event (for real home/away team
     abbreviations, fixed up via ESPN_TEAM_ABBREV_FIXUPS) with that same
     event's real summary response (for pickcenter moneylines) into
-    {home_team, away_team, market_home_win_probability, market_provider}.
-    Returns None if either the home/away split or the moneylines are
-    missing - a real, honest "no data for this game" case, not a crash."""
+    {home_team, away_team, market_home_win_probability, market_provider,
+    home_moneyline, away_moneyline}. The raw moneylines are carried
+    alongside the de-vigged probability, not just used to compute it and
+    discarded - the de-vigged probability answers "who's the better
+    forecaster" (kelly.py/scripts/recommend_bets.py's own comments explain
+    why real bet sizing needs the RAW, vigged price instead - you're paid
+    off at the real price, not a de-vigged one). Returns None if either
+    the home/away split or the moneylines are missing - a real, honest
+    "no data for this game" case, not a crash."""
     home_abbrev = None
     away_abbrev = None
     for competition in event.get("competitions", []):
@@ -126,6 +132,8 @@ def _extract_market_row(event: dict, summary_json: dict):
         "away_team": away_abbrev,
         "market_home_win_probability": devig(home_implied, away_implied),
         "market_provider": provider_name,
+        "home_moneyline": home_ml,
+        "away_moneyline": away_ml,
     }
 
 
@@ -136,11 +144,11 @@ def fetch_market_home_win_probabilities(date) -> pd.DataFrame:
     one bad/unreachable/oddly-shaped game can't drop the rest (same
     per-item isolation game_predictions.resolve_game_predictions already
     uses per pending date). Returns a DataFrame with columns
-    [home_team, away_team, market_home_win_probability, market_provider],
-    one row per game that had usable odds - an empty DataFrame (same
-    columns) if none did. Matching onto this project's own picks is by
-    (home_team, away_team) only - see the module docstring's doubleheader
-    caveat."""
+    [home_team, away_team, market_home_win_probability, market_provider,
+    home_moneyline, away_moneyline], one row per game that had usable
+    odds - an empty DataFrame (same columns) if none did. Matching onto
+    this project's own picks is by (home_team, away_team) only - see the
+    module docstring's doubleheader caveat."""
     date_str = pd.Timestamp(date).strftime("%Y%m%d")
     scoreboard = fetch_scoreboard(date_str)
 
@@ -161,5 +169,8 @@ def fetch_market_home_win_probabilities(date) -> pd.DataFrame:
         if row is not None:
             rows.append(row)
 
-    columns = ["home_team", "away_team", "market_home_win_probability", "market_provider"]
+    columns = [
+        "home_team", "away_team", "market_home_win_probability", "market_provider",
+        "home_moneyline", "away_moneyline",
+    ]
     return pd.DataFrame(rows, columns=columns)
