@@ -218,3 +218,63 @@ def test_load_model_corrupt_file_returns_none(tmp_path):
     path = tmp_path / "corrupt.joblib"
     path.write_text("not a real joblib file")
     assert ml_models.load_model(str(path)) is None
+
+
+def _compressed_probability_dataset(seed: int = 0, n: int = 2000, compression: float = 0.3):
+    """A real, deterministic stand-in for the real bug this was built to
+    fix (quant-analytics "dig into calibration"): a raw probability
+    compressed toward 0.5 relative to the TRUE generating probability
+    (compression=0.3 means the raw score only expresses 30% of the real
+    log-odds spread) - same shape as game_picks.compute_game_win_probability's
+    real, measured under-spread (std 0.035 vs the real market's 0.059 on
+    the same games). Returns (raw_probability, actual_0_1, true_probability)."""
+    rng = np.random.RandomState(seed)
+    true_logit = rng.normal(scale=1.5, size=n)
+    true_p = 1 / (1 + np.exp(-true_logit))
+    actual = rng.binomial(1, true_p)
+    raw_p = 1 / (1 + np.exp(-compression * true_logit))
+    return pd.Series(raw_p), pd.Series(actual), true_p
+
+
+def test_fit_probability_calibration_isotonic_corrects_a_compressed_probability():
+    raw_p, actual, true_p = _compressed_probability_dataset()
+    raw_brier_vs_truth = np.mean((raw_p.to_numpy() - true_p) ** 2)
+
+    calibrator = ml_models.fit_probability_calibration(raw_p, actual, method="isotonic")
+    calibrated_p = calibrator.predict(raw_p.to_numpy())
+    calibrated_brier_vs_truth = np.mean((calibrated_p - true_p) ** 2)
+
+    # Same "score against known ground truth, not just observed outcomes"
+    # discipline as test_fit_calibrated_improves_brier_score_for_an_overconfident_classifier.
+    assert calibrated_brier_vs_truth < raw_brier_vs_truth
+    # The real point of this fix: calibration should widen the compressed
+    # spread back out toward the true one, not just shift it around.
+    assert calibrated_p.std() > raw_p.std()
+
+
+def test_fit_probability_calibration_sigmoid_corrects_a_compressed_probability():
+    raw_p, actual, true_p = _compressed_probability_dataset()
+    raw_brier_vs_truth = np.mean((raw_p.to_numpy() - true_p) ** 2)
+
+    calibrator = ml_models.fit_probability_calibration(raw_p, actual, method="sigmoid")
+    calibrated_p = calibrator.predict(raw_p.to_numpy())
+    calibrated_brier_vs_truth = np.mean((calibrated_p - true_p) ** 2)
+
+    assert calibrated_brier_vs_truth < raw_brier_vs_truth
+    assert calibrated_p.std() > raw_p.std()
+
+
+def test_fit_probability_calibration_unknown_method_raises():
+    raw_p, actual, _ = _compressed_probability_dataset(n=50)
+    with pytest.raises(ValueError):
+        ml_models.fit_probability_calibration(raw_p, actual, method="not-a-real-method")
+
+
+def test_fit_probability_calibration_isotonic_predict_is_monotonic():
+    raw_p, actual, _ = _compressed_probability_dataset()
+    calibrator = ml_models.fit_probability_calibration(raw_p, actual, method="isotonic")
+    grid = np.linspace(0.01, 0.99, 50)
+    calibrated = calibrator.predict(grid)
+    # Isotonic regression is monotonic by construction - a real, structural
+    # property, not just a numeric coincidence of this dataset.
+    assert (np.diff(calibrated) >= 0).all()

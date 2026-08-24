@@ -869,6 +869,18 @@ GAME_PICK_LOGIT_C_GRID = [0.01, 0.03, 0.1, 0.3, 1, 3, 10]
 GAME_PICK_ML_WALK_FORWARD_MIN_TRAIN_DATES = 40
 GAME_PICK_ML_WALK_FORWARD_TEST_BLOCK_DATES = 15
 
+# Quant-analytics follow-up ("dig into calibration", 2026-08-24):
+# scripts/train_game_pick_calibration.py's saved recalibration of
+# game_picks.compute_game_win_probabilities' raw home_win_probability
+# ratio - a DIFFERENT artifact from GAME_PICK_WIN_PROBABILITY_MODEL_PATH
+# above (that one is a from-scratch replacement model that already failed
+# to beat the heuristic; this one instead RESCALES the heuristic's own
+# output against real outcomes, isotonic or Platt/sigmoid - see
+# ml_models.fit_probability_calibration). Reuses the same walk-forward
+# constants and ML_FINAL_HOLDOUT_DATES above for direct comparability
+# with that earlier attempt, not new ones.
+GAME_PICK_CALIBRATION_MODEL_PATH = "data/models/game_pick_calibration_model.joblib"
+
 # Market benchmark (ESPN odds, mlb_metrics.market_odds) - quant-analytics
 # item #6, slice 2. "DraftKings" is the only provider seen in every real
 # pickcenter row slice 1's confirmation dispatch found (GitHub Actions run
