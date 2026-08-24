@@ -436,14 +436,16 @@ above.</p>
 <div class="methodGrid">
 
 <div class="methodCard" id="wald">
-<h3>Logistic Regression Coefficient Significance (Wald Test)</h3>
+<h3>Coefficient Significance (Wald Test)</h3>
 <p class="methodLabel">What it is</p>
-<p>After fitting a logistic regression, each coefficient comes with a
-standard error; dividing the coefficient by its standard error gives a
-z-statistic, which converts to a p-value - the probability of seeing a
-coefficient this large by chance if the true effect were zero. This is
-what separates "this feature looks predictive in this sample" from "this
-feature is actually predictive."</p>
+<p>After fitting a model like logistic regression, each coefficient comes
+with a standard error; dividing the coefficient by its standard error
+gives a z-statistic, which converts to a p-value - the probability of
+seeing a coefficient this large by chance if the true effect were zero.
+This is what separates "this feature looks predictive in this sample"
+from "this feature is actually predictive" - a different question from
+the Regression &amp; Classification Models section above, which is about
+FITTING a model, not testing whether its coefficients are real.</p>
 <p class="methodLabel">How we use it</p>
 <p><code>statsmodels.api.Logit</code>, fit once per feature alone and
 once with all features together, in

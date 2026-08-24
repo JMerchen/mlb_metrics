@@ -35,15 +35,17 @@ def build_game_picks_export(
     game_predictions.select_game_picks, which now logs every scheduled game
     with an `above_threshold` flag instead of dropping sub-threshold ones)
     with a win/loss/not_played/pending status, most recent day first, plus
-    that `above_threshold` flag so the dashboard can highlight the confident
-    ones without hiding the rest. summary_row's n_games_resolved/accuracy/
-    brier_score/log_loss/current_streak/best_streak are computed from the
-    `above_threshold` subset ONLY - scoring stays scoped to confident picks
-    exactly as before this change, a below-threshold game's real outcome
-    must never move these numbers. best_streak is a plain counter of
-    consecutive correct picks, not Beat the Streak's reset-on-any-miss
-    multi-pick mechanic (that's MLB's specific hitter-streak game rule and
-    doesn't apply to independent game-by-game win/loss picks).
+    that `above_threshold` flag so the dashboard can highlight the model's
+    own confident picks alongside the rest. summary_row's real tracking
+    (`n_bets_advised`/`total_profit_units`/etc., see `_bet_pnl_metrics`
+    below) is scoped to `bet_units > 0` - NOT `above_threshold` - since the
+    real question worth tracking is "did the bets the market actually
+    disagreed with make money," not "was the model's own favorite right."
+    (`above_threshold` still flags/publishes every game, it just no longer
+    drives the headline scoring - see `_market_comparison_metrics`/
+    `_beat_closing_line_rate` below for the genuinely separate "are we
+    better forecasters than the market" question, which IS still scoped to
+    `above_threshold` and untouched by this.)
 
     `model_version` (default None, i.e. every version blended together -
     unchanged behavior) restricts to picks tagged with a specific
@@ -63,31 +65,30 @@ def build_game_picks_export(
         # Migrate a log written before slice 2's market column existed -
         # genuinely no real market data for those rows, NaN not a guess.
         picks["market_home_win_probability"] = pd.NA
+    if "bet_units" not in picks.columns:
+        # A row logged before bet advice existed genuinely never had a bet
+        # advised - 0.0 units is the factually correct backfill, not a guess.
+        picks["bet_units"] = 0.0
+        for col in ("bet_side", "bet_team", "bet_moneyline", "bet_stake_fraction", "bet_profit_units"):
+            picks[col] = pd.NA
     picks["status"] = _classify_outcome(picks)
     picks["actual_correct"] = pd.NA
     picks.loc[picks["status"] == "win", "actual_correct"] = 1.0
     picks.loc[picks["status"] == "loss", "actual_correct"] = 0.0
 
     recommended = picks[picks["above_threshold"]]
-    resolved = evaluation.resolved_only(recommended, outcome_col="actual_correct")
-    n_resolved = len(resolved)
-    accuracy = float(resolved["actual_correct"].mean()) if n_resolved else float("nan")
-    brier = evaluation.brier_score(recommended, outcome_col="actual_correct")
-    ll = evaluation.log_loss(recommended, outcome_col="actual_correct")
-
-    current_streak = 0
-    best_streak = 0
-    for correct in resolved.sort_values("date")["actual_correct"]:
-        current_streak = current_streak + 1 if correct == 1 else 0
-        best_streak = max(best_streak, current_streak)
-
     market_accuracy, market_brier, market_ll, n_market_resolved = _market_comparison_metrics(recommended)
     beat_closing_line_rate, n_beat_closing_line_compared = _beat_closing_line_rate(recommended)
+    (
+        n_bets_advised, bets_won, bets_lost, win_rate_on_advised_bets,
+        total_staked_units, total_profit_units, roi, current_bet_streak, best_bet_streak,
+    ) = _bet_pnl_metrics(picks)
 
     picks_out = picks[
         [
             "date", "game_pk", "home_team", "away_team", "predicted_winner",
             "predicted_probability", "above_threshold", "status", "market_home_win_probability",
+            "bet_units", "bet_side", "bet_team", "bet_moneyline", "bet_profit_units",
         ]
     ].sort_values("date", ascending=False).reset_index(drop=True)
 
@@ -96,13 +97,15 @@ def build_game_picks_export(
             {
                 "model_version": model_version if model_version is not None else "all_time",
                 "metric": metric,
-                "min_probability": min_probability,
-                "n_games_resolved": n_resolved,
-                "accuracy": accuracy,
-                "brier_score": brier,
-                "log_loss": ll,
-                "current_streak": current_streak,
-                "best_streak": best_streak,
+                "n_bets_advised": n_bets_advised,
+                "bets_won": bets_won,
+                "bets_lost": bets_lost,
+                "win_rate_on_advised_bets": win_rate_on_advised_bets,
+                "total_staked_units": total_staked_units,
+                "total_profit_units": total_profit_units,
+                "roi": roi,
+                "current_bet_streak": current_bet_streak,
+                "best_bet_streak": best_bet_streak,
                 "n_market_resolved": n_market_resolved,
                 "market_accuracy": market_accuracy,
                 "market_brier_score": market_brier,
@@ -113,6 +116,41 @@ def build_game_picks_export(
         ]
     )
     return picks_out, summary
+
+
+def _bet_pnl_metrics(picks: pd.DataFrame):
+    """Real units won/lost, scoped to games where a bet was actually
+    ADVISED (game_predictions.advise_bets' real Kelly-edge gate cleared,
+    i.e. bet_units > 0) - NOT the model's own above_threshold confidence
+    gate. This project's real quant-facing question is "did the advised
+    bets make money," not "was the model's favorite pick accurate" - see
+    build_game_picks_export's own docstring. Scoped to
+    bet_profit_units.notna() - real, resolved, advised bets only; a still-
+    pending advised bet doesn't count yet, and a non-advised game
+    (bet_units == 0) never gets a bet_profit_units value at all (see
+    game_predictions.resolve_game_predictions)."""
+    resolved = picks[picks["bet_profit_units"].notna()].copy()
+    n_bets_advised = len(resolved)
+    if n_bets_advised == 0:
+        return 0, 0, 0, float("nan"), 0.0, 0.0, float("nan"), 0, 0
+
+    resolved["bet_profit_units"] = resolved["bet_profit_units"].astype(float)
+    resolved["bet_units"] = resolved["bet_units"].astype(float)
+
+    bets_won = int((resolved["bet_profit_units"] > 0).sum())
+    bets_lost = int((resolved["bet_profit_units"] < 0).sum())
+    win_rate = bets_won / n_bets_advised
+    total_staked = float(resolved["bet_units"].sum())
+    total_profit = float(resolved["bet_profit_units"].sum())
+    roi = total_profit / total_staked if total_staked else float("nan")
+
+    current_streak = 0
+    best_streak = 0
+    for profit in resolved.sort_values("date")["bet_profit_units"]:
+        current_streak = current_streak + 1 if profit > 0 else 0
+        best_streak = max(best_streak, current_streak)
+
+    return n_bets_advised, bets_won, bets_lost, win_rate, total_staked, total_profit, roi, current_streak, best_streak
 
 
 def _market_comparison_metrics(recommended: pd.DataFrame):

@@ -521,7 +521,11 @@ def test_run_logs_game_picks_when_schedule_fetch_succeeds(monkeypatch, tmp_path)
     assert pd.isna(logged.loc[0, "game_played"])
 
     summary = pd.read_csv(f"{tmp_path}/out/game_picks_summary.csv")
-    assert summary.loc[0, "n_games_resolved"] == 0
+    # No real market data mocked here (fetch_market_home_win_probabilities
+    # isn't patched, so pipeline.run()'s own try/except catches the real
+    # network failure and logs with market_probabilities=None) - no bets
+    # can be advised without a real market price to compare against.
+    assert summary.loc[0, "n_bets_advised"] == 0
 
 
 def test_run_continues_without_game_picks_when_schedule_fetch_fails(monkeypatch, tmp_path):
@@ -565,6 +569,18 @@ def test_run_resolves_game_picks_across_two_runs(monkeypatch, tmp_path):
     }])
     monkeypatch.setattr(pipeline.schedule, "fetch_todays_games", lambda date: schedule_games_day1)
 
+    # A real, generously-priced market underdog line on NYY (home) - the
+    # fixture's own model favors NYY substantially (better composite,
+    # weaker opposing pitcher), so this real vigged price (implied
+    # probabilities sum to 1.0348, a real ~3.5% vig) guarantees a real,
+    # unambiguous positive edge on the home side regardless of the exact
+    # model probability this fixture happens to produce.
+    market_day1 = pd.DataFrame([{
+        "home_team": "NYY", "away_team": "BOS", "market_home_win_probability": 0.4203,
+        "market_provider": "DraftKings", "home_moneyline": 130, "away_moneyline": -150,
+    }])
+    monkeypatch.setattr(pipeline.market_odds, "fetch_market_home_win_probabilities", lambda date: market_day1)
+
     predictions_dir = str(tmp_path / "predictions")
     pipeline.run(
         datetime.date(2026, 6, 19),
@@ -595,16 +611,24 @@ def test_run_resolves_game_picks_across_two_runs(monkeypatch, tmp_path):
     logged = pd.read_csv(f"{predictions_dir}/game_predictions.csv")
     assert logged.loc[0, "actual_winner"] == "NYY"
     assert logged.loc[0, "game_played"] == 1
+    # A real bet was advised on NYY (home) - real, positive Kelly units -
+    # and NYY winning for real resolves it into a real positive profit,
+    # via game_predictions.resolve_game_predictions' own extended logic.
+    assert logged.loc[0, "bet_units"] > 0
+    assert logged.loc[0, "bet_team"] == "NYY"
+    assert logged.loc[0, "bet_profit_units"] > 0
 
     picks_export = pd.read_csv(f"{tmp_path}/out/game_picks_picks.csv")
     assert picks_export.loc[0, "status"] == "win"
 
     summary_export = pd.read_csv(f"{tmp_path}/out/game_picks_summary.csv")
-    assert summary_export.loc[0, "n_games_resolved"] == 1
-    assert summary_export.loc[0, "accuracy"] == 1.0
+    assert summary_export.loc[0, "n_bets_advised"] == 1
+    assert summary_export.loc[0, "bets_won"] == 1
+    assert summary_export.loc[0, "win_rate_on_advised_bets"] == 1.0
+    assert summary_export.loc[0, "total_profit_units"] > 0
 
     by_version = pd.read_csv(f"{tmp_path}/out/game_picks_summary_by_version.csv")
     assert set(by_version["model_version"]) == {"all_time", pipeline.config.GAME_PICK_MODEL_VERSION}
     current_row = by_version[by_version["model_version"] == pipeline.config.GAME_PICK_MODEL_VERSION].iloc[0]
-    assert current_row["n_games_resolved"] == 1
-    assert current_row["accuracy"] == 1.0
+    assert current_row["n_bets_advised"] == 1
+    assert current_row["bets_won"] == 1

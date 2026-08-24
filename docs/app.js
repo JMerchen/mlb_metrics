@@ -1724,28 +1724,49 @@ return
 
 const s = summary[0]
 
-const accuracy =
-s.accuracy && s.accuracy !== ""
-? (Number(s.accuracy) * 100).toFixed(1) + "%"
-: "-"
-
 const stat = (value, label) =>
 `<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div></div>`
 
+// Quant-analytics item #6 follow-up: tracking is scoped to whether a real
+// bet was ADVISED (a real Kelly edge actually cleared - see
+// game_predictions.advise_bets), not the model's own above_threshold
+// confidence gate, and the headline number is real money won/lost, not
+// pick accuracy. "-" (same convention as beatClosingLine below) until
+// n_bets_advised clears 0.
+const hasBets = s.n_bets_advised && Number(s.n_bets_advised) > 0
+
+const winRate = hasBets
+? (Number(s.win_rate_on_advised_bets) * 100).toFixed(1) + "%"
+: "-"
+
+// Units, not dollars - the standard bankroll-agnostic sports-betting
+// convention (config.UNIT_SIZE_FRACTION of bankroll per unit). "u" suffix
+// matches how bettors actually write this ("+12.4u").
+const pnl = hasBets
+? (Number(s.total_profit_units) >= 0 ? "+" : "") + Number(s.total_profit_units).toFixed(2) + "u"
+: "-"
+
+const pnlColor = hasBets
+? (Number(s.total_profit_units) >= 0 ? "var(--success)" : "var(--danger)")
+: "inherit"
+
 // Quant-analytics item #6, slice 2 - "beat the closing line," the
-// item's literal stated goal. "-" (same convention as accuracy above)
-// until n_beat_closing_line_compared clears 0, i.e. until real ESPN
-// market odds have actually been logged/backfilled for resolved games.
+// item's literal stated goal. "-" until n_beat_closing_line_compared
+// clears 0, i.e. until real ESPN market odds have actually been
+// logged/backfilled for resolved games. Unchanged by the bet-P&L pivot
+// above - a genuinely separate "are we better forecasters than the
+// market" question, not what's being replaced.
 const beatClosingLine =
 s.beat_closing_line_rate && s.n_beat_closing_line_compared > 0
 ? (Number(s.beat_closing_line_rate) * 100).toFixed(1) + "%"
 : "-"
 
 el.innerHTML =
-stat(s.current_streak || 0, "Current Streak") +
-stat(s.best_streak || 0, "Best Streak") +
-stat(accuracy, "Accuracy") +
-stat(s.n_games_resolved || 0, "Games Tracked") +
+stat(s.current_bet_streak || 0, "Bet Streak") +
+stat(s.best_bet_streak || 0, "Best Bet Streak") +
+stat(winRate, "Win Rate") +
+stat(s.n_bets_advised || 0, "Bets Tracked") +
+`<div class="streakStat"><div class="value" style="color:${pnlColor}">${pnl}</div><div class="label">P&amp;L</div></div>` +
 stat(beatClosingLine, "Beat Closing Line")
 
 }
@@ -1754,10 +1775,10 @@ function renderTodaysGamePicks(picks){
 
 const el = document.getElementById("todaysGamePicks")
 
-// Every scheduled game is published now, not just ones clearing
-// GAME_PICK_MIN_PROBABILITY (see game_predictions.select_game_picks) - the
-// confident ones are highlighted via the "recommended" class below instead
-// of being the only ones shown.
+// Every scheduled game is published now, not just ones a real bet was
+// advised on (see game_predictions.advise_bets) - advised games are
+// highlighted via the "recommended" class below instead of being the
+// only ones shown.
 if(!picks.length){
 el.innerHTML = "No game picks published yet"
 return
@@ -1792,13 +1813,21 @@ p.predicted_probability && p.predicted_probability !== ""
 ? (Number(p.predicted_probability) * 100).toFixed(1) + "% predicted"
 : ""
 
-const recommended = p.above_threshold === "True" || p.above_threshold === "true"
+// bet_units is the real "was a bet advised" signal - 0 (or blank/NaN on
+// an older row) means no bet, any positive number is real units to risk.
+const betUnits = Number(p.bet_units)
+const betAdvised = betUnits > 0
+
+const betLine = betAdvised
+? `<div class="pickStatus">Bet advised: ${p.bet_team} @ ${p.bet_moneyline} (${betUnits.toFixed(2)}u)</div>`
+: ""
 
 return `
-<div class="pickCard ${p.status}${recommended ? " recommended" : ""}">
+<div class="pickCard ${p.status}${betAdvised ? " recommended" : ""}">
 <div class="pickName">${p.predicted_winner} (${p.away_team} @ ${p.home_team})</div>
 <div class="pickProb">${prob}</div>
 <div class="pickStatus">${statusLabels[p.status] || p.status}</div>
+${betLine}
 </div>
 `
 
