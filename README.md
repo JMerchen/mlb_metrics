@@ -1550,6 +1550,77 @@ Full test suite: 658 passed (no test changes needed - existing tests
 either pass `min_edge` explicitly or use a fixture with a wide enough
 margin to clear the new default).
 
+### Real follow-up: game-pick probability calibration (2026-08-24, not shipped)
+
+Direct follow-up to the `KELLY_MIN_EDGE` sanity-check above: on the 93
+real games with both a model probability and a real de-vigged market
+price, the model's `home_win_probability` was measurably narrower than
+the market's on the exact same games (std 0.0347, max 63.7% vs. the
+market's std 0.0588, max 72.7%) - the concrete mechanical cause of the
+false-edge problem, not just "the model disagrees with the market
+sometimes." A deeper, separate problem was also found: model and market
+agree on which team is even favored on only 72.0% of those 93 games -
+calibration can rescale confidence magnitude, but can't fix disagreement
+about *who's* favored.
+
+`ml_models.fit_probability_calibration` (isotonic or sigmoid/Platt, see
+`scripts/train_game_pick_calibration.py`) was built to rescale the
+heuristic's own raw probability against real resolved outcomes, wired
+live via `game_picks.apply_calibration` (called from `pipeline.run()`
+and the backtest reconstruction of "what today's live code would
+produce") with the same graceful-degradation contract every other
+optional ML artifact in this project already uses - falls back to the
+raw, uncalibrated heuristic when no artifact exists or hasn't cleared
+its own bar.
+
+**Real dispatched result** (GitHub Actions run 32759747063, full
+persisted log, 143 distinct dates, 1,578 train-pool rows / 274 final
+holdout rows - 111 rows with a NaN raw probability, a genuine missing-
+composite-data date, dropped before fitting): walk-forward CV picked
+sigmoid (tied with isotonic at mean log_loss=0.6903). On the real,
+untouched final holdout, calibrated (sigmoid) log_loss=0.6864 beat the
+raw heuristic's 0.6933 - but did **not** beat the naive always-predict-
+base-rate baseline (0.6814), so it was correctly **not saved** under
+this project's strict "must beat both" bar. Notably, the calibrated
+probability's spread on this holdout was narrower than the raw
+heuristic's (std 0.0344 vs. 0.0641), the opposite direction of the
+correction that's actually needed - a real sign this particular
+population/fit isn't the fix, not a bug in the calibration code itself.
+
+**Status: not shipped, reported honestly.** `game_picks.apply_calibration`
+and the training script both stay live in the codebase (graceful no-op
+until a real artifact clears the bar), but no artifact exists yet at
+`config.GAME_PICK_CALIBRATION_MODEL_PATH`. The deeper favored-team-
+disagreement finding (72.0% agreement) is a real, separate open
+question a rescaling fix can't address on its own.
+
+### Real infra fix: per-month Statcast persistence (2026-08-24)
+
+Backfilling the real 2025 season (`scripts/backfill_statcast_season.py`,
+built so this project's historical training data - independent of any
+market-odds history - isn't limited to the current season only) produced
+a single ~110.6MB `data/raw/statcast_2025.parquet`, and GitHub's real
+push limit rejected it outright ("GH001: Large files detected...exceeds
+GitHub's file size limit of 100.00 MB", a hard rejection, not a soft
+warning) - all 742,080 fetched pitch rows were lost when the runner tore
+down. The live production season's own `statcast_2026.parquet` was
+already at 85MB with roughly half the season elapsed, putting the daily
+pipeline's own commit step on the same real path to failure.
+
+Fix: `data.persist_raw_statcast`/`load_persisted_statcast` now split by
+real calendar month (`data/raw/statcast_<season>_<month>.parquet`)
+instead of one file per season, keeping the exact same `(raw_dir,
+season)` signature and still returning one combined DataFrame - none of
+this project's ~20 existing callers needed changes. The real
+`statcast_2026.parquet` was migrated (579,217 rows, byte-exact verified)
+into 6 per-month files (~4-20MB each); a legacy-fallback read path keeps
+this project's existing synthetic test fixtures (which write directly to
+the old single-file layout) working unchanged.
+
+Re-running the 2025 backfill after the fix succeeded cleanly: **742,080
+real pitch rows across 190 distinct dates, 2,531 distinct games**, split
+into 7 per-month files (largest 21.5MB), pushed without incident.
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our
