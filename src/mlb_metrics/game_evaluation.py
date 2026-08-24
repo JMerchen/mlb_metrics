@@ -77,11 +77,18 @@ def build_game_picks_export(
     picks.loc[picks["status"] == "loss", "actual_correct"] = 0.0
 
     recommended = picks[picks["above_threshold"]]
-    market_accuracy, market_brier, market_ll, n_market_resolved = _market_comparison_metrics(recommended)
-    beat_closing_line_rate, n_beat_closing_line_compared = _beat_closing_line_rate(recommended)
+    (
+        market_accuracy, market_brier, market_ll, n_market_resolved,
+        market_accuracy_ci_low, market_accuracy_ci_high,
+    ) = _market_comparison_metrics(recommended)
+    (
+        beat_closing_line_rate, n_beat_closing_line_compared,
+        beat_closing_line_rate_ci_low, beat_closing_line_rate_ci_high, beat_closing_line_rate_p_value,
+    ) = _beat_closing_line_rate(recommended)
     (
         n_bets_advised, bets_won, bets_lost, win_rate_on_advised_bets,
         total_staked_units, total_profit_units, roi, current_bet_streak, best_bet_streak,
+        win_rate_on_advised_bets_ci_low, win_rate_on_advised_bets_ci_high, roi_p_value,
     ) = _bet_pnl_metrics(picks)
 
     picks_out = picks[
@@ -101,17 +108,25 @@ def build_game_picks_export(
                 "bets_won": bets_won,
                 "bets_lost": bets_lost,
                 "win_rate_on_advised_bets": win_rate_on_advised_bets,
+                "win_rate_on_advised_bets_ci_low": win_rate_on_advised_bets_ci_low,
+                "win_rate_on_advised_bets_ci_high": win_rate_on_advised_bets_ci_high,
                 "total_staked_units": total_staked_units,
                 "total_profit_units": total_profit_units,
                 "roi": roi,
+                "roi_p_value": roi_p_value,
                 "current_bet_streak": current_bet_streak,
                 "best_bet_streak": best_bet_streak,
                 "n_market_resolved": n_market_resolved,
                 "market_accuracy": market_accuracy,
+                "market_accuracy_ci_low": market_accuracy_ci_low,
+                "market_accuracy_ci_high": market_accuracy_ci_high,
                 "market_brier_score": market_brier,
                 "market_log_loss": market_ll,
                 "n_beat_closing_line_compared": n_beat_closing_line_compared,
                 "beat_closing_line_rate": beat_closing_line_rate,
+                "beat_closing_line_rate_ci_low": beat_closing_line_rate_ci_low,
+                "beat_closing_line_rate_ci_high": beat_closing_line_rate_ci_high,
+                "beat_closing_line_rate_p_value": beat_closing_line_rate_p_value,
             }
         ]
     )
@@ -128,11 +143,26 @@ def _bet_pnl_metrics(picks: pd.DataFrame):
     bet_profit_units.notna() - real, resolved, advised bets only; a still-
     pending advised bet doesn't count yet, and a non-advised game
     (bet_units == 0) never gets a bet_profit_units value at all (see
-    game_predictions.resolve_game_predictions)."""
+    game_predictions.resolve_game_predictions).
+
+    Also returns two quant-analytics item #5 ("backtest scope and
+    statistical significance") additions:
+    - `win_rate_ci_low`/`win_rate_ci_high`: a Wilson CI on win_rate,
+      informational only (see evaluation.binomial_significance's own
+      docstring for why a win-rate p-value against 0.5 would be
+      statistically wrong here - moneylines vary bet to bet, so a raw
+      win/loss count alone can't tell a good -150 favorite bet apart
+      from a bad one the way real profit can).
+    - `roi_p_value`: the real, correctly-posed test - a one-sample
+      t-test (evaluation.mean_significance) on each advised bet's real
+      bet_profit_units against a null of 0 ("breaking even"). This is
+      the honest answer to "is this edge distinguishable from noise
+      yet," not just reporting a P&L number that could flip sign with
+      the next handful of bets."""
     resolved = picks[picks["bet_profit_units"].notna()].copy()
     n_bets_advised = len(resolved)
     if n_bets_advised == 0:
-        return 0, 0, 0, float("nan"), 0.0, 0.0, float("nan"), 0, 0
+        return 0, 0, 0, float("nan"), 0.0, 0.0, float("nan"), 0, 0, 0.0, 1.0, float("nan")
 
     resolved["bet_profit_units"] = resolved["bet_profit_units"].astype(float)
     resolved["bet_units"] = resolved["bet_units"].astype(float)
@@ -140,9 +170,11 @@ def _bet_pnl_metrics(picks: pd.DataFrame):
     bets_won = int((resolved["bet_profit_units"] > 0).sum())
     bets_lost = int((resolved["bet_profit_units"] < 0).sum())
     win_rate = bets_won / n_bets_advised
+    win_rate_ci_low, win_rate_ci_high = evaluation.wilson_confidence_interval(bets_won, n_bets_advised)
     total_staked = float(resolved["bet_units"].sum())
     total_profit = float(resolved["bet_profit_units"].sum())
     roi = total_profit / total_staked if total_staked else float("nan")
+    roi_p_value = evaluation.mean_significance(resolved["bet_profit_units"], null_value=0.0)
 
     current_streak = 0
     best_streak = 0
@@ -150,7 +182,10 @@ def _bet_pnl_metrics(picks: pd.DataFrame):
         current_streak = current_streak + 1 if profit > 0 else 0
         best_streak = max(best_streak, current_streak)
 
-    return n_bets_advised, bets_won, bets_lost, win_rate, total_staked, total_profit, roi, current_streak, best_streak
+    return (
+        n_bets_advised, bets_won, bets_lost, win_rate, total_staked, total_profit, roi, current_streak, best_streak,
+        win_rate_ci_low, win_rate_ci_high, roi_p_value,
+    )
 
 
 def _market_comparison_metrics(recommended: pd.DataFrame):
@@ -165,11 +200,11 @@ def _market_comparison_metrics(recommended: pd.DataFrame):
     real games slice 1/2 haven't backfilled yet correctly return NaN/0
     here, not a fabricated number. Quant-analytics item #6, slice 2."""
     if "market_home_win_probability" not in recommended.columns:
-        return float("nan"), float("nan"), float("nan"), 0
+        return float("nan"), float("nan"), float("nan"), 0, float("nan"), float("nan")
 
     with_market = recommended[recommended["market_home_win_probability"].notna()].copy()
     if with_market.empty:
-        return float("nan"), float("nan"), float("nan"), 0
+        return float("nan"), float("nan"), float("nan"), 0, float("nan"), float("nan")
 
     market_home_prob = pd.to_numeric(with_market["market_home_win_probability"], errors="coerce")
     favors_home = market_home_prob >= 0.5
@@ -186,7 +221,13 @@ def _market_comparison_metrics(recommended: pd.DataFrame):
     accuracy = float(resolved["market_correct"].mean()) if n_resolved else float("nan")
     brier = evaluation.brier_score(with_market, outcome_col="market_correct")
     ll = evaluation.log_loss(with_market, outcome_col="market_correct")
-    return accuracy, brier, ll, n_resolved
+    # Quant-analytics item #5: CI only, deliberately no p-value here - real
+    # MLB home teams win somewhat more than half their games, so 0.5 isn't
+    # a genuine "no skill" null for an unconditional accuracy rate the way
+    # it is for _beat_closing_line_rate's symmetric win/loss-per-game
+    # comparison below (see evaluation.binomial_significance's docstring).
+    ci_low, ci_high = evaluation.wilson_confidence_interval(int(resolved["market_correct"].sum()), n_resolved) if n_resolved else (float("nan"), float("nan"))
+    return accuracy, brier, ll, n_resolved, ci_low, ci_high
 
 
 def _beat_closing_line_rate(recommended: pd.DataFrame):
@@ -201,15 +242,26 @@ def _beat_closing_line_rate(recommended: pd.DataFrame):
     lower than the market's - ties (equal squared error) are excluded
     from both the numerator and the denominator, and the real comparison
     base is reported separately as n_beat_closing_line_compared so a rate
-    can never hide a tiny n."""
+    can never hide a tiny n.
+
+    Also returns a real Wilson CI and, unlike the other rate metrics in
+    this module, a real binomial_significance p-value against a null of
+    0.5 (quant-analytics item #5, "backtest scope and statistical
+    significance") - this IS a well-posed 0.5 null, unlike a raw
+    accuracy rate: "whose squared error is lower on this game" is a
+    genuinely symmetric coin flip under "no real skill difference
+    between the model and the market," so a small n like the 12-game
+    read this project started with can be honestly flagged as not yet
+    distinguishable from chance instead of read as real evidence of an
+    edge."""
     if "market_home_win_probability" not in recommended.columns:
-        return float("nan"), 0
+        return float("nan"), 0, float("nan"), float("nan"), float("nan")
 
     scoped = recommended[
         recommended["market_home_win_probability"].notna() & recommended["actual_winner"].notna()
     ].copy()
     if scoped.empty:
-        return float("nan"), 0
+        return float("nan"), 0, float("nan"), float("nan"), float("nan")
 
     actual_home_win = (scoped["actual_winner"] == scoped["home_team"]).astype(float)
     model_favors_home = scoped["predicted_winner"] == scoped["home_team"]
@@ -224,7 +276,11 @@ def _beat_closing_line_rate(recommended: pd.DataFrame):
     compared = model_error != market_error
     n_compared = int(compared.sum())
     if n_compared == 0:
-        return float("nan"), 0
+        return float("nan"), 0, float("nan"), float("nan"), float("nan")
 
     beat = (model_error < market_error) & compared
-    return float(beat.sum() / n_compared), n_compared
+    n_beat = int(beat.sum())
+    rate = float(n_beat / n_compared)
+    ci_low, ci_high = evaluation.wilson_confidence_interval(n_beat, n_compared)
+    p_value = evaluation.binomial_significance(n_beat, n_compared, null_probability=0.5)
+    return rate, n_compared, ci_low, ci_high, p_value

@@ -5,6 +5,7 @@ pyarrow
 MLB-StatsAPI
 scikit-learn
 statsmodels
+scipy
 joblib
 pulp
 nflreadpy

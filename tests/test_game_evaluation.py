@@ -3,7 +3,7 @@ import math
 import pandas as pd
 import pytest
 
-from mlb_metrics import game_evaluation
+from mlb_metrics import evaluation, game_evaluation
 
 
 def _pick(date, game_pk, home_team, away_team, predicted_winner, predicted_probability, actual_winner, game_played,
@@ -159,6 +159,19 @@ def test_build_game_picks_export_bet_pnl_metrics_real_win_and_loss():
     assert summary.loc[0, "total_profit_units"] == pytest.approx(expected_profit)
     assert summary.loc[0, "roi"] == pytest.approx(expected_profit / 4.5)
 
+    # Quant-analytics item #5: win_rate's real Wilson CI (1 win of 2
+    # advised bets) - informational only, not a significance test (see
+    # evaluation.mean_significance's own docstring for why win-rate alone
+    # isn't the right null-hypothesis test for a bets-of-varying-price
+    # strategy). roi_p_value IS the real, correctly-posed test: a
+    # one-sample t-test on the two real bet_profit_units values
+    # (3*(100/150), -1.5) against a null of 0 (breaking even).
+    expected_wr_low, expected_wr_high = evaluation.wilson_confidence_interval(1, 2)
+    assert summary.loc[0, "win_rate_on_advised_bets_ci_low"] == pytest.approx(expected_wr_low)
+    assert summary.loc[0, "win_rate_on_advised_bets_ci_high"] == pytest.approx(expected_wr_high)
+    expected_roi_p = evaluation.mean_significance(pd.Series([3 * (100 / 150), -1.5]), null_value=0.0)
+    assert summary.loc[0, "roi_p_value"] == pytest.approx(expected_roi_p)
+
 
 def test_build_game_picks_export_bet_streak_is_plain_consecutive_wins():
     # Chronological order: win, loss, win -> current streak resets on the
@@ -214,6 +227,19 @@ def test_build_game_picks_export_market_metrics_are_nan_with_no_real_market_data
     assert pd.isna(summary.loc[0, "beat_closing_line_rate"])
     assert "market_home_win_probability" in picks.columns
 
+    # Quant-analytics item #5: honestly NaN, not a fabricated CI/p-value,
+    # when there's no real market comparison data at all.
+    assert pd.isna(summary.loc[0, "market_accuracy_ci_low"])
+    assert pd.isna(summary.loc[0, "beat_closing_line_rate_ci_low"])
+    assert pd.isna(summary.loc[0, "beat_closing_line_rate_p_value"])
+    # No bets advised either - win_rate_on_advised_bets is honestly NaN,
+    # but its CI still reports the real "no information" Wilson bound
+    # (0.0, 1.0), same n=0 contract as evaluation.wilson_confidence_interval
+    # itself; roi_p_value is honestly NaN (no profit samples to test).
+    assert summary.loc[0, "win_rate_on_advised_bets_ci_low"] == 0.0
+    assert summary.loc[0, "win_rate_on_advised_bets_ci_high"] == 1.0
+    assert pd.isna(summary.loc[0, "roi_p_value"])
+
 
 def test_build_game_picks_export_market_metrics_missing_column_migration():
     # A log written before slice 2's column existed at all (not just null
@@ -266,6 +292,14 @@ def test_build_game_picks_export_market_accuracy_brier_log_loss():
     expected_market_log_loss = -(math.log(0.60) + math.log(0.70) + math.log(0.75)) / 3
     assert summary.loc[0, "market_log_loss"] == pytest.approx(expected_market_log_loss)
 
+    # Quant-analytics item #5: market_accuracy's real Wilson CI (3 of 3) -
+    # deliberately no p-value here (0.5 isn't a genuine "no skill" null for
+    # an unconditional accuracy rate, see _market_comparison_metrics'
+    # own docstring).
+    expected_low, expected_high = evaluation.wilson_confidence_interval(3, 3)
+    assert summary.loc[0, "market_accuracy_ci_low"] == pytest.approx(expected_low)
+    assert summary.loc[0, "market_accuracy_ci_high"] == pytest.approx(expected_high)
+
 
 def test_build_game_picks_export_beat_closing_line_rate_excludes_ties():
     picks, summary = game_evaluation.build_game_picks_export(_market_comparison_rows())
@@ -274,6 +308,15 @@ def test_build_game_picks_export_beat_closing_line_rate_excludes_ties():
     # only pk 1 (model win) and pk 2 (market win) count.
     assert summary.loc[0, "n_beat_closing_line_compared"] == 2
     assert summary.loc[0, "beat_closing_line_rate"] == pytest.approx(0.5)
+
+    # Quant-analytics item #5: this IS a well-posed 0.5 null ("whose
+    # squared error is lower on this game" is a genuine coin flip under
+    # "no real skill difference") - 1 of 2 is exactly the null, so the
+    # real two-sided exact binomial p-value must be 1.0.
+    expected_low, expected_high = evaluation.wilson_confidence_interval(1, 2)
+    assert summary.loc[0, "beat_closing_line_rate_ci_low"] == pytest.approx(expected_low)
+    assert summary.loc[0, "beat_closing_line_rate_ci_high"] == pytest.approx(expected_high)
+    assert summary.loc[0, "beat_closing_line_rate_p_value"] == pytest.approx(1.0)
 
 
 def test_build_game_picks_export_picks_out_includes_market_column():

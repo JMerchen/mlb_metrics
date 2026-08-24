@@ -205,7 +205,15 @@ implementation. Computed on the raw (unshrunk) hit/at-bat counts in
 <code>hitters.compute_wave</code>/<code>compute_game_hit_probability</code> -
 deliberately never on the shrunk point estimate above, since shrinkage
 already borrows strength from the prior and isn't a plain sample
-proportion anymore.</p>
+proportion anymore. The same formula also backs
+<code>evaluation.wilson_confidence_interval</code> (a scalar wrapper for
+one aggregate backtest rate rather than a per-row Series) - applied to
+<code>day_survival_rate</code>, <code>market_accuracy</code>,
+<code>beat_closing_line_rate</code>, and
+<code>win_rate_on_advised_bets</code>, so a bare percentage on the
+dashboard is never read as more certain than its real sample size
+supports. Quant-analytics item #5, "backtest scope and statistical
+significance."</p>
 <a class="methodLink" href="https://en.wikipedia.org/wiki/Binomial_proportion_confidence_interval" target="_blank" rel="noopener">Learn more &rarr;</a>
 </div>
 
@@ -455,6 +463,51 @@ history, not the holdout) - it answers "which features matter and in
 which direction," a different question from the walk-forward accuracy
 numbers above.</p>
 <a class="methodLink" href="https://en.wikipedia.org/wiki/Wald_test" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="binomial-test">
+<h3>Exact Binomial Test</h3>
+<p class="methodLabel">What it is</p>
+<p>Given n real coin-flip-style trials with a known number of successes,
+this asks: how likely is a rate this extreme (or more extreme) if the
+true underlying rate were actually the null value (e.g. 0.5, "no real
+skill difference")? Unlike a normal-approximation test, it computes the
+exact binomial probability directly rather than approximating - reliable
+even at the small n a fresh real-money backtest actually starts with (a
+handful of games, not thousands).</p>
+<p class="methodLabel">How we use it</p>
+<p><code>scipy.stats.binomtest</code>, wrapped as
+<code>evaluation.binomial_significance</code>. Applied to
+<code>beat_closing_line_rate</code> - a genuinely symmetric "whose squared
+error was lower on this game" comparison, where 0.5 really is the "no
+skill difference" null. Deliberately NOT applied to a plain accuracy rate
+(real MLB home teams win somewhat more than half their games, so 0.5
+isn't a fair null there) or to a betting win rate (bets are placed at
+different real prices, so win/loss counts alone can't measure edge - see
+the t-test below) - see <code>game_evaluation.py</code>'s own docstrings
+for exactly which rate gets which test and why. Quant-analytics item #5,
+"backtest scope and statistical significance."</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Binomial_test" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
+<div class="methodCard" id="t-test">
+<h3>One-Sample t-Test</h3>
+<p class="methodLabel">What it is</p>
+<p>Tests whether the real mean of a sample of numbers is distinguishable
+from some null value, given the sample's own size and spread. Unlike a
+win/loss count, it uses the actual magnitude of each observation - the
+right tool when "how often" isn't the real question, "how much" is.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>scipy.stats.ttest_1samp</code>, wrapped as
+<code>evaluation.mean_significance</code>, tests each advised bet's real
+<code>bet_profit_units</code> against a null of 0 (breaking even) -
+reported as <code>roi_p_value</code>. This is the honest answer to "did
+the advised bets actually make money, or is this within noise": a bet's
+win/loss outcome alone doesn't capture the real price it was placed at (a
+-150 favorite winning 55% of the time and a +150 underdog winning 55% of
+the time are very different real outcomes), but its real profit already
+prices that in. Quant-analytics item #5.</p>
+<a class="methodLink" href="https://en.wikipedia.org/wiki/Student%27s_t-test#One-sample_t-test" target="_blank" rel="noopener">Learn more &rarr;</a>
 </div>
 
 </div>

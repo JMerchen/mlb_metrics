@@ -49,6 +49,39 @@ skipEmptyLines:true
 
 
 
+// Quant-analytics item #5 ("backtest scope and statistical significance"):
+// shared formatting for the Wilson CIs / p-values evaluation.py and
+// game_evaluation.py now attach to every real backtest rate, so a bare
+// percentage on the dashboard is never read as more certain than its real
+// sample size supports. `low`/`high` are the *_ci_low/*_ci_high CSV
+// columns (already 0-1 fractions, like the rate itself); returns "" when
+// either is missing/blank rather than a broken "NaN%" string.
+function ciLabel(low, high){
+if(low === undefined || low === "" || high === undefined || high === ""){
+return ""
+}
+return `95% CI ${(Number(low) * 100).toFixed(0)}–${(Number(high) * 100).toFixed(0)}%`
+}
+
+// `p` is a *_p_value CSV column (a real two-sided test p-value, see
+// evaluation.binomial_significance/mean_significance). Below 0.05 is
+// labeled "significant" - conventional, not a claim of certainty; above
+// is labeled "not significant" explicitly rather than just omitted, since
+// "no significance note shown" would otherwise read as "no evidence
+// either way" instead of "checked, and it isn't distinguishable from
+// noise yet." Returns "" when missing/blank (e.g. n=0, nothing to test).
+function significanceLabel(p){
+if(p === undefined || p === "" || Number.isNaN(Number(p))){
+return ""
+}
+const value = Number(p)
+return value < 0.05
+? `significant (p=${value.toFixed(3)})`
+: `not significant (p=${value.toFixed(2)})`
+}
+
+
+
 function buildTable(
 data,
 id,
@@ -1527,13 +1560,17 @@ s.day_survival_rate && s.day_survival_rate !== ""
 ? (Number(s.day_survival_rate) * 100).toFixed(1) + "%"
 : "-"
 
-const stat = (value, label) =>
-`<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div></div>`
+// Quant-analytics item #5: the real CI on day_survival_rate, so a small
+// n_days_resolved reads as "wide uncertainty band," not false precision.
+const survivalSub = s.n_days_resolved > 0 ? ciLabel(s.day_survival_rate_ci_low, s.day_survival_rate_ci_high) : ""
+
+const stat = (value, label, sub) =>
+`<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`
 
 el.innerHTML =
 stat(s.current_streak || 0, "Current Streak") +
 stat(s.longest_streak || 0, "Longest Streak") +
-stat(survivalRate, "Day Survival Rate") +
+stat(survivalRate, "Day Survival Rate", survivalSub) +
 stat(s.n_days_resolved || 0, "Days Tracked")
 
 }
@@ -1724,8 +1761,8 @@ return
 
 const s = summary[0]
 
-const stat = (value, label) =>
-`<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div></div>`
+const stat = (value, label, sub) =>
+`<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`
 
 // Quant-analytics item #6 follow-up: tracking is scoped to whether a real
 // bet was ADVISED (a real Kelly edge actually cleared - see
@@ -1739,6 +1776,13 @@ const winRate = hasBets
 ? (Number(s.win_rate_on_advised_bets) * 100).toFixed(1) + "%"
 : "-"
 
+// Quant-analytics item #5: win rate's real CI - informational only, no
+// significance flag here (a win/loss count alone can't tell a good -150
+// favorite bet apart from a bad one the real profit already prices in -
+// see evaluation.mean_significance's own docstring). roi_p_value below is
+// the correctly-posed test for whether the P&L is real.
+const winRateSub = hasBets ? ciLabel(s.win_rate_on_advised_bets_ci_low, s.win_rate_on_advised_bets_ci_high) : ""
+
 // Units, not dollars - the standard bankroll-agnostic sports-betting
 // convention (config.UNIT_SIZE_FRACTION of bankroll per unit). "u" suffix
 // matches how bettors actually write this ("+12.4u").
@@ -1750,24 +1794,38 @@ const pnlColor = hasBets
 ? (Number(s.total_profit_units) >= 0 ? "var(--success)" : "var(--danger)")
 : "inherit"
 
+// Quant-analytics item #5: the real test for "is this P&L distinguishable
+// from breaking even" - a one-sample t-test on each advised bet's real
+// profit (evaluation.mean_significance), not a win-rate coin-flip test.
+const pnlSub = hasBets ? significanceLabel(s.roi_p_value) : ""
+
 // Quant-analytics item #6, slice 2 - "beat the closing line," the
 // item's literal stated goal. "-" until n_beat_closing_line_compared
 // clears 0, i.e. until real ESPN market odds have actually been
 // logged/backfilled for resolved games. Unchanged by the bet-P&L pivot
 // above - a genuinely separate "are we better forecasters than the
 // market" question, not what's being replaced.
-const beatClosingLine =
-s.beat_closing_line_rate && s.n_beat_closing_line_compared > 0
+const hasClosingLineData = s.beat_closing_line_rate && s.n_beat_closing_line_compared > 0
+const beatClosingLine = hasClosingLineData
 ? (Number(s.beat_closing_line_rate) * 100).toFixed(1) + "%"
 : "-"
+
+// Quant-analytics item #5: THE real answer to "n=12, 33% - is that
+// evidence of an edge, or noise" - a real Wilson CI plus a real exact
+// binomial test against a null of 0.5 (a well-posed coin-flip null here,
+// see game_evaluation._beat_closing_line_rate's own docstring).
+const beatClosingLineSub = hasClosingLineData
+? [ciLabel(s.beat_closing_line_rate_ci_low, s.beat_closing_line_rate_ci_high), significanceLabel(s.beat_closing_line_rate_p_value)]
+.filter(Boolean).join(" · ")
+: ""
 
 el.innerHTML =
 stat(s.current_bet_streak || 0, "Bet Streak") +
 stat(s.best_bet_streak || 0, "Best Bet Streak") +
-stat(winRate, "Win Rate") +
+stat(winRate, "Win Rate", winRateSub) +
 stat(s.n_bets_advised || 0, "Bets Tracked") +
-`<div class="streakStat"><div class="value" style="color:${pnlColor}">${pnl}</div><div class="label">P&amp;L</div></div>` +
-stat(beatClosingLine, "Beat Closing Line")
+`<div class="streakStat"><div class="value" style="color:${pnlColor}">${pnl}</div><div class="label">P&amp;L</div>${pnlSub ? `<div class="sub">${pnlSub}</div>` : ""}</div>` +
+stat(beatClosingLine, "Beat Closing Line", beatClosingLineSub)
 
 }
 
