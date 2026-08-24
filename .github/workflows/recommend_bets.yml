@@ -1,0 +1,49 @@
+name: Recommend bets
+
+# scripts/recommend_bets.py - Kelly-criterion bet sizing, a follow-up to
+# quant-analytics item #6 (the market benchmark). Print-only diagnostic/
+# report, same as debug_espn_odds.yml - never writes back to the repo, so
+# no `permissions: contents: write` or commit step is needed. This
+# project's own dev sandbox blocks ESPN directly; this workflow runner has
+# normal internet access.
+
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Target date (YYYY-MM-DD) - defaults to today (Arizona time) if left blank"
+        required: false
+        default: ""
+      bankroll:
+        description: "Bankroll in dollars, for dollar-sized stake recommendations (optional)"
+        required: false
+        default: ""
+
+jobs:
+  recommend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas
+
+      - name: Real bet recommendations
+        run: |
+          ARGS=""
+          if [ -n "${{ inputs.date }}" ]; then
+            ARGS="$ARGS --date ${{ inputs.date }}"
+          fi
+          if [ -n "${{ inputs.bankroll }}" ]; then
+            ARGS="$ARGS --bankroll ${{ inputs.bankroll }}"
+          fi
+          python scripts/recommend_bets.py $ARGS
