@@ -79,7 +79,7 @@ def test_build_hitter_hit_log_full_backfill_writes_expected_schema(tmp_path, mon
     assert not result.empty
     expected_cols = {
         "date", "key_mlbam", "name_first", "name_last", "team",
-        *dfs_ml.HITTER_FEATURE_COLUMNS, "Total_PA", "Got_Hit",
+        *dfs_ml.HITTER_FEATURE_COLUMNS, "Total_PA", "Days_Rest", "Umpire_Factor", "Got_Hit",
     }
     assert set(result.columns) == expected_cols
 

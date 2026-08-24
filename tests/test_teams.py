@@ -68,6 +68,45 @@ def test_compute_park_factors_uses_final_combined_score_not_every_pitch():
     assert park_factors.loc["B", "Park_Factor"] == pytest.approx(1.0)
 
 
+def test_compute_umpire_factor_normalizes_to_league_average():
+    data = pd.DataFrame([
+        {"umpire": "Ump A", "events": "single"},   # hit
+        {"umpire": "Ump A", "events": "single"},   # hit
+        {"umpire": "Ump A", "events": "field_out"},  # out -> Ump A: 2/3 hit rate
+        {"umpire": "Ump B", "events": "field_out"},
+        {"umpire": "Ump B", "events": "field_out"},
+        {"umpire": "Ump B", "events": "single"},   # Ump B: 1/3 hit rate
+    ])
+
+    result = teams.compute_umpire_factor(data).set_index("umpire")
+
+    # league avg = (2+1)/6 = 0.5
+    assert result.loc["Ump A", "Umpire_Factor"] == pytest.approx((2 / 3) / 0.5)
+    assert result.loc["Ump B", "Umpire_Factor"] == pytest.approx((1 / 3) / 0.5)
+
+
+def test_compute_umpire_factor_excludes_missing_umpire_and_non_completed_events():
+    data = pd.DataFrame([
+        {"umpire": "Ump A", "events": "single"},
+        {"umpire": pd.NA, "events": "single"},  # real null umpire, excluded entirely
+        {"umpire": "Ump A", "events": "ball"},  # not a completed PA event, excluded
+    ])
+
+    result = teams.compute_umpire_factor(data).set_index("umpire")
+
+    assert list(result.index) == ["Ump A"]
+    assert result.loc["Ump A", "Umpire_Factor"] == pytest.approx(1.0)
+
+
+def test_compute_umpire_factor_empty_input_returns_empty_not_nan():
+    data = pd.DataFrame(columns=["umpire", "events"])
+
+    result = teams.compute_umpire_factor(data)
+
+    assert result.empty
+    assert list(result.columns) == ["umpire", "Umpire_Factor"]
+
+
 def test_compute_offensive_edge_exposes_team_bases_pg_alongside_offensive_edge():
     # Four teams so the opponent's bases-allowed comes from a THIRD team,
     # not a mirror of the row's own team - a two-team fixture would make

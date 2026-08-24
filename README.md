@@ -1740,6 +1740,48 @@ Full test suite: 678 passed (3 new - exact windowed arithmetic mirroring
 `compute_pitch_family_rates`'s own test shape, unrecognized-`inning_topbot`
 exclusion, and side-absent-reads-zero-not-dropped).
 
+### Real build: rest days + umpire factor, tested before committing (2026-08-24)
+
+Direct follow-up to the feature-gap audit's other two identified,
+already-persisted-and-unused signals. Explicit user direction this time:
+"use the identified features that we can use (whether derived or not).
+Do a feature search and test feature significance before committing to
+the model" - unlike `WAVE_Home`/`WAVE_Away` above (wired straight into
+`dfs_ml.HITTER_FEATURE_COLUMNS`), these two go through a real
+significance test FIRST, and only get wired into the live model if they
+clear a real bar.
+
+- `teams.compute_umpire_factor`: one row per real home-plate umpire
+  (Statcast's own `umpire` id), that umpire's real hit rate allowed
+  normalized to the across-all-umpires league average - same ratio
+  convention as `Park_Factor`.
+- `dfs_backtest.assemble_hitter_hit_log` now also carries two EXPLORATORY
+  candidate columns, NOT part of `HITTER_FEATURE_COLUMNS` (so the live
+  model's schema and every existing caller are completely unaffected):
+  `Days_Rest` (Statcast's own real `batter_days_since_prev_game` for
+  that date's game - already a real, no-lookahead fact, no derivation
+  needed) and `Umpire_Factor` (computed from history STRICTLY BEFORE
+  that date, same no-lookahead discipline every other feature here
+  already follows, joined via that date's real home-plate umpire).
+- `scripts/train_hitter_hit_model.py`'s existing significance report
+  (`CANDIDATE_FEATURE_COLUMNS`) now tests both candidates - univariate
+  AND combined with the full live feature set - alongside every existing
+  feature, on the same real historical log, via the same
+  `statsmodels.Logit` methodology already used for every other
+  significance check in this project.
+
+**Decision deferred to real dispatched numbers, not guessed**: neither
+candidate is added to `HITTER_FEATURE_COLUMNS` in this change - that
+only happens in an honest follow-up once a real GitHub Actions dispatch
+reports their actual p-values. Reported here regardless of outcome, same
+"non-significant is a real, useful answer" discipline the rest of this
+project's significance reports already follow.
+
+Full test suite: 682 passed (6 new - `compute_umpire_factor`'s own exact
+arithmetic/missing-umpire/empty-input cases, plus
+`assemble_hitter_hit_log`'s schema and real-value-population coverage
+for both candidates).
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our
