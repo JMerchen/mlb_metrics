@@ -1311,6 +1311,24 @@ not a formal power calculation) - which it currently does (n=12, see
 above). This script computes and shows real numbers; it does not claim
 they're a proven strategy.
 
+**Real dispatch verification** (GitHub Actions runs 32679390305/
+32679454113/32679504206, 2026-08-24) confirmed both safety guards work
+correctly end to end, and caught two real bugs along the way: (1) a
+stdout/stderr buffering issue that printed the confidence banner AFTER a
+later refusal message in the CI log despite running first in the code -
+fixed with explicit `flush=True`; (2) the workflow was missing the
+`MLB-StatsAPI` dependency `schedule.fetch_todays_games` needs - fixed by
+adding it to the install step. Once fixed, a real run against the log's
+actual last logged date (2026-08-21, three real days stale relative to
+the dispatch) correctly refused to recommend anything: all 15 real games
+logged that day were skipped because their real MLB Stats API status was
+no longer `"Scheduled"` (the games had long since finished) - exactly the
+intended safe behavior, not a bug. A genuinely positive real
+recommendation requires the daily pipeline to have logged TODAY's real
+slate first (this session's log happened to be stale); the underlying
+edge/Kelly math itself is separately verified via hand-computed unit
+tests (`tests/test_kelly.py`, `tests/test_recommend_bets.py`).
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our
