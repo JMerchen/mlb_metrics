@@ -23,6 +23,8 @@ import numpy as np
 import pandas as pd
 from sklearn.base import clone
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.isotonic import IsotonicRegression
+from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, brier_score_loss, log_loss, roc_auc_score
 from sklearn.model_selection import GridSearchCV
 
@@ -158,6 +160,74 @@ def fit_calibrated(fitted_estimator, X, y, dates, method: str, min_train_dates: 
     calibrated = CalibratedClassifierCV(clone(fitted_estimator), method=method, cv=splitter)
     calibrated.fit(X, y)
     return calibrated
+
+
+class _SigmoidCalibrator:
+    """Platt scaling for an ALREADY-COMPUTED probability estimate (not a
+    full classifier - see fit_calibrated above for that case): fits
+    sklearn's own LogisticRegression on the logit-transformed raw
+    probability as the sole feature, so `.predict()` reproduces the
+    textbook Platt formula sigmoid(a*logit(p) + b) via sklearn's own
+    fitted coefficients rather than a hand-derived one. Wrapped in a class
+    (not a bare function) so fit_probability_calibration can return this
+    and IsotonicRegression interchangeably - callers only ever call
+    `.predict(raw_probability)`, never branch on which method was used."""
+
+    def __init__(self, logistic_regression: LogisticRegression):
+        self._model = logistic_regression
+
+    def predict(self, raw_probability):
+        raw_probability = np.asarray(raw_probability, dtype=float)
+        logit = _logit(raw_probability)
+        return self._model.predict_proba(logit.reshape(-1, 1))[:, 1]
+
+
+def _logit(p: np.ndarray, eps: float = 1e-6) -> np.ndarray:
+    """log(p / (1-p)), clipped away from the real 0/1 boundary first - an
+    exact 0 or 1 probability would otherwise divide by zero / take log(0)."""
+    clipped = np.clip(p, eps, 1 - eps)
+    return np.log(clipped / (1 - clipped))
+
+
+def fit_probability_calibration(raw_probability: pd.Series, actual: pd.Series, method: str = "isotonic"):
+    """Fits a monotonic recalibration mapping an ALREADY-COMPUTED
+    probability estimate (e.g. a heuristic ratio, not a full classifier's
+    raw score - see fit_calibrated above for that case) to a properly
+    calibrated one, against real 0/1 outcomes. Quant-analytics follow-up:
+    "dig into calibration" - the real, honest fix for a probability
+    estimate whose spread doesn't match its own real outcome rate (too
+    compressed toward 0.5, too spread out, or non-monotonically off in
+    places), without assuming a specific parametric shape a priori.
+
+    `method="isotonic"` (default): sklearn.isotonic.IsotonicRegression
+    (out_of_bounds="clip") - a flexible, monotonic, non-parametric fit.
+    Can correct compression, over-spread, or a non-monotonic miscalibration
+    all at once, but has more effective degrees of freedom, so it can
+    overfit a small/noisy sample more readily than the alternative below.
+
+    `method="sigmoid"`: Platt scaling (_SigmoidCalibrator above) - a
+    single 2-parameter logistic curve on the logit-transformed input.
+    Lower-variance and more robust with a small sample, but assumes the
+    miscalibration really is shaped like a single sigmoid correction
+    (e.g. can't fix a non-monotonic wiggle isotonic could).
+
+    Returns a fitted object exposing `.predict(raw_probability_array) ->
+    calibrated_probability_array`, the same interface regardless of
+    `method`, so callers (and game_picks.apply_calibration) never need to
+    branch on which one was actually used. Callers are responsible for
+    picking `method` via real walk-forward validation (see
+    scripts/train_game_pick_calibration.py) - this function doesn't guess
+    which is better for a given dataset on its own."""
+    if method == "isotonic":
+        model = IsotonicRegression(out_of_bounds="clip")
+        model.fit(raw_probability, actual)
+        return model
+    if method == "sigmoid":
+        logit = _logit(np.asarray(raw_probability, dtype=float))
+        logistic_regression = LogisticRegression()
+        logistic_regression.fit(logit.reshape(-1, 1), actual)
+        return _SigmoidCalibrator(logistic_regression)
+    raise ValueError(f"Unknown calibration method {method!r} - expected 'isotonic' or 'sigmoid'.")
 
 
 def save_model(model, path: str) -> None:

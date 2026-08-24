@@ -37,7 +37,7 @@ hit-rate barely moved the old pick.
 
 import pandas as pd
 
-from mlb_metrics import config, matchup
+from mlb_metrics import config, matchup, ml_models
 
 GAME_PICK_FEATURE_COLUMNS = [
     "home_composite",
@@ -201,3 +201,53 @@ def compute_game_win_probabilities(
     games["home_win_probability"] = home_rating / (home_rating + away_rating)
 
     return games[["game_pk", "date", "home_team", "away_team", "home_win_probability"]]
+
+
+def apply_calibration(win_probabilities: pd.DataFrame) -> pd.DataFrame:
+    """Rescales `home_win_probability` through the saved recalibration at
+    config.GAME_PICK_CALIBRATION_MODEL_PATH (ml_models.fit_probability_calibration,
+    fit by scripts/train_game_pick_calibration.py) - quant-analytics
+    follow-up "dig into calibration": the raw ratio compute_game_win_probabilities
+    returns is explicitly NOT a calibrated probability (see that function's
+    own docstring), and real data confirmed it - its spread (std 0.035) is
+    far narrower than the real market's on the same games (std 0.059),
+    which was the direct mechanical cause of a real bet-advice false-edge
+    bug (see README's "Real quant sanity-check" section). This nudges the
+    reported probability toward what real outcomes actually support,
+    without changing which side is favored (`.predict()` for both isotonic
+    and sigmoid methods is a real, monotonic transform of the input, never
+    flips a > b to a real calibrated_a < calibrated_b - see
+    ml_models.fit_probability_calibration's own docstring).
+
+    Same graceful-degradation contract as dfs_ml.apply_ml_overrides: when
+    no artifact exists yet (hasn't been trained, or the last training run
+    didn't clear its own real-holdout bar - see the training script's own
+    docstring), `win_probabilities` is returned completely UNCHANGED, same
+    as before this function existed at all - never a crash, never a
+    fabricated recalibration. Preserves every other column and row order;
+    only `home_win_probability` itself is ever touched.
+
+    A real, genuine edge case, not hypothetical: compute_game_win_probabilities
+    can return NaN for a game whose home/away composite rating is itself
+    NaN (e.g. a team missing from today's confidence.csv snapshot - clip()
+    preserves NaN rather than flooring it) - both IsotonicRegression and
+    the Platt/sigmoid wrapper's `.predict()` raise ValueError on a NaN
+    input (confirmed directly against real sklearn, not assumed), and this
+    function is called unconditionally in pipeline.run() (not inside the
+    market-fetch try/except), so an unguarded call here would crash the
+    ENTIRE daily pipeline run over one game's missing data - not just
+    silently skip that game. Only the real, finite rows are ever passed to
+    `.predict()`; a NaN row stays NaN, the same honest "no real calibrated
+    output for no real input" contract the training script's own NaN-drop
+    uses."""
+    model = ml_models.load_model(config.GAME_PICK_CALIBRATION_MODEL_PATH)
+    if model is None:
+        return win_probabilities
+
+    calibrated = win_probabilities.copy()
+    real_valued = calibrated["home_win_probability"].notna()
+    if real_valued.any():
+        calibrated.loc[real_valued, "home_win_probability"] = model.predict(
+            calibrated.loc[real_valued, "home_win_probability"].to_numpy()
+        )
+    return calibrated

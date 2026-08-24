@@ -277,6 +277,11 @@ def reconstruct_historical_game_picks_from_persisted(
         win_probabilities = game_picks.compute_game_win_probabilities(
             outputs["confidence"], outputs["pave"], todays_games
         )
+        # This function's whole purpose is "what would today's live code
+        # produce" (see its own docstring) - pipeline.run() applies this
+        # same rescaling, so skipping it here would misrepresent what's
+        # actually live.
+        win_probabilities = game_picks.apply_calibration(win_probabilities)
         picks = game_predictions.select_game_picks(win_probabilities, date, model_version=model_version)
         if picks.empty:
             continue

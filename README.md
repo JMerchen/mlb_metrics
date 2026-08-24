@@ -1498,6 +1498,58 @@ Full test suite: 657 passed (7 new/updated tests across
 all three new primitives, plus real CI/p-value assertions wired through
 `build_beat_the_streak_export`/`build_game_picks_export`'s summary rows).
 
+### Real quant sanity-check: `KELLY_MIN_EDGE` raised 0.02 → 0.05 (2026-08-24)
+
+The very first real day the bet-advice pipeline ran with real market
+odds (2026-08-24), it advised bets on **8 of 10** real games - with
+model-vs-market disagreements as large as 12 percentage points on the
+de-vigged price. That's implausible as genuine value against a real,
+liquid MLB moneyline market on the same day, let alone on 80% of a
+day's slate at once - a real, sharp market essentially never leaves
+that much on the table.
+
+**Root cause (a real forecasting-skill gap, not a code bug)**: this
+project's model probabilities cluster much closer to 50/50 than real
+sportsbook lines do - the model is comparatively conservative/low-
+spread, while a real book prices in starting pitcher, bullpen,
+injuries, and more, more aggressively. When the model is less
+confident than the market on every game, its comparatively muted
+probability for whichever side the market is confident about
+systematically LOOKS like value on the other side - even when it's
+really just the model under-informing itself relative to the market,
+not a real market inefficiency. This project's own
+`beat_closing_line_rate` (0.357, n=14) is not yet statistically
+distinguishable from a coin flip (`evaluation.binomial_significance`
+p=0.42, using quant-analytics item #5's own new significance test) -
+there is currently no proven evidence this model forecasts games
+better than the market at all. Betting on every 2%+ disagreement was,
+in effect, betting on the model's own forecasting noise.
+
+**Fix (a stopgap, not a real solution)**: `config.KELLY_MIN_EDGE`
+raised from 0.02 to **0.05** - filters out the smallest, least
+convincing disagreements, but does NOT fix the underlying calibration/
+skill gap. Recomputing today's real 8 advised games against the new
+bar: 3 (AZ@CHC 3.5%, SEA@PHI 4.6%, ATH@MIN 4.9%) drop below 5% and were
+corrected back to "no bet advised" in the real log
+(`data/predictions/game_predictions.csv`) and re-exported to
+`docs/data/game_picks_*.csv` - the games hadn't been played yet, so
+this was a safe, honest correction, not a retroactive rewrite of a
+resolved outcome. The remaining 5 (WSH@COL 7.0%, SF@CIN 5.2%, LAA@CLE
+10.3%, DET@TB 5.6%, CWS@TEX 6.0%) still clear 5% - still a lot for one
+day, an honest sign the deeper calibration question (real follow-up,
+not this fix) still needs investigating, not that 0.05 is definitely
+the right number either.
+
+**Explicitly NOT done here** (raised, not decided, in the same
+conversation): gating bet-advice on `beat_closing_line_rate` actually
+clearing statistical significance before advising anything at all -
+a more correct, structural fix than a bigger static threshold, but a
+real design change of its own, not bundled into this stopgap.
+
+Full test suite: 658 passed (no test changes needed - existing tests
+either pass `min_edge` explicitly or use a fixture with a wide enough
+margin to clear the new default).
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our

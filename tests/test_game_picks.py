@@ -221,3 +221,78 @@ def test_rating_floor_prevents_division_blowup():
     # (0.05) rather than 0, so the division stays well-defined and NYY still
     # gets a real (very low, non-crashing) win probability.
     assert 0.0 < result.iloc[0]["home_win_probability"] < 0.1
+
+
+class _DoublingCalibrator:
+    """A fake calibrator standing in for a real fitted
+    ml_models.fit_probability_calibration result - just needs the same
+    `.predict(raw_probability_array) -> array` interface apply_calibration
+    actually calls."""
+
+    def predict(self, raw_probability):
+        return raw_probability * 2
+
+
+def test_apply_calibration_no_artifact_returns_input_completely_unchanged(monkeypatch):
+    # Same "no artifact yet -> pass through untouched" contract
+    # dfs_ml.apply_ml_overrides already establishes - never a crash, never
+    # a fabricated recalibration.
+    monkeypatch.setattr(game_picks.ml_models, "load_model", lambda path: None)
+    win_probabilities = pd.DataFrame({
+        "game_pk": [1, 2], "home_team": ["NYY", "BOS"], "away_team": ["BOS", "NYY"],
+        "home_win_probability": [0.55, 0.62],
+    })
+
+    result = game_picks.apply_calibration(win_probabilities)
+
+    pd.testing.assert_frame_equal(result, win_probabilities)
+
+
+def test_apply_calibration_rescales_home_win_probability_when_an_artifact_exists(monkeypatch):
+    monkeypatch.setattr(game_picks.ml_models, "load_model", lambda path: _DoublingCalibrator())
+    win_probabilities = pd.DataFrame({
+        "game_pk": [1, 2], "home_team": ["NYY", "BOS"], "away_team": ["BOS", "NYY"],
+        "home_win_probability": [0.20, 0.30],
+    })
+
+    result = game_picks.apply_calibration(win_probabilities)
+
+    assert list(result["home_win_probability"]) == pytest.approx([0.40, 0.60])
+    # Every other column/row is untouched - only home_win_probability itself.
+    assert list(result["game_pk"]) == [1, 2]
+    assert list(result["home_team"]) == ["NYY", "BOS"]
+
+
+class _RealisticNaNRejectingCalibrator:
+    """Reproduces real sklearn behavior (both IsotonicRegression and the
+    Platt/sigmoid wrapper) confirmed directly: `.predict()` raises
+    ValueError on ANY NaN in its input array, even if only one element
+    among many is NaN - a real regression this test guards against:
+    apply_calibration is called unconditionally in pipeline.run(), so an
+    unguarded call on a real NaN home_win_probability (a team missing from
+    today's confidence.csv) would crash the entire daily pipeline run."""
+
+    def predict(self, raw_probability):
+        if pd.isna(raw_probability).any():
+            raise ValueError("Input contains NaN.")
+        return raw_probability * 2
+
+
+def test_apply_calibration_never_passes_a_real_nan_probability_to_predict(monkeypatch):
+    monkeypatch.setattr(game_picks.ml_models, "load_model", lambda path: _RealisticNaNRejectingCalibrator())
+    win_probabilities = pd.DataFrame({
+        "game_pk": [1, 2, 3], "home_team": ["NYY", "BOS", "LAD"], "away_team": ["BOS", "NYY", "SF"],
+        # NYY's own composite rating happened to be NaN today (a real,
+        # not hypothetical, case - see compute_game_win_probabilities).
+        "home_win_probability": [0.20, float("nan"), 0.30],
+    })
+
+    result = game_picks.apply_calibration(win_probabilities)
+
+    # The two real rows still get rescaled - one NaN row doesn't take the
+    # whole calibration step down with it.
+    assert result.loc[0, "home_win_probability"] == pytest.approx(0.40)
+    assert result.loc[2, "home_win_probability"] == pytest.approx(0.60)
+    # The genuinely NaN row stays honestly NaN - no fabricated calibrated
+    # value for a game with no real input to calibrate.
+    assert pd.isna(result.loc[1, "home_win_probability"])

@@ -338,6 +338,12 @@ def run(
             win_probabilities = game_picks.compute_game_win_probabilities(
                 outputs["confidence"], outputs["pave"], schedule_games_df
             )
+            # Quant-analytics follow-up "dig into calibration": rescales
+            # the raw heuristic ratio through the saved recalibration, if
+            # one has been trained and cleared its own real-holdout bar
+            # (see game_picks.apply_calibration's own docstring) - a no-op
+            # returning win_probabilities completely unchanged otherwise.
+            win_probabilities = game_picks.apply_calibration(win_probabilities)
             # A real market-odds fetch failure must never suppress real
             # game-pick logging - deliberately a separate try/except from
             # schedule_games_df's own above, not shared with it. Quant-
