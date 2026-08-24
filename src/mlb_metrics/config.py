@@ -891,7 +891,26 @@ MARKET_ODDS_BACKFILL_DAYS_BACK = 5
 # recommend_bets.py's own comment on why this differs from
 # market_home_win_probability above).
 KELLY_FRACTION_MULTIPLIER = 0.5  # half-Kelly - full Kelly is only growth-optimal if the probability estimate is exactly right; this project's own probabilities carry real estimation error (see the Wilson CIs throughout this project), and full Kelly's downside variance is severe when the estimate is even slightly off. Half-Kelly is the standard practitioner default.
-KELLY_MIN_EDGE = 0.02  # minimum (model probability - real vigged market-implied probability) before recommending any stake at all - a buffer against noise in the model's own probability estimate, not a number backed by a formal calculation.
+KELLY_MIN_EDGE = 0.05  # minimum (model probability - real vigged market-implied probability) before recommending any stake at all - a buffer against noise in the model's own probability estimate, not a number backed by a formal calculation.
+# Raised from 0.02 after real production data (2026-08-24) showed 8 of 10
+# real games clearing the old 2% bar, with de-vigged model/market gaps as
+# large as 12 percentage points - implausible as genuine value against a
+# real, liquid MLB moneyline market. The likely cause: this project's own
+# model probabilities cluster much closer to 50/50 than real sportsbook
+# lines do (the model is comparatively low-spread/conservative), so on
+# any game the market is confident about, the model's comparatively muted
+# probability for the live underdog looks like "value" that isn't real -
+# it's the model under-informing itself relative to the market, not a
+# market inefficiency. This project's own beat_closing_line_rate (0.357,
+# n=14) is not yet statistically distinguishable from a coin flip
+# (evaluation.binomial_significance p=0.42 as of 2026-08-24) - there is
+# currently no proven evidence this model forecasts games better than the
+# market at all. 0.05 is a stopgap that filters out most of that noise,
+# NOT a fix for the underlying calibration/skill gap - see the
+# "Real quant sanity-check" README section for the fuller writeup and the
+# real follow-up options (raise this further, and/or gate bet-advice on
+# beat_closing_line_rate actually clearing statistical significance
+# before advising anything at all).
 KELLY_MIN_GAMES_FOR_CONFIDENCE = 100  # a conservative, round floor for scripts/recommend_bets.py's printed confidence banner - NOT a formal power-calculation result. Below this many real n_beat_closing_line_compared games (see game_evaluation.py), the script still shows the real computed edge/stake numbers but prints an explicit "not yet statistically validated" warning rather than hiding them - real numbers, honestly labeled, not a silent gate.
 UNIT_SIZE_FRACTION = 0.01  # what "1 unit" means, as a fraction of bankroll - the standard sports-betting convention (bettors report/track performance in bankroll-agnostic "units risked/won" rather than dollars, since bankroll size varies per person and shouldn't be required to compare or log a strategy's real results). 1% is a common real convention, not a formally derived number. game_predictions.csv logs bet_units = kelly_stake_fraction / UNIT_SIZE_FRACTION - a real bettor still converts units to their own real dollar stake at bet time via scripts/recommend_bets.py's own optional --bankroll flag, which this constant doesn't touch.
 
