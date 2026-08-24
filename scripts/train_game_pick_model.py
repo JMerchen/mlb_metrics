@@ -147,16 +147,22 @@ def predictive_model(train_pool: pd.DataFrame, holdout: pd.DataFrame) -> None:
         f"brier={heuristic_result['brier_score']:.4f}, roc_auc={heuristic_result['roc_auc']:.4f}"
     )
 
-    beats_baseline = result["log_loss"] < result["baseline_log_loss"]
+    # Save gate (2026-08-24 policy: "our goal is to get more and more
+    # accurate, so as long as it beats our current model, save it" - the
+    # naive always-predict-base-rate baseline is still printed above for
+    # context, but is no longer a REQUIRED bar to clear. "Our current
+    # model" here is the home_win_probability heuristic - the only thing
+    # actually live for this signal today, since no artifact has ever
+    # been saved to GAME_PICK_WIN_PROBABILITY_MODEL_PATH.
     beats_heuristic = result["log_loss"] < heuristic_result["log_loss"]
-    if beats_baseline and beats_heuristic:
+    if beats_heuristic:
         ml_models.save_model(search.best_estimator_, config.GAME_PICK_WIN_PROBABILITY_MODEL_PATH)
         print(
             f"  -> SAVED to {config.GAME_PICK_WIN_PROBABILITY_MODEL_PATH} "
-            f"(beats baseline and the home_win_probability heuristic - artifact only, NOT wired into live picks)"
+            f"(beats the home_win_probability heuristic - artifact only, NOT wired into live picks)"
         )
     else:
-        print("  -> NOT saved (does not beat baseline and/or the home_win_probability heuristic - reported honestly)")
+        print("  -> NOT saved (does not beat the home_win_probability heuristic - reported honestly)")
 
 
 def main():

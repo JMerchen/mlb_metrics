@@ -269,16 +269,20 @@ def predictive_model(train_pool: pd.DataFrame, holdout: pd.DataFrame) -> None:
 
     feature_importance_report(best_model, X_holdout, y_holdout)
 
-    beats_baseline = result["log_loss"] < result["baseline_log_loss"]
+    # Save gate (2026-08-24 policy: "as long as it beats our current
+    # model, save it" - naive baseline still printed above for context,
+    # no longer a required bar. "Our current model" is the
+    # Game_Hit_Probability heuristic - the only thing live for this
+    # signal (this artifact itself is NOT wired into live picks).
     beats_heuristic = result["log_loss"] < heuristic_result["log_loss"]
-    if beats_baseline and beats_heuristic:
+    if beats_heuristic:
         ml_models.save_model(best_model, config.HITTER_HIT_PROBABILITY_MODEL_PATH)
         print(
             f"  -> SAVED to {config.HITTER_HIT_PROBABILITY_MODEL_PATH} ({best_name}, "
-            f"beats baseline and Game_Hit_Probability - artifact only, NOT wired into live picks)"
+            f"beats Game_Hit_Probability - artifact only, NOT wired into live picks)"
         )
     else:
-        print("  -> NOT saved (does not beat baseline and/or the Game_Hit_Probability heuristic - reported honestly)")
+        print("  -> NOT saved (does not beat the Game_Hit_Probability heuristic - reported honestly)")
 
 
 def main():

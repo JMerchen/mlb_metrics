@@ -1621,6 +1621,86 @@ Re-running the 2025 backfill after the fix succeeded cleanly: **742,080
 real pitch rows across 190 distinct dates, 2,531 distinct games**, split
 into 7 per-month files (largest 21.5MB), pushed without incident.
 
+### Save-gate policy change: drop the naive-baseline requirement (2026-08-24)
+
+Every `train_*.py` script that fits a candidate ML replacement for an
+existing heuristic (`train_game_pick_calibration.py`,
+`train_game_pick_model.py`, `train_hitter_hit_model.py`,
+`train_dfs_ml_models.py`, `train_age_curve_hr9_model.py`) previously
+required a candidate to beat BOTH a naive always-predict-the-base-rate
+baseline AND the existing heuristic before saving - exactly what
+rejected the calibration result above (it beat the heuristic but not
+the baseline). Explicit user direction: "our goal should be to get more
+and more accurate, so as long as it beats our current model, save it."
+The naive-baseline requirement is dropped from all five gates - the
+naive baseline is still computed and printed for context (it's a useful
+sanity signal), but no longer blocks a save. A candidate now saves
+whenever it beats whatever's actually live for that signal today (the
+heuristic, or KNN for HR9).
+
+**Known limitation, not addressed by this change**: none of these five
+scripts currently compare a new candidate against a *previously-saved*
+ML artifact if one already exists (`hitter_hit_probability_model.joblib`
+and `age_curve_hr9_model.joblib` both already exist) - each retrain only
+re-compares against the heuristic/KNN, same as before. A retrain could
+in theory overwrite an already-good saved model with a new one that
+still beats the heuristic but is worse than what it's replacing. Real,
+open follow-up, not fixed here.
+
+**Also found and corrected while touching this code**: `train_age_curve_hr9_model.py`'s
+save message claimed a saved artifact was "now live for HR9" - false
+found via grep across `src/` (`AGE_CURVE_HR9_MODEL_PATH` is referenced
+only in `config.py` and the training script itself, never loaded or
+consulted by `age_curve.py`/`age_curve_ml.py`). Corrected to the same
+honest "artifact only, NOT wired into live picks" wording every other
+non-wired script already uses. Wiring it live is a separate, unstarted
+task.
+
+### Real feature-gap audit: home/road, day/night, weather, rest, umpire (2026-08-24)
+
+Direct answer to "have we taken into account home/road splits, day/night
+splits, weather, or other common features" for the game-pick model
+(`game_picks.GAME_PICK_FEATURE_COLUMNS`, 10 composite/bullpen/starter
+columns) - checked against the codebase and the real persisted Statcast
+schema (119 columns), not assumed:
+
+- **Home/road**: no explicit home-field-advantage term anywhere.
+  `compute_game_win_probabilities` is a pure `home_rating / (home_rating
+  + away_rating)` ratio with no home-field intercept/boost - real MLB
+  home teams win ~53-54% historically, and none of that prior is baked
+  in beyond whatever the composite ratings happen to encode (nothing
+  home/away-specific). The hitter-level DFS model does carry `is_home`
+  as a feature; the game-pick model does not carry anything equivalent.
+- **Day/night**: not used anywhere. Real Statcast doesn't carry a direct
+  `day_night` column, but `sv_id`'s embedded timestamp could derive it
+  (or `game_type`/schedule fetch, unconfirmed without more digging) -
+  no dedicated column has been built.
+- **Weather**: real Statcast's 119 real columns (confirmed directly
+  against `data/raw/statcast_2026_08.parquet`) carry no temperature,
+  wind, humidity, or roof/dome column at all - not filtered out, never
+  present. A weather feature would need a separate real data source
+  (e.g. a stadium-keyed weather API), not something already sitting
+  unused in persisted data like the batted-ball-quality/pitch-arsenal
+  features earlier quant-analytics items found. Month-as-weather-proxy
+  is unused too.
+- **Rest days**: real, confirmed, unused. `batter_days_since_prev_game`/
+  `batter_days_until_next_game`/`pitcher_days_since_prev_game`/
+  `pitcher_days_until_next_game` are real columns already sitting in
+  every persisted Statcast row (confirmed via grep - zero references
+  anywhere in `src/`) - the exact same "sitting unused in already-
+  persisted data" pattern quant-analytics item #1 found for batted-ball
+  quality and pitch arsenal.
+- **Umpire**: real, confirmed, unused. Statcast's own `umpire` column
+  (home-plate umpire ID) is never referenced in `src/` - some umpires
+  are real, well-documented hitter's/pitcher's umps.
+
+None of this is built yet - reported as a real, verified gap audit, not
+a commitment. Rest days and umpire are the most promising next slice
+(real signal already sitting in persisted data, zero new fetch needed,
+same low-cost pattern every prior quant-analytics item has followed);
+weather would be the most expensive (a genuinely new external data
+source, not just an unused column).
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our
