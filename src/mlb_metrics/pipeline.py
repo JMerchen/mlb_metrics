@@ -42,6 +42,16 @@ def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
     used by hitters.compute_pitch_family_rates - same "already on every
     real row, no extra fetch" reasoning as the quality-of-contact columns.
 
+    Also carries `inning_topbot` ("Top"/"Bot"), used by
+    hitters.compute_home_road_split to tell whether the batter's team was
+    home ("Bot" - bottom of the inning is the home team's ups) or away
+    ("Top") for that specific PA - real wave-logic follow-up (2026-08-24):
+    "for each of our features, they should be taken with wave logic
+    (someone... might randomly struggle versus lefties or at home)" - the
+    same recency-windowed-blend treatment WAVE_L/WAVE_R already gives the
+    platoon split, generalized to home/road via _blend_windows' existing
+    `column` parameter (already proven for compute_pitch_family_rates).
+
     A `df` missing one or more of these optional columns entirely (never
     happens with a real pybaseball.statcast() pull - see
     data.fetch_statcast_range's docstring - but does happen with an older/
@@ -53,6 +63,7 @@ def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
     quality_columns = [
         "type", "launch_speed", "estimated_ba_using_speedangle",
         "estimated_woba_using_speedangle", "launch_speed_angle", "pitch_type",
+        "inning_topbot",
     ]
     missing = [c for c in quality_columns if c not in df.columns]
     if missing:

@@ -1701,6 +1701,45 @@ same low-cost pattern every prior quant-analytics item has followed);
 weather would be the most expensive (a genuinely new external data
 source, not just an unused column).
 
+### Real build: hitter home/road split with wave logic (2026-08-24)
+
+Direct follow-up to the feature-gap audit above. Explicit user direction:
+"for each of our features, they should be taken with wave logic (someone
+or a whole team might randomly struggle versus lefties or at home, for
+example)" - a home/road split needs the exact same small-sample-noise
+guard the platoon split (`WAVE_L`/`WAVE_R`) already gets, not a flat
+season-long home-vs-away average that a short unlucky/lucky stretch could
+distort.
+
+`hitters.compute_home_road_split` (`WAVE_Home`/`WAVE_Away`) reuses
+`_blend_windows`/`_side_window_agg`'s already-generalized `column`
+parameter (previously proven for `compute_pitch_family_rates`'s pitch-type
+split) - same `config.WAVE_WINDOWS` recency blend WAVE itself uses, no new
+window scheme. The split key is Statcast's own `inning_topbot` ("Bot" =
+bottom of the inning = the home team batting, "Top" = away) - directly
+tells us, per PA, which side of the split it belongs to, with no need to
+resolve the batter's own team identity. Wired into
+`dfs_ml.HITTER_FEATURE_COLUMNS` (widening the hitter model's schema,
+same "MUST be retired, not left in place" policy this project has applied
+to every prior schema-widening slice - `hitter_hit_probability_model.joblib`
+retired here too).
+
+**Scope, honestly**: this is the hitter-level half of "someone... might
+randomly struggle... at home." The team-level half ("a whole team might
+randomly struggle... at home") - a real home-field-advantage term for
+`game_picks.compute_game_win_probabilities`, recency-windowed the same
+way - is real, separate follow-up work: it needs team game-by-game
+home/away win/loss history (not currently assembled anywhere in this
+project) rather than reusing existing per-PA infrastructure, so it isn't
+bundled into this same change. Day/night is still unbuilt too (see the
+audit above - Statcast carries no reliable, timezone-safe day/night
+signal for historical PAs; a real derivation needs a new data source,
+not just an unused column).
+
+Full test suite: 678 passed (3 new - exact windowed arithmetic mirroring
+`compute_pitch_family_rates`'s own test shape, unrecognized-`inning_topbot`
+exclusion, and side-absent-reads-zero-not-dropped).
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our

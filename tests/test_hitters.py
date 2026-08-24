@@ -19,7 +19,10 @@ def _at_bats(batter, throws, rows):
     a real batted ball (see _batted_balls below for that dedicated case) -
     and pitch_type defaulted to null too (compute_pitch_family_rates), so
     none of these existing call sites' at-bats count toward any pitch
-    family either (see _family_at_bats below for that dedicated case)."""
+    family either (see _family_at_bats below for that dedicated case), and
+    inning_topbot defaulted to null too (compute_home_road_split), so none
+    of these existing call sites' at-bats count toward the home/road split
+    either (see _home_road_at_bats below for that dedicated case)."""
     result = []
     for row in rows:
         if len(row) == 4:
@@ -32,7 +35,7 @@ def _at_bats(batter, throws, rows):
             "bat_score": bat_score, "post_bat_score": post_bat_score,
             "type": pd.NA, "launch_speed": pd.NA, "estimated_ba_using_speedangle": pd.NA,
             "estimated_woba_using_speedangle": pd.NA, "launch_speed_angle": pd.NA,
-            "pitch_type": pd.NA,
+            "pitch_type": pd.NA, "inning_topbot": pd.NA,
         })
     return result
 
@@ -50,7 +53,7 @@ def _batted_balls(batter, throws, rows):
             "bat_score": 0, "post_bat_score": 0,
             "type": "X", "launch_speed": launch_speed, "estimated_ba_using_speedangle": xba,
             "estimated_woba_using_speedangle": xwoba, "launch_speed_angle": launch_speed_angle,
-            "pitch_type": pd.NA,
+            "pitch_type": pd.NA, "inning_topbot": pd.NA,
         })
     return result
 
@@ -67,7 +70,23 @@ def _family_at_bats(batter, throws, rows):
             "bat_score": 0, "post_bat_score": 0,
             "type": pd.NA, "launch_speed": pd.NA, "estimated_ba_using_speedangle": pd.NA,
             "estimated_woba_using_speedangle": pd.NA, "launch_speed_angle": pd.NA,
-            "pitch_type": pitch_type,
+            "pitch_type": pitch_type, "inning_topbot": pd.NA,
+        })
+    return result
+
+
+def _home_road_at_bats(batter, throws, rows):
+    """rows: list of (game_date, inning_topbot, events) tuples - each
+    becomes a real completed-PA row tagged with a real Statcast
+    inning_topbot code ("Top"/"Bot") for hitters.compute_home_road_split."""
+    result = []
+    for date, inning_topbot, events in rows:
+        result.append({
+            "batter": batter, "game_date": pd.Timestamp(date), "events": events, "p_throws": throws,
+            "bat_score": 0, "post_bat_score": 0,
+            "type": pd.NA, "launch_speed": pd.NA, "estimated_ba_using_speedangle": pd.NA,
+            "estimated_woba_using_speedangle": pd.NA, "launch_speed_angle": pd.NA,
+            "pitch_type": pd.NA, "inning_topbot": inning_topbot,
         })
     return result
 
@@ -406,6 +425,52 @@ def test_compute_pitch_family_rates_family_absent_reads_zero_not_dropped():
     assert result.loc[1, "Offspeed_WAVE"] == 0
 
 
+def test_compute_home_road_split_exact_arithmetic_all_windows():
+    # Windows relative to latest=2026-06-20 (config.WAVE_WINDOWS: full/81d/
+    # 30d/10d, cutoffs 2026-03-31/05-21/06-10). "Bot" = home team batting.
+    rows = _home_road_at_bats(1, "R", [
+        ("2026-03-15", "Bot", "single"),      # only full (before 81d cutoff)
+        ("2026-05-01", "Bot", "field_out"),   # in 81d, not 30d/10d
+        ("2026-05-25", "Bot", "single"),      # in 30d, not 10d
+        ("2026-06-15", "Bot", "single"),      # in 10d
+    ])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_home_road_split(dt).set_index("key_mlbam")
+
+    # full: n=4, hits=3 -> 0.75; 81d: n=3, hits=2 -> 2/3; 30d: n=2, hits=2 -> 1.0; 10d: n=1, hits=1 -> 1.0
+    expected = 0.75 * 0.150 + (2 / 3) * 0.250 + 1.0 * 0.275 + 1.0 * 0.325
+    assert result.loc[1, "WAVE_Home"] == pytest.approx(expected)
+    assert result.loc[1, "WAVE_Away"] == 0
+
+
+def test_compute_home_road_split_excludes_unrecognized_inning_topbot():
+    # A real null inning_topbot (older/narrower synthetic fixture, or
+    # pipeline.build_pitch_events's own missing-column fallback) has no
+    # real home/road side - same "absent from this function's own output
+    # entirely" precedent compute_pitch_family_rates's own test establishes.
+    rows = _home_road_at_bats(1, "R", [("2026-06-15", None, "single")])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_home_road_split(dt)
+
+    assert result.empty
+
+
+def test_compute_home_road_split_side_absent_reads_zero_not_dropped():
+    # A batter with real data on ONE side only (road) must still appear in
+    # the output, with the other side at a real 0 - not silently dropped
+    # just because one side has no data (the union-merge across both
+    # sides, not an anchor on either one).
+    rows = _home_road_at_bats(1, "R", [("2026-06-18", "Top", "single")])
+    dt = pd.DataFrame(rows)
+
+    result = hitters.compute_home_road_split(dt).set_index("key_mlbam")
+
+    assert result.loc[1, "WAVE_Away"] > 0
+    assert result.loc[1, "WAVE_Home"] == 0
+
+
 def test_compute_game_hit_probability_blends_game_level_hit_rate():
     rows = [
         {"batter": 1, "game_id": 1, "game_date": pd.Timestamp("2026-03-12"), "events": "field_out"},
@@ -547,7 +612,8 @@ def test_assemble_hitters_output_columns_and_derived_fields():
         "Consistency", "Approach", "Expected_Bases",
         "Expected_BB", "Expected_HBP", "Expected_RBI",
         "Exit_Velo", "Barrel_Rate", "xBA", "xwOBA",
-        "Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE", "Last_Game_Date",
+        "Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE",
+        "WAVE_Home", "WAVE_Away", "Last_Game_Date",
     ]
     row = result.iloc[0]
     assert row["name_last"] == "Player"

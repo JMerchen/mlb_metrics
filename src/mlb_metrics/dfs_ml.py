@@ -93,6 +93,7 @@ HITTER_FEATURE_COLUMNS = [
     "Exit_Velo", "Barrel_Rate", "xBA", "xwOBA",
     "Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE",
     "Whiff_Rate", "Chase_Rate",
+    "WAVE_Home", "WAVE_Away",
     "starter_PAVE", "Bullpen_PAVE", "Park_Factor", "is_home",
     "starter_fastball_rate", "starter_breaking_rate", "starter_offspeed_rate",
     "Matchup_Hit_Probability",
@@ -134,6 +135,13 @@ def build_hitter_features(
     # this exactly like "no family data", the same convention every other
     # optional feature column here already uses.
     for column in ("Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE"):
+        if column not in df.columns:
+            df[column] = pd.NA
+
+    # A batter's own home/road split (hitters.compute_home_road_split, an
+    # even older wave.csv snapshot predating it) degrades to null the same
+    # way - same convention as the pitch-family columns just above.
+    for column in ("WAVE_Home", "WAVE_Away"):
         if column not in df.columns:
             df[column] = pd.NA
 
