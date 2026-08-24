@@ -225,11 +225,29 @@ def apply_calibration(win_probabilities: pd.DataFrame) -> pd.DataFrame:
     docstring), `win_probabilities` is returned completely UNCHANGED, same
     as before this function existed at all - never a crash, never a
     fabricated recalibration. Preserves every other column and row order;
-    only `home_win_probability` itself is ever touched."""
+    only `home_win_probability` itself is ever touched.
+
+    A real, genuine edge case, not hypothetical: compute_game_win_probabilities
+    can return NaN for a game whose home/away composite rating is itself
+    NaN (e.g. a team missing from today's confidence.csv snapshot - clip()
+    preserves NaN rather than flooring it) - both IsotonicRegression and
+    the Platt/sigmoid wrapper's `.predict()` raise ValueError on a NaN
+    input (confirmed directly against real sklearn, not assumed), and this
+    function is called unconditionally in pipeline.run() (not inside the
+    market-fetch try/except), so an unguarded call here would crash the
+    ENTIRE daily pipeline run over one game's missing data - not just
+    silently skip that game. Only the real, finite rows are ever passed to
+    `.predict()`; a NaN row stays NaN, the same honest "no real calibrated
+    output for no real input" contract the training script's own NaN-drop
+    uses."""
     model = ml_models.load_model(config.GAME_PICK_CALIBRATION_MODEL_PATH)
     if model is None:
         return win_probabilities
 
     calibrated = win_probabilities.copy()
-    calibrated["home_win_probability"] = model.predict(calibrated["home_win_probability"].to_numpy())
+    real_valued = calibrated["home_win_probability"].notna()
+    if real_valued.any():
+        calibrated.loc[real_valued, "home_win_probability"] = model.predict(
+            calibrated.loc[real_valued, "home_win_probability"].to_numpy()
+        )
     return calibrated

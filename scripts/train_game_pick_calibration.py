@@ -108,6 +108,20 @@ def main():
         print("No game pick log rows assembled - nothing to fit.")
         return
 
+    # A real, genuine NaN case (not a bug in this script): compute_game_win_probabilities
+    # returns NaN for a game whose home/away composite rating is itself
+    # NaN (e.g. a team missing from that date's confidence.csv snapshot -
+    # clip() preserves NaN rather than flooring it). No real calibration
+    # target to fit on for a row like that, so it's dropped and reported,
+    # not silently zero-filled - unlike game_feature_matrix's raw X
+    # features (which DO get NaN-filled to 0, a defensible neutral value
+    # for a model feature), a fabricated 0.0/0.5 "probability" here would
+    # actively corrupt the calibration curve.
+    before = len(rows)
+    rows = rows[rows["home_win_probability"].notna()].copy()
+    if before - len(rows):
+        print(f"Dropped {before - len(rows)} row(s) with a NaN raw home_win_probability (a real missing-composite-data date) - can't calibrate on those.")
+
     train_pool, holdout, dates = _split_holdout(rows, config.ML_FINAL_HOLDOUT_DATES)
     print(f"{len(dates)} distinct dates, {len(train_pool)} train-pool rows, {len(holdout)} holdout rows")
     if holdout.empty or train_pool.empty:
