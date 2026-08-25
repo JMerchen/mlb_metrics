@@ -172,6 +172,117 @@ def test_compute_bullpen_pave_excludes_starters_and_pools_by_team():
     assert result.loc["Y", "Bullpen_Power_A_PLUS"] == pytest.approx(1.0 / mean_power_a, rel=1e-3)
 
 
+def test_compute_bullpen_recent_workload_sums_relief_outs_within_window():
+    # Latest date = 2026-06-18, recent_days=2 -> cutoff 2026-06-16.
+    rows = [
+        _bullpen_row("X", 11, "2026-06-10", "field_out", False),   # outside window
+        _bullpen_row("X", 11, "2026-06-17", "field_out", False),   # 1 out, in window
+        _bullpen_row("X", 12, "2026-06-18", "strikeout", False),   # 1 out, in window
+        _bullpen_row("X", 12, "2026-06-18", "single", False),      # 0 outs, in window
+        # Team X's starter on the same dates - must NOT count.
+        _bullpen_row("X", 99, "2026-06-18", "strikeout", True),
+        # Team Y: only outside the window.
+        _bullpen_row("Y", 21, "2026-06-10", "strikeout", False),
+    ]
+    pdf_with_role = pd.DataFrame(rows)
+
+    result = pitchers.compute_bullpen_recent_workload(pdf_with_role, recent_days=2).set_index("team")
+
+    assert result.loc["X", "Bullpen_Recent_Outs"] == 2
+    assert "Y" not in result.index
+
+
+def test_compute_bullpen_recent_workload_empty_input_returns_empty_not_crash():
+    result = pitchers.compute_bullpen_recent_workload(pd.DataFrame(columns=["game_date", "team", "is_starter", "events"]))
+
+    assert result.empty
+    assert list(result.columns) == ["team", "Bullpen_Recent_Outs"]
+
+
+def test_compute_bullpen_recent_workload_no_relief_appearances_in_window_returns_empty():
+    # Every appearance in the window is a starter's - real 0 relief workload,
+    # not a fabricated row.
+    rows = [_bullpen_row("X", 99, "2026-06-18", "strikeout", True)]
+    pdf_with_role = pd.DataFrame(rows)
+
+    result = pitchers.compute_bullpen_recent_workload(pdf_with_role, recent_days=2)
+
+    assert result.empty
+
+
+def test_compute_bullpen_distinct_relievers_counts_different_pitchers_not_outs():
+    # Latest date = 2026-06-18, recent_days=2 -> cutoff 2026-06-16. Team X
+    # uses 2 different relievers in the window (real breadth); Team Y uses
+    # the SAME reliever twice on different days (1 distinct, despite 2
+    # appearances) - the count must reflect distinct arms, not raw outings.
+    rows = [
+        _bullpen_row("X", 11, "2026-06-17", "field_out", False),
+        _bullpen_row("X", 12, "2026-06-18", "strikeout", False),
+        _bullpen_row("Y", 21, "2026-06-17", "field_out", False),
+        _bullpen_row("Y", 21, "2026-06-18", "strikeout", False),
+        # Team X's starter must not count.
+        _bullpen_row("X", 99, "2026-06-18", "strikeout", True),
+    ]
+    pdf_with_role = pd.DataFrame(rows)
+
+    result = pitchers.compute_bullpen_distinct_relievers(pdf_with_role, recent_days=2).set_index("team")
+
+    assert result.loc["X", "Bullpen_Distinct_Relievers"] == 2
+    assert result.loc["Y", "Bullpen_Distinct_Relievers"] == 1
+
+
+def test_compute_bullpen_distinct_relievers_empty_input_returns_empty_not_crash():
+    result = pitchers.compute_bullpen_distinct_relievers(
+        pd.DataFrame(columns=["game_date", "team", "is_starter", "pitcher"])
+    )
+
+    assert result.empty
+    assert list(result.columns) == ["team", "Bullpen_Distinct_Relievers"]
+
+
+def test_compute_bullpen_back_to_back_relievers_requires_appearance_on_both_latest_days():
+    # Latest date = 2026-06-18, so "back-to-back" here means 2026-06-17 AND
+    # 2026-06-18. Pitcher 11 appears on both (real back-to-back). Pitcher
+    # 12 appears only on 06-18 (not back-to-back - fresh yesterday).
+    # Pitcher 13 appears only on 06-16 (two days before latest - a real
+    # off-day gap, not back-to-back either).
+    rows = [
+        _bullpen_row("X", 11, "2026-06-17", "field_out", False),
+        _bullpen_row("X", 11, "2026-06-18", "strikeout", False),
+        _bullpen_row("X", 12, "2026-06-18", "single", False),
+        _bullpen_row("X", 13, "2026-06-16", "field_out", False),
+    ]
+    pdf_with_role = pd.DataFrame(rows)
+
+    result = pitchers.compute_bullpen_back_to_back_relievers(pdf_with_role).set_index("team")
+
+    assert result.loc["X", "Bullpen_Back_To_Back_Relievers"] == 1
+
+
+def test_compute_bullpen_back_to_back_relievers_off_day_gap_reads_zero():
+    # Team's two most recent appearances are 3 days apart (a real
+    # scheduled off day in between) - nobody can be "back-to-back" across
+    # that gap, so this must read a real 0, not compare across it.
+    rows = [
+        _bullpen_row("X", 11, "2026-06-15", "field_out", False),
+        _bullpen_row("X", 11, "2026-06-18", "strikeout", False),
+    ]
+    pdf_with_role = pd.DataFrame(rows)
+
+    result = pitchers.compute_bullpen_back_to_back_relievers(pdf_with_role)
+
+    assert result.empty
+
+
+def test_compute_bullpen_back_to_back_relievers_empty_input_returns_empty_not_crash():
+    result = pitchers.compute_bullpen_back_to_back_relievers(
+        pd.DataFrame(columns=["game_date", "team", "is_starter", "pitcher"])
+    )
+
+    assert result.empty
+    assert list(result.columns) == ["team", "Bullpen_Back_To_Back_Relievers"]
+
+
 def _pitches(pitcher, rows):
     return [{"pitcher": pitcher, "game_date": pd.Timestamp(date), "pitch_type": pitch_type} for date, pitch_type in rows]
 

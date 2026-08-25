@@ -1804,6 +1804,180 @@ arithmetic/missing-umpire/empty-input cases, plus
 `assemble_hitter_hit_log`'s schema and real-value-population coverage
 for both candidates).
 
+**Real dispatched result (GitHub Actions run 32775346481, full history,
+n=34,086 rows across 140 dates)** - neither candidate is added to
+`HITTER_FEATURE_COLUMNS`:
+
+- **`Days_Rest`**: univariate coef=-0.0300, p=**0.0064** (real, more rest
+  correlates with a LOWER hit probability - plausibly IL/injury-stint
+  rest rather than a true rust effect) - but combined with the full
+  existing feature set, coef flips to +0.0057, p=**0.8054** (not
+  significant). The univariate signal doesn't survive once the model
+  already accounts for everything else - likely confounded with
+  recency/playing-time signals already present (WAVE, `Last_Game_Date`-
+  adjacent features), not independent information. **Not added.**
+- **`Umpire_Factor`**: excluded from the report entirely - constant
+  (zero variance) in the real data. Root cause confirmed directly
+  against the real persisted file: Statcast's own `umpire` column is
+  **0 non-null out of 92,154 real rows** in `data/raw/statcast_2026_08.parquet`
+  - this project's real pybaseball/Statcast pull simply never populates
+  it, a genuine real-world data-availability gap in the public feed, not
+  a bug in `compute_umpire_factor` or the join logic. A real umpire
+  signal would need a different data source entirely (e.g. a dedicated
+  umpire-assignment feed) - out of scope here. **Cannot be tested, let
+  alone used, with this project's current data.**
+
+Real side note from the same report: `WAVE_Home`/`WAVE_Away` (already
+live, shipped in the previous change) are strongly significant
+univariately (p<0.0001 each) but not in the combined multivariate fit
+(p=0.44/0.97) - the same multicollinearity-with-`WAVE`/`WAVE_L`/`WAVE_R`
+pattern several other platoon-adjacent features already show in this
+report, not evidence against the feature (see the significance report's
+own docstring on standardization/collinearity).
+
+The hitter hit-probability model retrained successfully under the
+widened schema and saved (sigmoid calibration, beats `Game_Hit_Probability`
+- artifact only, not wired live). The game-pick calibration artifact
+also **finally saved** under the relaxed gate from the policy change
+above (beats the raw heuristic, 0.6864 vs 0.6933) - wired live via
+`game_picks.apply_calibration`, so live game picks are now genuinely
+rescaled starting from this run.
+
+### Real build: bullpen rest/readiness candidate, tested before committing (2026-08-25)
+
+Direct follow-up ("what about bullpen rest/readiness"), same feature-
+search discipline as the hitter-side candidates above, applied to the
+game-pick model this time. `game_picks.GAME_PICK_FEATURE_COLUMNS`
+already has `home_bullpen_pave_plus`/`away_bullpen_pave_plus` - a
+season-long QUALITY aggregate - but nothing measuring current bullpen
+FATIGUE: a bullpen can be excellent on paper and still gassed from three
+straight extra-inning games.
+
+- `pitchers.compute_bullpen_recent_workload`: real outs recorded by a
+  team's relievers (`is_starter` False) in the `config.BULLPEN_FATIGUE_RECENT_DAYS`
+  (2, first-pass/unvalidated) calendar days strictly before the target
+  date - a single fixed recency CUTOFF (not a `WAVE_WINDOWS`-style multi-
+  window blend), since this is a workload TOTAL, not a rate needing
+  small-sample smoothing.
+- `game_picks_backtest.assemble_game_pick_log` now also carries
+  `home_bullpen_recent_outs`/`away_bullpen_recent_outs` as EXPLORATORY
+  columns, NOT part of `GAME_PICK_FEATURE_COLUMNS` (live model schema
+  unaffected).
+- `scripts/train_game_pick_model.py`'s existing significance report now
+  also tests both candidates, same `statsmodels.Logit` methodology as
+  every other significance check in this project.
+
+Real, already-existing infra reused directly: `data.label_pitcher_roles`/
+`pipeline.build_pitcher_events_with_role` (the same role-labeling
+`compute_bullpen_pave` already depends on) - no new fetch, no new
+identity-resolution logic, same "game_pk is the real game id, not
+`data.assign_game_ids`" convention this module already established.
+
+Decision deferred to real dispatched numbers, same as the hitter-side
+candidates: neither column is added to `GAME_PICK_FEATURE_COLUMNS` in
+this change.
+
+Full test suite: 686 passed (4 new - `compute_bullpen_recent_workload`'s
+own exact arithmetic/empty-input/no-relief-in-window cases, plus
+`assemble_game_pick_log`'s real-value population for both candidates).
+
+**Real dispatched result (GitHub Actions run 32792241148, n=1,963 games)**
+- clean, unambiguous negative, neither candidate added to
+`GAME_PICK_FEATURE_COLUMNS`:
+
+- `home_bullpen_recent_outs`: univariate p=**0.4727**, combined p=**0.6545**.
+- `away_bullpen_recent_outs`: univariate p=**0.8985**, combined p=**0.6321**.
+
+Neither clears any bar at all, univariate or combined - not a borderline
+call like `Days_Rest`'s. The 2-day recency window
+(`config.BULLPEN_FATIGUE_RECENT_DAYS`, explicitly flagged as a first-pass/
+unvalidated choice) is the most likely place a real signal could still be
+hiding - a different window length, or a rate-based measure (e.g. outs
+per relief appearance, not a raw total) instead of a fixed lookback
+total, are real, cheap follow-ups if this is worth revisiting; not
+pursued further here since the finding is this clean.
+
+Real side benefit of dispatching this: `train_game_pick_model.py`'s own
+walk-forward predictive model (a full from-scratch LogisticRegression
+replacement for the heuristic, previously reported as failing to beat
+it) **saved for the first time** under the relaxed no-baseline-required
+gate - `game_pick_win_probability_model.joblib`, artifact only, not
+wired into live picks.
+
+### Real build: broader bullpen-fatigue sweep, tested before committing (2026-08-25)
+
+Direct follow-up to the clean negative above: "I want to see if other
+applications of bullpen fatigue are significant, but I don't care if
+they're cheap" - the 2-day recent-outs total was one specific way to
+operationalize "bullpen fatigue," not the only one. Real, distinct
+hypotheses added and tested, not micro-variations of the same idea:
+
+- **Window sweep** (`config.BULLPEN_FATIGUE_CANDIDATE_WINDOWS = [1, 3, 5]`):
+  the same `pitchers.compute_bullpen_recent_workload` at additional
+  recency horizons - does the lookback length matter, independent of
+  what's being measured.
+- **`pitchers.compute_bullpen_distinct_relievers`**: workload BREADTH
+  (how many different arms got used) instead of a raw outs total - the
+  same total workload spread across many fresh arms is a very different
+  bullpen state from that same workload concentrated on a couple of arms.
+- **`pitchers.compute_bullpen_back_to_back_relievers`**: a sharper "which
+  SPECIFIC arms are on zero rest" signal - counts relievers who appeared
+  on both of the two most recent calendar dates (not "the last two games
+  played," so a real scheduled off day correctly reads as nobody being
+  back-to-back, rather than comparing across the gap).
+
+All EXPLORATORY - `game_picks_backtest.BULLPEN_FATIGUE_CANDIDATE_COLUMNS`
+is the single source of truth for the full column list, reused directly
+by `train_game_pick_model.py`'s `CANDIDATE_FEATURE_COLUMNS` rather than a
+second hardcoded copy. None of these are part of
+`GAME_PICK_FEATURE_COLUMNS` in this change.
+
+Tests: 6 new (`compute_bullpen_distinct_relievers`/
+`compute_bullpen_back_to_back_relievers`'s own exact arithmetic -
+including the off-day-gap-reads-zero case - plus real-value population
+in `assemble_game_pick_log`). Full suite: 692 passed.
+
+**Real dispatched result (GitHub Actions run 32813871428, n=1,963
+games)** - a comprehensive negative across all 12 candidates. None comes
+close to significant, univariate or combined:
+
+| candidate | univariate p | combined p |
+|---|---|---|
+| `home_bullpen_recent_outs` (2d) | 0.4727 | 0.7405 |
+| `away_bullpen_recent_outs` (2d) | 0.8985 | 0.8879 |
+| `home_bullpen_recent_outs_1d` | 0.4153 | 0.9695 |
+| `away_bullpen_recent_outs_1d` | 0.6632 | 0.5515 |
+| `home_bullpen_recent_outs_3d` | 0.2987 | 0.8388 |
+| `away_bullpen_recent_outs_3d` | 0.6031 | 0.2202 |
+| `home_bullpen_recent_outs_5d` | 0.0912 | 0.3111 |
+| `away_bullpen_recent_outs_5d` | 0.8869 | 0.6715 |
+| `home_bullpen_distinct_relievers` | 0.5920 | 0.8274 |
+| `away_bullpen_distinct_relievers` | 0.9725 | 0.9815 |
+| `home_bullpen_back_to_back_relievers` | 0.8397 | 0.9347 |
+| `away_bullpen_back_to_back_relievers` | 0.4511 | 0.6267 |
+
+The closest thing to a signal - `home_bullpen_recent_outs_5d` at
+p=0.0912 univariate - doesn't clear even the loosest conventional bar
+(0.05), and drops further to p=0.3111 combined. Window length, workload
+breadth, and specific-arms-on-zero-rest all tell the same story: none
+of these bullpen-fatigue formulations shows real signal in this
+project's data. **None added to `GAME_PICK_FEATURE_COLUMNS`.**
+
+Real, honest interpretation: this doesn't prove bullpen fatigue doesn't
+matter to real outcomes - it means none of these five ways of measuring
+it, from real Statcast relief-appearance data alone, predicts who wins
+the NEXT game beyond what `home_bullpen_pave_plus`/`Bullpen_PAVE_PLUS`
+(the existing season-long quality signal) already captures. A genuinely
+different data source (real bullpen-availability/usage-plan reporting,
+not derivable from box-score-level Statcast) would be a different,
+separate undertaking, not a variation on this same approach.
+
+Real side note: the already-live `home_bullpen_pave_plus`/
+`home_bullpen_power_a_plus` (quality, not fatigue) DO show real
+univariate significance here (p=0.0442/p=0.0398) that fades in the
+combined fit (p=0.4989/p=0.7216) - the same multicollinearity pattern
+several other features in this report already show, not a new finding.
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our

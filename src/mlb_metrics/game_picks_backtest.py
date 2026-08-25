@@ -36,7 +36,7 @@ import subprocess
 
 import pandas as pd
 
-from mlb_metrics import config, data, game_picks, game_predictions, git_backtest, pipeline
+from mlb_metrics import config, data, game_picks, game_predictions, git_backtest, pipeline, pitchers
 
 CONFIDENCE_CSV_PATH = "docs/data/confidence.csv"
 PAVE_CSV_PATH = "docs/data/pave.csv"
@@ -150,11 +150,52 @@ def reconstruct_historical_game_picks(
     return pd.concat(all_picks, ignore_index=True)
 
 
+# All EXPLORATORY bullpen-fatigue candidate columns - NOT part of
+# game_picks.GAME_PICK_FEATURE_COLUMNS - see
+# scripts/train_game_pick_model.py's significance report for whether any
+# clear a real bar before going anywhere near the live model.
+# home_bullpen_recent_outs/away_bullpen_recent_outs (2026-08-24, "what
+# about bullpen rest/readiness") tested a single fixed 2-day window and
+# found no signal - real follow-up (2026-08-25, "I want to see if other
+# applications of bullpen fatigue are significant... I don't care if
+# they're cheap"): a sweep of additional window lengths
+# (config.BULLPEN_FATIGUE_CANDIDATE_WINDOWS) plus two genuinely different
+# hypotheses - pitchers.compute_bullpen_distinct_relievers (workload
+# BREADTH: how many different arms got used, not how many total outs)
+# and pitchers.compute_bullpen_back_to_back_relievers (a sharper "which
+# SPECIFIC arms are on zero rest" signal, distinct from a team-wide
+# workload total).
+BULLPEN_FATIGUE_WINDOW_COLUMN_PAIRS = [
+    (f"home_bullpen_recent_outs_{d}d", f"away_bullpen_recent_outs_{d}d")
+    for d in config.BULLPEN_FATIGUE_CANDIDATE_WINDOWS
+]
+BULLPEN_FATIGUE_CANDIDATE_COLUMNS = (
+    ["home_bullpen_recent_outs", "away_bullpen_recent_outs"]
+    + [col for pair in BULLPEN_FATIGUE_WINDOW_COLUMN_PAIRS for col in pair]
+    + ["home_bullpen_distinct_relievers", "away_bullpen_distinct_relievers"]
+    + ["home_bullpen_back_to_back_relievers", "away_bullpen_back_to_back_relievers"]
+)
+
 GAME_PICK_LOG_COLUMNS = (
     ["game_pk", "date", "home_team", "away_team"]
     + game_picks.GAME_PICK_FEATURE_COLUMNS
+    + BULLPEN_FATIGUE_CANDIDATE_COLUMNS
     + ["home_win_probability", "Home_Won"]
 )
+
+
+def _merge_team_metric(rows: pd.DataFrame, metric: pd.DataFrame, value_column: str, home_col: str, away_col: str) -> pd.DataFrame:
+    """Left-merges a [team, value_column] frame onto `rows` twice - once
+    keyed by home_team (as `home_col`), once by away_team (as `away_col`).
+    Shared by every bullpen-fatigue candidate merge below so the same
+    two-sided join isn't duplicated per metric."""
+    rows = rows.merge(
+        metric.rename(columns={"team": "home_team", value_column: home_col}), on="home_team", how="left",
+    )
+    rows = rows.merge(
+        metric.rename(columns={"team": "away_team", value_column: away_col}), on="away_team", how="left",
+    )
+    return rows
 
 
 def assemble_game_pick_log(
@@ -209,6 +250,46 @@ def assemble_game_pick_log(
         rows = features.merge(
             win_probabilities[["game_pk", "home_win_probability"]], on="game_pk", how="left"
         )
+
+        # Exploratory candidate (see GAME_PICK_LOG_COLUMNS's own comment) -
+        # game_pk is Statcast's own real game id here (this module's own
+        # convention, not data.assign_game_ids - see module docstring).
+        # `events` is required by build_pitcher_events_with_role/
+        # completed_events - always present on real persisted Statcast, but
+        # missing from this module's own minimal schedule/score-only
+        # synthetic fixtures (derive_historical_schedule_games never needed
+        # it) - degrades to null rather than a KeyError, same "missing
+        # optional input becomes an honest null" precedent used elsewhere.
+        if "events" in history.columns:
+            data_with_game_id = history.rename(columns={"game_pk": "game_id"})
+            roles = data.label_pitcher_roles(data_with_game_id)
+            pdf_with_role = pipeline.build_pitcher_events_with_role(data_with_game_id, roles)
+
+            bullpen_workload = pitchers.compute_bullpen_recent_workload(pdf_with_role)
+            rows = _merge_team_metric(
+                rows, bullpen_workload, "Bullpen_Recent_Outs", "home_bullpen_recent_outs", "away_bullpen_recent_outs"
+            )
+
+            for window, (home_col, away_col) in zip(
+                config.BULLPEN_FATIGUE_CANDIDATE_WINDOWS, BULLPEN_FATIGUE_WINDOW_COLUMN_PAIRS
+            ):
+                workload_at_window = pitchers.compute_bullpen_recent_workload(pdf_with_role, recent_days=window)
+                rows = _merge_team_metric(rows, workload_at_window, "Bullpen_Recent_Outs", home_col, away_col)
+
+            distinct_relievers = pitchers.compute_bullpen_distinct_relievers(pdf_with_role)
+            rows = _merge_team_metric(
+                rows, distinct_relievers, "Bullpen_Distinct_Relievers",
+                "home_bullpen_distinct_relievers", "away_bullpen_distinct_relievers",
+            )
+
+            back_to_back = pitchers.compute_bullpen_back_to_back_relievers(pdf_with_role)
+            rows = _merge_team_metric(
+                rows, back_to_back, "Bullpen_Back_To_Back_Relievers",
+                "home_bullpen_back_to_back_relievers", "away_bullpen_back_to_back_relievers",
+            )
+        else:
+            for column in BULLPEN_FATIGUE_CANDIDATE_COLUMNS:
+                rows[column] = pd.NA
 
         results = todays_games[["game_pk", "home_score", "away_score"]]
         rows = rows.merge(results, on="game_pk", how="left")
