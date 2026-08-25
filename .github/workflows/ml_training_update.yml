@@ -51,6 +51,10 @@ jobs:
         run: |
           python scripts/train_hitter_hit_model.py
 
+      - name: Train game-pick win-probability model
+        run: |
+          python scripts/train_game_pick_model.py
+
       - name: Train game-pick calibration
         run: |
           python scripts/train_game_pick_calibration.py
