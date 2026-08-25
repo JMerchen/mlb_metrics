@@ -733,6 +733,16 @@ DFS_PITCHER_WINDOWS = [
 # real significance/backtest result exists.
 BULLPEN_FATIGUE_RECENT_DAYS = 2
 
+# Real dispatched result (2026-08-25, GitHub Actions run 32792241148,
+# n=1,963 games): compute_bullpen_recent_workload at the 2-day window
+# above showed no significant signal (home p=0.4727, away p=0.8985
+# univariate). Explicit follow-up - "I want to see if other applications
+# of bullpen fatigue are significant... I don't care if they're cheap" -
+# sweeps additional window lengths as separate candidates (see
+# scripts/train_game_pick_model.py's CANDIDATE_FEATURE_COLUMNS) rather
+# than assuming the 2-day cutoff was the right one.
+BULLPEN_FATIGUE_CANDIDATE_WINDOWS = [1, 3, 5]
+
 # A pitcher needs at least this many recorded starts (pitcher_form's
 # unweighted full-season `starts` count) to be ranked at all - a 1-2 start
 # sample is enough for HR9 especially to be pure small-sample noise (one

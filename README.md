@@ -1904,6 +1904,39 @@ it) **saved for the first time** under the relaxed no-baseline-required
 gate - `game_pick_win_probability_model.joblib`, artifact only, not
 wired into live picks.
 
+### Real build: broader bullpen-fatigue sweep, tested before committing (2026-08-25)
+
+Direct follow-up to the clean negative above: "I want to see if other
+applications of bullpen fatigue are significant, but I don't care if
+they're cheap" - the 2-day recent-outs total was one specific way to
+operationalize "bullpen fatigue," not the only one. Real, distinct
+hypotheses added and tested, not micro-variations of the same idea:
+
+- **Window sweep** (`config.BULLPEN_FATIGUE_CANDIDATE_WINDOWS = [1, 3, 5]`):
+  the same `pitchers.compute_bullpen_recent_workload` at additional
+  recency horizons - does the lookback length matter, independent of
+  what's being measured.
+- **`pitchers.compute_bullpen_distinct_relievers`**: workload BREADTH
+  (how many different arms got used) instead of a raw outs total - the
+  same total workload spread across many fresh arms is a very different
+  bullpen state from that same workload concentrated on a couple of arms.
+- **`pitchers.compute_bullpen_back_to_back_relievers`**: a sharper "which
+  SPECIFIC arms are on zero rest" signal - counts relievers who appeared
+  on both of the two most recent calendar dates (not "the last two games
+  played," so a real scheduled off day correctly reads as nobody being
+  back-to-back, rather than comparing across the gap).
+
+All EXPLORATORY - `game_picks_backtest.BULLPEN_FATIGUE_CANDIDATE_COLUMNS`
+is the single source of truth for the full column list, reused directly
+by `train_game_pick_model.py`'s `CANDIDATE_FEATURE_COLUMNS` rather than a
+second hardcoded copy. None of these are part of
+`GAME_PICK_FEATURE_COLUMNS` in this change.
+
+Tests: 6 new (`compute_bullpen_distinct_relievers`/
+`compute_bullpen_back_to_back_relievers`'s own exact arithmetic -
+including the off-day-gap-reads-zero case - plus real-value population
+in `assemble_game_pick_log`). Full suite: 692 passed.
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our

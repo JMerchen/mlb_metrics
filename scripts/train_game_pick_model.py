@@ -11,13 +11,19 @@ scope on the team side:
    (z-scored) first so coefficient magnitudes are comparable across very
    different scales - p-values themselves are scale-invariant.
 
-   Also tests CANDIDATE_FEATURE_COLUMNS (home_bullpen_recent_outs,
-   away_bullpen_recent_outs) - real feature-search follow-up (2026-08-25):
-   "what about bullpen rest/readiness." Neither is part of
-   game_picks.GAME_PICK_FEATURE_COLUMNS yet; they're carried by
-   game_picks_backtest.assemble_game_pick_log purely as exploratory
-   columns (see pitchers.compute_bullpen_recent_workload's docstring) and
-   included in this same significance report so a real p-value decides
+   Also tests CANDIDATE_FEATURE_COLUMNS - every bullpen-fatigue
+   exploratory column game_picks_backtest.assemble_game_pick_log carries
+   (game_picks_backtest.BULLPEN_FATIGUE_CANDIDATE_COLUMNS, reused
+   directly as the single source of truth for this list): the original
+   2-day recent-outs total ("what about bullpen rest/readiness",
+   2026-08-25 - no real signal, see README), plus a real follow-up sweep
+   ("I want to see if other applications of bullpen fatigue are
+   significant... I don't care if they're cheap") - additional recency
+   windows (config.BULLPEN_FATIGUE_CANDIDATE_WINDOWS), distinct-relievers-
+   used (workload BREADTH, not total), and back-to-back-relievers (which
+   SPECIFIC arms are on zero rest). None is part of
+   game_picks.GAME_PICK_FEATURE_COLUMNS yet; included in this same
+   significance report so a real p-value decides
    whether either earns a permanent place in the model.
 
 2. **Walk-forward-validated predictive model** (sklearn LogisticRegression +
@@ -95,17 +101,20 @@ def _fit_logit_report(y: pd.Series, X: pd.DataFrame, label: str):
     return table, result
 
 
-# Exploratory candidates (2026-08-25 feature-search follow-up - "what
-# about bullpen rest/readiness"): real, already-persisted signal
-# (game_picks_backtest.assemble_game_pick_log's own
-# home_bullpen_recent_outs/away_bullpen_recent_outs columns - see
-# pitchers.compute_bullpen_recent_workload's docstring) that is NOT part
-# of game_picks.GAME_PICK_FEATURE_COLUMNS - tested here, alongside the
-# live feature set, purely to decide whether either earns a permanent
-# place in the model. Nothing here changes what the live model actually
-# uses until a candidate clears a real bar and is deliberately added to
+# Exploratory candidates - every bullpen-fatigue column
+# game_picks_backtest.assemble_game_pick_log carries (see that module's
+# own BULLPEN_FATIGUE_CANDIDATE_COLUMNS comment for the full real
+# history: the original 2-day recent-outs total found no signal
+# (2026-08-25), so this reuses the SAME source-of-truth list rather than
+# hardcoding a second copy, to test the broader sweep - "I want to see
+# if other applications of bullpen fatigue are significant... I don't
+# care if they're cheap"). None is part of
+# game_picks.GAME_PICK_FEATURE_COLUMNS - tested here, alongside the live
+# feature set, purely to decide whether any earns a permanent place in
+# the model. Nothing here changes what the live model actually uses
+# until a candidate clears a real bar and is deliberately added to
 # GAME_PICK_FEATURE_COLUMNS in a follow-up change.
-CANDIDATE_FEATURE_COLUMNS = ["home_bullpen_recent_outs", "away_bullpen_recent_outs"]
+CANDIDATE_FEATURE_COLUMNS = game_picks_backtest.BULLPEN_FATIGUE_CANDIDATE_COLUMNS
 
 
 def significance_report(rows: pd.DataFrame) -> None:

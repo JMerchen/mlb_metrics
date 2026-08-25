@@ -302,6 +302,72 @@ def compute_bullpen_recent_workload(
     return result.rename(columns={"outs": "Bullpen_Recent_Outs"})
 
 
+def compute_bullpen_distinct_relievers(
+    pdf_with_role: pd.DataFrame, recent_days: int = config.BULLPEN_FATIGUE_RECENT_DAYS
+) -> pd.DataFrame:
+    """One row per team: Bullpen_Distinct_Relievers - the count of DIFFERENT
+    pitchers who made a relief appearance in the `recent_days` calendar
+    days strictly before the latest date in `pdf_with_role`. A genuinely
+    different hypothesis from compute_bullpen_recent_workload's raw outs
+    total (2026-08-25 feature-search follow-up - "other applications of
+    bullpen fatigue"): the SAME total workload spread across many fresh
+    arms (low distinct-reliever count) is a very different bullpen state
+    from that same workload concentrated on a couple of arms (a high
+    count could mean either "the whole pen got used" fatigue, or the
+    opposite - a manager mixing and matching to keep everyone fresh; the
+    significance report, not intuition, decides which reading the real
+    data supports).
+
+    Same `pdf_with_role`/no-lookahead contract as
+    compute_bullpen_recent_workload. A team with zero relief appearances
+    in the window reads a real 0."""
+    if pdf_with_role.empty:
+        return pd.DataFrame(columns=["team", "Bullpen_Distinct_Relievers"])
+
+    latest = pdf_with_role["game_date"].max()
+    cutoff = latest - pd.Timedelta(days=recent_days)
+    window = pdf_with_role[(~pdf_with_role["is_starter"]) & (pdf_with_role["game_date"] >= cutoff)]
+    if window.empty:
+        return pd.DataFrame(columns=["team", "Bullpen_Distinct_Relievers"])
+
+    result = window.groupby("team", as_index=False)["pitcher"].nunique()
+    return result.rename(columns={"pitcher": "Bullpen_Distinct_Relievers"})
+
+
+def compute_bullpen_back_to_back_relievers(pdf_with_role: pd.DataFrame) -> pd.DataFrame:
+    """One row per team: Bullpen_Back_To_Back_Relievers - the count of
+    relief pitchers who appeared for that team on BOTH of the two most
+    recent calendar dates in `pdf_with_role` (the latest date, and the
+    day immediately before it). A sharper, more targeted "which specific
+    arms are gassed" hypothesis (2026-08-25 feature-search follow-up)
+    than a team-wide workload total: a reliever who threw on zero days'
+    rest is plausibly genuinely less available/effective today,
+    regardless of how many total outs the whole bullpen recorded.
+
+    Uses the two most recent calendar days literally (latest and
+    latest - 1 day), not "the team's last two games" - if the team had a
+    real scheduled off day between those dates, nobody can appear on
+    both, and this correctly reads 0 (no one is on zero rest) rather
+    than comparing across a gap that isn't really "back-to-back."
+
+    Same `pdf_with_role`/no-lookahead contract as
+    compute_bullpen_recent_workload. A team with no back-to-back
+    relievers reads a real 0."""
+    if pdf_with_role.empty:
+        return pd.DataFrame(columns=["team", "Bullpen_Back_To_Back_Relievers"])
+
+    latest = pdf_with_role["game_date"].max()
+    relief = pdf_with_role[~pdf_with_role["is_starter"]]
+    day0 = relief[relief["game_date"] == latest][["team", "pitcher"]].drop_duplicates()
+    day1 = relief[relief["game_date"] == latest - pd.Timedelta(days=1)][["team", "pitcher"]].drop_duplicates()
+    both_days = day0.merge(day1, on=["team", "pitcher"], how="inner")
+    if both_days.empty:
+        return pd.DataFrame(columns=["team", "Bullpen_Back_To_Back_Relievers"])
+
+    result = both_days.groupby("team", as_index=False)["pitcher"].nunique()
+    return result.rename(columns={"pitcher": "Bullpen_Back_To_Back_Relievers"})
+
+
 def assemble_pitchers(
     pdf: pd.DataFrame,
     names: pd.DataFrame,

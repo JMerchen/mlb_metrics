@@ -366,6 +366,54 @@ def test_assemble_game_pick_log_populates_bullpen_recent_workload(tmp_path, monk
     assert row["home_bullpen_recent_outs"] == 1  # NYY's reliever's real strikeout the day before
     assert pd.isna(row["away_bullpen_recent_outs"])  # BOS had no relief appearance (one pitcher, is_starter)
 
+    # Wider windows (1d/3d/5d) still see the same single day of history -
+    # same real value, not zeroed out just because the window changed.
+    for suffix in ("1d", "3d", "5d"):
+        assert row[f"home_bullpen_recent_outs_{suffix}"] == 1
+
+    # Exactly one distinct reliever used (pitcher 102).
+    assert row["home_bullpen_distinct_relievers"] == 1
+
+    # No back-to-back reliever: only ONE prior date (05-31) exists in
+    # history at all, so there's no real "day before that" to compare
+    # against - a genuine cold-start NaN, not a fabricated 0.
+    assert pd.isna(row["home_bullpen_back_to_back_relievers"])
+
+
+def test_assemble_game_pick_log_populates_back_to_back_relievers_when_real(tmp_path, monkeypatch):
+    # NYY's reliever (102) pitches on BOTH 05-30 and 05-31 - the two
+    # consecutive dates strictly before the 06-01 target date - a real
+    # back-to-back appearance that must populate as a real 1, not NaN.
+    monkeypatch.setattr(game_picks_backtest.pipeline, "compute_outputs", lambda df: _fake_current_outputs())
+
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+
+    def _relief_game(game_pk, date):
+        return [
+            {"game_pk": game_pk, "game_date": date, "home_team": "NYY", "away_team": "BOS",
+             "pitcher": 101, "inning_topbot": "Top", "at_bat_number": 1, "events": "field_out",
+             "post_home_score": 0, "post_away_score": 0},
+            {"game_pk": game_pk, "game_date": date, "home_team": "NYY", "away_team": "BOS",
+             "pitcher": 102, "inning_topbot": "Top", "at_bat_number": 2, "events": "strikeout",
+             "post_home_score": 0, "post_away_score": 0},
+            {"game_pk": game_pk, "game_date": date, "home_team": "NYY", "away_team": "BOS",
+             "pitcher": 201, "inning_topbot": "Bot", "at_bat_number": 3, "events": "field_out",
+             "post_home_score": 0, "post_away_score": 0},
+        ]
+
+    day_minus_2 = _relief_game(553, pd.Timestamp("2026-05-30"))
+    day_minus_1 = _relief_game(554, pd.Timestamp("2026-05-31"))
+    day0 = _statcast_game(555, pd.Timestamp("2026-06-01"), "NYY", "BOS", 101, 201, 5, 2)
+    for row in day0:
+        row["events"] = None
+    pd.DataFrame(day_minus_2 + day_minus_1 + day0).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    log = game_picks_backtest.assemble_game_pick_log(raw_dir=str(raw_dir), season=2026, days=40)
+
+    assert len(log) == 1
+    assert log.iloc[0]["home_bullpen_back_to_back_relievers"] == 1
+
 
 def test_assemble_game_pick_log_home_loss_recorded_correctly(tmp_path, monkeypatch):
     monkeypatch.setattr(game_picks_backtest.pipeline, "compute_outputs", lambda df: _fake_current_outputs())
