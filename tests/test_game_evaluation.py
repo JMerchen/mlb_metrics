@@ -173,11 +173,12 @@ def test_build_game_picks_export_bet_pnl_metrics_real_win_and_loss():
     assert summary.loc[0, "roi_p_value"] == pytest.approx(expected_roi_p)
 
 
-def test_build_game_picks_export_bet_streak_is_plain_consecutive_wins():
-    # Chronological order: win, loss, win -> current streak resets on the
-    # loss then rebuilds to 1 on the next win - a plain consecutive-win
-    # counter over resolved advised bets, same style the old accuracy-based
-    # streak used, just scored on profit>0 instead of correctness.
+def test_build_game_picks_export_bet_streak_is_a_day_streak_not_a_bet_streak():
+    # Chronological order by DAY: profitable day, losing day, profitable
+    # day -> current streak resets on the losing day then rebuilds to 1 on
+    # the next profitable day - streak is scored per calendar day on that
+    # day's TOTAL real profit, not per individual bet (2026-08-25 - "the
+    # streak should be days... if the cumulative bets made money that day").
     rows = [
         _pick("2026-07-18", 1, "NYY", "BOS", "NYY", 0.65, "NYY", 1,
               bet_units=3.0, bet_team="NYY", bet_moneyline=-150, bet_profit_units=2.0),
@@ -192,6 +193,33 @@ def test_build_game_picks_export_bet_streak_is_plain_consecutive_wins():
     picks, summary = game_evaluation.build_game_picks_export(df)
 
     assert summary.loc[0, "current_bet_streak"] == 1
+    assert summary.loc[0, "best_bet_streak"] == 1
+
+
+def test_build_game_picks_export_bet_streak_scores_a_day_by_its_total_profit():
+    # Two bets on the SAME day: a big winner and a smaller loser that
+    # nets the day positive overall - counts as exactly ONE streak step,
+    # not two, and is scored on the day's combined profit (net positive),
+    # not on either individual bet.
+    rows = [
+        _pick("2026-07-18", 1, "NYY", "BOS", "NYY", 0.65, "NYY", 1,
+              bet_units=3.0, bet_team="NYY", bet_moneyline=-150, bet_profit_units=2.0),
+        _pick("2026-07-18", 2, "LAD", "SF", "LAD", 0.6, "SF", 1,
+              bet_units=1.0, bet_team="LAD", bet_moneyline=-120, bet_profit_units=-0.5),
+        # A second day, net negative overall despite one winning bet on it
+        # - resets the streak, not just leaves it unchanged.
+        _pick("2026-07-19", 3, "HOU", "SEA", "HOU", 0.7, "HOU", 1,
+              bet_units=1.0, bet_team="HOU", bet_moneyline=-130, bet_profit_units=0.5),
+        _pick("2026-07-19", 4, "ATL", "PHI", "ATL", 0.66, None, 1,
+              bet_units=2.0, bet_team="ATL", bet_moneyline=-140, bet_profit_units=-1.5),
+    ]
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+
+    picks, summary = game_evaluation.build_game_picks_export(df)
+
+    # Day 1 (net +1.5) extends the streak to 1; day 2 (net -1.0) resets it.
+    assert summary.loc[0, "current_bet_streak"] == 0
     assert summary.loc[0, "best_bet_streak"] == 1
 
 

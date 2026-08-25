@@ -1819,9 +1819,14 @@ const beatClosingLineSub = hasClosingLineData
 .filter(Boolean).join(" · ")
 : ""
 
+// Streak is DAYS, not bets (2026-08-25 - "the streak should be days...
+// if the cumulative bets made money that day" - see
+// game_evaluation._bet_pnl_metrics' own docstring): a day with several
+// advised bets counts for at most one real streak step either way,
+// scored on that day's TOTAL profit, not any single bet in isolation.
 el.innerHTML =
-stat(s.current_bet_streak || 0, "Bet Streak") +
-stat(s.best_bet_streak || 0, "Best Bet Streak") +
+stat(s.current_bet_streak || 0, "Day Streak") +
+stat(s.best_bet_streak || 0, "Best Day Streak") +
 stat(winRate, "Win Rate", winRateSub) +
 stat(s.n_bets_advised || 0, "Bets Tracked") +
 `<div class="streakStat"><div class="value" style="color:${pnlColor}">${pnl}</div><div class="label">P&amp;L</div>${pnlSub ? `<div class="sub">${pnlSub}</div>` : ""}</div>` +
