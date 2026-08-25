@@ -296,3 +296,70 @@ def test_apply_calibration_never_passes_a_real_nan_probability_to_predict(monkey
     # The genuinely NaN row stays honestly NaN - no fabricated calibrated
     # value for a game with no real input to calibrate.
     assert pd.isna(result.loc[1, "home_win_probability"])
+
+
+def test_apply_kelly_uncertainty_subtracts_combined_ci_half_width():
+    win_probabilities = pd.DataFrame({
+        "game_pk": [1], "home_team": ["NYY"], "away_team": ["BOS"], "home_win_probability": [0.70],
+    })
+    confidence = pd.DataFrame([
+        {"team": "NYY", "win_rate_CI_Low": 0.40, "win_rate_CI_High": 0.60},  # half-width 0.10
+        {"team": "BOS", "win_rate_CI_Low": 0.30, "win_rate_CI_High": 0.50},  # half-width 0.10
+    ])
+
+    result = game_picks.apply_kelly_uncertainty(win_probabilities, confidence)
+
+    # Real root-sum-square combination: sqrt(0.10^2 + 0.10^2) = 0.141421...
+    combined = (0.10**2 + 0.10**2) ** 0.5
+    assert result.loc[0, "home_win_probability_pessimistic"] == pytest.approx(0.70 - combined)
+    assert result.loc[0, "away_win_probability_pessimistic"] == pytest.approx(0.30 - combined)
+
+
+def test_apply_kelly_uncertainty_clips_to_zero_not_negative():
+    # A large combined uncertainty relative to a modest edge must clip at
+    # 0, not go negative - "no real confidence in an edge" reads as a real
+    # 0, matching kelly.kelly_fraction's own clip-at-zero convention.
+    win_probabilities = pd.DataFrame({
+        "game_pk": [1], "home_team": ["NYY"], "away_team": ["BOS"], "home_win_probability": [0.55],
+    })
+    confidence = pd.DataFrame([
+        {"team": "NYY", "win_rate_CI_Low": 0.10, "win_rate_CI_High": 0.90},
+        {"team": "BOS", "win_rate_CI_Low": 0.10, "win_rate_CI_High": 0.90},
+    ])
+
+    result = game_picks.apply_kelly_uncertainty(win_probabilities, confidence)
+
+    assert result.loc[0, "home_win_probability_pessimistic"] == 0.0
+
+
+def test_apply_kelly_uncertainty_missing_team_gets_maximal_uncertainty():
+    # A team genuinely absent from confidence (early season/real data gap)
+    # gets the same maximal half-width (0.5) helpers.wilson_ci's own n=0
+    # case uses - treated as maximally uncertain, not silently ordinary.
+    win_probabilities = pd.DataFrame({
+        "game_pk": [1], "home_team": ["NYY"], "away_team": ["BOS"], "home_win_probability": [0.70],
+    })
+    confidence = pd.DataFrame([{"team": "NYY", "win_rate_CI_Low": 0.45, "win_rate_CI_High": 0.55}])  # BOS absent
+
+    result = game_picks.apply_kelly_uncertainty(win_probabilities, confidence)
+
+    combined = (0.05**2 + 0.5**2) ** 0.5
+    assert result.loc[0, "home_win_probability_pessimistic"] == pytest.approx(max(0.70 - combined, 0.0))
+
+
+def test_apply_kelly_uncertainty_preserves_nan_home_win_probability():
+    # A real NaN home_win_probability (missing composite rating, same
+    # case apply_calibration itself guards against) must stay honestly
+    # NaN, not turn into a fabricated real number.
+    win_probabilities = pd.DataFrame({
+        "game_pk": [1], "home_team": ["NYY"], "away_team": ["BOS"], "home_win_probability": [float("nan")],
+    })
+    confidence = pd.DataFrame([
+        {"team": "NYY", "win_rate_CI_Low": 0.40, "win_rate_CI_High": 0.60},
+        {"team": "BOS", "win_rate_CI_Low": 0.30, "win_rate_CI_High": 0.50},
+    ])
+
+    result = game_picks.apply_kelly_uncertainty(win_probabilities, confidence)
+
+    assert pd.isna(result.loc[0, "home_win_probability_pessimistic"])
+    assert pd.isna(result.loc[0, "away_win_probability_pessimistic"])

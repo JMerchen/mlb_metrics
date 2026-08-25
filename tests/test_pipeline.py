@@ -475,11 +475,17 @@ def _minimal_outputs_with_confidence():
             "team": "NYY", "pyth_Strength": 1.1, "pyth_Confidence": 1.05,
             "suppression_resistance": 1.0, "true_power": 1.0,
             "Bullpen_PAVE_PLUS": 0.9, "Bullpen_Power_A_PLUS": 0.9,
+            # win_rate_CI_Low/High (teams.compute_team_win_rate_ci's real
+            # output columns, merged into a real assemble_team_metrics
+            # frame) - required by game_picks.apply_kelly_uncertainty, which
+            # select_game_picks now calls whenever `confidence` is given.
+            "win_rate_CI_Low": 0.40, "win_rate_CI_High": 0.60,
         },
         {
             "team": "BOS", "pyth_Strength": 0.9, "pyth_Confidence": 0.95,
             "suppression_resistance": 1.0, "true_power": 1.0,
             "Bullpen_PAVE_PLUS": 1.1, "Bullpen_Power_A_PLUS": 1.1,
+            "win_rate_CI_Low": 0.40, "win_rate_CI_High": 0.60,
         },
     ])
     outputs["pave"] = pd.DataFrame([

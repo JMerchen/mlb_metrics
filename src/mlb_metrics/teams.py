@@ -188,6 +188,30 @@ def compute_park_factors(data: pd.DataFrame) -> pd.DataFrame:
     return venue[["team", "Park_Factor"]]
 
 
+def compute_team_win_rate_ci(record: pd.DataFrame) -> pd.DataFrame:
+    """One row per team: games_played, win_rate (real season-to-date
+    wins / games), and a real Wilson score confidence interval
+    (helpers.wilson_ci) on that binomial proportion. Real follow-up
+    (2026-08-25 - "we need the units risked to not be arbitrary"): feeds
+    game_picks.apply_kelly_uncertainty, which replaces
+    config.KELLY_FRACTION_MULTIPLIER's old flat, unconditional 0.5
+    shrinkage with a real per-game conservative estimate - the CI
+    naturally widens early in the season (few real games played, genuine
+    uncertainty about how good a team really is) and narrows as more
+    real games accumulate, with no new tunable constant beyond the
+    already-established Wilson formula and standard error-propagation
+    math (see apply_kelly_uncertainty's own docstring).
+
+    `record` must be build_team_record's own shape (one row per team per
+    game, real win/loss)."""
+    games = record.groupby("team", as_index=False).agg(games_played=("win", "size"), wins=("win", "sum"))
+    games["win_rate"] = games["wins"] / games["games_played"]
+    ci_low, ci_high = helpers.wilson_ci(games["wins"], games["games_played"])
+    games["win_rate_CI_Low"] = ci_low
+    games["win_rate_CI_High"] = ci_high
+    return games[["team", "games_played", "win_rate", "win_rate_CI_Low", "win_rate_CI_High"]]
+
+
 def compute_umpire_factor(data: pd.DataFrame) -> pd.DataFrame:
     """One row per real home-plate umpire (Statcast's own `umpire` id -
     real, not derived): Umpire_Factor - that umpire's own real hit rate on
@@ -372,6 +396,11 @@ def assemble_team_metrics(data: pd.DataFrame, bullpen_pave: pd.DataFrame | None 
     Bullpen_PAVE_PLUS/Bullpen_BAA/etc, describing how tough *this* team's
     bullpen is to hit against. It's optional so teams.py stays independently
     testable/usable without requiring pitcher-role data.
+
+    Also carries games_played/win_rate/win_rate_CI_Low/win_rate_CI_High
+    (compute_team_win_rate_ci) - real season-to-date record with a Wilson
+    confidence interval, feeding game_picks.apply_kelly_uncertainty's
+    real bet-sizing (see that function's docstring).
     """
     for_merge, sus = compute_home_run_stats(data)
     latest_off = compute_offensive_edge(data)
@@ -415,12 +444,15 @@ def assemble_team_metrics(data: pd.DataFrame, bullpen_pave: pd.DataFrame | None 
     master["true_power"] = (master["offensive_edge"] + master["suppression_resistance"]) / 2
     master = master.merge(park_factors, on="team", how="left")
 
+    win_rate_ci = compute_team_win_rate_ci(record)
+    master = master.merge(win_rate_ci, on="team", how="left")
+
     output_columns = [
         "team", "current", "Strength", "pyth_Strength", "SOS", "pyth_SOS",
         "Confidence", "pyth_Confidence", "Confidence_Delta", "true_power",
         "offensive_edge", "team_bases_pg", "suppression_resistance", "home_run_reliance",
         "homer_per_game", "game_homer_rate", "team_home_run_rate", "away_hr_rate",
-        "Park_Factor",
+        "Park_Factor", "games_played", "win_rate", "win_rate_CI_Low", "win_rate_CI_High",
     ]
     if bullpen_pave is not None:
         master = master.merge(bullpen_pave, on="team", how="left")

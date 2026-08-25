@@ -1550,6 +1550,91 @@ Full test suite: 658 passed (no test changes needed - existing tests
 either pass `min_edge` explicitly or use a fixture with a wide enough
 margin to clear the new default).
 
+### Real bet-sizing fix: uncertainty-scaled Kelly + a daily unit cap (2026-08-25)
+
+Direct user ask: **"we need the units risked to not be arbitrary."**
+Investigation confirmed the concern was real, not just a feeling: the
+stake size on a given bet was the product of THREE separately-chosen
+constants, each explicitly self-documented in `config.py` as a
+convention, not a derived number - `KELLY_FRACTION_MULTIPLIER` (0.5,
+"the standard practitioner default"), `KELLY_MIN_EDGE` (0.05, "not a
+number backed by a formal calculation"), and `UNIT_SIZE_FRACTION` (0.01,
+"a common real convention"). The real logged data showed the concrete
+symptom: the 5 resolved advised bets on the books ranged **5.0 to 8.8
+units** (5-8.8% of bankroll) each - large stakes for a model whose own
+`beat_closing_line_rate` isn't yet statistically distinguishable from a
+coin flip (see the sanity-check above). Only 5 real resolved bets exist
+total - far too few to empirically backtest-tune any of the three
+constants, which ruled out that approach.
+
+**The fix grounds "how much to risk" in each team's own real record,
+with zero new tunable constants beyond the user's own explicit cap**:
+
+- `teams.compute_team_win_rate_ci` - one row per team: real
+  season-to-date `win_rate` (from `build_team_record`'s real win/loss
+  outcomes) plus a real Wilson score CI (`helpers.wilson_ci`, already
+  established elsewhere in this project) on that binomial proportion.
+  Naturally wide early in the season or for a thin sample, narrow once
+  real games accumulate - merged into `teams.assemble_team_metrics`'
+  output (`win_rate_CI_Low`/`win_rate_CI_High`), so it's part of the same
+  `confidence` frame the daily pipeline already computes.
+- `game_picks.apply_kelly_uncertainty` - for each game, combines both
+  teams' real CI half-widths via standard root-sum-square error
+  propagation (the two teams' records are independent real samples) into
+  one real per-game uncertainty measure, then subtracts it from the raw
+  win probability to get a real, worst-reasonable-case ("pessimistic")
+  probability. A team missing from `confidence` entirely gets the same
+  maximal degenerate half-width `wilson_ci`'s own `n=0` case already uses
+  (0.5) - genuinely unknown is treated as maximally uncertain, not
+  ordinary.
+- `game_predictions.advise_bets` sizes each bet's stake off THAT real
+  pessimistic probability at a full 1.0 Kelly multiplier, instead of the
+  raw point estimate scaled by the old flat 0.5 - so a thin, uncertain
+  team record now genuinely produces a smaller (or zero) stake, and a
+  well-established one produces a stake close to what full Kelly would
+  have said anyway. `KELLY_MIN_EDGE` eligibility is unchanged and still
+  uses the raw model probability - "is there a real edge worth
+  considering" stays a separate question from "how much to actually risk
+  given that edge." Gated per-ROW on the pessimistic values actually
+  being non-null (not just column presence, since the columns are now
+  always persisted - see below) - any game without real team-record
+  coverage cleanly falls back to the old flat-multiplier behavior instead
+  of silently producing a NaN stake.
+- **`config.KELLY_DAILY_UNIT_CAP = 5`** - a hard portfolio-level cap, in
+  units, on the total stake advised across all of one day's bets
+  combined - the user's own explicit number, not derived. If a day's
+  total advised stake would exceed it, `advise_bets` scales EVERY advised
+  stake for that date down proportionally (never dropping any single bet)
+  so the day's total lands exactly at the cap.
+- `KELLY_FRACTION_MULTIPLIER` is now a FALLBACK only - still the real
+  multiplier used when a game has no real team-record coverage
+  (`scripts/recommend_bets.py --kelly-fraction`, `game_picks_backtest.py`'s
+  historical replay), no longer the default source of shrinkage for every
+  bet.
+
+**Persisted, not just used transiently**: `select_game_picks` now writes
+`home_win_probability_pessimistic`/`away_win_probability_pessimistic`
+onto every logged row (null when `confidence` wasn't given/didn't cover
+that game) - `GAME_PREDICTION_COLUMNS` gains both, with the usual
+migration guard backfilling `NA` for any pre-existing row. This matters
+because `scripts/recommend_bets.py` re-derives its report from the
+ALREADY-LOGGED picks rather than recomputing team confidence from raw
+Statcast (a much heavier fetch than that script otherwise does) - without
+persisting these two columns, the live pipeline's logged stake and the
+report's recommended stake for the same game could silently disagree.
+`pipeline.run()` now passes `confidence=outputs["confidence"]` into
+`select_game_picks` so the live daily pipeline actually uses this sizing,
+not just the tests.
+
+New tests: `tests/test_teams.py` (Wilson CI correctness, smaller sample
+= wider interval), `tests/test_game_picks.py` (`apply_kelly_uncertainty`
+- combined half-width, zero-clipping, missing-team maximal uncertainty,
+NaN passthrough), `tests/test_game_predictions.py` (pessimistic sizing
+producing a real smaller stake than the old flat multiplier, the daily
+cap's proportional scale-down, a different date's stakes staying
+untouched, the per-row null fallback, persistence + migration of the two
+new columns). Full test suite: 703 passed.
+
 ### Real follow-up: game-pick probability calibration (2026-08-24, not shipped)
 
 Direct follow-up to the `KELLY_MIN_EDGE` sanity-check above: on the 93

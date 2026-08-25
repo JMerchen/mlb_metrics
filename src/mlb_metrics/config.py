@@ -924,7 +924,19 @@ MARKET_ODDS_BACKFILL_DAYS_BACK = 5
 # recommend_bets.py's own comment on why this differs from
 # market_home_win_probability above).
 KELLY_FRACTION_MULTIPLIER = 0.5  # half-Kelly - full Kelly is only growth-optimal if the probability estimate is exactly right; this project's own probabilities carry real estimation error (see the Wilson CIs throughout this project), and full Kelly's downside variance is severe when the estimate is even slightly off. Half-Kelly is the standard practitioner default.
+# FALLBACK ONLY as of 2026-08-25 ("we need the units risked to not be
+# arbitrary"): game_predictions.advise_bets now sizes off a real, per-bet
+# pessimistic probability (game_picks.apply_kelly_uncertainty, grounded in
+# each team's own real season-to-date Wilson CI - see teams.compute_team_win_rate_ci)
+# whenever that data is available, and uses a multiplier of 1.0 in that case
+# instead of this flat guessed 0.5 - a per-bet real uncertainty measure
+# replaces a single number applied identically to every bet regardless of
+# how solid the underlying estimate actually is. This constant still applies
+# as a straight fractional-Kelly multiplier for callers that lack real
+# team-record context (scripts/recommend_bets.py's own --kelly-fraction
+# override, game_picks_backtest.py's historical replay).
 KELLY_MIN_EDGE = 0.05  # minimum (model probability - real vigged market-implied probability) before recommending any stake at all - a buffer against noise in the model's own probability estimate, not a number backed by a formal calculation.
+KELLY_DAILY_UNIT_CAP = 5  # hard portfolio-level cap, in units (see UNIT_SIZE_FRACTION below), on the TOTAL stake advised across all of a single day's bets combined - a deliberate user-set risk limit (2026-08-25), not derived from data. game_predictions.advise_bets scales ALL of a date's stakes down proportionally (never selectively drops any one bet) whenever their sum would otherwise exceed this, so no single day's combined advice can ever risk more than this many units regardless of how many real edges clear on that date.
 # Raised from 0.02 after real production data (2026-08-24) showed 8 of 10
 # real games clearing the old 2% bar, with de-vigged model/market gaps as
 # large as 12 percentage points - implausible as genuine value against a

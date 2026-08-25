@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from mlb_metrics import config, game_predictions
+from mlb_metrics import config, game_predictions, kelly
 
 
 def _win_probabilities(rows):
@@ -394,6 +394,94 @@ def test_advise_bets_drops_both_sides_on_a_data_anomaly(capsys):
     assert "data-quality anomaly" in capsys.readouterr().out
 
 
+def test_advise_bets_sizes_off_pessimistic_probability_when_given():
+    # Real follow-up (2026-08-25 - "we need the units risked to not be
+    # arbitrary"): when home/away_win_probability_pessimistic columns are
+    # present, the stake is sized off THAT real, per-game conservative
+    # probability at a full 1.0 multiplier - not the raw model probability
+    # scaled by kelly_fraction_multiplier. kelly_fraction_multiplier=0.5 is
+    # passed here deliberately wrong/misleading, to prove it's genuinely
+    # ignored once pessimistic columns are present, not silently stacked on
+    # top of the new CI-based pessimism.
+    picks = pd.DataFrame([{
+        **_bet_pick_row(1, "NYY", "TOR", "NYY", 0.70),
+        "home_win_probability_pessimistic": 0.61,
+        "away_win_probability_pessimistic": 0.05,
+    }])
+    market = pd.DataFrame([_bet_market_row("NYY", "TOR", -150, 130)])
+
+    recs = game_predictions.advise_bets(picks, market, kelly_fraction_multiplier=0.5, min_edge=0.02)
+
+    assert len(recs) == 1
+    row = recs.iloc[0]
+    assert row["side"] == "home"
+    # Eligibility (min_edge) still uses the RAW model probability (0.70) -
+    # a separate question from how much to actually risk.
+    assert row["edge"] == pytest.approx(0.70 - (150 / 250), abs=1e-6)
+    expected_stake = kelly.kelly_fraction(0.61, -150, 1.0)
+    assert expected_stake > 0  # sanity - this test must exercise a real positive stake
+    assert row["kelly_stake_fraction"] == pytest.approx(expected_stake, abs=1e-9)
+    # And that real, per-game pessimistic stake is genuinely smaller than
+    # what the old flat-half-Kelly approach would have advised on the same
+    # raw 0.70 probability - the concrete "units risked" fix.
+    old_flat_stake = kelly.kelly_fraction(0.70, -150, 0.5)
+    assert row["kelly_stake_fraction"] < old_flat_stake
+
+
+def test_advise_bets_daily_cap_scales_all_of_a_days_stakes_proportionally():
+    # Two big real edges on the SAME date whose combined full-Kelly stakes
+    # really do exceed config.KELLY_DAILY_UNIT_CAP - otherwise this test
+    # wouldn't exercise the cap at all.
+    picks = pd.DataFrame([
+        _bet_pick_row(1, "NYY", "TOR", "NYY", 0.80),
+        _bet_pick_row(2, "LAD", "SF", "LAD", 0.75),
+    ])
+    market = pd.DataFrame([
+        _bet_market_row("NYY", "TOR", -150, 130),
+        _bet_market_row("LAD", "SF", -140, 120),
+    ])
+
+    recs = game_predictions.advise_bets(picks, market, kelly_fraction_multiplier=1.0, min_edge=0.02)
+
+    assert len(recs) == 2
+    cap_fraction = config.KELLY_DAILY_UNIT_CAP * config.UNIT_SIZE_FRACTION
+    nyy_uncapped = kelly.kelly_fraction(0.80, -150, 1.0)
+    lad_uncapped = kelly.kelly_fraction(0.75, -140, 1.0)
+    assert nyy_uncapped + lad_uncapped > cap_fraction  # sanity - cap is genuinely binding here
+
+    # The day's total lands EXACTLY at the cap, not merely under it.
+    assert recs["kelly_stake_fraction"].sum() == pytest.approx(cap_fraction, abs=1e-9)
+    # Scaled down PROPORTIONALLY - each bet's relative size is preserved,
+    # not clipped to an equal split or favoring whichever game came first.
+    nyy_row = recs.set_index("team").loc["NYY"]
+    lad_row = recs.set_index("team").loc["LAD"]
+    assert nyy_row["kelly_stake_fraction"] / lad_row["kelly_stake_fraction"] == pytest.approx(
+        nyy_uncapped / lad_uncapped, abs=1e-9
+    )
+
+
+def test_advise_bets_daily_cap_leaves_a_different_dates_stakes_untouched():
+    # Two dates, each individually under the cap on its own, but summed
+    # together they WOULD exceed cap_fraction=0.05 if the cap were (wrongly)
+    # applied across the whole DataFrame instead of per real calendar date.
+    picks = pd.DataFrame([
+        {**_bet_pick_row(1, "NYY", "TOR", "NYY", 0.615), "date": pd.Timestamp("2026-08-24")},
+        {**_bet_pick_row(2, "LAD", "SF", "LAD", 0.615), "date": pd.Timestamp("2026-08-25")},
+    ])
+    market = pd.DataFrame([
+        _bet_market_row("NYY", "TOR", -150, 130),
+        _bet_market_row("LAD", "SF", -150, 130),
+    ])
+
+    recs = game_predictions.advise_bets(picks, market, kelly_fraction_multiplier=1.0, min_edge=0.02)
+
+    expected_each = kelly.kelly_fraction(0.615, -150, 1.0)
+    cap_fraction = config.KELLY_DAILY_UNIT_CAP * config.UNIT_SIZE_FRACTION
+    assert expected_each < cap_fraction
+    assert expected_each * 2 > cap_fraction  # sanity - would exceed the cap if wrongly summed across dates
+    assert (recs["kelly_stake_fraction"] == pytest.approx(expected_each, abs=1e-9)).all()
+
+
 # ---------------------------------------------------------------------
 # select_game_picks - bet_* columns
 # ---------------------------------------------------------------------
@@ -424,6 +512,77 @@ def test_select_game_picks_logs_a_real_advised_bet():
     assert row["bet_stake_fraction"] > 0
     assert row["bet_units"] == pytest.approx(row["bet_stake_fraction"] / config.UNIT_SIZE_FRACTION)
     assert pd.isna(row["bet_profit_units"])  # not resolved yet
+
+
+def test_select_game_picks_uses_confidence_for_a_smaller_pessimistic_stake():
+    # Real follow-up (2026-08-25 - "we need the units risked to not be
+    # arbitrary"): passing `confidence` (teams.assemble_team_metrics' real
+    # output, carrying each team's real win_rate_CI_Low/CI_High) makes
+    # select_game_picks size the stake off a real per-game conservative
+    # probability instead of the flat kelly_fraction_multiplier - a smaller,
+    # more honest stake on the exact same real edge.
+    win_probs = _win_probabilities([
+        {"game_pk": 1, "date": pd.Timestamp("2026-08-24"), "home_team": "NYY", "away_team": "TOR",
+         "home_win_probability": 0.70},
+    ])
+    market = _full_market([{"home_team": "NYY", "away_team": "TOR", "home_moneyline": -150, "away_moneyline": 130}])
+    confidence = pd.DataFrame([
+        {"team": "NYY", "win_rate_CI_Low": 0.62, "win_rate_CI_High": 0.78},
+        {"team": "TOR", "win_rate_CI_Low": 0.46, "win_rate_CI_High": 0.54},
+    ])
+
+    with_confidence = game_predictions.select_game_picks(
+        win_probs, pd.Timestamp("2026-08-24"), market_probabilities=market,
+        kelly_fraction_multiplier=1.0, confidence=confidence,
+    )
+    without_confidence = game_predictions.select_game_picks(
+        win_probs, pd.Timestamp("2026-08-24"), market_probabilities=market, kelly_fraction_multiplier=1.0,
+    )
+
+    # Same real edge clears bet eligibility either way (min_edge uses the
+    # raw model probability, unaffected by `confidence`)...
+    assert with_confidence.iloc[0]["bet_units"] > 0
+    assert without_confidence.iloc[0]["bet_units"] > 0
+    # ...but the real per-game CI-derived stake is genuinely smaller than
+    # the flat full-Kelly stake on the same raw probability/edge.
+    assert with_confidence.iloc[0]["bet_stake_fraction"] < without_confidence.iloc[0]["bet_stake_fraction"]
+
+    # Persisted onto the logged row (not just used transiently) - so
+    # scripts/recommend_bets.py's later re-derivation of advise_bets from
+    # THIS log reuses the exact same real sizing.
+    assert with_confidence.iloc[0]["home_win_probability_pessimistic"] == pytest.approx(0.70 - 0.089442, abs=1e-4)
+    assert pd.notna(with_confidence.iloc[0]["away_win_probability_pessimistic"])
+    # Without `confidence`, the columns still EXIST (a stable schema for the
+    # log/report), just null for that game - not simply absent.
+    assert "home_win_probability_pessimistic" in without_confidence.columns
+    assert pd.isna(without_confidence.iloc[0]["home_win_probability_pessimistic"])
+    assert pd.isna(without_confidence.iloc[0]["away_win_probability_pessimistic"])
+
+
+def test_advise_bets_falls_back_to_flat_multiplier_when_pessimistic_columns_are_present_but_null():
+    # Regression guard: select_game_picks always persists
+    # home/away_win_probability_pessimistic (so scripts/recommend_bets.py's
+    # later re-derivation from the log can reuse them), but leaves them null
+    # for a game `confidence` didn't cover. advise_bets must fall back to
+    # the flat kelly_fraction_multiplier for THAT row, not silently compute
+    # a NaN stake just because the columns happen to exist.
+    picks = pd.DataFrame([{
+        **_bet_pick_row(1, "NYY", "TOR", "NYY", 0.70),
+        "home_win_probability_pessimistic": pd.NA,
+        "away_win_probability_pessimistic": pd.NA,
+    }])
+    market = pd.DataFrame([_bet_market_row("NYY", "TOR", -150, 130)])
+
+    # A small multiplier so the resulting stake stays comfortably under
+    # config.KELLY_DAILY_UNIT_CAP - this test is about the pessimistic/flat
+    # fallback choice, not the separate daily-cap behavior (covered above).
+    recs = game_predictions.advise_bets(picks, market, kelly_fraction_multiplier=0.1, min_edge=0.02)
+
+    assert len(recs) == 1
+    expected_stake = kelly.kelly_fraction(0.70, -150, 0.1)
+    cap_fraction = config.KELLY_DAILY_UNIT_CAP * config.UNIT_SIZE_FRACTION
+    assert expected_stake < cap_fraction  # sanity - this test isn't exercising the cap
+    assert recs.iloc[0]["kelly_stake_fraction"] == pytest.approx(expected_stake, abs=1e-9)
 
 
 def test_select_game_picks_no_bet_advised_when_no_real_edge():
@@ -482,6 +641,30 @@ def test_append_game_predictions_migrates_a_log_written_before_bet_columns_exist
     row1 = combined[combined["game_pk"] == 1].iloc[0]
     assert row1["bet_units"] == 0.0
     assert pd.isna(row1["bet_profit_units"])
+
+
+def test_append_game_predictions_migrates_a_log_written_before_pessimistic_columns_existed(tmp_path):
+    log_path = str(tmp_path / "game_predictions.csv")
+    legacy_log = pd.DataFrame([{
+        "date": pd.Timestamp("2026-07-19"), "game_pk": 1, "home_team": "NYY", "away_team": "BOS",
+        "predicted_winner": "NYY", "predicted_probability": 0.65, "metric": "GamePick_Win_Probability",
+        "actual_winner": "NYY", "game_played": 1, "model_version": "v1", "above_threshold": True,
+        "market_home_win_probability": pd.NA, "bet_units": 0.0, "bet_side": pd.NA, "bet_team": pd.NA,
+        "bet_moneyline": pd.NA, "bet_stake_fraction": pd.NA, "bet_profit_units": pd.NA,
+    }])
+    legacy_log.to_csv(log_path, index=False)
+    assert "home_win_probability_pessimistic" not in legacy_log.columns
+
+    new_pick = game_predictions.select_game_picks(
+        _win_probabilities([{"game_pk": 2, "date": pd.Timestamp("2026-07-20"), "home_team": "LAD",
+                              "away_team": "SF", "home_win_probability": 0.65}]),
+        pd.Timestamp("2026-07-20"),
+    )
+    combined = game_predictions.append_game_predictions(new_pick, log_path)
+
+    row1 = combined[combined["game_pk"] == 1].iloc[0]
+    assert pd.isna(row1["home_win_probability_pessimistic"])
+    assert pd.isna(row1["away_win_probability_pessimistic"])
 
 
 # ---------------------------------------------------------------------

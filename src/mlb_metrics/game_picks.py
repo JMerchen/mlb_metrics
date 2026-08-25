@@ -251,3 +251,56 @@ def apply_calibration(win_probabilities: pd.DataFrame) -> pd.DataFrame:
             calibrated.loc[real_valued, "home_win_probability"].to_numpy()
         )
     return calibrated
+
+
+def apply_kelly_uncertainty(win_probabilities: pd.DataFrame, confidence: pd.DataFrame) -> pd.DataFrame:
+    """Adds home_win_probability_pessimistic/away_win_probability_pessimistic
+    to `win_probabilities` - real bet-sizing follow-up (2026-08-25 -
+    "we need the units risked to not be arbitrary"): replaces
+    config.KELLY_FRACTION_MULTIPLIER's old flat, unconditional 0.5
+    shrinkage (applied identically to every bet regardless of how solid
+    the underlying estimate actually is) with a real, PER-GAME conservative
+    probability grounded in each team's own real season-to-date win-rate
+    Wilson confidence interval (teams.compute_team_win_rate_ci, carried on
+    `confidence` via teams.assemble_team_metrics).
+
+    Each team's CI half-width ((CI_High - CI_Low) / 2) is a real measure of
+    how much a team's true quality could still deviate from its observed
+    record - wide early in the season (few real games played), narrow
+    once real games accumulate. The two teams' half-widths are combined
+    via standard root-sum-square error propagation (the two records are
+    independent real samples) into one real per-game uncertainty, then
+    subtracted from the raw win_probability for whichever side is being
+    considered - game_predictions.advise_bets sizes off THIS pessimistic
+    probability instead of the raw point estimate, so kelly.kelly_fraction
+    naturally computes a SMALLER (or zero) edge whenever the underlying
+    team records are too thin to trust, with no new tunable constant
+    beyond the already-established Wilson formula and this standard
+    propagation math.
+
+    A team missing from `confidence` (a real data gap, or an early-season
+    date before any games are recorded) gets the same maximal real
+    degenerate half-width helpers.wilson_ci's own n=0 case already uses
+    ((1.0 - 0.0) / 2 = 0.5) - a genuinely unknown team is treated as
+    maximally uncertain, not silently ordinary."""
+    ci = confidence[["team", "win_rate_CI_Low", "win_rate_CI_High"]].copy()
+    ci["ci_half_width"] = (ci["win_rate_CI_High"] - ci["win_rate_CI_Low"]) / 2
+
+    result = win_probabilities.copy()
+    result = result.merge(
+        ci[["team", "ci_half_width"]].rename(columns={"team": "home_team", "ci_half_width": "home_ci_half_width"}),
+        on="home_team", how="left",
+    )
+    result = result.merge(
+        ci[["team", "ci_half_width"]].rename(columns={"team": "away_team", "ci_half_width": "away_ci_half_width"}),
+        on="away_team", how="left",
+    )
+    result["home_ci_half_width"] = result["home_ci_half_width"].fillna(0.5)
+    result["away_ci_half_width"] = result["away_ci_half_width"].fillna(0.5)
+
+    combined_uncertainty = (result["home_ci_half_width"] ** 2 + result["away_ci_half_width"] ** 2) ** 0.5
+    result["home_win_probability_pessimistic"] = (result["home_win_probability"] - combined_uncertainty).clip(0, 1)
+    result["away_win_probability_pessimistic"] = (
+        (1 - result["home_win_probability"]) - combined_uncertainty
+    ).clip(0, 1)
+    return result.drop(columns=["home_ci_half_width", "away_ci_half_width"])
