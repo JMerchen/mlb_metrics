@@ -1635,6 +1635,41 @@ cap's proportional scale-down, a different date's stakes staying
 untouched, the per-row null fallback, persistence + migration of the two
 new columns). Full test suite: 703 passed.
 
+### Bet streak is now a DAY streak, not a per-bet streak (2026-08-25)
+
+Direct user ask: **"the streak should be days (only add one per day or go
+back to zero) if the cumulative bets made money that day."** The
+previous `current_bet_streak`/`best_bet_streak` (`game_evaluation._bet_pnl_metrics`)
+walked every real resolved advised bet in date order and incremented on
+each individual winning bet - so a day with several advised bets could
+move the streak by more than one step in a single day, and a day's own
+net result didn't matter, only each bet's own sign.
+
+**Fix**: `_bet_pnl_metrics` now groups resolved advised bets by real
+calendar `date` and sums `bet_profit_units` per day first
+(`resolved.groupby("date")["bet_profit_units"].sum()`), then runs the
+same streak counter over those daily totals instead of over individual
+bets - each day extends the streak by exactly 1 if its bets, summed
+together, were profitable overall, and resets it to 0 otherwise,
+regardless of how many bets were advised that day or how any one of them
+did individually. A day with no advised bets at all neither extends nor
+breaks it (it's simply not in the grouped total). The column names
+(`current_bet_streak`/`best_bet_streak`) are unchanged - only what they
+count changed - but the dashboard tile labels were renamed **Day
+Streak**/**Best Day Streak** (`docs/app.js`) so the displayed number is
+honestly labeled for what it now actually measures.
+
+New/updated tests (`tests/test_game_evaluation.py`): the existing
+plain-consecutive-wins test was renamed and re-asserted as a day streak
+(one bet per day, so the numbers coincidentally match the old semantics -
+kept to show that continuity), plus a new test with two bets on the same
+day netting positive (one streak step, not two) followed by a second day
+with a winning AND a losing bet that nets negative overall (a real
+reset, proving the day's TOTAL profit drives the reset, not merely
+"at least one bet lost that day").
+
+Full test suite: 704 passed.
+
 ### Real follow-up: game-pick probability calibration (2026-08-24, not shipped)
 
 Direct follow-up to the `KELLY_MIN_EDGE` sanity-check above: on the 93

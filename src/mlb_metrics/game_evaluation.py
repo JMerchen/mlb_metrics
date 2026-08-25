@@ -145,6 +145,15 @@ def _bet_pnl_metrics(picks: pd.DataFrame):
     (bet_units == 0) never gets a bet_profit_units value at all (see
     game_predictions.resolve_game_predictions).
 
+    `current_bet_streak`/`best_bet_streak` are DAY streaks (2026-08-25 -
+    direct follow-up to the uncertainty-scaled Kelly change above), not
+    per-bet streaks: a day extends the streak by exactly 1 if that day's
+    real advised bets, summed together, made money overall - and resets
+    it to 0 otherwise - regardless of how many individual bets were
+    advised that day or how they each did. A day with two winners and one
+    bigger loser is a losing day for the streak; a single-bet day and a
+    five-bet day both count for at most one real streak step.
+
     Also returns two quant-analytics item #5 ("backtest scope and
     statistical significance") additions:
     - `win_rate_ci_low`/`win_rate_ci_high`: a Wilson CI on win_rate,
@@ -176,10 +185,19 @@ def _bet_pnl_metrics(picks: pd.DataFrame):
     roi = total_profit / total_staked if total_staked else float("nan")
     roi_p_value = evaluation.mean_significance(resolved["bet_profit_units"], null_value=0.0)
 
+    # Streak is DAYS, not bets (2026-08-25 - "the streak should be days...
+    # if the cumulative bets made money that day"): a day can carry several
+    # advised bets, but it counts for at most +1 (or a reset to 0) toward
+    # the streak, scored on that day's TOTAL real profit, not on any one
+    # bet in isolation - a day with a winner and a bigger loser is a losing
+    # day, not a streak-extending one. Only days that actually had a
+    # resolved advised bet enter this at all (grouping by date on
+    # `resolved`), so a day with no advice neither extends nor breaks it.
+    daily_profit = resolved.groupby("date")["bet_profit_units"].sum().sort_index()
     current_streak = 0
     best_streak = 0
-    for profit in resolved.sort_values("date")["bet_profit_units"]:
-        current_streak = current_streak + 1 if profit > 0 else 0
+    for day_profit in daily_profit:
+        current_streak = current_streak + 1 if day_profit > 0 else 0
         best_streak = max(best_streak, current_streak)
 
     return (
