@@ -1937,6 +1937,47 @@ Tests: 6 new (`compute_bullpen_distinct_relievers`/
 including the off-day-gap-reads-zero case - plus real-value population
 in `assemble_game_pick_log`). Full suite: 692 passed.
 
+**Real dispatched result (GitHub Actions run 32813871428, n=1,963
+games)** - a comprehensive negative across all 12 candidates. None comes
+close to significant, univariate or combined:
+
+| candidate | univariate p | combined p |
+|---|---|---|
+| `home_bullpen_recent_outs` (2d) | 0.4727 | 0.7405 |
+| `away_bullpen_recent_outs` (2d) | 0.8985 | 0.8879 |
+| `home_bullpen_recent_outs_1d` | 0.4153 | 0.9695 |
+| `away_bullpen_recent_outs_1d` | 0.6632 | 0.5515 |
+| `home_bullpen_recent_outs_3d` | 0.2987 | 0.8388 |
+| `away_bullpen_recent_outs_3d` | 0.6031 | 0.2202 |
+| `home_bullpen_recent_outs_5d` | 0.0912 | 0.3111 |
+| `away_bullpen_recent_outs_5d` | 0.8869 | 0.6715 |
+| `home_bullpen_distinct_relievers` | 0.5920 | 0.8274 |
+| `away_bullpen_distinct_relievers` | 0.9725 | 0.9815 |
+| `home_bullpen_back_to_back_relievers` | 0.8397 | 0.9347 |
+| `away_bullpen_back_to_back_relievers` | 0.4511 | 0.6267 |
+
+The closest thing to a signal - `home_bullpen_recent_outs_5d` at
+p=0.0912 univariate - doesn't clear even the loosest conventional bar
+(0.05), and drops further to p=0.3111 combined. Window length, workload
+breadth, and specific-arms-on-zero-rest all tell the same story: none
+of these bullpen-fatigue formulations shows real signal in this
+project's data. **None added to `GAME_PICK_FEATURE_COLUMNS`.**
+
+Real, honest interpretation: this doesn't prove bullpen fatigue doesn't
+matter to real outcomes - it means none of these five ways of measuring
+it, from real Statcast relief-appearance data alone, predicts who wins
+the NEXT game beyond what `home_bullpen_pave_plus`/`Bullpen_PAVE_PLUS`
+(the existing season-long quality signal) already captures. A genuinely
+different data source (real bullpen-availability/usage-plan reporting,
+not derivable from box-score-level Statcast) would be a different,
+separate undertaking, not a variation on this same approach.
+
+Real side note: the already-live `home_bullpen_pave_plus`/
+`home_bullpen_power_a_plus` (quality, not fatigue) DO show real
+univariate significance here (p=0.0442/p=0.0398) that fades in the
+combined fit (p=0.4989/p=0.7216) - the same multicollinearity pattern
+several other features in this report already show, not a new finding.
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our
