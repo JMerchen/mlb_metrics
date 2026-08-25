@@ -1881,6 +1881,29 @@ Full test suite: 686 passed (4 new - `compute_bullpen_recent_workload`'s
 own exact arithmetic/empty-input/no-relief-in-window cases, plus
 `assemble_game_pick_log`'s real-value population for both candidates).
 
+**Real dispatched result (GitHub Actions run 32792241148, n=1,963 games)**
+- clean, unambiguous negative, neither candidate added to
+`GAME_PICK_FEATURE_COLUMNS`:
+
+- `home_bullpen_recent_outs`: univariate p=**0.4727**, combined p=**0.6545**.
+- `away_bullpen_recent_outs`: univariate p=**0.8985**, combined p=**0.6321**.
+
+Neither clears any bar at all, univariate or combined - not a borderline
+call like `Days_Rest`'s. The 2-day recency window
+(`config.BULLPEN_FATIGUE_RECENT_DAYS`, explicitly flagged as a first-pass/
+unvalidated choice) is the most likely place a real signal could still be
+hiding - a different window length, or a rate-based measure (e.g. outs
+per relief appearance, not a raw total) instead of a fixed lookback
+total, are real, cheap follow-ups if this is worth revisiting; not
+pursued further here since the finding is this clean.
+
+Real side benefit of dispatching this: `train_game_pick_model.py`'s own
+walk-forward predictive model (a full from-scratch LogisticRegression
+replacement for the heuristic, previously reported as failing to beat
+it) **saved for the first time** under the relaxed no-baseline-required
+gate - `game_pick_win_probability_model.joblib`, artifact only, not
+wired into live picks.
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our
