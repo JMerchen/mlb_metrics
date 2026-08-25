@@ -1843,6 +1843,44 @@ above (beats the raw heuristic, 0.6864 vs 0.6933) - wired live via
 `game_picks.apply_calibration`, so live game picks are now genuinely
 rescaled starting from this run.
 
+### Real build: bullpen rest/readiness candidate, tested before committing (2026-08-25)
+
+Direct follow-up ("what about bullpen rest/readiness"), same feature-
+search discipline as the hitter-side candidates above, applied to the
+game-pick model this time. `game_picks.GAME_PICK_FEATURE_COLUMNS`
+already has `home_bullpen_pave_plus`/`away_bullpen_pave_plus` - a
+season-long QUALITY aggregate - but nothing measuring current bullpen
+FATIGUE: a bullpen can be excellent on paper and still gassed from three
+straight extra-inning games.
+
+- `pitchers.compute_bullpen_recent_workload`: real outs recorded by a
+  team's relievers (`is_starter` False) in the `config.BULLPEN_FATIGUE_RECENT_DAYS`
+  (2, first-pass/unvalidated) calendar days strictly before the target
+  date - a single fixed recency CUTOFF (not a `WAVE_WINDOWS`-style multi-
+  window blend), since this is a workload TOTAL, not a rate needing
+  small-sample smoothing.
+- `game_picks_backtest.assemble_game_pick_log` now also carries
+  `home_bullpen_recent_outs`/`away_bullpen_recent_outs` as EXPLORATORY
+  columns, NOT part of `GAME_PICK_FEATURE_COLUMNS` (live model schema
+  unaffected).
+- `scripts/train_game_pick_model.py`'s existing significance report now
+  also tests both candidates, same `statsmodels.Logit` methodology as
+  every other significance check in this project.
+
+Real, already-existing infra reused directly: `data.label_pitcher_roles`/
+`pipeline.build_pitcher_events_with_role` (the same role-labeling
+`compute_bullpen_pave` already depends on) - no new fetch, no new
+identity-resolution logic, same "game_pk is the real game id, not
+`data.assign_game_ids`" convention this module already established.
+
+Decision deferred to real dispatched numbers, same as the hitter-side
+candidates: neither column is added to `GAME_PICK_FEATURE_COLUMNS` in
+this change.
+
+Full test suite: 686 passed (4 new - `compute_bullpen_recent_workload`'s
+own exact arithmetic/empty-input/no-relief-in-window cases, plus
+`assemble_game_pick_log`'s real-value population for both candidates).
+
 ### Dashboard: Hit Streaks and Model Odds
 
 The Beat the Streak section of the dashboard has three subtabs: **Our

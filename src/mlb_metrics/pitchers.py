@@ -261,6 +261,47 @@ def compute_bullpen_pave(pdf_with_role: pd.DataFrame) -> pd.DataFrame:
     ]
 
 
+def compute_bullpen_recent_workload(
+    pdf_with_role: pd.DataFrame, recent_days: int = config.BULLPEN_FATIGUE_RECENT_DAYS
+) -> pd.DataFrame:
+    """One row per team: Bullpen_Recent_Outs - real outs recorded
+    (helpers.outs_recorded) by that team's RELIEVERS (`is_starter` False)
+    in the `recent_days` calendar days strictly before the latest date in
+    `pdf_with_role` - a recency-windowed WORKLOAD/fatigue proxy, distinct
+    from compute_bullpen_pave's season-long QUALITY aggregate (a bullpen
+    can be excellent on paper AND gassed from three straight extra-inning
+    games). Exploratory candidate feature (2026-08-24 feature-search
+    follow-up - "what about bullpen rest/readiness"): NOT yet wired into
+    game_picks.GAME_PICK_FEATURE_COLUMNS - see
+    scripts/train_game_pick_model.py's significance report for whether a
+    real bar was cleared before this goes anywhere near the live model.
+
+    `pdf_with_role` must carry `game_date`, `team`, `is_starter`, `events`
+    (pipeline.build_pitcher_events_with_role's own shape) and should
+    already be no-lookahead-filtered to the target date by the caller
+    (the `recent_days` cutoff here is relative to `pdf_with_role`'s own
+    latest date, not an externally-passed "today").
+
+    A team with zero relief appearances in the window (an early-season
+    date, or a team that hasn't played recently) reads a real 0 - not
+    dropped and not a fabricated league-average - a genuinely idle
+    bullpen has a real 0 recent workload."""
+    if pdf_with_role.empty:
+        return pd.DataFrame(columns=["team", "Bullpen_Recent_Outs"])
+
+    latest = pdf_with_role["game_date"].max()
+    cutoff = latest - pd.Timedelta(days=recent_days)
+    window = pdf_with_role[
+        (~pdf_with_role["is_starter"]) & (pdf_with_role["game_date"] >= cutoff)
+    ].copy()
+    if window.empty:
+        return pd.DataFrame(columns=["team", "Bullpen_Recent_Outs"])
+
+    window["outs"] = helpers.outs_recorded(window["events"])
+    result = window.groupby("team", as_index=False)["outs"].sum()
+    return result.rename(columns={"outs": "Bullpen_Recent_Outs"})
+
+
 def assemble_pitchers(
     pdf: pd.DataFrame,
     names: pd.DataFrame,

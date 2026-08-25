@@ -36,7 +36,7 @@ import subprocess
 
 import pandas as pd
 
-from mlb_metrics import config, data, game_picks, game_predictions, git_backtest, pipeline
+from mlb_metrics import config, data, game_picks, game_predictions, git_backtest, pipeline, pitchers
 
 CONFIDENCE_CSV_PATH = "docs/data/confidence.csv"
 PAVE_CSV_PATH = "docs/data/pave.csv"
@@ -150,9 +150,16 @@ def reconstruct_historical_game_picks(
     return pd.concat(all_picks, ignore_index=True)
 
 
+# home_bullpen_recent_outs/away_bullpen_recent_outs are EXPLORATORY
+# candidate columns (2026-08-24 feature-search follow-up - "what about
+# bullpen rest/readiness"), NOT part of game_picks.GAME_PICK_FEATURE_COLUMNS
+# - see pitchers.compute_bullpen_recent_workload's own docstring and
+# scripts/train_game_pick_model.py's significance report for whether
+# either clears a real bar before going anywhere near the live model.
 GAME_PICK_LOG_COLUMNS = (
     ["game_pk", "date", "home_team", "away_team"]
     + game_picks.GAME_PICK_FEATURE_COLUMNS
+    + ["home_bullpen_recent_outs", "away_bullpen_recent_outs"]
     + ["home_win_probability", "Home_Won"]
 )
 
@@ -209,6 +216,32 @@ def assemble_game_pick_log(
         rows = features.merge(
             win_probabilities[["game_pk", "home_win_probability"]], on="game_pk", how="left"
         )
+
+        # Exploratory candidate (see GAME_PICK_LOG_COLUMNS's own comment) -
+        # game_pk is Statcast's own real game id here (this module's own
+        # convention, not data.assign_game_ids - see module docstring).
+        # `events` is required by build_pitcher_events_with_role/
+        # completed_events - always present on real persisted Statcast, but
+        # missing from this module's own minimal schedule/score-only
+        # synthetic fixtures (derive_historical_schedule_games never needed
+        # it) - degrades to null rather than a KeyError, same "missing
+        # optional input becomes an honest null" precedent used elsewhere.
+        if "events" in history.columns:
+            data_with_game_id = history.rename(columns={"game_pk": "game_id"})
+            roles = data.label_pitcher_roles(data_with_game_id)
+            pdf_with_role = pipeline.build_pitcher_events_with_role(data_with_game_id, roles)
+            bullpen_workload = pitchers.compute_bullpen_recent_workload(pdf_with_role)
+            rows = rows.merge(
+                bullpen_workload.rename(columns={"team": "home_team", "Bullpen_Recent_Outs": "home_bullpen_recent_outs"}),
+                on="home_team", how="left",
+            )
+            rows = rows.merge(
+                bullpen_workload.rename(columns={"team": "away_team", "Bullpen_Recent_Outs": "away_bullpen_recent_outs"}),
+                on="away_team", how="left",
+            )
+        else:
+            rows["home_bullpen_recent_outs"] = pd.NA
+            rows["away_bullpen_recent_outs"] = pd.NA
 
         results = todays_games[["game_pk", "home_score", "away_score"]]
         rows = rows.merge(results, on="game_pk", how="left")

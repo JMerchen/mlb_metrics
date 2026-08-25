@@ -330,6 +330,43 @@ def test_assemble_game_pick_log_has_expected_schema_and_no_lookahead(tmp_path, m
         assert col in log.columns
 
 
+def test_assemble_game_pick_log_populates_bullpen_recent_workload(tmp_path, monkeypatch):
+    # Real columns present (unlike _statcast_game's minimal fixture) ->
+    # home_bullpen_recent_outs should populate with a real value derived
+    # from NYY's own relief appearance the day before.
+    monkeypatch.setattr(game_picks_backtest.pipeline, "compute_outputs", lambda df: _fake_current_outputs())
+
+    raw_dir = tmp_path / "raw"
+    raw_dir.mkdir()
+    day1 = [
+        # NYY (home) starter - earliest at_bat_number for NYY in this game.
+        {"game_pk": 554, "game_date": pd.Timestamp("2026-05-31"), "home_team": "NYY", "away_team": "BOS",
+         "pitcher": 101, "inning_topbot": "Top", "at_bat_number": 1, "events": "field_out",
+         "post_home_score": 0, "post_away_score": 0},
+        # NYY (home) reliever - later at_bat_number, real strikeout (1 out).
+        {"game_pk": 554, "game_date": pd.Timestamp("2026-05-31"), "home_team": "NYY", "away_team": "BOS",
+         "pitcher": 102, "inning_topbot": "Top", "at_bat_number": 2, "events": "strikeout",
+         "post_home_score": 0, "post_away_score": 0},
+        {"game_pk": 554, "game_date": pd.Timestamp("2026-05-31"), "home_team": "NYY", "away_team": "BOS",
+         "pitcher": 201, "inning_topbot": "Bot", "at_bat_number": 3, "events": "single",
+         "post_home_score": 0, "post_away_score": 0},
+        {"game_pk": 554, "game_date": pd.Timestamp("2026-05-31"), "home_team": "NYY", "away_team": "BOS",
+         "pitcher": 201, "inning_topbot": "Bot", "at_bat_number": 4, "events": "field_out",
+         "post_home_score": 0, "post_away_score": 1},
+    ]
+    day2 = _statcast_game(555, pd.Timestamp("2026-06-01"), "NYY", "BOS", 101, 201, 5, 2)
+    for row in day2:
+        row["events"] = None
+    pd.DataFrame(day1 + day2).to_parquet(raw_dir / "statcast_2026.parquet", index=False)
+
+    log = game_picks_backtest.assemble_game_pick_log(raw_dir=str(raw_dir), season=2026, days=40)
+
+    assert len(log) == 1
+    row = log.iloc[0]
+    assert row["home_bullpen_recent_outs"] == 1  # NYY's reliever's real strikeout the day before
+    assert pd.isna(row["away_bullpen_recent_outs"])  # BOS had no relief appearance (one pitcher, is_starter)
+
+
 def test_assemble_game_pick_log_home_loss_recorded_correctly(tmp_path, monkeypatch):
     monkeypatch.setattr(game_picks_backtest.pipeline, "compute_outputs", lambda df: _fake_current_outputs())
 

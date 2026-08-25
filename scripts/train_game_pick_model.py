@@ -11,6 +11,15 @@ scope on the team side:
    (z-scored) first so coefficient magnitudes are comparable across very
    different scales - p-values themselves are scale-invariant.
 
+   Also tests CANDIDATE_FEATURE_COLUMNS (home_bullpen_recent_outs,
+   away_bullpen_recent_outs) - real feature-search follow-up (2026-08-25):
+   "what about bullpen rest/readiness." Neither is part of
+   game_picks.GAME_PICK_FEATURE_COLUMNS yet; they're carried by
+   game_picks_backtest.assemble_game_pick_log purely as exploratory
+   columns (see pitchers.compute_bullpen_recent_workload's docstring) and
+   included in this same significance report so a real p-value decides
+   whether either earns a permanent place in the model.
+
 2. **Walk-forward-validated predictive model** (sklearn LogisticRegression +
    ml_models.py's WalkForwardDateSplit machinery): the SAME no-lookahead,
    nested-holdout methodology train_hitter_hit_model.py already uses. The
@@ -86,6 +95,19 @@ def _fit_logit_report(y: pd.Series, X: pd.DataFrame, label: str):
     return table, result
 
 
+# Exploratory candidates (2026-08-25 feature-search follow-up - "what
+# about bullpen rest/readiness"): real, already-persisted signal
+# (game_picks_backtest.assemble_game_pick_log's own
+# home_bullpen_recent_outs/away_bullpen_recent_outs columns - see
+# pitchers.compute_bullpen_recent_workload's docstring) that is NOT part
+# of game_picks.GAME_PICK_FEATURE_COLUMNS - tested here, alongside the
+# live feature set, purely to decide whether either earns a permanent
+# place in the model. Nothing here changes what the live model actually
+# uses until a candidate clears a real bar and is deliberately added to
+# GAME_PICK_FEATURE_COLUMNS in a follow-up change.
+CANDIDATE_FEATURE_COLUMNS = ["home_bullpen_recent_outs", "away_bullpen_recent_outs"]
+
+
 def significance_report(rows: pd.DataFrame) -> None:
     print("\n=== Feature significance report (statsmodels.Logit, full log) ===")
     y = rows["Home_Won"]
@@ -94,7 +116,17 @@ def significance_report(rows: pd.DataFrame) -> None:
     # in case an early-history date falls back to pd.NA for a not-yet-
     # computable column and upcasts the concatenated column to object.
     X = _standardize(game_picks.game_feature_matrix(rows).astype(float))
+
+    # Same fillna(0)-for-not-yet-computable convention as
+    # game_feature_matrix (a real 0 recent-outs is indistinguishable here
+    # from "no relief appearance in the window yet" - an honest known
+    # rough edge for an EXPLORATORY column, not worth a bespoke encoding
+    # before we know whether this candidate has any real signal at all).
+    candidates = _standardize(rows[CANDIDATE_FEATURE_COLUMNS].astype(float).fillna(0))
+    X = pd.concat([X, candidates], axis=1)
+
     print(f"  n={len(rows)}, base home-win rate={y.mean():.4f}")
+    print(f"  Candidate features under test (not yet in the live model): {CANDIDATE_FEATURE_COLUMNS}")
 
     print("\n  -- Individually (one univariate Logit per feature) --")
     univariate_rows = []

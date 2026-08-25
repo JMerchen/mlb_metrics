@@ -722,6 +722,17 @@ DFS_PITCHER_WINDOWS = [
     (15, 0.20),
 ]
 
+# Bullpen fatigue/readiness (2026-08-24 feature-search follow-up):
+# pitchers.compute_bullpen_recent_workload's lookback window, in real
+# calendar days strictly before the target date. A single fixed recency
+# CUTOFF, not a config.PAVE_WINDOWS-style multi-window blend - this is a
+# recent WORKLOAD total (a fatigue proxy), not a rate that needs
+# small-sample smoothing across windows the way a hit-rate signal does.
+# 2 days is a first-pass, unvalidated choice (real bullpen usage/rest
+# patterns commonly discussed in baseball are 1-3 days) - revisit once a
+# real significance/backtest result exists.
+BULLPEN_FATIGUE_RECENT_DAYS = 2
+
 # A pitcher needs at least this many recorded starts (pitcher_form's
 # unweighted full-season `starts` count) to be ranked at all - a 1-2 start
 # sample is enough for HR9 especially to be pure small-sample noise (one

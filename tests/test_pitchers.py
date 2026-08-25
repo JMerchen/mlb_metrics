@@ -172,6 +172,44 @@ def test_compute_bullpen_pave_excludes_starters_and_pools_by_team():
     assert result.loc["Y", "Bullpen_Power_A_PLUS"] == pytest.approx(1.0 / mean_power_a, rel=1e-3)
 
 
+def test_compute_bullpen_recent_workload_sums_relief_outs_within_window():
+    # Latest date = 2026-06-18, recent_days=2 -> cutoff 2026-06-16.
+    rows = [
+        _bullpen_row("X", 11, "2026-06-10", "field_out", False),   # outside window
+        _bullpen_row("X", 11, "2026-06-17", "field_out", False),   # 1 out, in window
+        _bullpen_row("X", 12, "2026-06-18", "strikeout", False),   # 1 out, in window
+        _bullpen_row("X", 12, "2026-06-18", "single", False),      # 0 outs, in window
+        # Team X's starter on the same dates - must NOT count.
+        _bullpen_row("X", 99, "2026-06-18", "strikeout", True),
+        # Team Y: only outside the window.
+        _bullpen_row("Y", 21, "2026-06-10", "strikeout", False),
+    ]
+    pdf_with_role = pd.DataFrame(rows)
+
+    result = pitchers.compute_bullpen_recent_workload(pdf_with_role, recent_days=2).set_index("team")
+
+    assert result.loc["X", "Bullpen_Recent_Outs"] == 2
+    assert "Y" not in result.index
+
+
+def test_compute_bullpen_recent_workload_empty_input_returns_empty_not_crash():
+    result = pitchers.compute_bullpen_recent_workload(pd.DataFrame(columns=["game_date", "team", "is_starter", "events"]))
+
+    assert result.empty
+    assert list(result.columns) == ["team", "Bullpen_Recent_Outs"]
+
+
+def test_compute_bullpen_recent_workload_no_relief_appearances_in_window_returns_empty():
+    # Every appearance in the window is a starter's - real 0 relief workload,
+    # not a fabricated row.
+    rows = [_bullpen_row("X", 99, "2026-06-18", "strikeout", True)]
+    pdf_with_role = pd.DataFrame(rows)
+
+    result = pitchers.compute_bullpen_recent_workload(pdf_with_role, recent_days=2)
+
+    assert result.empty
+
+
 def _pitches(pitcher, rows):
     return [{"pitcher": pitcher, "game_date": pd.Timestamp(date), "pitch_type": pitch_type} for date, pitch_type in rows]
 
