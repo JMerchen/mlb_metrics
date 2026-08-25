@@ -368,7 +368,10 @@ def run(
                 )
                 market_probabilities = None
             todays_game_picks = game_predictions.select_game_picks(
-                win_probabilities, as_of_date, market_probabilities=market_probabilities
+                win_probabilities,
+                as_of_date,
+                market_probabilities=market_probabilities,
+                confidence=outputs["confidence"],
             )
             game_predictions.append_game_predictions(todays_game_picks, game_predictions_log_path)
 

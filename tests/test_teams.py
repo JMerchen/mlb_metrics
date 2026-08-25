@@ -68,6 +68,34 @@ def test_compute_park_factors_uses_final_combined_score_not_every_pitch():
     assert park_factors.loc["B", "Park_Factor"] == pytest.approx(1.0)
 
 
+def test_compute_team_win_rate_ci_real_wilson_interval():
+    # Team A: 3 wins out of 4 games (real, small-sample proportion).
+    # Team B: 1 win out of 20 games (a much larger, tighter sample).
+    record = pd.DataFrame(
+        [{"team": "A", "win": w} for w in [1, 1, 1, 0]]
+        + [{"team": "B", "win": w} for w in [1] + [0] * 19]
+    )
+
+    result = teams.compute_team_win_rate_ci(record).set_index("team")
+
+    assert result.loc["A", "games_played"] == 4
+    assert result.loc["A", "win_rate"] == pytest.approx(0.75)
+    assert result.loc["B", "games_played"] == 20
+    assert result.loc["B", "win_rate"] == pytest.approx(0.05)
+
+    # Real Wilson CI property: the smaller sample (A, n=4) has a WIDER
+    # interval than the larger sample (B, n=20) - the whole point of using
+    # a real confidence interval instead of a flat guessed shrinkage.
+    a_width = result.loc["A", "win_rate_CI_High"] - result.loc["A", "win_rate_CI_Low"]
+    b_width = result.loc["B", "win_rate_CI_High"] - result.loc["B", "win_rate_CI_Low"]
+    assert a_width > b_width
+
+    # Sanity: the interval actually contains the point estimate and stays in [0, 1].
+    assert result.loc["A", "win_rate_CI_Low"] <= result.loc["A", "win_rate"] <= result.loc["A", "win_rate_CI_High"]
+    assert 0.0 <= result.loc["A", "win_rate_CI_Low"]
+    assert result.loc["A", "win_rate_CI_High"] <= 1.0
+
+
 def test_compute_umpire_factor_normalizes_to_league_average():
     data = pd.DataFrame([
         {"umpire": "Ump A", "events": "single"},   # hit

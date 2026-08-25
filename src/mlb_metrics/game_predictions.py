@@ -30,13 +30,23 @@ import os
 
 import pandas as pd
 
-from mlb_metrics import config, kelly, market_odds
+from mlb_metrics import config, game_picks, kelly, market_odds
 
 GAME_PREDICTION_COLUMNS = [
     "date", "game_pk", "home_team", "away_team", "predicted_winner",
     "predicted_probability", "above_threshold", "metric", "actual_winner", "game_played", "model_version",
     "market_home_win_probability",
     "bet_units", "bet_side", "bet_team", "bet_moneyline", "bet_stake_fraction", "bet_profit_units",
+    # Real per-game conservative probabilities (game_picks.apply_kelly_uncertainty,
+    # 2026-08-25 - "we need the units risked to not be arbitrary") - persisted
+    # (not just used transiently inside select_game_picks) so
+    # scripts/recommend_bets.py's later re-derivation of advise_bets from
+    # THIS log reuses the exact same real sizing the live pipeline already
+    # computed for that game, rather than silently falling back to the flat
+    # kelly_fraction_multiplier because the team-confidence context that
+    # produced them isn't cheaply recomputable from a lightweight report
+    # script. NaN for any game where `confidence` wasn't given/empty.
+    "home_win_probability_pessimistic", "away_win_probability_pessimistic",
 ]
 
 BET_ADVICE_COLUMNS = [
@@ -82,7 +92,32 @@ def advise_bets(
     (e.g. a stale matching collision), not a real arbitrage in this
     pipeline's actual data - both sides are dropped for that game rather
     than either one being guessed at. Returns at most one row per
-    game_pk."""
+    game_pk.
+
+    Real bet-sizing follow-up (2026-08-25 - "we need the units risked to
+    not be arbitrary"): if a row carries real (non-null)
+    home_win_probability_pessimistic/away_win_probability_pessimistic
+    values (see game_picks.apply_kelly_uncertainty, merged in by
+    select_game_picks below), that row's stake is sized off THAT real,
+    per-game conservative probability instead of the raw point estimate
+    scaled by `kelly_fraction_multiplier`. Gated per ROW, not just per
+    column: select_game_picks always persists these two columns (so
+    scripts/recommend_bets.py's later re-derivation from the log reuses
+    the same real sizing), but leaves them null for any game `confidence`
+    didn't cover - a caller/test that never supplies them at all
+    (game_picks_backtest.py's real historical replay, older fixtures)
+    is unaffected, exactly like a caller that supplies the columns but
+    with null values for a specific game. `min_edge` eligibility still
+    uses the raw model_probability either way - "is there a real edge
+    worth considering" stays a separate question from "how much to
+    actually risk given that edge."
+
+    Also enforces config.KELLY_DAILY_UNIT_CAP (a real, user-set portfolio-
+    level risk limit, not derived) - if the day's total advised stake
+    fraction exceeds the cap, every advised stake for that date is scaled
+    down proportionally so the day's total lands exactly at the cap,
+    preserving each bet's relative size rather than favoring whichever
+    game happened to be evaluated first."""
     merged = todays_picks.merge(market, on=["home_team", "away_team"], how="left")
 
     rows = []
@@ -94,17 +129,28 @@ def advise_bets(
         home_model_probability = pick["predicted_probability"] if home_favored else 1 - pick["predicted_probability"]
         away_model_probability = 1 - home_model_probability
 
+        home_pessimistic = pick.get("home_win_probability_pessimistic")
+        away_pessimistic = pick.get("away_win_probability_pessimistic")
+        if pd.notna(home_pessimistic) and pd.notna(away_pessimistic):
+            home_sizing_probability = home_pessimistic
+            away_sizing_probability = away_pessimistic
+            sizing_fraction_multiplier = 1.0
+        else:
+            home_sizing_probability = home_model_probability
+            away_sizing_probability = away_model_probability
+            sizing_fraction_multiplier = kelly_fraction_multiplier
+
         sides = [
-            ("home", pick["home_team"], pick["away_team"], home_model_probability, pick["home_moneyline"]),
-            ("away", pick["away_team"], pick["home_team"], away_model_probability, pick["away_moneyline"]),
+            ("home", pick["home_team"], pick["away_team"], home_model_probability, home_sizing_probability, pick["home_moneyline"]),
+            ("away", pick["away_team"], pick["home_team"], away_model_probability, away_sizing_probability, pick["away_moneyline"]),
         ]
 
         candidates = []
-        for side, team, opponent, model_probability, moneyline in sides:
+        for side, team, opponent, model_probability, sizing_probability, moneyline in sides:
             market_implied = market_odds.moneyline_to_implied_probability(moneyline)
             edge = model_probability - market_implied
             if edge >= min_edge:
-                stake_fraction = kelly.kelly_fraction(model_probability, moneyline, kelly_fraction_multiplier)
+                stake_fraction = kelly.kelly_fraction(sizing_probability, moneyline, sizing_fraction_multiplier)
                 candidates.append({
                     "date": pick["date"], "game_pk": pick["game_pk"], "side": side,
                     "team": team, "opponent": opponent, "moneyline": moneyline,
@@ -121,7 +167,17 @@ def advise_bets(
             continue
         rows.extend(candidates)
 
-    return pd.DataFrame(rows, columns=BET_ADVICE_COLUMNS)
+    result = pd.DataFrame(rows, columns=BET_ADVICE_COLUMNS)
+    if result.empty:
+        return result
+
+    daily_cap_fraction = config.KELLY_DAILY_UNIT_CAP * config.UNIT_SIZE_FRACTION
+    daily_total = result.groupby("date")["kelly_stake_fraction"].transform("sum")
+    over_cap = daily_total > daily_cap_fraction
+    result.loc[over_cap, "kelly_stake_fraction"] = (
+        result.loc[over_cap, "kelly_stake_fraction"] * daily_cap_fraction / daily_total[over_cap]
+    )
+    return result
 
 
 def select_game_picks(
@@ -133,6 +189,7 @@ def select_game_picks(
     market_probabilities: pd.DataFrame | None = None,
     kelly_fraction_multiplier: float = config.KELLY_FRACTION_MULTIPLIER,
     min_edge: float = config.KELLY_MIN_EDGE,
+    confidence: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Turn game_picks.compute_game_win_probabilities' output into the
     day's logged games - EVERY scheduled game, not just the ones that clear
@@ -181,7 +238,16 @@ def select_game_picks(
     explicitly here (not silently trusted): any game_pk appearing more
     than once in the advice is dropped from consideration entirely (with
     a warning) rather than picking one arbitrarily, so the final merge
-    below is always safely one-to-one."""
+    below is always safely one-to-one.
+
+    `confidence` (default None - unchanged behavior for every existing
+    caller/test that doesn't pass one) is teams.assemble_team_metrics'
+    output, carrying each team's real win_rate_CI_Low/CI_High - when
+    given, game_picks.apply_kelly_uncertainty computes a real, per-game
+    conservative probability that `advise_bets` sizes stakes off instead
+    of the flat `kelly_fraction_multiplier` shrinkage (see that function's
+    own docstring for why - "we need the units risked to not be
+    arbitrary")."""
     df = win_probabilities.copy()
     favors_home = df["home_win_probability"] >= 0.5
     df["predicted_winner"] = df["home_team"].where(favors_home, df["away_team"])
@@ -209,6 +275,17 @@ def select_game_picks(
         )
     else:
         picks["market_home_win_probability"] = pd.NA
+
+    if confidence is not None and not confidence.empty:
+        pessimistic = game_picks.apply_kelly_uncertainty(win_probabilities, confidence)
+        picks = picks.merge(
+            pessimistic[["game_pk", "home_win_probability_pessimistic", "away_win_probability_pessimistic"]],
+            on="game_pk",
+            how="left",
+        )
+    else:
+        picks["home_win_probability_pessimistic"] = pd.NA
+        picks["away_win_probability_pessimistic"] = pd.NA
 
     if has_moneylines:
         advice = advise_bets(picks, market_probabilities, kelly_fraction_multiplier, min_edge)
@@ -277,6 +354,13 @@ def append_game_predictions(picks: pd.DataFrame, log_path: str) -> pd.DataFrame:
             existing["bet_units"] = 0.0
             for col in ("bet_side", "bet_team", "bet_moneyline", "bet_stake_fraction", "bet_profit_units"):
                 existing[col] = pd.NA
+        if "home_win_probability_pessimistic" not in existing.columns:
+            # A row logged before uncertainty-scaled Kelly existed genuinely
+            # has no real per-game pessimistic probability to report - NaN,
+            # not a guess (same reasoning as market_home_win_probability's
+            # own backfill above).
+            existing["home_win_probability_pessimistic"] = pd.NA
+            existing["away_win_probability_pessimistic"] = pd.NA
         combined = pd.concat([picks, existing], ignore_index=True)
     else:
         combined = picks
