@@ -127,12 +127,23 @@ def advise_bets(
     the flat multiplier (half-Kelly by default) is what actually reins
     that in.
 
-    Also enforces config.KELLY_DAILY_UNIT_CAP (a real, user-set portfolio-
-    level risk limit, not derived) - if the day's total advised stake
-    fraction exceeds the cap, every advised stake for that date is scaled
-    down proportionally so the day's total lands exactly at the cap,
-    preserving each bet's relative size rather than favoring whichever
-    game happened to be evaluated first."""
+    Also enforces two real, user-set portfolio-level risk limits, in
+    order (2026-08-26 - direct response to "maybe we scaled it down too
+    much... this is now taking out games where the line is genuinely
+    appealing"): first config.KELLY_MAX_SINGLE_BET_UNIT_CAP clips any ONE
+    game's stake directly - the real, targeted defense against Kelly's
+    own amplification of a thin sizing-probability margin into a large
+    stake for short-priced favorites (stake sensitivity to that
+    probability is proportional to 1 + 1/b, large when the net odds b
+    are small), which the CI-based pessimistic probability and
+    kelly_fraction_multiplier reduce but don't fully eliminate on their
+    own - see config.KELLY_UNCERTAINTY_CI_ALPHA's own docstring for why
+    that CI was widened rather than relied on alone for this. Then
+    config.KELLY_DAILY_UNIT_CAP - if the day's total (post-per-bet-cap)
+    stake fraction still exceeds the daily cap, every advised stake for
+    that date is scaled down proportionally so the day's total lands
+    exactly at the cap, preserving each bet's relative size rather than
+    favoring whichever game happened to be evaluated first."""
     merged = todays_picks.merge(market, on=["home_team", "away_team"], how="left")
 
     rows = []
@@ -183,6 +194,9 @@ def advise_bets(
     result = pd.DataFrame(rows, columns=BET_ADVICE_COLUMNS)
     if result.empty:
         return result
+
+    single_bet_cap_fraction = config.KELLY_MAX_SINGLE_BET_UNIT_CAP * config.UNIT_SIZE_FRACTION
+    result["kelly_stake_fraction"] = result["kelly_stake_fraction"].clip(upper=single_bet_cap_fraction)
 
     daily_cap_fraction = config.KELLY_DAILY_UNIT_CAP * config.UNIT_SIZE_FRACTION
     daily_total = result.groupby("date")["kelly_stake_fraction"].transform("sum")

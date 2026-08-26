@@ -193,20 +193,29 @@ def compute_team_win_rate_ci(record: pd.DataFrame) -> pd.DataFrame:
     wins / games), and a real Wilson score confidence interval
     (helpers.wilson_ci) on that binomial proportion. Real follow-up
     (2026-08-25 - "we need the units risked to not be arbitrary"): feeds
-    game_picks.apply_kelly_uncertainty, which replaces
-    config.KELLY_FRACTION_MULTIPLIER's old flat, unconditional 0.5
-    shrinkage with a real per-game conservative estimate - the CI
-    naturally widens early in the season (few real games played, genuine
-    uncertainty about how good a team really is) and narrows as more
-    real games accumulate, with no new tunable constant beyond the
-    already-established Wilson formula and standard error-propagation
-    math (see apply_kelly_uncertainty's own docstring).
+    game_picks.apply_kelly_uncertainty, which supplements
+    config.KELLY_FRACTION_MULTIPLIER's flat shrinkage with a real
+    per-game conservative estimate.
+
+    Uses config.KELLY_UNCERTAINTY_CI_ALPHA (a ~68%/1-standard-error CI),
+    NOT helpers.wilson_ci's own 95% default - real follow-up (2026-08-26,
+    "maybe we scaled it down too much... this is now taking out games
+    where the line is genuinely appealing"): a real 95% CI's half-width
+    sits at roughly 8 points EVEN AT A NEAR-FULL SEASON'S ~130 games (the
+    real sqrt(n) precision floor of a binomial proportion at that sample
+    size, not a fluke), which combined across two teams was quietly
+    erasing genuine, honest edges rather than just implausible ones - see
+    config.KELLY_UNCERTAINTY_CI_ALPHA's own docstring for the worked
+    example. This narrower interval still genuinely widens early in the
+    season (few real games played) and narrows as more real games
+    accumulate, same as before - just calibrated to a less extreme real
+    confidence level, with no hand-picked shrinkage constant.
 
     `record` must be build_team_record's own shape (one row per team per
     game, real win/loss)."""
     games = record.groupby("team", as_index=False).agg(games_played=("win", "size"), wins=("win", "sum"))
     games["win_rate"] = games["wins"] / games["games_played"]
-    ci_low, ci_high = helpers.wilson_ci(games["wins"], games["games_played"])
+    ci_low, ci_high = helpers.wilson_ci(games["wins"], games["games_played"], alpha=config.KELLY_UNCERTAINTY_CI_ALPHA)
     games["win_rate_CI_Low"] = ci_low
     games["win_rate_CI_High"] = ci_high
     return games[["team", "games_played", "win_rate", "win_rate_CI_Low", "win_rate_CI_High"]]
