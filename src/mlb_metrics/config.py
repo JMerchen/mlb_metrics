@@ -941,6 +941,26 @@ KELLY_FRACTION_MULTIPLIER = 0.5  # half-Kelly - full Kelly is only growth-optima
 # of conservatism - one doesn't substitute for the other.
 KELLY_MIN_EDGE = 0.05  # minimum (model probability - real vigged market-implied probability) before recommending any stake at all - a buffer against noise in the model's own probability estimate, not a number backed by a formal calculation.
 KELLY_DAILY_UNIT_CAP = 5  # hard portfolio-level cap, in units (see UNIT_SIZE_FRACTION below), on the TOTAL stake advised across all of a single day's bets combined - a deliberate user-set risk limit (2026-08-25), not derived from data. game_predictions.advise_bets scales ALL of a date's stakes down proportionally (never selectively drops any one bet) whenever their sum would otherwise exceed this, so no single day's combined advice can ever risk more than this many units regardless of how many real edges clear on that date.
+KELLY_MAX_SINGLE_BET_UNIT_CAP = 2  # hard cap, in units, on any ONE game's advised stake regardless of what Kelly computes - a deliberate user-set risk limit (2026-08-26, "the short-priced-favorite blowup risk" follow-up), not derived from data. Directly bounds Kelly's own amplification of a thin probability margin into a large stake for short-priced favorites (stake sensitivity to the sizing probability is proportional to 1 + 1/b, which is large when the net odds b are small) - a risk the CI-based pessimistic probability and kelly_fraction_multiplier can reduce but not fully eliminate on their own. Applied in game_predictions.advise_bets BEFORE the daily cap (which then still applies across whatever survives).
+# Real follow-up (2026-08-26, direct response to "maybe we scaled it down
+# too much... this is now taking out games where the line is genuinely
+# appealing (some underdogs who have a chance)"): real production data
+# (2026-08-26) showed EVERY team's real season-to-date Wilson win-rate CI
+# (95% - the statsmodels/helpers.wilson_ci default) sitting at roughly an
+# 8-point half-width even at 132-133 games played (nearly a full season) -
+# not a fluke, just the real sqrt(n) floor of a ~130-game binomial
+# proportion's precision. Combined (root-sum-square) across two teams,
+# that is consistently ~11-12 points of haircut on every single game, all
+# season, regardless of how much real data accumulates - larger than most
+# real edges this project has ever advised on (see KELLY_MIN_EDGE's own
+# history above), so it was quietly zeroing out real, honest edges,
+# concretely: a real 2026-08-26 game (NYM +143, model 51.9% vs. market-
+# implied 41.2%, a genuine 10.7-point edge) got fully erased by an 11.7-
+# point haircut. See KELLY_MAX_SINGLE_BET_UNIT_CAP above for the other
+# half of this fix - the per-bet cap is what actually bounds the specific
+# short-priced-favorite risk that motivated widening this CI in the first
+# place, so this constant no longer has to do that job alone.
+KELLY_UNCERTAINTY_CI_ALPHA = 0.32  # ~68% CI (roughly 1 standard error) instead of the usual 95% (alpha=0.05) - a real, standard, NAMED statistical convention (not a hand-picked number), used ONLY for teams.compute_team_win_rate_ci's bet-sizing input (helpers.wilson_ci's own default alpha=0.05 is untouched everywhere else - every other real CI this project reports, e.g. win_rate_on_advised_bets_ci_low/high, beat_closing_line_rate_ci_low/high, stays a genuine 95% CI for honest reporting).
 # Raised from 0.02 after real production data (2026-08-24) showed 8 of 10
 # real games clearing the old 2% bar, with de-vigged model/market gaps as
 # large as 12 percentage points - implausible as genuine value against a

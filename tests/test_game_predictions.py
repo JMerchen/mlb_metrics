@@ -433,58 +433,106 @@ def test_advise_bets_sizes_off_pessimistic_probability_when_given():
     assert row["kelly_stake_fraction"] < old_flat_stake
 
 
-def test_advise_bets_daily_cap_scales_all_of_a_days_stakes_proportionally():
-    # Two big real edges on the SAME date whose combined full-Kelly stakes
-    # really do exceed config.KELLY_DAILY_UNIT_CAP - otherwise this test
-    # wouldn't exercise the cap at all.
+def test_advise_bets_clips_a_single_bet_to_the_max_single_bet_cap():
+    # Real follow-up (2026-08-26 - "maybe we scaled it down too much...
+    # this is now taking out games where the line is genuinely appealing"):
+    # config.KELLY_MAX_SINGLE_BET_UNIT_CAP bounds any ONE game's stake
+    # directly, regardless of how large Kelly's own number is - a huge raw
+    # edge here (full Kelly would be 50% of bankroll) still clips to the
+    # cap, well under config.KELLY_DAILY_UNIT_CAP so this isolates the
+    # per-bet cap from the separate daily cap.
+    picks = pd.DataFrame([_bet_pick_row(1, "NYY", "TOR", "NYY", 0.80)])
+    market = pd.DataFrame([_bet_market_row("NYY", "TOR", -150, 130)])
+
+    recs = game_predictions.advise_bets(picks, market, kelly_fraction_multiplier=1.0, min_edge=0.02)
+
+    assert len(recs) == 1
+    uncapped = kelly.kelly_fraction(0.80, -150, 1.0)
+    single_bet_cap = config.KELLY_MAX_SINGLE_BET_UNIT_CAP * config.UNIT_SIZE_FRACTION
+    assert uncapped > single_bet_cap  # sanity - the cap is genuinely binding here
+    assert single_bet_cap < config.KELLY_DAILY_UNIT_CAP * config.UNIT_SIZE_FRACTION
+    assert recs.iloc[0]["kelly_stake_fraction"] == pytest.approx(single_bet_cap, abs=1e-9)
+
+
+def test_advise_bets_daily_cap_layers_on_top_of_the_single_bet_cap():
+    # Three real edges on the SAME date: two huge ones (full Kelly would be
+    # 25%+ of bankroll each) that each clip to config.KELLY_MAX_SINGLE_BET_UNIT_CAP
+    # first, plus one modest one that stays under that per-bet cap on its
+    # own. Their SUM after the per-bet cap still exceeds
+    # config.KELLY_DAILY_UNIT_CAP, so the daily cap then scales ALL THREE
+    # down further, proportionally, on top of the per-bet cap - both real
+    # risk limits apply together, in the documented order, and the two
+    # already-capped bets aren't exempted from the daily cap just because
+    # they were already reduced once.
     picks = pd.DataFrame([
         _bet_pick_row(1, "NYY", "TOR", "NYY", 0.80),
-        _bet_pick_row(2, "LAD", "SF", "LAD", 0.75),
+        _bet_pick_row(2, "LAD", "SF", "LAD", 0.80),
+        _bet_pick_row(3, "HOU", "SEA", "HOU", 0.346),
     ])
     market = pd.DataFrame([
         _bet_market_row("NYY", "TOR", -150, 130),
         _bet_market_row("LAD", "SF", -140, 120),
+        # HOU a live underdog at +200 - a real, modestly-appealing edge
+        # (~1.3 points above the 33.3% breakeven) that stays under the
+        # per-bet cap on its own, unlike NYY/LAD's huge favorite edges.
+        _bet_market_row("HOU", "SEA", 200, -260),
     ])
 
-    recs = game_predictions.advise_bets(picks, market, kelly_fraction_multiplier=1.0, min_edge=0.02)
+    # min_edge=0.01 (below the module-default 0.05) so HOU's modest,
+    # deliberately-small edge still clears eligibility - this test is
+    # about cap layering, not min_edge itself.
+    recs = game_predictions.advise_bets(picks, market, kelly_fraction_multiplier=1.0, min_edge=0.01)
 
-    assert len(recs) == 2
-    cap_fraction = config.KELLY_DAILY_UNIT_CAP * config.UNIT_SIZE_FRACTION
-    nyy_uncapped = kelly.kelly_fraction(0.80, -150, 1.0)
-    lad_uncapped = kelly.kelly_fraction(0.75, -140, 1.0)
-    assert nyy_uncapped + lad_uncapped > cap_fraction  # sanity - cap is genuinely binding here
+    assert len(recs) == 3
+    single_bet_cap = config.KELLY_MAX_SINGLE_BET_UNIT_CAP * config.UNIT_SIZE_FRACTION
+    daily_cap = config.KELLY_DAILY_UNIT_CAP * config.UNIT_SIZE_FRACTION
+    hou_pre_daily_cap = kelly.kelly_fraction(0.346, 200, 1.0)
+    assert hou_pre_daily_cap < single_bet_cap  # sanity - HOU isn't hitting the per-bet cap on its own
+    pre_daily_total = 2 * single_bet_cap + hou_pre_daily_cap
+    assert pre_daily_total > daily_cap  # sanity - the daily cap is genuinely binding on top of the per-bet cap
 
-    # The day's total lands EXACTLY at the cap, not merely under it.
-    assert recs["kelly_stake_fraction"].sum() == pytest.approx(cap_fraction, abs=1e-9)
-    # Scaled down PROPORTIONALLY - each bet's relative size is preserved,
-    # not clipped to an equal split or favoring whichever game came first.
-    nyy_row = recs.set_index("team").loc["NYY"]
-    lad_row = recs.set_index("team").loc["LAD"]
-    assert nyy_row["kelly_stake_fraction"] / lad_row["kelly_stake_fraction"] == pytest.approx(
-        nyy_uncapped / lad_uncapped, abs=1e-9
+    # The day's total lands EXACTLY at the daily cap.
+    assert recs["kelly_stake_fraction"].sum() == pytest.approx(daily_cap, abs=1e-9)
+    # NYY/LAD were identically capped pre-daily-cap (both hit the same
+    # per-bet cap), so they land identically post-daily-cap too.
+    by_team = recs.set_index("team")
+    assert by_team.loc["NYY", "kelly_stake_fraction"] == pytest.approx(
+        by_team.loc["LAD", "kelly_stake_fraction"], abs=1e-9
     )
+    # HOU's smaller pre-daily-cap stake is scaled down by the same real
+    # ratio as NYY/LAD - proportional, not an equal three-way split.
+    scale = daily_cap / pre_daily_total
+    assert by_team.loc["NYY", "kelly_stake_fraction"] == pytest.approx(single_bet_cap * scale, abs=1e-9)
+    assert by_team.loc["HOU", "kelly_stake_fraction"] == pytest.approx(hou_pre_daily_cap * scale, abs=1e-9)
 
 
 def test_advise_bets_daily_cap_leaves_a_different_dates_stakes_untouched():
-    # Two dates, each individually under the cap on its own, but summed
-    # together they WOULD exceed cap_fraction=0.05 if the cap were (wrongly)
-    # applied across the whole DataFrame instead of per real calendar date.
+    # Three dates, each individually under BOTH caps on its own, but
+    # summed together they WOULD exceed config.KELLY_DAILY_UNIT_CAP if the
+    # cap were (wrongly) applied across the whole DataFrame instead of per
+    # real calendar date.
+    # +200 underdog picks (same modest, real edge used in the layering
+    # test above) - a real edge that stays under both caps individually.
     picks = pd.DataFrame([
-        {**_bet_pick_row(1, "NYY", "TOR", "NYY", 0.615), "date": pd.Timestamp("2026-08-24")},
-        {**_bet_pick_row(2, "LAD", "SF", "LAD", 0.615), "date": pd.Timestamp("2026-08-25")},
+        {**_bet_pick_row(1, "NYY", "TOR", "NYY", 0.346), "date": pd.Timestamp("2026-08-24")},
+        {**_bet_pick_row(2, "LAD", "SF", "LAD", 0.346), "date": pd.Timestamp("2026-08-25")},
+        {**_bet_pick_row(3, "HOU", "SEA", "HOU", 0.346), "date": pd.Timestamp("2026-08-26")},
     ])
     market = pd.DataFrame([
-        _bet_market_row("NYY", "TOR", -150, 130),
-        _bet_market_row("LAD", "SF", -150, 130),
+        _bet_market_row("NYY", "TOR", 200, -260),
+        _bet_market_row("LAD", "SF", 200, -260),
+        _bet_market_row("HOU", "SEA", 200, -260),
     ])
 
-    recs = game_predictions.advise_bets(picks, market, kelly_fraction_multiplier=1.0, min_edge=0.02)
+    recs = game_predictions.advise_bets(picks, market, kelly_fraction_multiplier=1.0, min_edge=0.01)
 
-    expected_each = kelly.kelly_fraction(0.615, -150, 1.0)
-    cap_fraction = config.KELLY_DAILY_UNIT_CAP * config.UNIT_SIZE_FRACTION
-    assert expected_each < cap_fraction
-    assert expected_each * 2 > cap_fraction  # sanity - would exceed the cap if wrongly summed across dates
-    assert (recs["kelly_stake_fraction"] == pytest.approx(expected_each, abs=1e-9)).all()
+    expected_each = kelly.kelly_fraction(0.346, 200, 1.0)
+    single_bet_cap = config.KELLY_MAX_SINGLE_BET_UNIT_CAP * config.UNIT_SIZE_FRACTION
+    daily_cap = config.KELLY_DAILY_UNIT_CAP * config.UNIT_SIZE_FRACTION
+    assert expected_each < single_bet_cap
+    assert expected_each < daily_cap
+    assert expected_each * 3 > daily_cap  # sanity - would exceed the cap if wrongly summed across dates
+    assert (recs["kelly_stake_fraction"] - expected_each).abs().max() < 1e-9
 
 
 # ---------------------------------------------------------------------
@@ -524,9 +572,11 @@ def test_select_game_picks_uses_confidence_for_a_smaller_pessimistic_stake():
     # arbitrary"): passing `confidence` (teams.assemble_team_metrics' real
     # output, carrying each team's real win_rate_CI_Low/CI_High) makes
     # select_game_picks size the stake off a real per-game conservative
-    # probability, on top of the same kelly_fraction_multiplier (1.0 here
-    # in both calls, so this isolates the CI-based pessimism's own effect) -
-    # a smaller, more honest stake on the exact same real edge.
+    # probability, on top of the same kelly_fraction_multiplier (a small
+    # 0.05 in both calls here so neither stake hits
+    # config.KELLY_MAX_SINGLE_BET_UNIT_CAP - this isolates the CI-based
+    # pessimism's own effect from that separate cap) - a smaller, more
+    # honest stake on the exact same real edge.
     win_probs = _win_probabilities([
         {"game_pk": 1, "date": pd.Timestamp("2026-08-24"), "home_team": "NYY", "away_team": "TOR",
          "home_win_probability": 0.70},
@@ -539,10 +589,10 @@ def test_select_game_picks_uses_confidence_for_a_smaller_pessimistic_stake():
 
     with_confidence = game_predictions.select_game_picks(
         win_probs, pd.Timestamp("2026-08-24"), market_probabilities=market,
-        kelly_fraction_multiplier=1.0, confidence=confidence,
+        kelly_fraction_multiplier=0.05, confidence=confidence,
     )
     without_confidence = game_predictions.select_game_picks(
-        win_probs, pd.Timestamp("2026-08-24"), market_probabilities=market, kelly_fraction_multiplier=1.0,
+        win_probs, pd.Timestamp("2026-08-24"), market_probabilities=market, kelly_fraction_multiplier=0.05,
     )
 
     # Same real edge clears bet eligibility either way (min_edge uses the
@@ -580,14 +630,17 @@ def test_advise_bets_falls_back_to_flat_multiplier_when_pessimistic_columns_are_
     market = pd.DataFrame([_bet_market_row("NYY", "TOR", -150, 130)])
 
     # A small multiplier so the resulting stake stays comfortably under
-    # config.KELLY_DAILY_UNIT_CAP - this test is about the pessimistic/flat
-    # fallback choice, not the separate daily-cap behavior (covered above).
-    recs = game_predictions.advise_bets(picks, market, kelly_fraction_multiplier=0.1, min_edge=0.02)
+    # BOTH config.KELLY_MAX_SINGLE_BET_UNIT_CAP and config.KELLY_DAILY_UNIT_CAP
+    # - this test is about the pessimistic/flat fallback choice, not either
+    # cap (covered elsewhere).
+    recs = game_predictions.advise_bets(picks, market, kelly_fraction_multiplier=0.05, min_edge=0.02)
 
     assert len(recs) == 1
-    expected_stake = kelly.kelly_fraction(0.70, -150, 0.1)
-    cap_fraction = config.KELLY_DAILY_UNIT_CAP * config.UNIT_SIZE_FRACTION
-    assert expected_stake < cap_fraction  # sanity - this test isn't exercising the cap
+    expected_stake = kelly.kelly_fraction(0.70, -150, 0.05)
+    single_bet_cap = config.KELLY_MAX_SINGLE_BET_UNIT_CAP * config.UNIT_SIZE_FRACTION
+    daily_cap = config.KELLY_DAILY_UNIT_CAP * config.UNIT_SIZE_FRACTION
+    assert expected_stake < single_bet_cap  # sanity - this test isn't exercising either cap
+    assert expected_stake < daily_cap
     assert recs.iloc[0]["kelly_stake_fraction"] == pytest.approx(expected_stake, abs=1e-9)
 
 

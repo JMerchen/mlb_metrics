@@ -1751,6 +1751,99 @@ unaffected by this change and still passes.
 
 Full test suite: 704 passed.
 
+### Rebalancing the blowup-risk fix: it was also killing genuinely appealing underdogs (2026-08-26)
+
+Direct user follow-up, the morning after the fix above shipped: **"maybe
+we scaled it down too much... this is now taking out games where the
+line is genuinely appealing (some underdogs who have a chance)."**
+Investigated with the day's own real, live data rather than assumed:
+2026-08-26's slate logged 15 real games, all with `bet_units = 0.0`.
+Three (NYM, MIA, ATH) had cleared the raw min-edge bar as candidates but
+were zeroed out at the sizing step. Concretely, NYM (home, +143) showed
+a real 10.7-point edge (model 51.9% vs. market-implied 41.2%) - a
+genuinely appealing underdog line - but its real per-game pessimistic
+probability (40.2%) fell just under the market's own price.
+
+**Root cause, found in the real data, not assumed**: every team's real
+season-to-date Wilson CI (`docs/data/confidence.csv`, 132-133 games
+played - nearly a full season) sat at roughly an **8-point half-width**.
+That's not a fluke or an early-season artifact - it's the real
+`sqrt(n)` precision floor of a ~130-game binomial win-rate estimate, and
+it barely narrows even at a full 162-game season. Combined
+(root-sum-square) across two teams, that's consistently **~11-12 points
+of haircut on every single game, all season long** - larger than most
+real edges this project has ever advised on, so it was quietly erasing
+genuine, honest edges (like NYM's above) right alongside the
+implausible ones it was built to catch.
+
+**Two real error sources need two different controls, not one shared
+dial** - confirmed by testing both blowup-risk and underdog-value cases
+against the same lever: loosening the CI enough to let the NYM edge back
+through (real edge -0.99 -> +4.72 points) *also* reopens 3-12 units of
+exposure on the original Dodgers/Rockies -275 blowup scenario, because
+Kelly's stake sensitivity to the sizing probability is proportional to
+`1 + 1/b` - large for short-priced favorites (small net odds `b`),
+small for underdogs (large `b`). A single flat probability haircut,
+tuned to catch one, unavoidably damages the other.
+
+**Fix - two independent, complementary controls, each targeting the
+real mechanism it addresses**:
+- `config.KELLY_UNCERTAINTY_CI_ALPHA = 0.32` (a real, standard,
+  NAMED ~68%/1-standard-error confidence level, not a hand-picked
+  shrinkage constant) replaces the default 95% Wilson CI (alpha=0.05)
+  *only* for `teams.compute_team_win_rate_ci`'s bet-sizing input -
+  `helpers.wilson_ci`'s own 95% default is untouched everywhere else
+  this project reports a real CI (win_rate_on_advised_bets, beat_closing_line_rate,
+  etc.). Roughly halves the per-team half-width (~8pts -> ~4pts,
+  ~11-12pts -> ~6pts combined), enough to let the real NYM edge clear
+  again.
+- `config.KELLY_MAX_SINGLE_BET_UNIT_CAP = 2` (a deliberate user-set risk
+  limit, like `KELLY_DAILY_UNIT_CAP`, not derived) hard-clips any ONE
+  game's stake directly in `game_predictions.advise_bets`, applied
+  BEFORE the existing daily cap. This is the real, targeted defense
+  against Kelly's own short-odds amplification - the loosened CI alone
+  would let the Dodgers/Rockies example back in at 3-12 units depending
+  on model confidence; the per-bet cap bounds it at exactly 2 units
+  regardless.
+
+**Honest, verified consequence, not hidden**: with this project's actual
+production defaults (`KELLY_MIN_EDGE=0.05`, `KELLY_FRACTION_MULTIPLIER=0.5`),
+a bet that just barely clears the minimum-edge bar already implies a
+~5-unit half-Kelly stake before either cap - Kelly is aggressive by
+design at even a "modest" edge. That means `KELLY_MAX_SINGLE_BET_UNIT_CAP`
+will bind on most real advised bets, not just extreme outliers - Kelly's
+own relative differentiation mostly only survives between "zero" and
+"the per-bet cap," not much further above it. This is a real, deliberate
+trade-off inherent to capping at all (the whole point is bounding the
+worst case), not a bug, but worth naming plainly rather than letting the
+per-bet cap's practical effect be a surprise.
+
+**Re-verified against both real scenarios**: today's real NYM pick, run
+through the fixed pipeline with actual production defaults, now advises
+**2.0 units** (real pessimistic edge +4.7 points, an uncapped half-Kelly
+stake of 4.0 units, clipped to the 2-unit per-bet cap). The original
+Dodgers/Rockies -275 blowup case, re-checked at raw model confidences of
+80/85/90%, now lands at exactly 2.0 units in all three cases (previously
+0/3.3/12.7 units before this rebalancing) - bounded regardless of how
+confident the model claims to be, rather than swinging unpredictably
+between zero and double digits.
+
+New/updated tests (`tests/test_game_predictions.py`): a dedicated
+single-bet-cap test, a cap-layering test (two bets clipped by the
+per-bet cap, one that isn't, all three then scaled together by the
+daily cap - proving the two caps compose correctly and neither bet is
+exempted from the daily cap just because it was already reduced once),
+and the existing daily-cap/pessimistic-sizing tests updated to use
+edges that isolate each behavior from the new per-bet cap. Also fixed a
+real, verified pandas/pytest interaction bug hit while writing these:
+`pandas.Series == pytest.approx(scalar)` silently returns all-`False`
+elementwise in this project's pinned pandas/pytest versions (confirmed
+directly, not assumed) rather than raising or comparing correctly -
+replaced with a direct `(series - expected).abs().max() < tolerance`
+check.
+
+Full test suite: 705 passed.
+
 ### Real follow-up: game-pick probability calibration (2026-08-24, not shipped)
 
 Direct follow-up to the `KELLY_MIN_EDGE` sanity-check above: on the 93
