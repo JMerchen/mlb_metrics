@@ -99,18 +99,33 @@ def advise_bets(
     home_win_probability_pessimistic/away_win_probability_pessimistic
     values (see game_picks.apply_kelly_uncertainty, merged in by
     select_game_picks below), that row's stake is sized off THAT real,
-    per-game conservative probability instead of the raw point estimate
-    scaled by `kelly_fraction_multiplier`. Gated per ROW, not just per
-    column: select_game_picks always persists these two columns (so
-    scripts/recommend_bets.py's later re-derivation from the log reuses
-    the same real sizing), but leaves them null for any game `confidence`
-    didn't cover - a caller/test that never supplies them at all
-    (game_picks_backtest.py's real historical replay, older fixtures)
-    is unaffected, exactly like a caller that supplies the columns but
-    with null values for a specific game. `min_edge` eligibility still
-    uses the raw model_probability either way - "is there a real edge
-    worth considering" stays a separate question from "how much to
-    actually risk given that edge."
+    per-game conservative probability instead of the raw point estimate.
+    Gated per ROW, not just per column: select_game_picks always persists
+    these two columns (so scripts/recommend_bets.py's later re-derivation
+    from the log reuses the same real sizing), but leaves them null for
+    any game `confidence` didn't cover - a caller/test that never
+    supplies them at all (game_picks_backtest.py's real historical
+    replay, older fixtures) is unaffected, exactly like a caller that
+    supplies the columns but with null values for a specific game.
+    `min_edge` eligibility still uses the raw model_probability either
+    way - "is there a real edge worth considering" stays a separate
+    question from "how much to actually risk given that edge."
+
+    `kelly_fraction_multiplier` is ALWAYS applied on top of whichever
+    probability ends up sizing the bet (2026-08-26 - real follow-up:
+    "the short-priced-favorite blowup risk" - a heavy favorite's small
+    payout per unit staked means a small error in the sizing probability
+    can flip real profit to real loss, and a team's season-long win-rate
+    CI can stay tight - and so barely discount a confident raw estimate -
+    even for a single game whose own real matchup-specific uncertainty
+    the CI can't see). The CI-derived pessimistic probability and the
+    flat multiplier are two INDEPENDENT layers of conservatism, not a
+    swap of one for the other - a confident raw model probability run
+    through even a real, non-arbitrary pessimistic adjustment can still
+    imply a double-digit-percent-of-bankroll full-Kelly stake on a heavy
+    favorite (see the README's own worked Dodgers/Rockies example), and
+    the flat multiplier (half-Kelly by default) is what actually reins
+    that in.
 
     Also enforces config.KELLY_DAILY_UNIT_CAP (a real, user-set portfolio-
     level risk limit, not derived) - if the day's total advised stake
@@ -134,11 +149,9 @@ def advise_bets(
         if pd.notna(home_pessimistic) and pd.notna(away_pessimistic):
             home_sizing_probability = home_pessimistic
             away_sizing_probability = away_pessimistic
-            sizing_fraction_multiplier = 1.0
         else:
             home_sizing_probability = home_model_probability
             away_sizing_probability = away_model_probability
-            sizing_fraction_multiplier = kelly_fraction_multiplier
 
         sides = [
             ("home", pick["home_team"], pick["away_team"], home_model_probability, home_sizing_probability, pick["home_moneyline"]),
@@ -150,7 +163,7 @@ def advise_bets(
             market_implied = market_odds.moneyline_to_implied_probability(moneyline)
             edge = model_probability - market_implied
             if edge >= min_edge:
-                stake_fraction = kelly.kelly_fraction(sizing_probability, moneyline, sizing_fraction_multiplier)
+                stake_fraction = kelly.kelly_fraction(sizing_probability, moneyline, kelly_fraction_multiplier)
                 candidates.append({
                     "date": pick["date"], "game_pk": pick["game_pk"], "side": side,
                     "team": team, "opponent": opponent, "moneyline": moneyline,
@@ -244,10 +257,11 @@ def select_game_picks(
     caller/test that doesn't pass one) is teams.assemble_team_metrics'
     output, carrying each team's real win_rate_CI_Low/CI_High - when
     given, game_picks.apply_kelly_uncertainty computes a real, per-game
-    conservative probability that `advise_bets` sizes stakes off instead
-    of the flat `kelly_fraction_multiplier` shrinkage (see that function's
-    own docstring for why - "we need the units risked to not be
-    arbitrary")."""
+    conservative probability that `advise_bets` sizes stakes off, with
+    `kelly_fraction_multiplier` still applied on top of it (see that
+    function's own docstring for why - "we need the units risked to not
+    be arbitrary," and its 2026-08-26 follow-up on why the flat
+    multiplier isn't dropped once this pessimistic probability exists)."""
     df = win_probabilities.copy()
     favors_home = df["home_win_probability"] >= 0.5
     df["predicted_winner"] = df["home_team"].where(favors_home, df["away_team"])

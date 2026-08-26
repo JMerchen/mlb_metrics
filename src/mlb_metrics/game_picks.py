@@ -256,13 +256,18 @@ def apply_calibration(win_probabilities: pd.DataFrame) -> pd.DataFrame:
 def apply_kelly_uncertainty(win_probabilities: pd.DataFrame, confidence: pd.DataFrame) -> pd.DataFrame:
     """Adds home_win_probability_pessimistic/away_win_probability_pessimistic
     to `win_probabilities` - real bet-sizing follow-up (2026-08-25 -
-    "we need the units risked to not be arbitrary"): replaces
+    "we need the units risked to not be arbitrary"): supplements
     config.KELLY_FRACTION_MULTIPLIER's old flat, unconditional 0.5
     shrinkage (applied identically to every bet regardless of how solid
     the underlying estimate actually is) with a real, PER-GAME conservative
     probability grounded in each team's own real season-to-date win-rate
     Wilson confidence interval (teams.compute_team_win_rate_ci, carried on
-    `confidence` via teams.assemble_team_metrics).
+    `confidence` via teams.assemble_team_metrics). Not a replacement for
+    that flat multiplier (2026-08-26 - "the short-priced-favorite blowup
+    risk": a team's season-long win-rate CI can stay genuinely tight even
+    though a single game still carries real matchup-level uncertainty the
+    season-level CI can't see) - game_predictions.advise_bets applies
+    BOTH, stacked.
 
     Each team's CI half-width ((CI_High - CI_Low) / 2) is a real measure of
     how much a team's true quality could still deviate from its observed
@@ -272,11 +277,12 @@ def apply_kelly_uncertainty(win_probabilities: pd.DataFrame, confidence: pd.Data
     independent real samples) into one real per-game uncertainty, then
     subtracted from the raw win_probability for whichever side is being
     considered - game_predictions.advise_bets sizes off THIS pessimistic
-    probability instead of the raw point estimate, so kelly.kelly_fraction
-    naturally computes a SMALLER (or zero) edge whenever the underlying
-    team records are too thin to trust, with no new tunable constant
-    beyond the already-established Wilson formula and this standard
-    propagation math.
+    probability instead of the raw point estimate (still scaled by
+    kelly_fraction_multiplier on top), so kelly.kelly_fraction naturally
+    computes a SMALLER (or zero) edge whenever the underlying team records
+    are too thin to trust, with no new tunable constant beyond the
+    already-established Wilson formula and this standard propagation
+    math.
 
     A team missing from `confidence` (a real data gap, or an early-season
     date before any games are recorded) gets the same maximal real

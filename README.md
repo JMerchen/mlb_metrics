@@ -1670,6 +1670,87 @@ reset, proving the day's TOTAL profit drives the reset, not merely
 
 Full test suite: 704 passed.
 
+### The short-priced-favorite blowup risk: `kelly_fraction_multiplier` is stacked, not swapped out (2026-08-26)
+
+Direct user challenge to the uncertainty-scaled Kelly fix above: **"choosing
+whether we bet or not should not just be on whether we beat Vegas odds...
+that 1 loss versus minimal return on the 3 wins minimizes returns, and if
+[the underdog] wins just a couple times more than expected, we're working
+at a loss despite the impressive win record."** Using the user's own
+example (Dodgers -275 vs. Rockies): breakeven implied probability is
+275/375 = **73.33%** and the real payout on a win is only `100/275 =
+0.364` units per unit staked. That asymmetry makes the bet's real profitability extremely sensitive to
+small errors in the probability estimate - concretely, if the model says
+80% but the team's TRUE win probability is actually 75% (a real EV of
+just +0.023 units per unit staked - barely profitable), and only 70%
+(a real **-0.046** EV - a genuine loss): a 5-10 point overestimate, well
+within this project's own documented calibration noise, flips real
+profit to real loss. A real
+20-bet simulation at this same price makes the fragility concrete: at a
+true 75% win rate (expected 15 wins), the *expected* result is barely
+positive (+0.45 units on 20 risked) - but 14 wins (well within one
+binomial standard deviation of "expected") turns the same 20 bets into a
+real **-0.91 unit loss**, despite a 70% win rate that would look
+"impressive" on any accuracy-scored dashboard.
+
+**Investigated first, not assumed**: simulating the exact Dodgers/Rockies
+matchup through the already-shipped uncertainty-scaled Kelly (a
+dominant team, 70-30 real record, n=162 - the largest possible real
+in-season sample) found the existing pessimistic-probability mechanism
+*already* zeroes out this exact bet when the model's raw estimate is
+80% (pessimistic probability 70.1%, still under the 73.33% breakeven) -
+the CI-based fix from the prior slice already does real work here.  But
+push the model's raw confidence to 85% and the pessimistic probability
+(75.1%) clears breakeven again, implying a **6.6-unit (6.6% of
+bankroll) full-Kelly stake on a single game** - because a team's
+SEASON-LONG win-rate Wilson CI can stay genuinely tight (a real,
+well-established record) even though this one specific game still
+carries real matchup-level uncertainty (starting pitcher, injuries,
+etc.) that a season-aggregate CI simply can't see.
+
+**Root cause**: `game_predictions.advise_bets` was treating the CI-based
+pessimistic probability and the flat `kelly_fraction_multiplier` as
+alternatives - full Kelly (1.0x) once a pessimistic probability was
+available, the flat multiplier (0.5x) only as a fallback when one
+wasn't. That swap was wrong: they defend against two different, both
+real, sources of error (season-level team-quality uncertainty vs.
+across-the-board probability-estimation error) and neither substitutes
+for the other.
+
+**Fix**: `kelly_fraction_multiplier` is now ALWAYS applied on top of
+whichever probability sizes the bet - the code simplified to always call
+`kelly.kelly_fraction(sizing_probability, moneyline, kelly_fraction_multiplier)`,
+with only the *probability* (pessimistic vs. raw) still chosen per-row.
+On the 85%-confidence Dodgers example above, this halves the single-game
+stake from 6.6 units to **3.3 units** at the default half-Kelly
+multiplier - real, direct risk reduction on exactly the scenario raised,
+with no new tunable constant (the existing `KELLY_FRACTION_MULTIPLIER`
+default, 0.5, is reused as-is).
+
+**Explicitly not done here** (a real, more involved follow-up, not this
+slice): a per-game (not per-team-season) uncertainty measure - e.g. the
+model's own real historical calibration error conditional on how
+extreme its predicted probability is - would target the exact
+established-team/thin-single-game-signal gap this example exposed more
+precisely than stacking a flat multiplier does. `KELLY_MIN_EDGE`
+eligibility also still gates on the raw model probability rather than
+the risk-adjusted one; a genuinely zero-stake "advised" row (sizing
+clips to 0 either from the CI or the multiplier) is already
+indistinguishable from "not advised" downstream (`bet_units == 0` is
+the sole real signal, and `resolve_game_predictions` never scores a
+`bet_units == 0` row), so this wasn't treated as a separate bug, but a
+tighter eligibility gate remains a real option if the flat multiplier
+alone proves insufficient once more real advised bets accumulate.
+
+Updated tests (`tests/test_game_predictions.py`): the pessimistic-sizing
+test now asserts the multiplier is genuinely still applied (smaller than
+both a full-1.0-off-pessimistic stake and the old flat-multiplier-off-raw
+stake); the `confidence`-vs-no-`confidence` comparison test already used
+an explicit `kelly_fraction_multiplier=1.0` in both branches, so it was
+unaffected by this change and still passes.
+
+Full test suite: 704 passed.
+
 ### Real follow-up: game-pick probability calibration (2026-08-24, not shipped)
 
 Direct follow-up to the `KELLY_MIN_EDGE` sanity-check above: on the 93

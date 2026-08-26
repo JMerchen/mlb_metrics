@@ -398,11 +398,11 @@ def test_advise_bets_sizes_off_pessimistic_probability_when_given():
     # Real follow-up (2026-08-25 - "we need the units risked to not be
     # arbitrary"): when home/away_win_probability_pessimistic columns are
     # present, the stake is sized off THAT real, per-game conservative
-    # probability at a full 1.0 multiplier - not the raw model probability
-    # scaled by kelly_fraction_multiplier. kelly_fraction_multiplier=0.5 is
-    # passed here deliberately wrong/misleading, to prove it's genuinely
-    # ignored once pessimistic columns are present, not silently stacked on
-    # top of the new CI-based pessimism.
+    # probability - not the raw model probability - but STILL scaled by
+    # kelly_fraction_multiplier (2026-08-26 - "the short-priced-favorite
+    # blowup risk": the CI-based pessimism and the flat multiplier are two
+    # independent, stacked layers of conservatism, not a swap of one for
+    # the other).
     picks = pd.DataFrame([{
         **_bet_pick_row(1, "NYY", "TOR", "NYY", 0.70),
         "home_win_probability_pessimistic": 0.61,
@@ -418,12 +418,17 @@ def test_advise_bets_sizes_off_pessimistic_probability_when_given():
     # Eligibility (min_edge) still uses the RAW model probability (0.70) -
     # a separate question from how much to actually risk.
     assert row["edge"] == pytest.approx(0.70 - (150 / 250), abs=1e-6)
-    expected_stake = kelly.kelly_fraction(0.61, -150, 1.0)
+    expected_stake = kelly.kelly_fraction(0.61, -150, 0.5)
     assert expected_stake > 0  # sanity - this test must exercise a real positive stake
     assert row["kelly_stake_fraction"] == pytest.approx(expected_stake, abs=1e-9)
-    # And that real, per-game pessimistic stake is genuinely smaller than
-    # what the old flat-half-Kelly approach would have advised on the same
-    # raw 0.70 probability - the concrete "units risked" fix.
+    # Genuinely smaller than sizing at a full 1.0 multiplier off the same
+    # pessimistic probability - the multiplier still does real work even
+    # once the CI-based pessimism has already been applied.
+    full_kelly_off_pessimistic = kelly.kelly_fraction(0.61, -150, 1.0)
+    assert row["kelly_stake_fraction"] < full_kelly_off_pessimistic
+    # And genuinely smaller than the old flat-half-Kelly approach on the
+    # same raw 0.70 probability too - the CI-based pessimism still matters
+    # on top of the multiplier, not replaced by it.
     old_flat_stake = kelly.kelly_fraction(0.70, -150, 0.5)
     assert row["kelly_stake_fraction"] < old_flat_stake
 
@@ -519,8 +524,9 @@ def test_select_game_picks_uses_confidence_for_a_smaller_pessimistic_stake():
     # arbitrary"): passing `confidence` (teams.assemble_team_metrics' real
     # output, carrying each team's real win_rate_CI_Low/CI_High) makes
     # select_game_picks size the stake off a real per-game conservative
-    # probability instead of the flat kelly_fraction_multiplier - a smaller,
-    # more honest stake on the exact same real edge.
+    # probability, on top of the same kelly_fraction_multiplier (1.0 here
+    # in both calls, so this isolates the CI-based pessimism's own effect) -
+    # a smaller, more honest stake on the exact same real edge.
     win_probs = _win_probabilities([
         {"game_pk": 1, "date": pd.Timestamp("2026-08-24"), "home_team": "NYY", "away_team": "TOR",
          "home_win_probability": 0.70},
