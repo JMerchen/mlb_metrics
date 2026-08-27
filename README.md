@@ -1844,6 +1844,52 @@ check.
 
 Full test suite: 705 passed.
 
+### Two real follow-ups after the above shipped: same-day refresh and the daily schedule
+
+**A same-day recompute gap, found and fixed by hand once (2026-08-26)**:
+re-running `daily_update.yml` (or `scripts/wave.py` directly) again on a
+date it already logged picks for does NOT refresh those still-pending
+picks with newly-fixed logic - `game_predictions.append_game_predictions`
+deliberately keeps an EXISTING logged row over a freshly-recomputed one
+for the same `(date, game_pk, metric)`, correct behavior for protecting
+already-resolved history, but it also meant the two fixes above didn't
+actually reach that day's already-logged, still-pending games just by
+re-running the pipeline. Concretely hit real: 2026-08-26's slate was
+logged by the morning's run, both fixes merged a few hours later, and a
+manual re-run of the pipeline still showed the pre-fix numbers (NYM/MIA/
+ATH bet_units all 0.0) even though the freshly-regenerated
+`confidence.csv` DID carry the new CI. Corrected by hand this one time -
+recomputed those 3 real candidate games directly with the merged
+production code (`game_picks.apply_kelly_uncertainty`, `kelly.kelly_fraction`)
+against the real freshly-regenerated confidence data and each game's own
+already-logged raw probability/moneyline, then wrote the corrected
+`bet_units`/`bet_stake_fraction`/pessimistic-probability values back into
+`data/predictions/game_predictions.csv` and regenerated
+`docs/data/game_picks_picks.csv` (`pipeline.write_game_picks_export`) -
+not hand-derived, the same real functions, just called directly on that
+one date's real data. This is a real, standing gap (a same-day RE-run
+doesn't refresh pending picks) - not fixed structurally here, only
+patched for that one occurrence.
+
+**Daily schedule moved earlier (2026-08-26)**: direct user report -
+10 AM real Arizona time (`schedule.today_local()`'s own fixed UTC-7
+reference zone), games about to start, site still showing stale picks.
+`daily_update.yml`'s cron moved from `"0 12 * * *"` (noon UTC = 5 AM AZ)
+to `"23 10 * * *"` (10:23 UTC = 3:23 AM AZ) - two real, separate reasons,
+not just "earlier": (1) more real buffer before the earliest MLB games
+(as early as ~9 AM AZ for a 12:05 PM ET getaway-day game) - roughly
+5.5-6 hours of lead time instead of ~4; (2) off the top of the hour
+(`:23`, not `:00`) - GitHub's own docs warn that scheduled workflows
+"can be delayed during periods of high load," and the top of the hour
+(especially a popular round-UTC time like noon) is exactly when that
+load peaks. No DST drift to manage here, unlike most US timezones - real
+Arizona time is fixed UTC-7 year-round, so this offset never needs
+revisiting for that reason. **Does NOT fix the same-day refresh gap
+above** - only a genuinely fresh calendar date benefits from the earlier
+schedule automatically; a manual re-run later on an already-logged date
+still needs the same by-hand correction until that gap is addressed
+structurally.
+
 ### Real follow-up: game-pick probability calibration (2026-08-24, not shipped)
 
 Direct follow-up to the `KELLY_MIN_EDGE` sanity-check above: on the 93

@@ -1,8 +1,30 @@
 name: Daily Update
 
 on:
+  # 10:23 UTC = 3:23 AM Arizona time (UTC-7, fixed - the same real
+  # convention schedule.today_local() already uses for "today," and the
+  # user's own real timezone) - moved from the old "0 12 * * *" (noon
+  # UTC = 5 AM AZ) after a real report that the site still wasn't
+  # updated by 10 AM AZ with games about to start. Two real, separate
+  # reasons this earlier slot is more reliable, not just "earlier":
+  # 1. More real buffer before the earliest MLB games (as early as
+  #    ~9 AM AZ for a 12:05 PM ET getaway-day game) - roughly 5.5-6
+  #    hours of lead time instead of ~4.
+  # 2. Off the top of the hour (`:23`, not `:00`) - GitHub's own docs
+  #    warn that scheduled workflows "can be delayed during periods of
+  #    high load," and the top of the hour (and especially popular
+  #    round-UTC times like noon) is exactly when that load peaks
+  #    across every public repo's own default-choice cron schedules.
+  # No DST drift to worry about here, unlike most US timezones - real
+  # Arizona time is fixed UTC-7 year-round (see schedule.today_local's
+  # own docstring), so this offset never needs revisiting.
+  # Doesn't fix a separate, already-known issue: re-running this
+  # workflow again LATER on a date it already ran for won't refresh
+  # that date's still-pending picks (append_game_predictions keeps the
+  # existing logged row over a freshly-recomputed one) - only a fresh
+  # calendar date benefits from this earlier schedule automatically.
   schedule:
-    - cron: "0 12 * * *"
+    - cron: "23 10 * * *"
   workflow_dispatch:
 
 jobs:
