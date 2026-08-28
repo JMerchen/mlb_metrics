@@ -1905,8 +1905,41 @@ const sorted = picks
 .slice()
 .sort((a,b)=>b.date.localeCompare(a.date) || Number(b.predicted_probability) - Number(a.predicted_probability))
 
+const statusLabels = {
+win: "win",
+loss: "loss",
+not_played: "not played",
+pending: "pending",
+}
+
+const pct = v =>
+v !== undefined && v !== null && v !== "" && !Number.isNaN(Number(v))
+? (Number(v) * 100).toFixed(1) + "%"
+: "-"
+
+// Real follow-up (2026-08-28 - "we're dumping almost everything data
+// wise into the table, and it all gets jumbled"): trimmed to a curated
+// set of columns, nicely labeled/formatted - not a raw dump of
+// whatever's in game_picks_picks.csv. renderTodaysGamePicks (above)
+// still reads the full row for its own cards, so nothing is removed
+// from the underlying data, just from THIS table's display.
+const formatted = sorted.map(p=>({
+"Date": p.date,
+"Predicted Winner": p.predicted_winner,
+"Predicted Loser": p.predicted_loser,
+"Model Probability": pct(p.predicted_probability),
+"Market Probability": pct(p.market_predicted_winner_probability),
+"Bet Units": p.bet_units && Number(p.bet_units) > 0 ? Number(p.bet_units).toFixed(2) : "-",
+"Bet Team": p.bet_team || "-",
+"Status": statusLabels[p.status] || p.status,
+"Bet Profit Units":
+p.bet_profit_units !== undefined && p.bet_profit_units !== "" && !Number.isNaN(Number(p.bet_profit_units))
+? (Number(p.bet_profit_units) >= 0 ? "+" : "") + Number(p.bet_profit_units).toFixed(2) + "u"
+: "-",
+}))
+
 buildTable(
-sorted,
+formatted,
 "gamePickHistoryTable",
 100
 )

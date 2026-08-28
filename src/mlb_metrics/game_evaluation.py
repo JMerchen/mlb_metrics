@@ -91,10 +91,34 @@ def build_game_picks_export(
         win_rate_on_advised_bets_ci_low, win_rate_on_advised_bets_ci_high, roi_p_value,
     ) = _bet_pnl_metrics(picks)
 
+    # Real follow-up (2026-08-28 - "we're dumping almost everything data
+    # wise into the [History] table"): predicted_loser and
+    # market_predicted_winner_probability are new, DERIVED display
+    # columns - the dashboard's History table shows only these plus a
+    # small, curated set of the existing ones (see docs/app.js's
+    # renderGamePickHistory), while renderTodaysGamePicks keeps reading
+    # the full row for its own cards (home_team/away_team/bet_moneyline/
+    # etc. are still real, needed data - not removed here, just not all
+    # surfaced in the History table).
+    home_favored = picks["predicted_winner"] == picks["home_team"]
+    picks["predicted_loser"] = picks["away_team"].where(home_favored, picks["home_team"])
+    # The market's own real probability for the SAME side the model
+    # favored - de-vigged market_home_win_probability is always the HOME
+    # team's probability, so when the model favors the away team this
+    # needs flipping (1 - p) to stay an apples-to-apples "model prob vs.
+    # market prob for the predicted winner" comparison, not a home-vs-
+    # picked-side mismatch. NaN-safe: 1 - NaN stays NaN, same "no real
+    # market data" signal market_home_win_probability's own NaN already
+    # carries.
+    picks["market_predicted_winner_probability"] = picks["market_home_win_probability"].where(
+        home_favored, 1 - picks["market_home_win_probability"]
+    )
+
     picks_out = picks[
         [
-            "date", "game_pk", "home_team", "away_team", "predicted_winner",
+            "date", "game_pk", "home_team", "away_team", "predicted_winner", "predicted_loser",
             "predicted_probability", "above_threshold", "status", "market_home_win_probability",
+            "market_predicted_winner_probability",
             "bet_units", "bet_side", "bet_team", "bet_moneyline", "bet_profit_units",
         ]
     ].sort_values("date", ascending=False).reset_index(drop=True)
