@@ -51,6 +51,38 @@ def test_build_game_picks_export_picks_table_status_and_order():
     assert by_pk.loc[5, "status"] == "not_played"
 
 
+def test_build_game_picks_export_predicted_loser_and_market_predicted_winner_probability():
+    # Real follow-up (2026-08-28 - the History table was "dumping almost
+    # everything... jumbled," trimmed to a curated column set including
+    # two new DERIVED ones): predicted_loser is whichever of home/away
+    # ISN'T predicted_winner, and market_predicted_winner_probability is
+    # the market's real probability for the SAME side the model favored -
+    # de-vigged market_home_win_probability is always the home team's own
+    # probability, so it needs flipping (1 - p) whenever the model favors
+    # the AWAY team, to stay a real apples-to-apples "model vs. market"
+    # comparison instead of silently comparing the wrong side.
+    rows = [
+        # Home team (NYY) favored - no flip needed, market_predicted_winner_probability
+        # should equal the raw market_home_win_probability directly.
+        _pick("2026-07-18", 1, "NYY", "BOS", "NYY", 0.65, "NYY", 1, market_home_win_probability=0.60),
+        # Away team (SF) favored - market_predicted_winner_probability
+        # must be the FLIPPED value (1 - 0.40 = 0.60), not the raw
+        # home-team number (0.40), which would be the WRONG side.
+        _pick("2026-07-19", 2, "LAD", "SF", "SF", 0.55, "SF", 1, market_home_win_probability=0.40),
+    ]
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+
+    picks, summary = game_evaluation.build_game_picks_export(df)
+    by_pk = picks.set_index("game_pk")
+
+    assert by_pk.loc[1, "predicted_loser"] == "BOS"
+    assert by_pk.loc[1, "market_predicted_winner_probability"] == pytest.approx(0.60)
+
+    assert by_pk.loc[2, "predicted_loser"] == "LAD"
+    assert by_pk.loc[2, "market_predicted_winner_probability"] == pytest.approx(0.60)
+
+
 def test_build_game_picks_export_min_probability_flags_but_does_not_drop():
     preds = _predictions()
     picks, summary = game_evaluation.build_game_picks_export(preds, min_probability=0.63)

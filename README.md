@@ -1890,6 +1890,52 @@ schedule automatically; a manual re-run later on an already-logged date
 still needs the same by-hand correction until that gap is addressed
 structurally.
 
+### Game Picks History table: trimmed to a curated column set (2026-08-28)
+
+Direct user report: **"we're dumping almost everything data wise into
+the table, and it all gets jumbled. All we need is date, predicted
+winner, predicted loser, model probability, market probability, bet
+units, bet team, and status[, and bet profit units]."** The History
+table (`docs/app.js`'s `renderGamePickHistory`) previously passed the
+FULL raw row straight from `game_picks_picks.csv` into `buildTable`,
+which renders one column per object key with the raw key name as the
+header (no title-casing) - every field ever added to that CSV
+(`game_pk`, `home_team`, `away_team`, `above_threshold`, the raw
+`market_home_win_probability`, `bet_side`, `bet_moneyline`, ...) showed
+up as an unlabeled, unformatted column.
+
+**Two derived columns didn't exist yet and needed real logic, not just
+column hiding**: `predicted_loser` (whichever of home/away ISN'T
+`predicted_winner`) and a market probability that's actually comparable
+to the model's - the existing `market_home_win_probability` is always
+the HOME team's de-vigged probability, so showing it next to the
+model's `predicted_probability` (always the model's OWN favored side)
+silently compares the wrong side whenever the model favors the away
+team. Added `game_evaluation.build_game_picks_export` computing both as
+real pandas derivations (flip `market_home_win_probability` to
+`1 - market_home_win_probability` whenever the away team is favored,
+NaN-safe) rather than duplicating that logic in JS - kept in the same
+Python data layer as every other real derived column in this project.
+
+**`renderTodaysGamePicks` (the separate "today's picks" cards section)
+reads the exact same loaded `picks` array as the History table**, so the
+underlying CSV/columns weren't trimmed - only `renderGamePickHistory`'s
+own display was, by building a small formatted object (Title Case
+labels, `%` for probabilities, `-` for not-applicable bet fields, `+/-`
+and a `u` suffix for profit units) before calling `buildTable`, the same
+pattern `renderProbablePitchers` already established for a "nice" table
+rather than a raw data dump.
+
+Verified two ways: `tests/test_game_evaluation.py` (real Python
+assertions on both derived columns, including the flip case), and a
+small Node harness loading the real `app.js` against synthetic rows to
+inspect the actual rendered `<table>` HTML directly (not just re-reading
+the code) - confirmed the header row is exactly the 9 requested columns
+and the away-favored row's Market Probability shows the correctly
+flipped 60.0%, not the raw home-team 40.0%.
+
+Full test suite: 706 passed.
+
 ### Real follow-up: game-pick probability calibration (2026-08-24, not shipped)
 
 Direct follow-up to the `KELLY_MIN_EDGE` sanity-check above: on the 93
