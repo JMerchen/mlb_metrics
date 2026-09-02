@@ -1,0 +1,86 @@
+name: NFL Weekly Update
+
+on:
+  # 13:17 UTC Tuesday = 6:17 AM Arizona time (UTC-7, fixed - real
+  # Arizona time has no DST, same convention every other cron in this
+  # repo already uses). Tuesday morning, not daily: real NFL games
+  # cluster Thu/Sun/Mon, so a Tuesday run comes AFTER Monday Night
+  # Football has fully resolved (last week's picks can be graded) and
+  # BEFORE next week's slate/odds firm up further in the week - see
+  # nfl_pipeline.py's own module docstring. Off the top of the hour
+  # (`:17`, not `:00`) for the same "avoid peak scheduled-workflow load"
+  # reason daily_update.yml's own cron already documents. A weekly (not
+  # daily) cadence is a deliberate choice, not an oversight - this
+  # project has already learned firsthand that shared GitHub Actions
+  # minutes are a real, finite, easily-squeezed budget (see
+  # daily_update.yml's own history), and an idle NFL pipeline rerun on
+  # 6 of 7 days a week would waste exactly that.
+  schedule:
+    - cron: "17 13 * * 2"
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season to run (defaults to config.NFL_SEASON)"
+        required: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: |
+          pytest
+
+      - name: Create output folders
+        run: |
+          mkdir -p docs/data
+          mkdir -p data/raw/nfl
+          mkdir -p data/predictions
+
+      - name: Run NFL game picks pipeline
+        run: |
+          if [ -n "${{ inputs.season }}" ]; then
+            python scripts/nfl_pipeline.py --season "${{ inputs.season }}"
+          else
+            python scripts/nfl_pipeline.py
+          fi
+
+      - name: Commit updates
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          git add docs/data/nfl_game_picks_picks.csv docs/data/nfl_game_picks_summary.csv docs/data/nfl_game_picks_summary_by_version.csv data/raw/nfl/ data/predictions/nfl_game_predictions.csv
+
+          git commit -m "NFL weekly update" || echo "No changes"
+
+          # Retry with a rebase before each attempt - same real push-race
+          # fix as daily_update.yml's own "Commit updates" step.
+          branch=$(git rev-parse --abbrev-ref HEAD)
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              exit 0
+            fi
+            echo "Push attempt $attempt failed - pulling/rebasing and retrying..."
+            git pull --rebase origin "$branch"
+            sleep 5
+          done
+          echo "::error::Failed to push after 5 attempts"
+          exit 1
