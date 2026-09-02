@@ -4,7 +4,7 @@ import pytest
 from mlb_metrics import config, nfl_passing
 
 
-def _qb_row(player_id, season, week, attempts, completions, passing_yards, passing_tds, ints, carries, rush_yards, rush_tds):
+def _qb_row(player_id, season, week, attempts, completions, passing_yards, passing_tds, ints, carries, rush_yards, rush_tds, passing_epa=0.0):
     return {
         "player_id": player_id,
         "position": "QB",
@@ -19,6 +19,7 @@ def _qb_row(player_id, season, week, attempts, completions, passing_yards, passi
         "carries": carries,
         "rushing_yards": rush_yards,
         "rushing_tds": rush_tds,
+        "passing_epa": passing_epa,
     }
 
 
@@ -89,6 +90,25 @@ def test_compute_qb_rolling_stats_filters_to_qb_position_only():
     result = nfl_passing.compute_qb_rolling_stats(weekly_df)
 
     assert list(result["player_id"]) == ["qb1"]
+
+
+def test_compute_qb_rolling_stats_blends_passing_epa():
+    # passing_epa is a real per-game QB efficiency total (nfl_team_strength's
+    # QB-continuity adjustment relies on it) - blended across NFL_QB_WINDOWS
+    # the same way every other STAT_COLS entry is.
+    rows = [_qb_row("qb1", 2025, week, attempts=30, completions=20, passing_yards=200, passing_tds=1, ints=0,
+                     carries=2, rush_yards=5, rush_tds=0, passing_epa=float(week)) for week in range(1, 11)]
+    weekly_df = pd.DataFrame(rows)
+
+    result = nfl_passing.compute_qb_rolling_stats(weekly_df).set_index("player_id")
+
+    # Same window shape as the passing_yards blend test: full mean of
+    # weeks 1-10 = 5.5; 8-game window (weeks 3-10) mean = 6.5; 4-game
+    # window (weeks 7-10) mean = 8.5.
+    full_mean, w8_mean, w4_mean = 5.5, 6.5, 8.5
+    windows = dict(config.NFL_QB_WINDOWS)
+    expected = full_mean * windows[None] + w8_mean * windows[8] + w4_mean * windows[4]
+    assert result.loc["qb1", "passing_epa_per_game"] == pytest.approx(expected)
 
 
 def test_compute_qb_rolling_stats_min_games_qualifier_count_is_exposed():

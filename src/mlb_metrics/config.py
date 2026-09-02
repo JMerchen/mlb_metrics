@@ -1825,3 +1825,99 @@ NFL_BESTBALL_DRAFTABLE_POOL_SIZE = {
 # "was this player producing early enough in the real season to matter for
 # real pod advancement, not just totaling well by the end."
 NFL_BESTBALL_ROUND1_END_WEEK = 14
+
+# --- NFL Game Predictions (nfl_team_strength.py, nfl_game_picks.py) ---
+#
+# Real 1:1 structural port of the MLB Automated Game Picks pipeline
+# (teams.py's Pyth Strength/SOS/Confidence mixture -> game_picks.py's
+# composite win-probability model) - see nfl_team_strength.py's own
+# module docstring for the full signal-by-signal mapping. EVERY constant
+# below is a real, honestly-labeled STARTING POINT, not an asserted-
+# correct value - nfl_game_picks_backtest.py trains on real 2025 weeks
+# 1-7 and validates/re-fits against real 2025 weeks 8-18 (held out,
+# including real historical closing-line moneylines already sitting in
+# schedules_*.parquet) before any of this reaches a live 2026 pick. Same
+# "hand-tuned, then honestly backtested" arc MLB's own TEAM_STRENGTH_WINDOWS/
+# PYTHAGOREAN_EXPONENT/GAME_PICK_COMPOSITE_WEIGHTS went through - and the
+# same real caveat NFL_QB_WINDOWS/NFL_SKILL_WINDOWS/NFL_DEFENSE_WINDOWS
+# above already carry ("PLACEHOLDER WEIGHTS, not yet backtested").
+
+# Games-back windows for nfl_team_strength.compute_strength_metrics -
+# starts from the exact same real full/8-games/4-games shape already
+# used by NFL_QB_WINDOWS/NFL_SKILL_WINDOWS/NFL_DEFENSE_WINDOWS above
+# (an 18-week NFL season, not MLB's 162-game one - MLB's own 10g/30g/81g/
+# full windows would be meaningless at NFL's scale, so this reuses this
+# project's own already-established NFL window convention rather than a
+# naive proportional rescale of MLB's).
+NFL_TEAM_STRENGTH_WINDOWS = [
+    (4, 0.50),
+    (8, 0.30),
+    (None, 0.20),
+]
+
+# NFL's own real, commonly-cited Pythagorean win-expectation exponent
+# (points-scored/points-allowed based) - NOT MLB's 1.83 (a different real
+# sport with a different real scoring distribution). 2.37 is the widely-
+# cited real NFL value in the sports-analytics literature (originally a
+# Football Outsiders derivation) - a real, sourced starting point, same
+# spirit as MLB's own "custom-tuned, not the classic 2" - genuinely
+# re-fit against the real 2025 test split in nfl_game_picks_backtest.py,
+# not assumed correct just because it's a commonly-cited number.
+NFL_PYTHAGOREAN_EXPONENT = 2.37
+
+# Same role/formula as NORMALIZATION_Z_SCALE/CONFIDENCE_SOS_WEIGHT above,
+# a real starting point pending the same backtest - not reusing the MLB
+# constants directly so tuning one sport's mixture can never silently
+# move the other's.
+NFL_NORMALIZATION_Z_SCALE = 0.15
+NFL_CONFIDENCE_SOS_WEIGHT = 0.3
+
+# Equal-weighted blend of the four team-level signals into one team
+# composite rating, direct structural mirror of GAME_PICK_COMPOSITE_WEIGHTS -
+# pyth_Strength/pyth_Confidence (the real record-based Pythagorean
+# mixture) plus offensive_edge/defensive_edge (real passing_epa+
+# rushing_epa+receiving_epa produced/allowed per game - see
+# nfl_team_strength.py's own docstring) folded into true_power, same
+# "true_power = avg(offensive_edge, defensive_edge)" shape as MLB's
+# true_power = avg(offensive_edge, suppression_resistance). No NFL
+# analog of suppression_resistance itself (baseball's "held under 3
+# runs" shutout-innings framing has no honest 1:1 football translation) -
+# defensive_edge fills that same STRUCTURAL role (a real, separate
+# defensive-quality signal) with a real football-native stat instead of
+# a force-fit port.
+NFL_GAME_PICK_COMPOSITE_WEIGHTS = [
+    ("pyth_Strength", 0.25),
+    ("pyth_Confidence", 0.25),
+    ("defensive_edge", 0.25),
+    ("true_power", 0.25),
+]
+
+# A game is only "picked" if the favored side's win probability clears
+# this bar - same role as GAME_PICK_MIN_PROBABILITY. Real NFL talent
+# gaps tend to be larger than MLB's on a per-game basis, so this starts
+# higher than MLB's 0.58 - a real, honest guess pending the backtest,
+# not derived.
+NFL_GAME_PICK_MIN_PROBABILITY = 0.62
+
+# Same degenerate-input guard as GAME_PICK_RATING_FLOOR.
+NFL_GAME_PICK_RATING_FLOOR = 0.05
+
+# How much the QB-continuity adjustment (nfl_team_strength.py - the
+# actual starting QB's own real rolling EPA-per-dropback quality,
+# blended in when it differs from the team's recent primary QB) shifts
+# a team's offensive rating, mirroring GAME_PICK_SUSCEPTIBILITY_WEIGHT's
+# role. Ships conservative (informational lean, not a full swap to the
+# backup's own thin-sample number) pending a real backtested weight,
+# same "ship conservatively until proven" reasoning as NFL_MATCHUP_WEIGHT
+# above.
+NFL_QB_CONTINUITY_WEIGHT = 0.5
+
+# Path to the saved NFL game-pick probability-calibration artifact
+# (ml_models.fit_probability_calibration, trained by
+# scripts/train_nfl_game_pick_calibration.py) - same real graceful-
+# degradation contract as GAME_PICK_CALIBRATION_MODEL_PATH: a no-op
+# until/unless a real trained artifact clears its own real-holdout bar.
+NFL_GAME_PICK_CALIBRATION_MODEL_PATH = "data/models/nfl_game_pick_calibration_model.joblib"
+
+# Same purpose as GAME_PICK_MODEL_VERSION, for nfl_game_predictions.py.
+NFL_GAME_PICK_MODEL_VERSION = "v1"

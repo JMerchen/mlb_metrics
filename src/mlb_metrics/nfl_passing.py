@@ -14,10 +14,17 @@ player's own rows by recency and slicing the most recent N games
 naturally skips unplayed weeks without any separate bye-detection logic.
 
 All column names here (attempts, completions, passing_yards, passing_tds,
-passing_interceptions, carries, rushing_yards, rushing_tds, player_id,
-position, season, week, game_id) are confirmed live against real
-nflreadpy 0.1.5 output - see nfl_data.py's module docstring for the cited
-run.
+passing_interceptions, carries, rushing_yards, rushing_tds, passing_epa,
+player_id, position, season, week, game_id) are confirmed live against
+real nflreadpy 0.1.5 output - see nfl_data.py's module docstring for the
+cited run.
+
+`passing_epa` (added for nfl_team_strength.py's QB-continuity adjustment
+- a real, already-computed per-game EPA total from a QB's own dropbacks,
+summed and blended across NFL_QB_WINDOWS exactly like every other stat
+here) is real and NOT the same number as team_stats_*.parquet's own
+team-level `passing_epa` (that one sums every passer on the team that
+week; this one is the individual QB's own row from weekly_*.parquet).
 """
 
 import pandas as pd
@@ -33,6 +40,7 @@ STAT_COLS = [
     "carries",
     "rushing_yards",
     "rushing_tds",
+    "passing_epa",
 ]
 
 
