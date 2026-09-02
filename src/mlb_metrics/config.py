@@ -1908,12 +1908,22 @@ NFL_CONFIDENCE_SOS_WEIGHT = 0.3
 # from 4 equal 0.25 weights) - a real starting point, pending
 # nfl_game_picks_backtest.py's own re-validation, same honest status as
 # every other constant here.
+# Real follow-up (2026-09-02 - "offensive efficiency (pts/drive)"):
+# points_per_drive (nfl_team_strength.compute_team_points_per_drive - real
+# points scored per real offensive drive, derived from play-by-play) added
+# as a 6th signal, rebalanced to 6 equal ~0.1667 weights. A genuinely
+# different efficiency lens than offensive_edge (per-PLAY EPA) - this
+# measures how often real drives actually turn into points, not how
+# valuable each individual play was - so kept as its own weight rather
+# than folded into true_power/offensive_edge, same "let the backtest
+# validate it independently" reasoning as turnover_margin above.
 NFL_GAME_PICK_COMPOSITE_WEIGHTS = [
-    ("pyth_Strength", 0.20),
-    ("pyth_Confidence", 0.20),
-    ("defensive_edge", 0.20),
-    ("true_power", 0.20),
-    ("turnover_margin", 0.20),
+    ("pyth_Strength", 1 / 6),
+    ("pyth_Confidence", 1 / 6),
+    ("defensive_edge", 1 / 6),
+    ("true_power", 1 / 6),
+    ("turnover_margin", 1 / 6),
+    ("points_per_drive", 1 / 6),
 ]
 
 # A game is only "picked" if the favored side's win probability clears

@@ -42,7 +42,20 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import pandas as pd
 
-from mlb_metrics import config, ml_models, nfl_game_picks_backtest as backtest
+from mlb_metrics import config, ml_models, nfl_data, nfl_game_picks_backtest as backtest
+
+
+def _load_or_fetch_pbp(raw_dir: str, season: int) -> pd.DataFrame:
+    """Same cache-or-fetch pattern as scripts/run_nfl_game_picks_backtest.py's
+    own helper - real play-by-play isn't part of the bulk historical
+    backfill (see nfl_data.fetch_pbp's own docstring)."""
+    cached = nfl_data.load_persisted_table(raw_dir, "pbp", season)
+    if cached is not None:
+        return cached
+    print(f"No cached pbp_{season}.parquet - fetching real play-by-play live (this can take a minute)...")
+    pbp = nfl_data.fetch_pbp([season])
+    nfl_data.persist_table(pbp, raw_dir, "pbp", season)
+    return pbp
 
 
 def _split_holdout(rows: pd.DataFrame, holdout_weeks: int):
@@ -88,9 +101,10 @@ def main():
 
     schedules, team_stats, weekly = _load("schedules"), _load("team_stats"), _load("weekly")
     snap_counts, rosters = _load("snap_counts"), _load("rosters_weekly")
+    pbp = _load_or_fetch_pbp(args.raw_dir, args.season)
 
     print(f"Replaying {args.season} season (no lookahead)...")
-    rows = backtest.replay_season(schedules, team_stats, weekly, snap_counts, rosters, season=args.season)
+    rows = backtest.replay_season(schedules, team_stats, weekly, snap_counts, rosters, pbp, season=args.season)
 
     if rows.empty:
         print("No replayed games - nothing to fit.")

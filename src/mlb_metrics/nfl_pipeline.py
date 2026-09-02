@@ -55,6 +55,7 @@ TABLE_FETCHERS = [
     ("weekly", nfl_data.fetch_weekly_stats),
     ("snap_counts", nfl_data.fetch_snap_counts),
     ("rosters_weekly", nfl_data.fetch_rosters_weekly),
+    ("pbp", nfl_data.fetch_pbp),
 ]
 TABLES = [table for table, _ in TABLE_FETCHERS]
 
@@ -196,7 +197,9 @@ def run(
         if real_history_games.empty:
             print("No real completed games in history yet (brand-new season with no prior-season data) - skipping prediction.")
         else:
-            master = nfl_team_strength.assemble_team_metrics(history["schedules"], history["team_stats"])
+            master = nfl_team_strength.assemble_team_metrics(
+                history["schedules"], history["team_stats"], history["pbp"]
+            )
             qb_continuity = nfl_team_strength.compute_qb_continuity_adjustment(
                 history["snap_counts"], history["weekly"], history["rosters_weekly"]
             )

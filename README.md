@@ -4225,6 +4225,33 @@ game in 541/544 (99.4%) of real 2025 team-games - the rare (~0.6%)
 mismatch traces to a real fumble going out of bounds (possession changes
 by rule with no recovery credited to either side), not a data error.
 
+**Points per drive** (`nfl_team_strength.compute_team_points_per_drive`,
+added 2026-09-02 - "offensive efficiency (pts/drive)") - a genuinely
+different efficiency lens than `offensive_edge` (real per-PLAY EPA): how
+often real drives actually turn into points, not how valuable each
+individual play was. Sourced from real play-by-play (`nfl_data.fetch_pbp`,
+`nflreadpy`'s `load_pbp` - not touched by this project before this, and
+NOT bulk-backfilled across `config.NFL_HISTORICAL_SEASONS` the way every
+other NFL table is, since one season alone is already ~20MB/~48.7k rows -
+roughly 10x the combined size of every other NFL table this project
+persists per season; fetched per-season on demand instead, current +
+immediately-prior season, mirroring the live pipeline's own cold-start
+pattern for every other table). Each real drive's own point value is the
+real score change across it (`posteam_score_post` on the drive's last
+real play minus `posteam_score` on its first), not guessed from
+`fixed_drive_result`'s text label - this correctly handles a real 2-point
+conversion, and correctly credits 0 points to the offense's own drive
+when the DEFENSE scores against them mid-drive (a pick-six, a safety),
+confirmed live against real 2025 plays. Considered and explicitly
+NOT built: a homegrown "QBR-like" composite from the same play-by-play
+data (`qb_epa`/`wpa`/`cpoe` are all real, confirmed-present columns) -
+skipped since the model already has `passing_epa`/`passing_cpoe` doing
+that job in the QB-continuity signal from the exact same underlying play
+data, so a new composite would likely just duplicate existing signal for
+real added engineering cost, not add new information; real ESPN Total
+QBR itself is proprietary and isn't in `nflreadpy` at all, so it
+couldn't be reproduced exactly regardless.
+
 **QB continuity** (`nfl_team_strength.compute_qb_continuity_adjustment` +
 `nfl_game_picks.py`'s own comparison) is the real NFL-specific signal
 with no clean MLB analog - no MLB pitcher swings a team's win probability
@@ -4241,16 +4268,17 @@ so when the confirmed starter IS the team's own recent-primary QB (the
 ordinary case) the adjustment is exactly 0 with no separate "did the
 starter change" branch needed.
 
-`nfl_game_picks.compute_game_win_probabilities` combines five
+`nfl_game_picks.compute_game_win_probabilities` combines six
 z-normalized signals (`config.NFL_GAME_PICK_COMPOSITE_WEIGHTS`:
 `pyth_Strength`, `pyth_Confidence`, `defensive_edge`, `true_power`,
-`turnover_margin`, equal-weighted at 0.20 each - `turnover_margin` was
-added as its own explicit weight rather than folded into `true_power`,
-since turnovers are a genuinely distinct quality dimension from
-EPA-based efficiency and keeping it separate lets the backtest validate
-it independently) plus the QB-continuity shift, then a simple ratio (not
-log5) into `home_win_probability` - same "these composites aren't
-calibrated win percentages" reasoning as the MLB original.
+`turnover_margin`, `points_per_drive`, equal-weighted at 1/6 each -
+`turnover_margin`/`points_per_drive` were each added as their own
+explicit weight rather than folded into `true_power`, since both are
+genuinely distinct quality dimensions from EPA-based efficiency and
+keeping them separate lets the backtest validate each independently)
+plus the QB-continuity shift, then a simple ratio (not log5) into
+`home_win_probability` - same "these composites aren't calibrated win
+percentages" reasoning as the MLB original.
 
 ### Real backtest results (`scripts/run_nfl_game_picks_backtest.py`, `nfl_game_picks_backtest.py`)
 
@@ -4263,12 +4291,12 @@ honestly, not cherry-picked:
 
 | Split | Source | n | Accuracy | Brier | Beat closing line |
 |---|---|---|---|---|---|
-| Train (wk3-7) | Model | 76 | 56.6% | 0.245 | 35.5% |
+| Train (wk3-7) | Model | 76 | 56.6% | 0.244 | 36.8% |
 | Train (wk3-7) | Market | 76 | 67.1% | 0.219 | - |
-| Test (wk8-18) | Model | 164 | 57.3% | 0.247 | 36.0% |
+| Test (wk8-18) | Model | 164 | 57.9% | 0.246 | 36.0% |
 | Test (wk8-18) | Market | 164 | 62.8% | 0.213 | - |
 
-The raw heuristic beats a coin flip on real held-out data (57.3% test
+The raw heuristic beats a coin flip on real held-out data (57.9% test
 accuracy) but trails the real market meaningfully (62.8%) and loses the
 squared-error comparison on the majority of games (36.0% beat-closing-line,
 below the 50% a genuinely competitive model would clear) - the exact same
@@ -4277,14 +4305,13 @@ real spread is far narrower than the market's own spread on the same
 games), reported here with the same honesty rather than smoothed over.
 
 **2026-09-02 real update** (tightened windows 4/8/full -> 3/7/full, plus
-adding `turnover_margin` as a 5th composite signal): a real, modest,
-mixed improvement, not a breakthrough - train accuracy rose meaningfully
-(53.9% -> 56.6%) and test beat-closing-line rose a bit (34.8% -> 36.0%),
-but test accuracy was exactly unchanged (57.3% -> 57.3%, since the
-model's predicted probabilities are still tightly clustered near 0.5 -
-small composite shifts rarely flip which side is actually favored) and
-test Brier moved by less than 0.001 (essentially noise). Reported as-is
-rather than rounded up to a bigger win than the real numbers show.
+adding `turnover_margin` and `points_per_drive` as new composite signals,
+in two real backtested steps): a real, modest, cumulative improvement,
+not a breakthrough - train accuracy rose meaningfully (53.9% -> 56.6%),
+test accuracy rose a bit (57.3% -> 57.9%), train beat-closing-line rose
+(35.5% -> 36.8%), and test Brier improved slightly (0.247 -> 0.246).
+Reported as-is rather than rounded up to a bigger win than the real
+numbers show - still a narrow, unproven edge, not a solved model.
 
 **Weeks 1 and 2 are excluded from every replay, for a real structural
 reason, not an arbitrary cutoff**: week 1 has zero real prior-game history
@@ -4302,7 +4329,7 @@ prior-season history into early-season weeks instead.
 walk-forward-CV/final-holdout gate as MLB's own
 `train_game_pick_calibration.py`) was fit against the same real 2025
 replay and did **not** clear its own holdout bar yet (calibrated log_loss
-0.705 vs. the raw heuristic's 0.698 on a 48-game final holdout - isotonic
+0.702 vs. the raw heuristic's 0.695 on a 48-game final holdout - isotonic
 badly overfit the real heuristic's very narrow probability range on this
 little data). Nothing was saved; the live model runs uncalibrated
 (`nfl_game_picks.apply_calibration`'s own graceful no-op) until a future
@@ -4318,8 +4345,8 @@ games cluster Thu/Sun/Mon and this project has already learned firsthand
 that shared GitHub Actions minutes are a real, finite budget). Each run:
 fetches the current season fresh (falling back to the last persisted copy
 of any table whose live fetch fails - real, live-confirmed preseason
-case: nflverse doesn't publish a season's `team_stats`/`weekly` file
-until real games start generating stats, and `snap_counts`/
+case: nflverse doesn't publish a season's `team_stats`/`weekly`/`pbp`
+file until real games start generating stats, and `snap_counts`/
 `rosters_weekly` reject a season past their own currently-valid range
 outright), resolves any picks from previously-logged pending weeks
 against real final scores (a single bulk match against the freshly

@@ -294,6 +294,59 @@ def compute_team_turnover_margin(team_stats_df: pd.DataFrame) -> pd.DataFrame:
     return blended.rename("turnover_margin").reset_index()
 
 
+# --- Points per drive (real, derived from play-by-play) ---
+
+
+def compute_team_points_per_drive(pbp_df: pd.DataFrame) -> pd.DataFrame:
+    """One row per team: `points_per_drive` - real points scored per real
+    offensive drive, blended across `config.NFL_TEAM_STRENGTH_WINDOWS`
+    (same recency-rank + per-window-mean blend as
+    `compute_team_offense_defense_edge`/`compute_team_turnover_margin`).
+    Real follow-up (2026-09-02, "offensive efficiency (pts/drive)") - a
+    genuinely different efficiency lens than `offensive_edge` (real
+    per-PLAY EPA): this measures how often real drives actually turn into
+    points, not how valuable each individual play was.
+
+    `pbp_df` is `nfl_data.fetch_pbp`'s own real play-by-play output. Each
+    real drive's own point value is derived directly from the real score
+    change across it (`posteam_score_post` on the drive's last real play
+    minus `posteam_score` on its first) rather than guessed from
+    `fixed_drive_result`'s text label (Touchdown/Field goal/etc.) - this
+    correctly handles a real 2-point conversion, and correctly credits 0
+    points to the offense's own drive when the DEFENSE scores against
+    them mid-drive (a pick-six, a safety) - confirmed live: `defteam_score`,
+    not `posteam_score`, is what changes on that specific play, so the
+    offense's own drive-point tally is unaffected by a score that wasn't
+    theirs. Rows with a null `posteam` (a pre-snap/kickoff row before
+    possession is established that play) or null `fixed_drive` are
+    excluded - they carry no real completed-drive attribution."""
+    pbp = pbp_df[
+        (pbp_df["season_type"] == "REG") & pbp_df["posteam"].notna() & pbp_df["fixed_drive"].notna()
+    ].sort_values(["game_id", "play_id"])
+
+    drives = pbp.groupby(["game_id", "season", "week", "posteam", "fixed_drive"], as_index=False).agg(
+        start_score=("posteam_score", "first"), end_score=("posteam_score_post", "last"),
+    )
+    drives["drive_points"] = drives["end_score"] - drives["start_score"]
+
+    per_game = drives.groupby(["game_id", "season", "week", "posteam"], as_index=False).agg(
+        total_points=("drive_points", "sum"), num_drives=("fixed_drive", "nunique"),
+    )
+    per_game["points_per_drive_game"] = per_game["total_points"] / per_game["num_drives"]
+    per_game = per_game.rename(columns={"posteam": "team"})
+
+    ranked = per_game.sort_values(["team", "season", "week"], ascending=False)
+    ranked["_recency_rank"] = ranked.groupby("team").cumcount()
+
+    blended = None
+    for games_back, weight in config.NFL_TEAM_STRENGTH_WINDOWS:
+        window_df = ranked if games_back is None else ranked[ranked["_recency_rank"] < games_back]
+        per_team = window_df.groupby("team")["points_per_drive_game"].mean()
+        blended = per_team * weight if blended is None else blended.add(per_team * weight, fill_value=0)
+
+    return blended.rename("points_per_drive").reset_index()
+
+
 # --- QB continuity (real snap-share-identified recent starter vs. the confirmed one) ---
 
 
@@ -374,14 +427,17 @@ def compute_qb_continuity_adjustment(
 # --- Assembly: z-normalize + Confidence mixture + composite ---
 
 
-def assemble_team_metrics(schedules_df: pd.DataFrame, team_stats_df: pd.DataFrame) -> pd.DataFrame:
+def assemble_team_metrics(schedules_df: pd.DataFrame, team_stats_df: pd.DataFrame, pbp_df: pd.DataFrame) -> pd.DataFrame:
     """Build the final NFL team output table - direct structural port of
     teams.assemble_team_metrics. See module docstring for the full
-    signal-by-signal MLB->NFL mapping."""
+    signal-by-signal MLB->NFL mapping. `pbp_df` is `nfl_data.fetch_pbp`'s
+    own real play-by-play output, feeding `compute_team_points_per_drive`
+    (added 2026-09-02 - "offensive efficiency (pts/drive)")."""
     record = build_team_record(schedules_df)
     current_strength, sos = compute_strength_metrics(record)
     edge = compute_team_offense_defense_edge(team_stats_df)
     turnovers = compute_team_turnover_margin(team_stats_df)
+    points_per_drive = compute_team_points_per_drive(pbp_df)
 
     master = current_strength.merge(sos, on="team")
 
@@ -418,6 +474,10 @@ def assemble_team_metrics(schedules_df: pd.DataFrame, team_stats_df: pd.DataFram
     mean_to, std_to = master["turnover_margin"].mean(), master["turnover_margin"].std()
     master["turnover_margin"] = 1 + ((master["turnover_margin"] - mean_to) / std_to * config.NFL_NORMALIZATION_Z_SCALE)
 
+    master = master.merge(points_per_drive, on="team", how="left")
+    mean_ppd, std_ppd = master["points_per_drive"].mean(), master["points_per_drive"].std()
+    master["points_per_drive"] = 1 + ((master["points_per_drive"] - mean_ppd) / std_ppd * config.NFL_NORMALIZATION_Z_SCALE)
+
     # teams.compute_team_win_rate_ci operates generically on any
     # build_team_record-shaped frame (team/win/games_played, no MLB-specific
     # column referenced) - reused UNCHANGED rather than reimplemented, same
@@ -429,7 +489,7 @@ def assemble_team_metrics(schedules_df: pd.DataFrame, team_stats_df: pd.DataFram
     output_columns = [
         "team", "current", "Strength", "pyth_Strength", "SOS", "pyth_SOS",
         "Confidence", "pyth_Confidence", "Confidence_Delta", "true_power",
-        "offensive_edge", "defensive_edge", "turnover_margin",
+        "offensive_edge", "defensive_edge", "turnover_margin", "points_per_drive",
         "games_played", "win_rate", "win_rate_CI_Low", "win_rate_CI_High",
     ]
     return master[output_columns]

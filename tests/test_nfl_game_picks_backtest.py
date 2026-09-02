@@ -30,6 +30,9 @@ PASSING_EPA_BY_TEAM = {"A": 2.0, "B": 1.0, "C": 0.5, "D": -0.5}
 # cross-team variance, not identical for every team" reasoning as
 # PASSING_EPA_BY_TEAM above (turnover_margin z-normalizes across teams too).
 TURNOVERS_BY_TEAM = {"A": (0, 2), "B": (1, 1), "C": (1, 0), "D": (2, 0)}
+# Real per-team fixed points-per-drive profile - same cross-team-variance
+# reasoning as PASSING_EPA_BY_TEAM/TURNOVERS_BY_TEAM above.
+POINTS_BY_TEAM = {"A": 7, "B": 3, "C": 0, "D": 3}
 
 
 def _ts_row(team, opp, season, week, gid):
@@ -52,7 +55,7 @@ def _tiny_season(num_weeks=8):
         [("A", "C"), ("B", "D")],
         [("A", "D"), ("B", "C")],
     ]
-    sched_rows, ts_rows, weekly_rows, snap_rows = [], [], [], []
+    sched_rows, ts_rows, weekly_rows, snap_rows, pbp_rows = [], [], [], [], []
     for week in range(1, num_weeks + 1):
         pairings = weekly_pairings[(week - 1) % len(weekly_pairings)]
         for game_num, (home, away) in enumerate(pairings, start=1):
@@ -72,35 +75,43 @@ def _tiny_season(num_weeks=8):
                     "team": team, "position": "QB", "pfr_player_id": f"{team}_pfr",
                     "offense_snaps": 60, "offense_pct": 0.95,
                 })
+                points = POINTS_BY_TEAM[team]
+                for play_id, (score, score_post) in enumerate([(0, 0), (0, points)], start=1):
+                    pbp_rows.append({
+                        "game_id": gid, "season": 2025, "week": week, "season_type": "REG",
+                        "play_id": play_id, "posteam": team, "fixed_drive": 1,
+                        "posteam_score": score, "posteam_score_post": score_post,
+                    })
     rosters = pd.DataFrame([
         {"season": 2025, "gsis_id": f"{t}_qb", "pfr_id": f"{t}_pfr"} for t in ["A", "B", "C", "D"]
     ])
     return (
         pd.DataFrame(sched_rows), pd.DataFrame(ts_rows), pd.DataFrame(weekly_rows),
-        pd.DataFrame(snap_rows), rosters,
+        pd.DataFrame(snap_rows), rosters, pd.DataFrame(pbp_rows),
     )
 
 
 def test_replay_season_default_weeks_excludes_week_1_and_2():
-    schedules, team_stats, weekly, snap_counts, rosters = _tiny_season(num_weeks=8)
+    schedules, team_stats, weekly, snap_counts, rosters, pbp = _tiny_season(num_weeks=8)
 
-    replay = bt.replay_season(schedules, team_stats, weekly, snap_counts, rosters, season=2025)
+    replay = bt.replay_season(schedules, team_stats, weekly, snap_counts, rosters, pbp, season=2025)
 
     assert replay["week"].min() >= 3
     assert not replay["home_win_probability"].isna().any()
 
 
 def test_replay_season_no_lookahead_future_weeks_dont_change_past_predictions():
-    schedules, team_stats, weekly, snap_counts, rosters = _tiny_season(num_weeks=4)
-    replay_short = bt.replay_season(schedules, team_stats, weekly, snap_counts, rosters, season=2025, weeks=[3])
+    schedules, team_stats, weekly, snap_counts, rosters, pbp = _tiny_season(num_weeks=4)
+    replay_short = bt.replay_season(schedules, team_stats, weekly, snap_counts, rosters, pbp, season=2025, weeks=[3])
 
     # Extend the same season with 4 more real weeks (different scorelines
     # each week) - week 3's own replayed prediction must be byte-identical,
     # since replay_season restricts history to games strictly before the
     # requested week.
-    schedules_long, team_stats_long, weekly_long, snap_counts_long, rosters_long = _tiny_season(num_weeks=8)
+    schedules_long, team_stats_long, weekly_long, snap_counts_long, rosters_long, pbp_long = _tiny_season(num_weeks=8)
     replay_long = bt.replay_season(
-        schedules_long, team_stats_long, weekly_long, snap_counts_long, rosters_long, season=2025, weeks=[3]
+        schedules_long, team_stats_long, weekly_long, snap_counts_long, rosters_long, pbp_long,
+        season=2025, weeks=[3],
     )
 
     pd.testing.assert_frame_equal(

@@ -173,6 +173,52 @@ def test_compute_team_turnover_margin_uses_own_row_both_sides():
     assert result.loc["B", "turnover_margin"] == pytest.approx(-2.0)
 
 
+def test_compute_team_points_per_drive_uses_real_score_deltas():
+    # Team A: two real drives that game - a field goal (real score delta
+    # 0->3) and a punt (no score, delta 0) - real points_per_drive for
+    # that game = (3 + 0) / 2 = 1.5.
+    pbp = pd.DataFrame([
+        # Drive 1 (FG): two plays, ending 0 -> 3.
+        {"game_id": "g1", "season": 2025, "week": 1, "season_type": "REG", "play_id": 1,
+         "posteam": "A", "fixed_drive": 1, "posteam_score": 0, "posteam_score_post": 0},
+        {"game_id": "g1", "season": 2025, "week": 1, "season_type": "REG", "play_id": 2,
+         "posteam": "A", "fixed_drive": 1, "posteam_score": 0, "posteam_score_post": 3},
+        # Drive 2 (punt, B's real drive in between - must not be counted
+        # toward A's own points_per_drive).
+        {"game_id": "g1", "season": 2025, "week": 1, "season_type": "REG", "play_id": 3,
+         "posteam": "B", "fixed_drive": 2, "posteam_score": 0, "posteam_score_post": 0},
+        # Drive 3 (A's second real drive that game - a punt, no score).
+        {"game_id": "g1", "season": 2025, "week": 1, "season_type": "REG", "play_id": 4,
+         "posteam": "A", "fixed_drive": 3, "posteam_score": 3, "posteam_score_post": 3},
+        # A real pre-snap/kickoff row with no real posteam yet - excluded.
+        {"game_id": "g1", "season": 2025, "week": 1, "season_type": "REG", "play_id": 0,
+         "posteam": None, "fixed_drive": 1, "posteam_score": None, "posteam_score_post": None},
+        # A real playoff row that must be excluded entirely.
+        {"game_id": "g2", "season": 2025, "week": 19, "season_type": "POST", "play_id": 1,
+         "posteam": "A", "fixed_drive": 1, "posteam_score": 0, "posteam_score_post": 99},
+    ])
+
+    result = nfl_team_strength.compute_team_points_per_drive(pbp).set_index("team")
+
+    assert result.loc["A", "points_per_drive"] == pytest.approx(1.5)
+
+
+def test_compute_team_points_per_drive_credits_zero_when_defense_scores():
+    # A real pick-six/safety-style drive: team A has the ball, but the
+    # DEFENSE (not A) scores - defteam_score changes, posteam_score does
+    # not, so A's own points_per_drive for that drive is honestly 0, not
+    # a fabricated negative or positive number.
+    pbp = pd.DataFrame([
+        {"game_id": "g1", "season": 2025, "week": 1, "season_type": "REG", "play_id": 1,
+         "posteam": "A", "fixed_drive": 1, "posteam_score": 0, "posteam_score_post": 0,
+         "defteam_score": 0, "defteam_score_post": 6},
+    ])
+
+    result = nfl_team_strength.compute_team_points_per_drive(pbp).set_index("team")
+
+    assert result.loc["A", "points_per_drive"] == pytest.approx(0.0)
+
+
 def test_nfl_team_strength_windows_sum_to_one():
     assert sum(weight for _, weight in config.NFL_TEAM_STRENGTH_WINDOWS) == pytest.approx(1.0)
 
@@ -275,8 +321,12 @@ def test_assemble_team_metrics_real_season_shape():
     # turnover_margin also z-normalizes across teams, so an all-teams-
     # identical turnover profile would be degenerate too.
     turnovers_by_team = {"A": (0, 1), "B": (1, 1), "C": (1, 0), "D": (2, 0)}  # (lost, forced)
+    # Same reasoning again for points_per_drive - one single real drive
+    # per team-game, with a real per-team fixed point value.
+    points_by_team = {"A": 7, "B": 3, "C": 0, "D": 3}
     rows = []
     ts_rows = []
+    pbp_rows = []
     for week, pairings in enumerate(weekly_pairings, start=1):
         for game_num, (home, away) in enumerate(pairings, start=1):
             gid = f"2025_{week:02d}_{game_num}"
@@ -290,16 +340,24 @@ def test_assemble_team_metrics_real_season_shape():
                     "passing_interceptions": lost, "fumbles_lost_total": 0,
                     "def_interceptions": forced, "fumble_recovery_opp": 0,
                 })
+                points = points_by_team[team]
+                for play_id, (score, score_post) in enumerate([(0, 0), (0, points)], start=1):
+                    pbp_rows.append({
+                        "game_id": gid, "season": 2025, "week": week, "season_type": "REG",
+                        "play_id": play_id, "posteam": team, "fixed_drive": 1,
+                        "posteam_score": score, "posteam_score_post": score_post,
+                    })
     schedules = pd.DataFrame(rows)
     team_stats = pd.DataFrame(ts_rows)
+    pbp = pd.DataFrame(pbp_rows)
 
-    master = nfl_team_strength.assemble_team_metrics(schedules, team_stats)
+    master = nfl_team_strength.assemble_team_metrics(schedules, team_stats, pbp)
 
     assert set(master["team"]) == set(teams)
     expected_cols = {
         "team", "current", "Strength", "pyth_Strength", "SOS", "pyth_SOS",
         "Confidence", "pyth_Confidence", "Confidence_Delta", "true_power",
-        "offensive_edge", "defensive_edge", "turnover_margin",
+        "offensive_edge", "defensive_edge", "turnover_margin", "points_per_drive",
         "games_played", "win_rate", "win_rate_CI_Low", "win_rate_CI_High",
     }
     assert set(master.columns) == expected_cols

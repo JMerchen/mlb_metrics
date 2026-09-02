@@ -66,6 +66,7 @@ def replay_season(
     weekly_df: pd.DataFrame,
     snap_counts_df: pd.DataFrame,
     rosters_df: pd.DataFrame,
+    pbp_df: pd.DataFrame,
     season: int,
     weeks: list[int] | None = None,
 ) -> pd.DataFrame:
@@ -77,12 +78,15 @@ def replay_season(
     (no lookahead - the same "current_strength as of a team's most recent
     game" contract every function here already carries), so this genuinely
     reconstructs what nfl_game_picks.compute_game_win_probabilities would
-    have predicted in real time, not a full-season-hindsight number."""
+    have predicted in real time, not a full-season-hindsight number.
+    `pbp_df` is `nfl_data.fetch_pbp`'s own real play-by-play output,
+    feeding `compute_team_points_per_drive` the same no-lookahead way."""
     season_sched = schedules_df[schedules_df["season"] == season]
     reg = season_sched[season_sched["game_type"] == "REG"]
     reg_stats = team_stats_df[(team_stats_df["season"] == season) & (team_stats_df["season_type"] == "REG")]
     reg_snaps = snap_counts_df[(snap_counts_df["season"] == season) & (snap_counts_df["game_type"] == "REG")]
     reg_weekly = weekly_df[(weekly_df["season"] == season) & (weekly_df["season_type"] == "REG")]
+    reg_pbp = pbp_df[(pbp_df["season"] == season) & (pbp_df["season_type"] == "REG")]
 
     if weeks is None:
         weeks = sorted(w for w in reg["week"].unique() if w > 2)
@@ -107,8 +111,9 @@ def replay_season(
         history_stats = reg_stats[reg_stats["week"] < week]
         history_snaps = reg_snaps[reg_snaps["week"] < week]
         history_weekly = reg_weekly[reg_weekly["week"] < week]
+        history_pbp = reg_pbp[reg_pbp["week"] < week]
 
-        master = nfl_team_strength.assemble_team_metrics(history_sched, history_stats)
+        master = nfl_team_strength.assemble_team_metrics(history_sched, history_stats, history_pbp)
         qb_continuity = nfl_team_strength.compute_qb_continuity_adjustment(history_snaps, history_weekly, rosters_df)
 
         probs = nfl_game_picks.compute_game_win_probabilities(

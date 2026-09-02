@@ -127,8 +127,20 @@ def test_run_end_to_end_with_synthetic_fetchers(tmp_path, monkeypatch):
             "offense_snaps": 60, "offense_pct": 0.95,
         }
 
+    def _pbp_rows(team, season, week, gid):
+        # Real per-team fixed points-per-drive profile - one real drive
+        # per team-game, same cross-team-variance reasoning as the other
+        # fixtures above.
+        points = {"A": 7, "B": 3, "C": 0, "D": 3}[team]
+        return [
+            {"game_id": gid, "season": season, "week": week, "season_type": "REG",
+             "play_id": 1, "posteam": team, "fixed_drive": 1, "posteam_score": 0, "posteam_score_post": 0},
+            {"game_id": gid, "season": season, "week": week, "season_type": "REG",
+             "play_id": 2, "posteam": team, "fixed_drive": 1, "posteam_score": 0, "posteam_score_post": points},
+        ]
+
     weekly_pairings = [[("A", "B"), ("C", "D")], [("A", "C"), ("B", "D")], [("A", "D"), ("B", "C")]]
-    sched_2025, ts_2025, weekly_2025, snaps_2025 = [], [], [], []
+    sched_2025, ts_2025, weekly_2025, snaps_2025, pbp_2025 = [], [], [], [], []
     for week in range(1, 4):
         for game_num, (home, away) in enumerate(weekly_pairings[(week - 1) % 3], start=1):
             gid = f"2025_{week:02d}_{game_num}"
@@ -137,6 +149,7 @@ def test_run_end_to_end_with_synthetic_fetchers(tmp_path, monkeypatch):
                 ts_2025.append(_team_stats_row(team, opp, 2025, week, gid))
                 weekly_2025.append(_weekly_row(team, 2025, week))
                 snaps_2025.append(_snap_row(team, 2025, week, gid))
+                pbp_2025.extend(_pbp_rows(team, 2025, week, gid))
 
     sched_2026 = pd.DataFrame([_game("2026_01_A_B", 2026, 1, "A", "B", None, None)])
     rosters = pd.DataFrame([{"season": s, "gsis_id": f"{t}_qb", "pfr_id": f"{t}_pfr"} for s in (2025, 2026) for t in "ABCD"])
@@ -147,6 +160,7 @@ def test_run_end_to_end_with_synthetic_fetchers(tmp_path, monkeypatch):
         "weekly": pd.DataFrame(columns=["player_id", "position", "season", "week", "season_type", "game_id"]),
         "snap_counts": pd.DataFrame(columns=["game_id", "season", "week", "game_type", "team", "position", "pfr_player_id", "offense_snaps", "offense_pct"]),
         "rosters_weekly": rosters[rosters["season"] == 2026],
+        "pbp": pd.DataFrame(columns=["game_id", "season", "week", "season_type", "play_id", "posteam", "fixed_drive", "posteam_score", "posteam_score_post"]),
     }
     monkeypatch.setattr(nfl_pipeline, "TABLE_FETCHERS", [(name, (lambda df: (lambda seasons: df))(df)) for name, df in fake_tables.items()])
 
@@ -157,6 +171,7 @@ def test_run_end_to_end_with_synthetic_fetchers(tmp_path, monkeypatch):
     pd.DataFrame(weekly_2025).to_parquet(raw_dir / "weekly_2025.parquet")
     pd.DataFrame(snaps_2025).to_parquet(raw_dir / "snap_counts_2025.parquet")
     rosters[rosters["season"] == 2025].to_parquet(raw_dir / "rosters_weekly_2025.parquet")
+    pd.DataFrame(pbp_2025).to_parquet(raw_dir / "pbp_2025.parquet")
 
     predictions_log = tmp_path / "predictions" / "nfl_game_predictions.csv"
     output_dir = tmp_path / "docs_data"
@@ -182,6 +197,7 @@ def test_run_no_predictable_week_still_writes_export(tmp_path, monkeypatch):
         "weekly": pd.DataFrame(),
         "snap_counts": pd.DataFrame(),
         "rosters_weekly": pd.DataFrame(),
+        "pbp": pd.DataFrame(),
     }
     monkeypatch.setattr(nfl_pipeline, "TABLE_FETCHERS", [(name, (lambda df: (lambda seasons: df))(df)) for name, df in fake_tables.items()])
 
@@ -210,6 +226,7 @@ def test_run_resilient_to_a_failed_table_fetch(tmp_path, monkeypatch, capsys):
         ("weekly", _raise),
         ("snap_counts", _raise),
         ("rosters_weekly", _raise),
+        ("pbp", _raise),
     ])
 
     raw_dir = tmp_path / "raw"
