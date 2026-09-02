@@ -57,6 +57,47 @@ this block isn't in the shared stylesheet. */
 
 <div class="tabGroup" id="nflTabs">
 <button class="tabButton active" data-nfl-tab="preseason" onclick="selectNflTab('preseason')">Preseason</button>
+<button class="tabButton" data-nfl-tab="gamepicks" onclick="selectNflTab('gamepicks')">Game Picks</button>
+</div>
+
+<div id="gamePicksSection" style="display:none">
+
+<h3>
+Automated Game Picks
+</h3>
+
+<div
+class="streakStats"
+id="nflGamePickStats">
+
+Loading...
+
+</div>
+
+<h3>
+This Week's Picks
+</h3>
+
+<div
+class="todaysPicks"
+id="nflTodaysGamePicks">
+
+Loading...
+
+</div>
+
+<h3>
+Pick History
+</h3>
+
+<div
+class="scrollbox"
+id="nflGamePickHistoryTable">
+
+Loading...
+
+</div>
+
 </div>
 
 <div id="preseasonSection">
