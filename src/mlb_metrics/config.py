@@ -1921,3 +1921,20 @@ NFL_GAME_PICK_CALIBRATION_MODEL_PATH = "data/models/nfl_game_pick_calibration_mo
 
 # Same purpose as GAME_PICK_MODEL_VERSION, for nfl_game_predictions.py.
 NFL_GAME_PICK_MODEL_VERSION = "v1"
+
+# Walk-forward CV / final-holdout sizing for
+# scripts/train_nfl_game_pick_calibration.py - same role as
+# ML_FINAL_HOLDOUT_DATES/GAME_PICK_ML_WALK_FORWARD_MIN_TRAIN_DATES/
+# GAME_PICK_ML_WALK_FORWARD_TEST_BLOCK_DATES, but in real NFL WEEK units,
+# not calendar days - an NFL season has only ~16-18 real weeks of games
+# total (vs. MLB's ~180 real days), so reusing the MLB day-count constants
+# directly would leave zero real weeks to train calibration on at all.
+# Sized against nfl_game_picks_backtest.py's own real replay (weeks 3-18,
+# 16 real weeks): 3 held out as a real untouched final test, a minimum of
+# 6 real weeks before the first walk-forward CV fold fires, 2-week test
+# blocks after that - real starting points, not derived from a
+# calibration-specific backtest of their own (unlike the model constants
+# above, which nfl_game_picks_backtest.py itself validates).
+NFL_GAME_PICK_ML_FINAL_HOLDOUT_WEEKS = 3
+NFL_GAME_PICK_ML_WALK_FORWARD_MIN_TRAIN_WEEKS = 6
+NFL_GAME_PICK_ML_WALK_FORWARD_TEST_BLOCK_WEEKS = 2
