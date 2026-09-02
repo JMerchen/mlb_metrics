@@ -1842,16 +1842,27 @@ NFL_BESTBALL_ROUND1_END_WEEK = 14
 # same real caveat NFL_QB_WINDOWS/NFL_SKILL_WINDOWS/NFL_DEFENSE_WINDOWS
 # above already carry ("PLACEHOLDER WEIGHTS, not yet backtested").
 
-# Games-back windows for nfl_team_strength.compute_strength_metrics -
-# starts from the exact same real full/8-games/4-games shape already
-# used by NFL_QB_WINDOWS/NFL_SKILL_WINDOWS/NFL_DEFENSE_WINDOWS above
-# (an 18-week NFL season, not MLB's 162-game one - MLB's own 10g/30g/81g/
-# full windows would be meaningless at NFL's scale, so this reuses this
-# project's own already-established NFL window convention rather than a
-# naive proportional rescale of MLB's).
+# Games-back windows for nfl_team_strength.compute_strength_metrics.
+# Tightened from the original (4, 8, None) start (which mirrored
+# NFL_QB_WINDOWS/NFL_SKILL_WINDOWS/NFL_DEFENSE_WINDOWS's own shape) to
+# (3, 7, None) - real follow-up (2026-09-02): a 17-18 game NFL season
+# gets far less benefit from a long smoothing window than MLB's 162-game
+# one does, since real personnel/scheme regime changes (a new starting
+# QB, an OC change, a key injury) happen often enough that a season is
+# too short to let a longer window "catch up" to the new reality on its
+# own. This is NOT because single NFL games carry less real luck/variance
+# than MLB's - if anything the standard finding is the opposite (a
+# 17-game sample doesn't average out game-to-game variance the way 162
+# games does, and famously low-persistence stats like raw turnover
+# margin are a big part of why) - so tightening these windows is a real
+# tradeoff (faster to react to a genuine regime shift, but also faster to
+# overreact to one-game noise), not a free improvement. Genuinely
+# re-validated by nfl_game_picks_backtest.py against the real 2025 test
+# split (old 4/8/None vs this 3/7/None), not assumed better just because
+# it reacts faster.
 NFL_TEAM_STRENGTH_WINDOWS = [
-    (4, 0.50),
-    (8, 0.30),
+    (3, 0.50),
+    (7, 0.30),
     (None, 0.20),
 ]
 
@@ -1885,11 +1896,24 @@ NFL_CONFIDENCE_SOS_WEIGHT = 0.3
 # defensive_edge fills that same STRUCTURAL role (a real, separate
 # defensive-quality signal) with a real football-native stat instead of
 # a force-fit port.
+# Real follow-up (2026-09-02 - "we should include turnover ratio at a
+# game level"): turnover_margin (nfl_team_strength.compute_team_turnover_margin -
+# real takeaways minus real giveaways per game, same games-back blend as
+# every other signal here) added as its own explicit 5th weight rather
+# than folded into true_power - turnovers are a genuinely distinct
+# quality dimension from EPA-based offensive/defensive edge (a team can
+# be efficient per-play and still hemorrhage the ball), and keeping it
+# separate lets the backtest validate/tune it independently instead of
+# diluting it into an average. Rebalanced to 5 equal 0.20 weights (down
+# from 4 equal 0.25 weights) - a real starting point, pending
+# nfl_game_picks_backtest.py's own re-validation, same honest status as
+# every other constant here.
 NFL_GAME_PICK_COMPOSITE_WEIGHTS = [
-    ("pyth_Strength", 0.25),
-    ("pyth_Confidence", 0.25),
-    ("defensive_edge", 0.25),
-    ("true_power", 0.25),
+    ("pyth_Strength", 0.20),
+    ("pyth_Confidence", 0.20),
+    ("defensive_edge", 0.20),
+    ("true_power", 0.20),
+    ("turnover_margin", 0.20),
 ]
 
 # A game is only "picked" if the favored side's win probability clears
@@ -1920,7 +1944,12 @@ NFL_QB_CONTINUITY_WEIGHT = 0.5
 NFL_GAME_PICK_CALIBRATION_MODEL_PATH = "data/models/nfl_game_pick_calibration_model.joblib"
 
 # Same purpose as GAME_PICK_MODEL_VERSION, for nfl_game_predictions.py.
-NFL_GAME_PICK_MODEL_VERSION = "v1"
+# Bumped v1 -> v2 (2026-09-02, tightened windows + turnover_margin added
+# to the composite) so game_evaluation.py/the dashboard can segment the
+# already-logged v1 picks (the old 4/8/full, 4-signal composite) from
+# real picks made under this new logic - same "never silently rewrite
+# already-logged history" discipline as MLB's own model_version bumps.
+NFL_GAME_PICK_MODEL_VERSION = "v2"
 
 # Walk-forward CV / final-holdout sizing for
 # scripts/train_nfl_game_pick_calibration.py - same role as

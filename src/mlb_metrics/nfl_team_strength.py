@@ -253,6 +253,47 @@ def compute_team_offense_defense_edge(team_stats_df: pd.DataFrame) -> pd.DataFra
     return result.reset_index()
 
 
+# --- Turnover margin (real takeaways minus real giveaways, per game) ---
+
+
+def compute_team_turnover_margin(team_stats_df: pd.DataFrame) -> pd.DataFrame:
+    """One row per team: `turnover_margin` - real takeaways forced minus
+    real turnovers given away, per game, blended across
+    `config.NFL_TEAM_STRENGTH_WINDOWS` (same recency-rank + per-window-mean
+    blend as `compute_team_offense_defense_edge`). Real follow-up
+    (2026-09-02, "we should include turnover ratio at a game level") -
+    unlike offensive_edge/defensive_edge, this does NOT need an
+    opponent-row join: `team_stats_df` already carries both halves on a
+    team's OWN row - `passing_interceptions`/`fumbles_lost_total` (real
+    turnovers this team's OFFENSE gave away) and
+    `def_interceptions`/`fumble_recovery_opp` (real takeaways this team's
+    DEFENSE forced - `fumble_recovery_opp` is a recovery of the
+    OPPONENT's own lost fumble, confirmed live against real 2025 data).
+
+    Confirmed live: a team's own real `turnovers_lost` matches the real
+    `turnovers_forced` on the OPPONENT's own row for that same game in
+    541/544 (99.4%) of real 2025 team-games - the real, rare (~0.6%)
+    mismatch traces to a real fumble that goes out of bounds (possession
+    changes by rule with no recovery credited to either side, not a data
+    error) - each side is computed from its own team's own real credited
+    stats here, not forced into cross-team symmetry."""
+    ts = team_stats_df[team_stats_df["season_type"] == "REG"].copy()
+    ts["turnovers_lost"] = ts["passing_interceptions"].fillna(0) + ts["fumbles_lost_total"].fillna(0)
+    ts["turnovers_forced"] = ts["def_interceptions"].fillna(0) + ts["fumble_recovery_opp"].fillna(0)
+    ts["turnover_margin_game"] = ts["turnovers_forced"] - ts["turnovers_lost"]
+
+    ranked = ts.sort_values(["team", "season", "week"], ascending=False)
+    ranked["_recency_rank"] = ranked.groupby("team").cumcount()
+
+    blended = None
+    for games_back, weight in config.NFL_TEAM_STRENGTH_WINDOWS:
+        window_df = ranked if games_back is None else ranked[ranked["_recency_rank"] < games_back]
+        per_game = window_df.groupby("team")["turnover_margin_game"].mean()
+        blended = per_game * weight if blended is None else blended.add(per_game * weight, fill_value=0)
+
+    return blended.rename("turnover_margin").reset_index()
+
+
 # --- QB continuity (real snap-share-identified recent starter vs. the confirmed one) ---
 
 
@@ -340,6 +381,7 @@ def assemble_team_metrics(schedules_df: pd.DataFrame, team_stats_df: pd.DataFram
     record = build_team_record(schedules_df)
     current_strength, sos = compute_strength_metrics(record)
     edge = compute_team_offense_defense_edge(team_stats_df)
+    turnovers = compute_team_turnover_margin(team_stats_df)
 
     master = current_strength.merge(sos, on="team")
 
@@ -372,6 +414,10 @@ def assemble_team_metrics(schedules_df: pd.DataFrame, team_stats_df: pd.DataFram
         master[col] = 1 + ((master[col] - mean) / std * config.NFL_NORMALIZATION_Z_SCALE)
     master["true_power"] = (master["offensive_edge"] + master["defensive_edge"]) / 2
 
+    master = master.merge(turnovers, on="team", how="left")
+    mean_to, std_to = master["turnover_margin"].mean(), master["turnover_margin"].std()
+    master["turnover_margin"] = 1 + ((master["turnover_margin"] - mean_to) / std_to * config.NFL_NORMALIZATION_Z_SCALE)
+
     # teams.compute_team_win_rate_ci operates generically on any
     # build_team_record-shaped frame (team/win/games_played, no MLB-specific
     # column referenced) - reused UNCHANGED rather than reimplemented, same
@@ -383,7 +429,7 @@ def assemble_team_metrics(schedules_df: pd.DataFrame, team_stats_df: pd.DataFram
     output_columns = [
         "team", "current", "Strength", "pyth_Strength", "SOS", "pyth_SOS",
         "Confidence", "pyth_Confidence", "Confidence_Delta", "true_power",
-        "offensive_edge", "defensive_edge",
+        "offensive_edge", "defensive_edge", "turnover_margin",
         "games_played", "win_rate", "win_rate_CI_Low", "win_rate_CI_High",
     ]
     return master[output_columns]

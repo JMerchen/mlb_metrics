@@ -26,13 +26,20 @@ def _game(game_id, season, week, home_team, away_team, home_score, away_score,
 # opponent-independent EPA, not a bug, but still degenerate for a test
 # that needs real cross-team variance to exercise z-normalization.
 PASSING_EPA_BY_TEAM = {"A": 2.0, "B": 1.0, "C": 0.5, "D": -0.5}
+# Real per-team turnover profile (lost, forced) - same "needs real
+# cross-team variance, not identical for every team" reasoning as
+# PASSING_EPA_BY_TEAM above (turnover_margin z-normalizes across teams too).
+TURNOVERS_BY_TEAM = {"A": (0, 2), "B": (1, 1), "C": (1, 0), "D": (2, 0)}
 
 
 def _ts_row(team, opp, season, week, gid):
+    lost, forced = TURNOVERS_BY_TEAM[team]
     return {
         "team": team, "opponent_team": opp, "season": season, "week": week, "game_id": gid,
         "season_type": "REG",
         "passing_epa": PASSING_EPA_BY_TEAM[team] + week * 0.1, "rushing_epa": 0.5, "receiving_epa": 0.0,
+        "passing_interceptions": lost, "fumbles_lost_total": 0,
+        "def_interceptions": forced, "fumble_recovery_opp": 0,
     }
 
 

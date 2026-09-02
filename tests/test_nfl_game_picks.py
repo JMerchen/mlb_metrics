@@ -6,17 +6,18 @@ from mlb_metrics import config, nfl_game_picks
 
 def _master(rows):
     """rows: list of dicts with team, pyth_Strength, pyth_Confidence,
-    defensive_edge, true_power."""
+    defensive_edge, true_power, turnover_margin."""
     return pd.DataFrame(rows)
 
 
 def test_team_composite_exact_arithmetic():
     master = _master([
-        {"team": "KC", "pyth_Strength": 1.1, "pyth_Confidence": 1.05, "defensive_edge": 1.0, "true_power": 1.0},
+        {"team": "KC", "pyth_Strength": 1.1, "pyth_Confidence": 1.05, "defensive_edge": 1.0, "true_power": 1.0,
+         "turnover_margin": 1.0},
     ])
     result = nfl_game_picks._team_composite(master).set_index("team")
-    # .25*1.1 + .25*1.05 + .25*1.0 + .25*1.0 = .25*4.15 = 1.0375
-    assert result.loc["KC", "composite"] == pytest.approx(1.0375)
+    # .20*1.1 + .20*1.05 + .20*1.0 + .20*1.0 + .20*1.0 = .20*5.15 = 1.03
+    assert result.loc["KC", "composite"] == pytest.approx(1.03)
 
 
 def _schedule_games(home_team="KC", away_team="DEN", home_qb="qb_home", away_qb="qb_away"):
@@ -42,8 +43,10 @@ def test_build_game_features_qb_adjustment_is_zero_when_starter_matches_recent_p
     # QB - same real epa lookup both ways, so the adjustment must be
     # exactly 0 regardless of the population's mean/std.
     master = _master([
-        {"team": "KC", "pyth_Strength": 1.1, "pyth_Confidence": 1.05, "defensive_edge": 1.0, "true_power": 1.0},
-        {"team": "DEN", "pyth_Strength": 0.9, "pyth_Confidence": 0.95, "defensive_edge": 1.0, "true_power": 1.0},
+        {"team": "KC", "pyth_Strength": 1.1, "pyth_Confidence": 1.05, "defensive_edge": 1.0, "true_power": 1.0,
+         "turnover_margin": 1.0},
+        {"team": "DEN", "pyth_Strength": 0.9, "pyth_Confidence": 0.95, "defensive_edge": 1.0, "true_power": 1.0,
+         "turnover_margin": 1.0},
     ])
     qb_continuity = pd.DataFrame([
         {"team": "KC", "recent_primary_qb_id": "qb_home", "recent_primary_qb_epa": 5.0, "recent_primary_qb_games": 8},
@@ -57,9 +60,9 @@ def test_build_game_features_qb_adjustment_is_zero_when_starter_matches_recent_p
     row = features.iloc[0]
     assert row["home_qb_adjustment"] == pytest.approx(0.0)
     assert row["away_qb_adjustment"] == pytest.approx(0.0)
-    # home_composite = .25*(1.1+1.05+1.0+1.0) = 1.0375; away_composite = .25*(0.9+0.95+1.0+1.0) = .9625
-    assert row["home_composite"] == pytest.approx(1.0375)
-    assert row["away_composite"] == pytest.approx(0.9625)
+    # home_composite = .20*(1.1+1.05+1.0+1.0+1.0) = 1.03; away_composite = .20*(0.9+0.95+1.0+1.0+1.0) = .97
+    assert row["home_composite"] == pytest.approx(1.03)
+    assert row["away_composite"] == pytest.approx(0.97)
 
 
 def test_build_game_features_qb_adjustment_favors_confirmed_starter_over_backup():
@@ -68,8 +71,10 @@ def test_build_game_features_qb_adjustment_favors_confirmed_starter_over_backup(
     # is the real, better incumbent returning from injury - the adjustment
     # must be POSITIVE (a real quality upgrade over what recent snaps show).
     master = _master([
-        {"team": "KC", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "defensive_edge": 1.0, "true_power": 1.0},
-        {"team": "DEN", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "defensive_edge": 1.0, "true_power": 1.0},
+        {"team": "KC", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "defensive_edge": 1.0, "true_power": 1.0,
+         "turnover_margin": 1.0},
+        {"team": "DEN", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "defensive_edge": 1.0, "true_power": 1.0,
+         "turnover_margin": 1.0},
     ])
     qb_continuity = pd.DataFrame([
         {"team": "KC", "recent_primary_qb_id": "kc_backup", "recent_primary_qb_epa": -5.0, "recent_primary_qb_games": 3},
@@ -90,8 +95,10 @@ def test_build_game_features_qb_adjustment_favors_confirmed_starter_over_backup(
 def test_compute_game_win_probabilities_exact_arithmetic(monkeypatch):
     monkeypatch.setattr(nfl_game_picks.config, "NFL_QB_CONTINUITY_WEIGHT", 0.0)
     master = _master([
-        {"team": "KC", "pyth_Strength": 1.1, "pyth_Confidence": 1.05, "defensive_edge": 1.0, "true_power": 1.0},
-        {"team": "DEN", "pyth_Strength": 0.9, "pyth_Confidence": 0.95, "defensive_edge": 1.0, "true_power": 1.0},
+        {"team": "KC", "pyth_Strength": 1.1, "pyth_Confidence": 1.05, "defensive_edge": 1.0, "true_power": 1.0,
+         "turnover_margin": 1.0},
+        {"team": "DEN", "pyth_Strength": 0.9, "pyth_Confidence": 0.95, "defensive_edge": 1.0, "true_power": 1.0,
+         "turnover_margin": 1.0},
     ])
     qb_continuity = pd.DataFrame([
         {"team": "KC", "recent_primary_qb_id": "qb_home", "recent_primary_qb_epa": 5.0, "recent_primary_qb_games": 8},
@@ -103,8 +110,8 @@ def test_compute_game_win_probabilities_exact_arithmetic(monkeypatch):
     result = nfl_game_picks.compute_game_win_probabilities(master, qb_continuity, weekly, schedule_games)
 
     # QB continuity weight pinned to 0, so this reduces to a pure composite ratio:
-    # home_composite = 1.0375, away_composite = .9625
-    expected = 1.0375 / (1.0375 + 0.9625)
+    # home_composite = 1.03, away_composite = .97
+    expected = 1.03 / (1.03 + 0.97)
     assert result.iloc[0]["home_win_probability"] == pytest.approx(expected)
     assert result.iloc[0]["game_id"] == "2025_08_DEN_KC"
 

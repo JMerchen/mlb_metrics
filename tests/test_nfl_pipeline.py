@@ -100,10 +100,16 @@ def test_run_end_to_end_with_synthetic_fetchers(tmp_path, monkeypatch):
     # played (real history), 2026 week 1 unplayed (the week to predict).
     # Monkeypatches TABLE_FETCHERS so no live network fetch happens.
     def _team_stats_row(team, opp, season, week, gid):
+        # Real per-team turnover profile (lost, forced) - turnover_margin
+        # z-normalizes across teams too, so it needs real cross-team
+        # variance same as passing_epa below.
+        lost, forced = {"A": (0, 2), "B": (1, 1), "C": (1, 0), "D": (2, 0)}[team]
         return {
             "team": team, "opponent_team": opp, "season": season, "week": week, "game_id": gid,
             "season_type": "REG", "passing_epa": {"A": 2.0, "B": 1.0, "C": 0.5, "D": -0.5}[team] + week * 0.1,
             "rushing_epa": 0.5, "receiving_epa": 0.0,
+            "passing_interceptions": lost, "fumbles_lost_total": 0,
+            "def_interceptions": forced, "fumble_recovery_opp": 0,
         }
 
     def _weekly_row(team, season, week):

@@ -4189,17 +4189,41 @@ efficiency modeling needed from raw play-by-play).
 **Team strength** (`nfl_team_strength.py`) mirrors `teams.py` exactly:
 rolling win% and Pythagorean win% (`config.NFL_PYTHAGOREAN_EXPONENT=2.37`,
 a real commonly-cited NFL literature value - not MLB's own 1.83) blended
-across games-back windows (`config.NFL_TEAM_STRENGTH_WINDOWS`, 4/8/full
-games - an 18-week NFL season's analog of MLB's 10/30/81/full), each
-z-normalized (`config.NFL_NORMALIZATION_Z_SCALE=0.15`) and mixed into a
-Confidence signal the same way. `offensive_edge`/`defensive_edge` replace
-MLB's `offensive_edge`/`suppression_resistance` with real total EPA
-produced vs. allowed (the opponent's own `team_stats` row that same week,
-joined via `opponent_team` - the same "opponent's own row for that week
-IS what my defense allowed" pattern `nfl_teams.py` already used for DFS
-matchups) - EPA is a real, well-regarded efficiency metric that fills the
-same structural role as "held under 3 runs" without forcing an invented
-baseball-specific threshold onto football.
+across games-back windows (`config.NFL_TEAM_STRENGTH_WINDOWS`, 3/7/full
+games). Real follow-up (2026-09-02): tightened from an initial 4/8/full
+(an 18-week season's naive analog of MLB's 10/30/81/full) after a real
+design discussion - an NFL season is too short for a long smoothing
+window to "catch up" to a genuine regime change (a new starting QB, an
+OC change, a key injury) the way MLB's 162-game season can, so recent
+games are weighted more heavily. This is NOT because single NFL games
+carry less real luck/variance than MLB's (the standard finding runs the
+other way - a 17-game sample doesn't average out game-to-game noise the
+way 162 games does, and raw turnover margin is famously low-persistence
+year to year) - it's a real, honest tradeoff (faster to react to a
+genuine shift, but also faster to overreact to one-game noise), validated
+against the real backtest below rather than assumed. Each rolling signal
+is z-normalized (`config.NFL_NORMALIZATION_Z_SCALE=0.15`) and mixed into
+a Confidence signal the same way. `offensive_edge`/`defensive_edge`
+replace MLB's `offensive_edge`/`suppression_resistance` with real total
+EPA produced vs. allowed (the opponent's own `team_stats` row that same
+week, joined via `opponent_team` - the same "opponent's own row for that
+week IS what my defense allowed" pattern `nfl_teams.py` already used for
+DFS matchups) - EPA is a real, well-regarded efficiency metric that fills
+the same structural role as "held under 3 runs" without forcing an
+invented baseball-specific threshold onto football.
+
+**Turnover margin** (`nfl_team_strength.compute_team_turnover_margin`,
+added 2026-09-02 - "we should include turnover ratio at a game level") -
+real takeaways forced (`def_interceptions` + `fumble_recovery_opp`, a
+recovery of the OPPONENT's own lost fumble) minus real turnovers given
+away (`passing_interceptions` + `fumbles_lost_total`), both already
+carried on a team's own `team_stats` row (no opponent join needed, unlike
+offensive_edge/defensive_edge), blended across the same games-back
+windows. Confirmed live: a team's own real turnovers-lost count matches
+the real turnovers-forced count on the opponent's own row for that same
+game in 541/544 (99.4%) of real 2025 team-games - the rare (~0.6%)
+mismatch traces to a real fumble going out of bounds (possession changes
+by rule with no recovery credited to either side), not a data error.
 
 **QB continuity** (`nfl_team_strength.compute_qb_continuity_adjustment` +
 `nfl_game_picks.py`'s own comparison) is the real NFL-specific signal
@@ -4217,13 +4241,16 @@ so when the confirmed starter IS the team's own recent-primary QB (the
 ordinary case) the adjustment is exactly 0 with no separate "did the
 starter change" branch needed.
 
-`nfl_game_picks.compute_game_win_probabilities` combines the same four
-z-normalized signals MLB's own composite uses
-(`config.NFL_GAME_PICK_COMPOSITE_WEIGHTS`: `pyth_Strength`,
-`pyth_Confidence`, `defensive_edge`, `true_power`, equal-weighted) plus
-the QB-continuity shift, then a simple ratio (not log5) into
-`home_win_probability` - same "these composites aren't calibrated win
-percentages" reasoning as the MLB original.
+`nfl_game_picks.compute_game_win_probabilities` combines five
+z-normalized signals (`config.NFL_GAME_PICK_COMPOSITE_WEIGHTS`:
+`pyth_Strength`, `pyth_Confidence`, `defensive_edge`, `true_power`,
+`turnover_margin`, equal-weighted at 0.20 each - `turnover_margin` was
+added as its own explicit weight rather than folded into `true_power`,
+since turnovers are a genuinely distinct quality dimension from
+EPA-based efficiency and keeping it separate lets the backtest validate
+it independently) plus the QB-continuity shift, then a simple ratio (not
+log5) into `home_win_probability` - same "these composites aren't
+calibrated win percentages" reasoning as the MLB original.
 
 ### Real backtest results (`scripts/run_nfl_game_picks_backtest.py`, `nfl_game_picks_backtest.py`)
 
@@ -4236,18 +4263,28 @@ honestly, not cherry-picked:
 
 | Split | Source | n | Accuracy | Brier | Beat closing line |
 |---|---|---|---|---|---|
-| Train (wk3-7) | Model | 76 | 53.9% | 0.247 | 35.5% |
+| Train (wk3-7) | Model | 76 | 56.6% | 0.245 | 35.5% |
 | Train (wk3-7) | Market | 76 | 67.1% | 0.219 | - |
-| Test (wk8-18) | Model | 164 | 57.3% | 0.246 | 34.8% |
+| Test (wk8-18) | Model | 164 | 57.3% | 0.247 | 36.0% |
 | Test (wk8-18) | Market | 164 | 62.8% | 0.213 | - |
 
 The raw heuristic beats a coin flip on real held-out data (57.3% test
 accuracy) but trails the real market meaningfully (62.8%) and loses the
-squared-error comparison on the majority of games (34.8% beat-closing-line,
+squared-error comparison on the majority of games (36.0% beat-closing-line,
 below the 50% a genuinely competitive model would clear) - the exact same
 finding MLB's own pre-calibration heuristic had (`home_win_probability`'s
 real spread is far narrower than the market's own spread on the same
 games), reported here with the same honesty rather than smoothed over.
+
+**2026-09-02 real update** (tightened windows 4/8/full -> 3/7/full, plus
+adding `turnover_margin` as a 5th composite signal): a real, modest,
+mixed improvement, not a breakthrough - train accuracy rose meaningfully
+(53.9% -> 56.6%) and test beat-closing-line rose a bit (34.8% -> 36.0%),
+but test accuracy was exactly unchanged (57.3% -> 57.3%, since the
+model's predicted probabilities are still tightly clustered near 0.5 -
+small composite shifts rarely flip which side is actually favored) and
+test Brier moved by less than 0.001 (essentially noise). Reported as-is
+rather than rounded up to a bigger win than the real numbers show.
 
 **Weeks 1 and 2 are excluded from every replay, for a real structural
 reason, not an arbitrary cutoff**: week 1 has zero real prior-game history
@@ -4265,7 +4302,7 @@ prior-season history into early-season weeks instead.
 walk-forward-CV/final-holdout gate as MLB's own
 `train_game_pick_calibration.py`) was fit against the same real 2025
 replay and did **not** clear its own holdout bar yet (calibrated log_loss
-0.712 vs. the raw heuristic's 0.702 on a 48-game final holdout - isotonic
+0.705 vs. the raw heuristic's 0.698 on a 48-game final holdout - isotonic
 badly overfit the real heuristic's very narrow probability range on this
 little data). Nothing was saved; the live model runs uncalibrated
 (`nfl_game_picks.apply_calibration`'s own graceful no-op) until a future

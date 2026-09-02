@@ -148,6 +148,31 @@ def test_compute_team_offense_defense_edge_uses_opponents_own_row():
     assert result.loc["B", "defensive_edge"] == pytest.approx(7.0)
 
 
+def test_compute_team_turnover_margin_uses_own_row_both_sides():
+    # A team's turnover_margin is computed entirely from ITS OWN real
+    # credited stats (no opponent-row join needed, unlike offensive_edge/
+    # defensive_edge) - takeaways (def_interceptions + fumble_recovery_opp)
+    # minus giveaways (passing_interceptions + fumbles_lost_total).
+    team_stats = pd.DataFrame([
+        # A forced 2 turnovers (1 INT + 1 opp-fumble recovery), gave away 1
+        # (an INT) - real margin = 2 - 1 = +1.
+        {"team": "A", "opponent_team": "B", "season": 2025, "week": 1, "game_id": "g1", "season_type": "REG",
+         "passing_interceptions": 1, "fumbles_lost_total": 0, "def_interceptions": 1, "fumble_recovery_opp": 1},
+        # B forced 0, gave away 2 (matching the fumble A recovered, plus a
+        # separate lost fumble) - real margin = 0 - 2 = -2.
+        {"team": "B", "opponent_team": "A", "season": 2025, "week": 1, "game_id": "g1", "season_type": "REG",
+         "passing_interceptions": 0, "fumbles_lost_total": 2, "def_interceptions": 0, "fumble_recovery_opp": 0},
+        # A real playoff row that must be excluded entirely.
+        {"team": "A", "opponent_team": "B", "season": 2025, "week": 19, "game_id": "g2", "season_type": "POST",
+         "passing_interceptions": 0, "fumbles_lost_total": 0, "def_interceptions": 5, "fumble_recovery_opp": 5},
+    ])
+
+    result = nfl_team_strength.compute_team_turnover_margin(team_stats).set_index("team")
+
+    assert result.loc["A", "turnover_margin"] == pytest.approx(1.0)
+    assert result.loc["B", "turnover_margin"] == pytest.approx(-2.0)
+
+
 def test_nfl_team_strength_windows_sum_to_one():
     assert sum(weight for _, weight in config.NFL_TEAM_STRENGTH_WINDOWS) == pytest.approx(1.0)
 
@@ -177,9 +202,10 @@ def _roster_row(season, gsis_id, pfr_id):
 def test_compute_qb_continuity_adjustment_identifies_real_recent_starter():
     # KC's QB1 (pfr "qb1_pfr") started weeks 1-3, then got hurt - QB2
     # ("qb2_pfr") took over weeks 4-6. Over the smallest games-back window
-    # (4 games), QB2 has played MORE recent snaps than QB1, so QB2 should
-    # be identified as the real recent primary starter, not QB1 even
-    # though QB1 played more total games.
+    # (config.NFL_TEAM_STRENGTH_WINDOWS' own smallest cutoff), QB2 has
+    # played MORE recent snaps than QB1, so QB2 should be identified as
+    # the real recent primary starter, not QB1 even though QB1 played
+    # more total games.
     snap_rows = (
         [_snap_row("KC", 2025, w, "qb1_pfr", offense_snaps=60) for w in range(1, 4)]
         + [_snap_row("KC", 2025, w, "qb2_pfr", offense_snaps=60) for w in range(4, 7)]
@@ -245,6 +271,10 @@ def test_assemble_team_metrics_real_season_shape():
     # team a zero-std, all-NaN z-score, same failure mode as a degenerate
     # single-opponent schedule above.
     passing_epa_by_team = {"A": 2.0, "B": 1.0, "C": 0.5, "D": -0.5}
+    # Same real-variance-needed reasoning as passing_epa_by_team above -
+    # turnover_margin also z-normalizes across teams, so an all-teams-
+    # identical turnover profile would be degenerate too.
+    turnovers_by_team = {"A": (0, 1), "B": (1, 1), "C": (1, 0), "D": (2, 0)}  # (lost, forced)
     rows = []
     ts_rows = []
     for week, pairings in enumerate(weekly_pairings, start=1):
@@ -252,10 +282,13 @@ def test_assemble_team_metrics_real_season_shape():
             gid = f"2025_{week:02d}_{game_num}"
             rows.append(_game(gid, 2025, week, home, away, 24, 17))
             for team, opp in [(home, away), (away, home)]:
+                lost, forced = turnovers_by_team[team]
                 ts_rows.append({
                     "team": team, "opponent_team": opp, "season": 2025, "week": week, "game_id": gid,
                     "season_type": "REG", "passing_epa": passing_epa_by_team[team],
                     "rushing_epa": 0.5, "receiving_epa": 0.0,
+                    "passing_interceptions": lost, "fumbles_lost_total": 0,
+                    "def_interceptions": forced, "fumble_recovery_opp": 0,
                 })
     schedules = pd.DataFrame(rows)
     team_stats = pd.DataFrame(ts_rows)
@@ -266,7 +299,7 @@ def test_assemble_team_metrics_real_season_shape():
     expected_cols = {
         "team", "current", "Strength", "pyth_Strength", "SOS", "pyth_SOS",
         "Confidence", "pyth_Confidence", "Confidence_Delta", "true_power",
-        "offensive_edge", "defensive_edge",
+        "offensive_edge", "defensive_edge", "turnover_margin",
         "games_played", "win_rate", "win_rate_CI_Low", "win_rate_CI_High",
     }
     assert set(master.columns) == expected_cols
