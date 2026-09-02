@@ -141,6 +141,42 @@ def fetch_snap_counts(seasons: list[int]) -> pd.DataFrame:
     return nflreadpy.load_snap_counts(seasons=seasons).to_pandas()
 
 
+def fetch_pbp(seasons: list[int]) -> pd.DataFrame:
+    """Real play-by-play data (nflreadpy's `load_pbp`) - one row per real
+    play, confirmed live to include `game_id`/`season`/`week`/`season_type`
+    (REG/POST), `posteam`/`defteam` (team with/without the ball that play -
+    null on a kickoff/pre-snap row before possession is established),
+    `fixed_drive` (a real drive-sequence number, running continuously
+    across BOTH teams for the whole game - e.g. drive 1 is the home team's
+    first real drive, drive 2 the away team's first, drive 3 the home
+    team's second, and so on - NOT a per-team-restarting count, though
+    `(game_id, posteam, fixed_drive)` together still uniquely and
+    correctly identify one real team's one real drive), `fixed_drive_result`
+    (Touchdown/Field goal/Punt/Turnover/Safety/etc.), and real running
+    score columns `posteam_score`/`posteam_score_post` (the offense's own
+    real score immediately before/after that specific play) - the real
+    source `nfl_team_strength.compute_team_points_per_drive` uses to
+    derive each real drive's own point value directly from the score
+    change across it, rather than guessing at TD=6/7/8 vs FG=3 from
+    `fixed_drive_result`'s text label alone (correctly handles a 2-point
+    conversion, and correctly attributes 0 points to the offense's own
+    drive when the DEFENSE scores against them mid-drive - e.g. a
+    pick-six or a safety - since `defteam_score`, not `posteam_score`,
+    is what changes on that specific play).
+
+    Real per-season volume confirmed live: ~48.7k rows/season (~20MB
+    parquet) - roughly 10x the combined size of every other real NFL
+    table this project persists per season, which is why this is fetched
+    per-season on demand (current + immediately-prior season, mirroring
+    nfl_pipeline.py's own cold-start pattern for every other table) rather
+    than bulk-backfilled across config.NFL_HISTORICAL_SEASONS the way
+    scripts/fetch_nfl_historical.py does for the rest - a real, deliberate
+    scope decision, not an oversight."""
+    import nflreadpy
+
+    return nflreadpy.load_pbp(seasons=seasons).to_pandas()
+
+
 def fetch_ff_rankings() -> pd.DataFrame:
     """Real FantasyPros Expert Consensus Ranking (ECR) snapshot - NOT
     season-keyed like every other fetcher here, since this is a real

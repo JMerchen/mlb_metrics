@@ -31,6 +31,25 @@ html += "</table>"
 el.innerHTML = html
 }
 
+// Copied from app.js (same "no shared build step in docs/" convention
+// as loadCSV/buildTable above).
+function ciLabel(low, high){
+if(low === undefined || low === "" || high === undefined || high === ""){
+return ""
+}
+return `95% CI ${(Number(low) * 100).toFixed(0)}–${(Number(high) * 100).toFixed(0)}%`
+}
+
+function significanceLabel(p){
+if(p === undefined || p === "" || Number.isNaN(Number(p))){
+return ""
+}
+const value = Number(p)
+return value < 0.05
+? `significant (p=${value.toFixed(3)})`
+: `not significant (p=${value.toFixed(2)})`
+}
+
 let nflBestball = []
 let nflPositionScarcity = []
 let nflDraftStrategy = []
@@ -51,6 +70,7 @@ document.querySelectorAll("#nflTabs .tabButton").forEach(btn=>{
 btn.classList.toggle("active", btn.dataset.nflTab === tab)
 })
 document.getElementById("preseasonSection").style.display = tab === "preseason" ? "" : "none"
+document.getElementById("gamePicksSection").style.display = tab === "gamepicks" ? "" : "none"
 }
 
 function selectBestballPosition(position){
@@ -446,4 +466,188 @@ document.getElementById("draftAssistantTable").innerHTML = noDataMessage
 
 }
 
+// --- NFL Automated Game Picks (nfl_game_evaluation.build_game_picks_export's
+// own docs/data/nfl_game_picks_*.csv exports) - direct structural mirror
+// of app.js's own game-picks section, adapted for game_id/season/week in
+// place of game_pk/date-only, and "This Week's Picks" (the most recent
+// real week logged, not necessarily "today" the way MLB's daily cadence
+// means) in place of "Today's Picks". ---
+
+async function loadNflGamePicks(){
+
+let summary = []
+let picks = []
+
+try{
+summary = await loadCSV("./data/nfl_game_picks_summary.csv")
+}catch(e){
+console.log("no nfl_game_picks_summary.csv yet", e)
+}
+
+try{
+picks = await loadCSV("./data/nfl_game_picks_picks.csv")
+}catch(e){
+console.log("no nfl_game_picks_picks.csv yet", e)
+}
+
+renderNflGamePickStats(summary)
+renderNflTodaysGamePicks(picks)
+renderNflGamePickHistory(picks)
+
+}
+
+function renderNflGamePickStats(summary){
+
+const el = document.getElementById("nflGamePickStats")
+
+if(!summary.length){
+el.innerHTML = "No picks tracked yet"
+return
+}
+
+const s = summary[0]
+
+const stat = (value, label, sub) =>
+`<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`
+
+const hasBets = s.n_bets_advised && Number(s.n_bets_advised) > 0
+
+const winRate = hasBets
+? (Number(s.win_rate_on_advised_bets) * 100).toFixed(1) + "%"
+: "-"
+
+const winRateSub = hasBets ? ciLabel(s.win_rate_on_advised_bets_ci_low, s.win_rate_on_advised_bets_ci_high) : ""
+
+const pnl = hasBets
+? (Number(s.total_profit_units) >= 0 ? "+" : "") + Number(s.total_profit_units).toFixed(2) + "u"
+: "-"
+
+const pnlColor = hasBets
+? (Number(s.total_profit_units) >= 0 ? "var(--success)" : "var(--danger)")
+: "inherit"
+
+const pnlSub = hasBets ? significanceLabel(s.roi_p_value) : ""
+
+const hasClosingLineData = s.beat_closing_line_rate && s.n_beat_closing_line_compared > 0
+const beatClosingLine = hasClosingLineData
+? (Number(s.beat_closing_line_rate) * 100).toFixed(1) + "%"
+: "-"
+
+const beatClosingLineSub = hasClosingLineData
+? [ciLabel(s.beat_closing_line_rate_ci_low, s.beat_closing_line_rate_ci_high), significanceLabel(s.beat_closing_line_rate_p_value)]
+.filter(Boolean).join(" · ")
+: ""
+
+el.innerHTML =
+stat(s.current_bet_streak || 0, "Week Streak") +
+stat(s.best_bet_streak || 0, "Best Week Streak") +
+stat(winRate, "Win Rate", winRateSub) +
+stat(s.n_bets_advised || 0, "Bets Tracked") +
+`<div class="streakStat"><div class="value" style="color:${pnlColor}">${pnl}</div><div class="label">P&amp;L</div>${pnlSub ? `<div class="sub">${pnlSub}</div>` : ""}</div>` +
+stat(beatClosingLine, "Beat Closing Line", beatClosingLineSub)
+
+}
+
+function renderNflTodaysGamePicks(picks){
+
+const el = document.getElementById("nflTodaysGamePicks")
+
+if(!picks.length){
+el.innerHTML = "No game picks published yet"
+return
+}
+
+const latestWeek = picks
+.map(p=>`${p.season}_${String(p.week).padStart(2,"0")}`)
+.sort()
+.slice(-1)[0]
+
+const thisWeek = picks
+.filter(p=>`${p.season}_${String(p.week).padStart(2,"0")}` === latestWeek)
+.sort((a,b)=>Number(b.predicted_probability) - Number(a.predicted_probability))
+
+if(!thisWeek.length){
+el.innerHTML = "No games this week"
+return
+}
+
+const statusLabels = {
+win: "win",
+loss: "loss",
+not_played: "not played",
+pending: "pending",
+}
+
+el.innerHTML = thisWeek
+.map(p=>{
+
+const prob =
+p.predicted_probability && p.predicted_probability !== ""
+? (Number(p.predicted_probability) * 100).toFixed(1) + "% predicted"
+: ""
+
+const betUnits = Number(p.bet_units)
+const betAdvised = betUnits > 0
+
+const betLine = betAdvised
+? `<div class="pickStatus">Bet advised: ${p.bet_team} @ ${p.bet_moneyline} (${betUnits.toFixed(2)}u)</div>`
+: ""
+
+return `
+<div class="pickCard ${p.status}${betAdvised ? " recommended" : ""}">
+<div class="pickName">${p.predicted_winner} (${p.away_team} @ ${p.home_team})</div>
+<div class="pickProb">${prob}</div>
+<div class="pickStatus">${statusLabels[p.status] || p.status}</div>
+${betLine}
+</div>
+`
+
+})
+.join("")
+
+}
+
+function renderNflGamePickHistory(picks){
+
+const sorted = picks
+.slice()
+.sort((a,b)=>b.date.localeCompare(a.date) || Number(b.predicted_probability) - Number(a.predicted_probability))
+
+const statusLabels = {
+win: "win",
+loss: "loss",
+not_played: "not played",
+pending: "pending",
+}
+
+const pct = v =>
+v !== undefined && v !== null && v !== "" && !Number.isNaN(Number(v))
+? (Number(v) * 100).toFixed(1) + "%"
+: "-"
+
+const formatted = sorted.map(p=>({
+"Date": p.date,
+"Predicted Winner": p.predicted_winner,
+"Predicted Loser": p.predicted_loser,
+"Model Probability": pct(p.predicted_probability),
+"Market Probability": pct(p.market_predicted_winner_probability),
+"Bet Units": p.bet_units && Number(p.bet_units) > 0 ? Number(p.bet_units).toFixed(2) : "-",
+"Bet Team": p.bet_team || "-",
+"Status": statusLabels[p.status] || p.status,
+"Bet Profit Units":
+p.bet_profit_units !== undefined && p.bet_profit_units !== "" && !Number.isNaN(Number(p.bet_profit_units))
+? (Number(p.bet_profit_units) >= 0 ? "+" : "") + Number(p.bet_profit_units).toFixed(2) + "u"
+: "-",
+}))
+
+buildTable(
+formatted,
+"nflGamePickHistoryTable",
+100
+)
+
+}
+
 loadAll()
+
+loadNflGamePicks()

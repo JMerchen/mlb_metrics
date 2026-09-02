@@ -17,6 +17,7 @@ def _qb_week(player_id, season, week, passing_yards=200, passing_tds=1, ints=0, 
         # not just a nonzero row count, to do column arithmetic.
         "targets": 0, "receptions": 0, "receiving_yards": 0, "receiving_tds": 0,
         "rushing_fumbles_lost": 0, "receiving_fumbles_lost": 0, "rushing_2pt_conversions": 0, "receiving_2pt_conversions": 0,
+        "passing_epa": 0.0,
     }
 
 

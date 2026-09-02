@@ -20,6 +20,7 @@ def _qb_row(player_id, season, week, passing_yards, passing_tds=2, ints=1, carri
         "rushing_yards": rush_yards,
         "rushing_tds": rush_tds,
         "passing_2pt_conversions": two_pt,
+        "passing_epa": 0.0,
     }
 
 

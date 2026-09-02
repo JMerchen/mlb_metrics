@@ -4174,6 +4174,206 @@ external web content (no scraping/RSS/WebFetch anywhere), and the NFL
 page's own design philosophy is "no new network call, same-origin CSV
 fetches only."
 
+## NFL Automated Game Picks (`docs/nfl.html`'s Game Picks tab)
+
+A direct structural port of MLB's own Automated Game Picks (above) to
+football, replicated signal-by-signal - not a from-scratch model. Real
+NFL data made this genuinely easier to build than the MLB original in two
+ways: `schedules_*.parquet` already carries real historical
+`home_moneyline`/`away_moneyline`/`spread_line`/`total_line` for every
+regular-season game back to 2016 (no separate `market_odds.py`-style
+scraper needed), and `team_stats_*.parquet` already carries real,
+already-computed `passing_epa`/`rushing_epa`/`receiving_epa` (no new
+efficiency modeling needed from raw play-by-play).
+
+**Team strength** (`nfl_team_strength.py`) mirrors `teams.py` exactly:
+rolling win% and Pythagorean win% (`config.NFL_PYTHAGOREAN_EXPONENT=2.37`,
+a real commonly-cited NFL literature value - not MLB's own 1.83) blended
+across games-back windows (`config.NFL_TEAM_STRENGTH_WINDOWS`, 3/7/full
+games). Real follow-up (2026-09-02): tightened from an initial 4/8/full
+(an 18-week season's naive analog of MLB's 10/30/81/full) after a real
+design discussion - an NFL season is too short for a long smoothing
+window to "catch up" to a genuine regime change (a new starting QB, an
+OC change, a key injury) the way MLB's 162-game season can, so recent
+games are weighted more heavily. This is NOT because single NFL games
+carry less real luck/variance than MLB's (the standard finding runs the
+other way - a 17-game sample doesn't average out game-to-game noise the
+way 162 games does, and raw turnover margin is famously low-persistence
+year to year) - it's a real, honest tradeoff (faster to react to a
+genuine shift, but also faster to overreact to one-game noise), validated
+against the real backtest below rather than assumed. Each rolling signal
+is z-normalized (`config.NFL_NORMALIZATION_Z_SCALE=0.15`) and mixed into
+a Confidence signal the same way. `offensive_edge`/`defensive_edge`
+replace MLB's `offensive_edge`/`suppression_resistance` with real total
+EPA produced vs. allowed (the opponent's own `team_stats` row that same
+week, joined via `opponent_team` - the same "opponent's own row for that
+week IS what my defense allowed" pattern `nfl_teams.py` already used for
+DFS matchups) - EPA is a real, well-regarded efficiency metric that fills
+the same structural role as "held under 3 runs" without forcing an
+invented baseball-specific threshold onto football.
+
+**Turnover margin** (`nfl_team_strength.compute_team_turnover_margin`,
+added 2026-09-02 - "we should include turnover ratio at a game level") -
+real takeaways forced (`def_interceptions` + `fumble_recovery_opp`, a
+recovery of the OPPONENT's own lost fumble) minus real turnovers given
+away (`passing_interceptions` + `fumbles_lost_total`), both already
+carried on a team's own `team_stats` row (no opponent join needed, unlike
+offensive_edge/defensive_edge), blended across the same games-back
+windows. Confirmed live: a team's own real turnovers-lost count matches
+the real turnovers-forced count on the opponent's own row for that same
+game in 541/544 (99.4%) of real 2025 team-games - the rare (~0.6%)
+mismatch traces to a real fumble going out of bounds (possession changes
+by rule with no recovery credited to either side), not a data error.
+
+**Points per drive** (`nfl_team_strength.compute_team_points_per_drive`,
+added 2026-09-02 - "offensive efficiency (pts/drive)") - a genuinely
+different efficiency lens than `offensive_edge` (real per-PLAY EPA): how
+often real drives actually turn into points, not how valuable each
+individual play was. Sourced from real play-by-play (`nfl_data.fetch_pbp`,
+`nflreadpy`'s `load_pbp` - not touched by this project before this, and
+NOT bulk-backfilled across `config.NFL_HISTORICAL_SEASONS` the way every
+other NFL table is, since one season alone is already ~20MB/~48.7k rows -
+roughly 10x the combined size of every other NFL table this project
+persists per season; fetched per-season on demand instead, current +
+immediately-prior season, mirroring the live pipeline's own cold-start
+pattern for every other table). Each real drive's own point value is the
+real score change across it (`posteam_score_post` on the drive's last
+real play minus `posteam_score` on its first), not guessed from
+`fixed_drive_result`'s text label - this correctly handles a real 2-point
+conversion, and correctly credits 0 points to the offense's own drive
+when the DEFENSE scores against them mid-drive (a pick-six, a safety),
+confirmed live against real 2025 plays. Considered and explicitly
+NOT built: a homegrown "QBR-like" composite from the same play-by-play
+data (`qb_epa`/`wpa`/`cpoe` are all real, confirmed-present columns) -
+skipped since the model already has `passing_epa`/`passing_cpoe` doing
+that job in the QB-continuity signal from the exact same underlying play
+data, so a new composite would likely just duplicate existing signal for
+real added engineering cost, not add new information; real ESPN Total
+QBR itself is proprietary and isn't in `nflreadpy` at all, so it
+couldn't be reproduced exactly regardless.
+
+**QB continuity** (`nfl_team_strength.compute_qb_continuity_adjustment` +
+`nfl_game_picks.py`'s own comparison) is the real NFL-specific signal
+with no clean MLB analog - no MLB pitcher swings a team's win probability
+the way an NFL starting QB does. `snap_counts_*.parquet`'s real per-game
+`offense_pct` at the QB position identifies which QB has actually been
+playing most recently (not just who a stale depth chart says); when the
+game's own confirmed starter (`schedules_*.parquet`'s real `home_qb_id`/
+`away_qb_id`) differs from that identified recent-primary QB, the team's
+composite shifts toward the confirmed starter's own real rolling
+`passing_epa_per_game` (`nfl_passing.compute_qb_rolling_stats`, reused
+unchanged), weighted by `config.NFL_QB_CONTINUITY_WEIGHT=0.5`. Both
+sides are z-normalized against the same population before differencing,
+so when the confirmed starter IS the team's own recent-primary QB (the
+ordinary case) the adjustment is exactly 0 with no separate "did the
+starter change" branch needed.
+
+`nfl_game_picks.compute_game_win_probabilities` combines six
+z-normalized signals (`config.NFL_GAME_PICK_COMPOSITE_WEIGHTS`:
+`pyth_Strength`, `pyth_Confidence`, `defensive_edge`, `true_power`,
+`turnover_margin`, `points_per_drive`, equal-weighted at 1/6 each -
+`turnover_margin`/`points_per_drive` were each added as their own
+explicit weight rather than folded into `true_power`, since both are
+genuinely distinct quality dimensions from EPA-based efficiency and
+keeping them separate lets the backtest validate each independently)
+plus the QB-continuity shift, then a simple ratio (not log5) into
+`home_win_probability` - same "these composites aren't calibrated win
+percentages" reasoning as the MLB original.
+
+### Real backtest results (`scripts/run_nfl_game_picks_backtest.py`, `nfl_game_picks_backtest.py`)
+
+Real no-lookahead week-by-week replay of the 2025 season (nflreadpy's own
+real final scores and moneylines), split per the original build request
+("use up to week 7 from last year to build and then the rest of the year
+to test and calibrate models") into weeks 3-7 (train - weeks 1-2 are
+excluded entirely, see below) and weeks 8-18 (test, held out). Reported
+honestly, not cherry-picked:
+
+| Split | Source | n | Accuracy | Brier | Beat closing line |
+|---|---|---|---|---|---|
+| Train (wk3-7) | Model | 76 | 56.6% | 0.244 | 36.8% |
+| Train (wk3-7) | Market | 76 | 67.1% | 0.219 | - |
+| Test (wk8-18) | Model | 164 | 57.9% | 0.246 | 36.0% |
+| Test (wk8-18) | Market | 164 | 62.8% | 0.213 | - |
+
+The raw heuristic beats a coin flip on real held-out data (57.9% test
+accuracy) but trails the real market meaningfully (62.8%) and loses the
+squared-error comparison on the majority of games (36.0% beat-closing-line,
+below the 50% a genuinely competitive model would clear) - the exact same
+finding MLB's own pre-calibration heuristic had (`home_win_probability`'s
+real spread is far narrower than the market's own spread on the same
+games), reported here with the same honesty rather than smoothed over.
+
+**2026-09-02 real update** (tightened windows 4/8/full -> 3/7/full, plus
+adding `turnover_margin` and `points_per_drive` as new composite signals,
+in two real backtested steps): a real, modest, cumulative improvement,
+not a breakthrough - train accuracy rose meaningfully (53.9% -> 56.6%),
+test accuracy rose a bit (57.3% -> 57.9%), train beat-closing-line rose
+(35.5% -> 36.8%), and test Brier improved slightly (0.247 -> 0.246).
+Reported as-is rather than rounded up to a bigger win than the real
+numbers show - still a narrow, unproven edge, not a solved model.
+
+**Weeks 1 and 2 are excluded from every replay, for a real structural
+reason, not an arbitrary cutoff**: week 1 has zero real prior-game history
+within the season to build a rating from at all; week 2's history is
+exactly one real game per team, so - confirmed live against the real 2025
+season - every team's rolling rating collapses to the exact same real 0
+(no games strictly before a team's own single game to draw a window from),
+the whole population has zero variance, and z-normalization is a real,
+honest 0/0 rather than a fabricated number. This is a genuine cold-start
+property of validating a single season in isolation on purpose - the LIVE
+pipeline (below) doesn't have this problem, since it carries real
+prior-season history into early-season weeks instead.
+
+**Calibration** (`scripts/train_nfl_game_pick_calibration.py`, same real
+walk-forward-CV/final-holdout gate as MLB's own
+`train_game_pick_calibration.py`) was fit against the same real 2025
+replay and did **not** clear its own holdout bar yet (calibrated log_loss
+0.702 vs. the raw heuristic's 0.695 on a 48-game final holdout - isotonic
+badly overfit the real heuristic's very narrow probability range on this
+little data). Nothing was saved; the live model runs uncalibrated
+(`nfl_game_picks.apply_calibration`'s own graceful no-op) until a future
+season's worth of additional real data can prove a real recalibration
+out, exactly the same honest, unproven-until-earned status MLB's own
+calibration artifact had before its first real backtest.
+
+### Live pipeline (`nfl_pipeline.py`, `.github/workflows/nfl_weekly_update.yml`)
+
+Runs weekly (Tuesday mornings, after Monday Night Football has resolved
+and before the next week's slate firms up further - not daily, real NFL
+games cluster Thu/Sun/Mon and this project has already learned firsthand
+that shared GitHub Actions minutes are a real, finite budget). Each run:
+fetches the current season fresh (falling back to the last persisted copy
+of any table whose live fetch fails - real, live-confirmed preseason
+case: nflverse doesn't publish a season's `team_stats`/`weekly`/`pbp`
+file until real games start generating stats, and `snap_counts`/
+`rosters_weekly` reject a season past their own currently-valid range
+outright), resolves any picks from previously-logged pending weeks
+against real final scores (a single bulk match against the freshly
+fetched schedule - no per-date fetch loop needed, unlike MLB Stats API),
+predicts the next real unplayed week, and writes
+`docs/data/nfl_game_picks_*.csv`.
+
+Logs to its own separate `data/predictions/nfl_game_predictions.csv` (a
+distinct log from MLB's `game_predictions.csv`) and reuses `kelly.py`/
+`config.KELLY_*` completely unchanged for bet sizing - `KELLY_DAILY_UNIT_CAP`/
+`KELLY_MAX_SINGLE_BET_UNIT_CAP` apply **per sport**, so MLB's and NFL's
+unit budgets are independent, never pooled. Verified end to end against
+real live data: the actual pipeline script, run against the real 2026
+preseason schedule (real Week 1 games, real already-posted moneylines,
+2025 as cold-start history), produced real predictions and real
+Kelly-sized bet advice - committed as the pipeline's first real output
+(`data/predictions/nfl_game_predictions.csv`,
+`docs/data/nfl_game_picks_*.csv`).
+
+Like MLB's own daily log, this accumulates forward from when it ships -
+no historical backfill of the live prediction log itself (the backtest
+above is what validates the model against history, not the live log).
+Playoff games (WC/DIV/CON/SB) are excluded from both the backtest and the
+live pipeline's predictable-week logic - elimination-game dynamics, rest
+advantages, and small sample don't fit the same statistical treatment as
+the regular season.
+
 ## Running
 
 ```
