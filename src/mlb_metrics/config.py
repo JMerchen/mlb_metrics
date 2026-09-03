@@ -325,25 +325,81 @@ SAME_GAME_DIVERSIFICATION_MARGIN = 0.0
 # --- Lineup awareness ---
 #
 # Backtesting found ~30% of logged top-5 picks had zero at-bats on the day
-# they were picked - the batter wasn't even in the lineup. These qualifiers
-# (see lineup.py, predictions.select_picks) use each batter's *historical*
-# batting-order slot - derived from Statcast data already persisted, via
-# data.assign_batting_order - as a proxy for "reliably plays, and plays high
-# enough in the order to get real at-bats", without needing same-day lineup
-# confirmation (which isn't available until a few hours before first pitch -
-# see schedule.py).
+# they were picked - the batter wasn't even in the lineup. These signals
+# (see lineup.py, predictions.select_picks, hitters.assemble_hitters) use
+# each batter's *historical* batting-order usage - derived from Statcast
+# data already persisted, via data.assign_batting_order - as a proxy for
+# "reliably plays, and plays enough in the order to get real at-bats",
+# without needing same-day lineup confirmation (which isn't available
+# until a few hours before first pitch - see schedule.py).
 
 # Rolling window (team games, not days) used to compute batting-order
 # consistency. A game-count window, unlike the day-count *_WINDOWS lists
 # above, since roster usage doesn't follow a calendar cadence.
 LINEUP_WINDOW_GAMES = 20
 
-# A batter's average batting-order slot over the window must be strictly
-# above this to count as "top half" - the 9-man order's true median is 5,
-# so 4.5 means strictly better than a 50/50 split, matching "more at-bats
-# than the bottom of the order" precisely (a mean of exactly 5.0 is not
-# "top half").
-LINEUP_TOP_HALF_MAX_SLOT = 4.5
+# REMOVED - a hard "average batting-order slot over LINEUP_WINDOW_GAMES
+# must be <= 4.5 (top half)" gate in predictions.select_picks. A real,
+# no-lookahead, full-season backtest (2026-09,
+# scripts/backtest_pick_strategies_v2.py's c2a_no_lineup variant) found
+# this gate was excluding batters who went on to hit BETTER than the
+# ones it let through (73.0%, n=115 vs 66.2%, n=157) - it was screening
+# out real everyday hitters who simply bat lower in the order (see the
+# Javier Sanoja case that prompted the backtest: 100% start rate,
+# avg_batting_order 7.25, excluded anyway), not the hot-bench-player/
+# recent-callup case it was meant to catch (LINEUP_MIN_START_RATE below
+# already covers that case on its own).
+#
+# Batting order isn't nothing, though - a leadoff hitter really does get
+# more real at-bats per game than a #9 hitter, which is real extra
+# opportunity for a hit at an identical per-AB rate. Replaced with a
+# continuous signal instead of an on/off gate: lineup.compute_expected_plate_appearances
+# turns each batter's own recent batting-order slot into an empirically-
+# derived Expected_PA, which hitters.assemble_hitters/
+# matchup.compute_matchup_hit_probability then use as that batter's own
+# per-game trials count (in place of the league-flat
+# WAVE_TRIALS_PER_GAME) - "more expected at-bats" becomes part of the
+# probability itself rather than a pass/fail cutoff.
+
+# Rolling window (team games, not days - same reasoning as
+# LINEUP_WINDOW_GAMES above) used for Expected_PA's own batting-order
+# input (lineup.compute_expected_plate_appearances's Recent_Avg_Batting_Order).
+# Deliberately SHORTER than LINEUP_WINDOW_GAMES (20): "how many at-bats
+# will this batter get TODAY" is answered by where they've been hitting
+# recently (a promotion to the 2-hole this week matters more than a
+# 20-game average still weighted down by a month of 7th-hole starts),
+# not by a slower-moving longer-run average - the same "reactive window"
+# reasoning HIT_STREAK_RECENT_DAYS/HITTER_MAX_DAYS_SINCE_LAST_GAME
+# already use for other recency-sensitive signals in this file.
+LINEUP_RECENT_WINDOW_GAMES = 7
+
+# Shrinkage applied to Expected_PA toward the league-flat WAVE_TRIALS_PER_GAME
+# (0.0 = ignore Expected_PA entirely and always use the flat constant; 1.0 =
+# trust the raw per-batter Expected_PA estimate completely). NOT 1.0, despite
+# Expected_PA being a real, empirically-derived, no-lookahead signal - real
+# no-lookahead validation (2026-09, scripts/validate_expected_pa_calibration.py,
+# ~35,000 real hitter-days scored against real outcomes) found using it at
+# full strength (1.0, this feature's first shipped version) made
+# `probability`'s calibration measurably WORSE than the flat constant it
+# replaced (Brier 0.244372 vs 0.243381, paired t-test p=0.0013) - a real
+# Jensen's-inequality effect: 1-(1-p)**n is concave in n, so plugging in a
+# single POINT ESTIMATE of a batter's real (day-to-day variable - early
+# exits, pinch-hits, extra innings, rainout-shortened games) plate
+# appearances systematically overpredicts the true expected hit
+# probability, worst at the high end (the calibration table showed the
+# unshrunk version overpredicting by ~0.08 in its top probability bin, vs
+# ~0.03 for the flat constant). A grid search over this same real data
+# found shrink~0.35 minimized Brier score; a first-half/second-half
+# out-of-sample check (fit on one half, scored on the other) confirmed the
+# improvement over the flat constant holds in BOTH directions (not just an
+# in-sample fit), with the two halves' own best-fit values landing at 0.25
+# and 0.40 - 0.3 is a round, defensible value within that validated range,
+# not the single best in-sample point (picking the single best point would
+# itself be a small confirmation-bias risk on the same data used to find
+# it). Same underlying idea as helpers.shrink_rate's Bayesian shrinkage of
+# WAVE itself toward the league average - trust a real signal partially,
+# not as if it were a certain fact.
+EXPECTED_PA_SHRINKAGE = 0.3
 
 # Fraction of the team's games in the window (or fewer, early in the season)
 # a batter must have actually started in to count as a regular, not a bench

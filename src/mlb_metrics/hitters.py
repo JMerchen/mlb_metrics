@@ -682,10 +682,21 @@ def assemble_hitters(
     `lineup_consistency` (see lineup.compute_lineup_consistency) is optional
     so existing callers/tests are unaffected; when given, it adds
     avg_batting_order/start_rate columns that predictions.select_picks's
-    lineup qualifiers key off of. avg_batting_order is deliberately left
-    null (not filled to 0) for a batter with no recorded starts - a null
-    correctly fails the "top half of the order" qualifier downstream,
-    whereas a 0 would look like the best possible batting slot.
+    start_rate qualifier keys off of. avg_batting_order is deliberately
+    left null (not filled to 0) for a batter with no recorded starts,
+    rather than a 0 that would look like the best possible batting slot.
+
+    If `lineup_consistency` also carries an Expected_PA column (see
+    lineup.compute_expected_plate_appearances - pipeline.compute_outputs
+    merges it in before calling this), `probability`/`probability_L`/
+    `probability_R`/`probability_CI_Low`/`probability_CI_High`/`Approach`/
+    `Consistency` are recomputed using each batter's OWN Expected_PA as
+    the binomial trials count, in place of the league-flat
+    config.WAVE_TRIALS_PER_GAME every one of them was first computed with
+    above - see config.LINEUP_TOP_HALF_MAX_SLOT's docstring for why
+    (batting order shapes per-game hit probability continuously now,
+    not via a separate hard cutoff). A missing Expected_PA column is a
+    no-op, same convention as every other optional column here.
 
     `all_pitches` (pipeline.build_all_pitch_events's output - EVERY real
     pitch, not `dt`'s PA-ending-only frame) is likewise optional so
@@ -748,6 +759,21 @@ def assemble_hitters(
     if lineup_consistency is not None:
         hitters = hitters.merge(lineup_consistency, on="key_mlbam", how="left")
         hitters["start_rate"] = hitters["start_rate"].fillna(0)
+
+        if "Expected_PA" in hitters.columns:
+            # A batter absent from lineup_consistency entirely (shouldn't
+            # normally happen - it's built from the same population - but
+            # merges are how missing rows show up) falls back to the same
+            # league-flat trials count every batter used before this
+            # feature existed, not a fabricated 0 trials.
+            trials = hitters["Expected_PA"].fillna(config.WAVE_TRIALS_PER_GAME)
+            hitters["probability"] = 1 - (1 - hitters["WAVE"]) ** trials
+            hitters["probability_L"] = 1 - (1 - hitters["WAVE_L"]) ** trials
+            hitters["probability_R"] = 1 - (1 - hitters["WAVE_R"]) ** trials
+            hitters["probability_CI_Low"] = 1 - (1 - hitters["WAVE_CI_Low"]) ** trials
+            hitters["probability_CI_High"] = 1 - (1 - hitters["WAVE_CI_High"]) ** trials
+            hitters["Consistency"] = hitters["Game_Hit_Probability"] - hitters["probability"]
+            hitters["Approach"] = hitters["Game_Hit_Probability"] * hitters["probability"]
 
     hitters = hitters.sort_values("Game_Hit_Probability", ascending=False)
     return hitters.rename(columns={"pa_lfull": "PA_L", "pa_rfull": "PA_R"})

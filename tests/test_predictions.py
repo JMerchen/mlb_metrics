@@ -86,19 +86,23 @@ def test_append_predictions_migrates_a_log_written_before_model_version_existed(
     assert row_19["model_version"] == config.HITTER_MODEL_VERSION
 
 
-def test_select_picks_applies_lineup_qualifiers_when_columns_present():
+def test_select_picks_applies_start_rate_qualifier_when_column_present():
+    # avg_batting_order is NOT a gate anymore (REMOVED - see
+    # config.LINEUP_TOP_HALF_MAX_SLOT's docstring): a batter batting low
+    # in the order (key 2) still qualifies here, unlike before. start_rate
+    # is still a real gate.
     hitters = _hitters([
         (1, 0, 40, 0.90),  # top-half slot, consistent starter -> qualifies
-        (2, 0, 40, 0.85),  # bats bottom of the order -> excluded
+        (2, 0, 40, 0.85),  # bats bottom of the order, but consistent -> still qualifies
         (3, 0, 40, 0.80),  # bats top-half, but inconsistent (low start_rate) -> excluded
-        (4, 0, 40, 0.70),  # never started at all (null avg) -> excluded, not treated as slot 0
+        (4, 0, 40, 0.70),  # never started at all (start_rate 0) -> excluded
     ])
     hitters["avg_batting_order"] = [2.0, 7.0, 2.0, float("nan")]
     hitters["start_rate"] = [0.9, 0.9, 0.2, 0.0]
 
     picks = predictions.select_picks(hitters, "2026-06-20", top_n=5, min_plate_appearances=30)
 
-    assert list(picks["key_mlbam"]) == [1]
+    assert list(picks["key_mlbam"]) == [1, 2]
 
 
 def test_select_picks_lineup_qualifiers_are_noop_without_columns():

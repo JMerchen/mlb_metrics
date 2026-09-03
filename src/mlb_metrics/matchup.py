@@ -288,7 +288,8 @@ def compute_matchup_hit_probability(
     """
     wave_columns = [
         c for c in
-        ("key_mlbam", "team", "WAVE", "WAVE_L", "WAVE_R", "Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE")
+        ("key_mlbam", "team", "WAVE", "WAVE_L", "WAVE_R", "Fastball_WAVE", "Breaking_WAVE", "Offspeed_WAVE",
+         "Expected_PA")
         if c in wave.columns
     ]
     schedule_columns = [
@@ -330,8 +331,20 @@ def compute_matchup_hit_probability(
         * _park_factor_multiplier(matchup["Park_Factor"])
         * _pitch_arsenal_multiplier(matchup, league_arsenal_mix)
     )
+    # Per-batter Expected_PA (see lineup.compute_expected_plate_appearances)
+    # in place of the league-flat config.WAVE_TRIALS_PER_GAME when
+    # available - same real-batting-order-driven trials count
+    # hitters.assemble_hitters uses for `probability`, applied here too so
+    # a high-Expected_PA batter's real extra opportunity for a hit shows
+    # up in the matchup signal as well, not just their own season-form
+    # probability. Falls back to the constant for a batter Expected_PA
+    # doesn't cover (missing column entirely, or an individual null).
+    if "Expected_PA" in matchup.columns:
+        trials = matchup["Expected_PA"].fillna(config.WAVE_TRIALS_PER_GAME)
+    else:
+        trials = config.WAVE_TRIALS_PER_GAME
     matchup["Matchup_Hit_Probability"] = (
-        1 - (1 - matchup_ab_rate) ** config.WAVE_TRIALS_PER_GAME
+        1 - (1 - matchup_ab_rate) ** trials
     ).clip(0, 1)
 
     return matchup[["key_mlbam", "Matchup_Hit_Probability"]]
