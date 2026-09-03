@@ -139,6 +139,8 @@ def compute_outputs(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
     batting_order = data.assign_batting_order(data_with_game_id)
     lineup_consistency = lineup.compute_lineup_consistency(batting_order, latest_batter_team)
+    expected_pa = lineup.compute_expected_plate_appearances(data_with_game_id, batting_order, latest_batter_team)
+    lineup_consistency = lineup_consistency.merge(expected_pa, on="key_mlbam", how="left")
 
     return {
         "wave": hitters.assemble_hitters(

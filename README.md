@@ -163,14 +163,43 @@ Backtesting found ~30% of logged top-5 picks had zero at-bats on the day
 they were picked - the batter wasn't even in the lineup. Two independent
 fixes, both applied in `predictions.select_picks`:
 
-- **Batting-order consistency** (`data.assign_batting_order`, `lineup.py`) -
-  derived entirely from Statcast data already persisted, no new dependency,
-  works retroactively. A batter only qualifies if their average batting-order
-  slot over their current team's last `LINEUP_WINDOW_GAMES` games is in the
-  top half (`LINEUP_TOP_HALF_MAX_SLOT`) *and* they've actually started at
-  that rate (`LINEUP_MIN_START_RATE`) - together these exclude both a bench
-  player's hot week and a recent call-up without a real track record. A
-  mid-season trade resets the window to the batter's new team only.
+- **Consistent starter** (`data.assign_batting_order`, `lineup.py`) - a
+  batter only qualifies if they've actually started at a real rate
+  (`start_rate` over their current team's last `LINEUP_WINDOW_GAMES`
+  games, `LINEUP_MIN_START_RATE`) - excludes a recent call-up without a
+  real track record. A mid-season trade resets the window to the
+  batter's new team only.
+
+  **Batting order itself is no longer a hard gate** (it was originally:
+  average slot over the window had to be in the "top half",
+  `LINEUP_TOP_HALF_MAX_SLOT`). A real, no-lookahead, full-season backtest
+  (2026-09, `scripts/backtest_pick_strategies_v2.py`'s `c2a_no_lineup`
+  variant) found that gate excluding batters who went on to hit BETTER
+  than the ones it let through (73.0% hit rate, n=115 vs. 66.2%, n=157) -
+  it was screening out real everyday hitters who simply bat lower in the
+  order (a real case: a hitter batting .444/7g, .379/15g, .344/30g on a
+  100% start rate, excluded anyway on an average slot of 7.25), not the
+  hot-bench-player case it was meant to catch (`start_rate` above already
+  covers that on its own). Removing it entirely recovered the full gap to
+  a matchup-only baseline (69.3% vs. 69.1%) and its stability across both
+  halves of the season (69.4% -> 69.3%, vs. the old gate's 67.6% -> 64.0%
+  degradation).
+
+  Batting order isn't *nothing*, though - a leadoff hitter really does
+  get more real at-bats per game than a #9 hitter, which is real extra
+  opportunity for a hit at an identical per-AB rate. Replaced with a
+  continuous signal instead: `lineup.compute_expected_plate_appearances`
+  turns each batter's own recent (`LINEUP_RECENT_WINDOW_GAMES=7` games)
+  batting-order slot into a real, empirically-derived `Expected_PA` - the
+  real average at-bats league-wide at that slot, from already-persisted
+  history, interpolated for a fractional slot rather than rounded.
+  `hitters.assemble_hitters`/`matchup.compute_matchup_hit_probability`
+  then use each batter's own `Expected_PA` as their per-game binomial
+  trials count, in place of the league-flat `config.WAVE_TRIALS_PER_GAME`
+  every batter used before - "more expected at-bats" is now part of the
+  probability itself (a hitter projected for 4.2 PA gets real extra
+  credit over one projected for 3.4, even at an identical per-AB rate),
+  not an on/off cutoff.
 - **Probable-pitcher matchup blending** (`schedule.py`, `matchup.py`) - a new
   dependency (`MLB-StatsAPI`, since `pybaseball` has no schedule/lineup
   support at all) fetches today's probable starters and, via a log5
@@ -961,8 +990,8 @@ removed). Real feedback after v3 shipped live (2026-08-05): a day it
 surfaced a single hitter as the lone recommended pick and dropped another
 hitter the user explicitly wanted, "because of their place in the
 lineup" - a signal `Approach`/`Matchup_Approach` implicitly captures via
-the `avg_batting_order`/`start_rate` qualifiers (a hitter who bats high
-in an everyday lineup) that `Model_Hit_Probability` doesn't see directly
+`Expected_PA`/`start_rate` (see "Lineup awareness" above - a hitter who
+bats high in an everyday lineup) that `Model_Hit_Probability` doesn't see directly
 (it's not one of `dfs_ml.HITTER_FEATURE_COLUMNS`). The current design
 (v4, `"v4-model-shortlist"`) keeps the model's original purpose - killing
 pure hot-streak outliers by requiring a real matchup-aware model score at

@@ -731,3 +731,53 @@ def test_assemble_hitters_lineup_consistency_missing_batter_is_null_not_zero():
     row = result.iloc[0]
     assert pd.isna(row["avg_batting_order"])  # never filled to 0 - that would look like batting 1st
     assert row["start_rate"] == 0
+
+
+def test_assemble_hitters_uses_expected_pa_as_trials_when_provided():
+    # Batter 1 gets a real Expected_PA of 5.0 (a leadoff-type hitter) -
+    # probability/Approach/Consistency should use 5.0 as the binomial
+    # trials count instead of the league-flat config.WAVE_TRIALS_PER_GAME
+    # every one of them defaults to.
+    dt = pd.DataFrame(_at_bats(1, "R", [("2026-06-15", "single"), ("2026-06-16", "field_out")]))
+    data_with_game_id = pd.DataFrame([
+        {"batter": 1, "game_id": 1, "game_date": pd.Timestamp("2026-06-15"), "events": "single"},
+        {"batter": 1, "game_id": 2, "game_date": pd.Timestamp("2026-06-16"), "events": "field_out"},
+    ])
+    names = pd.DataFrame([{"key_mlbam": 1, "name_first": "Test", "name_last": "Player"}])
+    latest_team = pd.DataFrame([{"key_mlbam": 1, "team": "NYY"}])
+    lineup_consistency = pd.DataFrame(
+        [{"key_mlbam": 1, "avg_batting_order": 1.0, "start_rate": 1.0,
+          "Recent_Avg_Batting_Order": 1.0, "Expected_PA": 5.0}]
+    )
+
+    result = hitters.assemble_hitters(dt, data_with_game_id, names, latest_team, lineup_consistency)
+
+    row = result.iloc[0]
+    wave = row["WAVE"]
+    expected_probability = 1 - (1 - wave) ** 5.0
+    assert row["probability"] == pytest.approx(expected_probability)
+    assert row["Approach"] == pytest.approx(row["Game_Hit_Probability"] * expected_probability)
+    assert row["Consistency"] == pytest.approx(row["Game_Hit_Probability"] - expected_probability)
+    # Sanity: 5.0 trials genuinely differs from the flat default, so this
+    # test would actually fail if the recompute were silently skipped.
+    assert row["probability"] != pytest.approx(1 - (1 - wave) ** config.WAVE_TRIALS_PER_GAME)
+
+
+def test_assemble_hitters_expected_pa_missing_column_is_noop():
+    # lineup_consistency without an Expected_PA column (e.g. old-shape
+    # callers/tests) must leave probability/Approach exactly as the
+    # original config.WAVE_TRIALS_PER_GAME-based computation produced.
+    dt = pd.DataFrame(_at_bats(1, "R", [("2026-06-15", "single"), ("2026-06-16", "field_out")]))
+    data_with_game_id = pd.DataFrame([
+        {"batter": 1, "game_id": 1, "game_date": pd.Timestamp("2026-06-15"), "events": "single"},
+        {"batter": 1, "game_id": 2, "game_date": pd.Timestamp("2026-06-16"), "events": "field_out"},
+    ])
+    names = pd.DataFrame([{"key_mlbam": 1, "name_first": "Test", "name_last": "Player"}])
+    latest_team = pd.DataFrame([{"key_mlbam": 1, "team": "NYY"}])
+    lineup_consistency = pd.DataFrame([{"key_mlbam": 1, "avg_batting_order": 1.0, "start_rate": 1.0}])
+
+    result = hitters.assemble_hitters(dt, data_with_game_id, names, latest_team, lineup_consistency)
+
+    row = result.iloc[0]
+    expected_probability = 1 - (1 - row["WAVE"]) ** config.WAVE_TRIALS_PER_GAME
+    assert row["probability"] == pytest.approx(expected_probability)

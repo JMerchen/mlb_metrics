@@ -112,6 +112,55 @@ def test_missing_probable_starter_uses_league_average_neutral():
     assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(expected)
 
 
+def test_matchup_hit_probability_uses_expected_pa_when_present():
+    from mlb_metrics import config
+
+    wave = _wave([(1, "NYY", 0.30)])
+    wave["Expected_PA"] = 5.0  # a leadoff-type hitter, not the flat 3.5 default
+    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE": 0.27, "PAVE_PLUS": 1.0}])
+    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.297}])
+    schedule_df = pd.DataFrame([{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999}])
+
+    result = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df).set_index("key_mlbam")
+
+    # Same matchup_ab_rate as test_compute_matchup_hit_probability_exact_arithmetic
+    # (.311487965...) but raised to 5.0 trials instead of the flat 3.5.
+    league_pave = 0.27
+    opponent_rate = 0.6 * 0.27 + 0.4 * 0.297
+    numerator = 0.30 * opponent_rate / league_pave
+    denominator = numerator + (1 - 0.30) * (1 - opponent_rate) / (1 - league_pave)
+    matchup_ab_rate = numerator / denominator
+    expected = 1 - (1 - matchup_ab_rate) ** 5.0
+    assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(expected)
+    # Sanity: genuinely different from the flat-trials default, so this
+    # test would fail if Expected_PA were silently ignored.
+    assert result.loc[1, "Matchup_Hit_Probability"] != pytest.approx(
+        1 - (1 - matchup_ab_rate) ** config.WAVE_TRIALS_PER_GAME
+    )
+
+
+def test_matchup_hit_probability_expected_pa_missing_column_is_noop():
+    from mlb_metrics import config
+
+    wave = _wave([(1, "NYY", 0.30)])  # no Expected_PA column at all
+    pave = pd.DataFrame([{"key_mlbam": 999, "PAVE": 0.27, "PAVE_PLUS": 1.0}])
+    confidence = pd.DataFrame([{"team": "BOS", "Bullpen_PAVE": 0.297}])
+    schedule_df = pd.DataFrame([{"team": "NYY", "opponent": "BOS", "probable_pitcher_key_mlbam": 999}])
+
+    result = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df).set_index("key_mlbam")
+
+    # Same fixture as test_compute_matchup_hit_probability_exact_arithmetic
+    # (matchup_ab_rate = .311487965...), falling back to the flat
+    # config.WAVE_TRIALS_PER_GAME since Expected_PA isn't a column at all.
+    league_pave = 0.27
+    opponent_rate = 0.6 * 0.27 + 0.4 * 0.297
+    numerator = 0.30 * opponent_rate / league_pave
+    denominator = numerator + (1 - 0.30) * (1 - opponent_rate) / (1 - league_pave)
+    matchup_ab_rate = numerator / denominator
+    expected = 1 - (1 - matchup_ab_rate) ** config.WAVE_TRIALS_PER_GAME
+    assert result.loc[1, "Matchup_Hit_Probability"] == pytest.approx(expected)
+
+
 def test_batter_with_no_game_today_is_excluded():
     wave = _wave([(1, "NYY", 0.30), (2, "SEA", 0.28)])
     pave = pd.DataFrame(columns=["key_mlbam", "PAVE", "PAVE_PLUS"])

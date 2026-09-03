@@ -78,7 +78,6 @@ def select_picks(
     rank_metric: str | None = None,
     min_probability: float = config.HITTER_MIN_PROBABILITY,
     model_shortlist_size: int = config.HITTER_MODEL_SHORTLIST_SIZE,
-    max_avg_batting_order: float = config.LINEUP_TOP_HALF_MAX_SLOT,
     min_start_rate: float = config.LINEUP_MIN_START_RATE,
     max_days_since_last_game: int = config.HITTER_MAX_DAYS_SINCE_LAST_GAME,
     teams_playing_today: set[str] | None = None,
@@ -93,12 +92,22 @@ def select_picks(
     which column was used to rank - `rank_metric` only changes *which*
     qualified hitters get chosen, not what probability gets reported/scored.
 
-    `max_avg_batting_order`/`min_start_rate` only take effect if `hitters`
-    has avg_batting_order/start_rate columns (see hitters.assemble_hitters's
-    optional `lineup_consistency` param) - absent columns mean a no-op, so
-    old wave.csv snapshots in git history (which predate this feature) are
-    unaffected. A null avg_batting_order (never started for their current
-    team) fails the comparison and is correctly excluded, not treated as 0.
+    `min_start_rate` only takes effect if `hitters` has a start_rate column
+    (see hitters.assemble_hitters's optional `lineup_consistency` param) -
+    an absent column means a no-op, so old wave.csv snapshots in git
+    history (which predate this feature) are unaffected.
+
+    There is deliberately no `avg_batting_order` gate here anymore (REMOVED -
+    see config.LINEUP_TOP_HALF_MAX_SLOT's docstring for the real,
+    no-lookahead backtest that found the old top-half-of-the-order cutoff
+    was excluding batters who went on to hit BETTER than the ones it let
+    through). Batting order still matters, just not as a pass/fail gate:
+    hitters.assemble_hitters/matchup.compute_matchup_hit_probability turn
+    each batter's own recent batting-order slot into an Expected_PA that
+    feeds directly into `probability`/`Matchup_Hit_Probability` (more
+    expected at-bats -> higher per-game hit probability at the same
+    per-AB rate) - so it already shapes `metric`/`rank_metric` upstream of
+    this function, without a separate cutoff here.
 
     `min_probability` requires EVERY column in JOINT_PROBABILITY_GATE_COLUMNS
     that's actually present on `hitters` to clear this bar (see
@@ -179,8 +188,6 @@ def select_picks(
     unmodified single-column ranking, bit-for-bit.
     """
     qualified = hitters[(hitters["PA_L"] + hitters["PA_R"]) >= min_plate_appearances].copy()
-    if "avg_batting_order" in qualified.columns:
-        qualified = qualified[qualified["avg_batting_order"] <= max_avg_batting_order]
     if "start_rate" in qualified.columns:
         qualified = qualified[qualified["start_rate"] >= min_start_rate]
     if "Last_Game_Date" in qualified.columns:
