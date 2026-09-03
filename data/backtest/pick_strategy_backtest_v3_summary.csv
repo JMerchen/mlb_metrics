@@ -1,0 +1,7 @@
+strategy,window,n,successes,hit_rate,wilson_ci_low,wilson_ci_high,day_success_rate,longest_streak
+c1: WAVE vs PAVE (user's manual method),full_season,274,184,0.6715328467153284,0.6138861512238984,0.7244362877633774,0.4583333333333333,11
+c1: WAVE vs PAVE (user's manual method),first_half,138,95,0.6884057971014492,0.6069136068529343,0.75969288769627,0.4861111111111111,11
+c1: WAVE vs PAVE (user's manual method),second_half,136,89,0.6544117647058824,0.571236240216938,0.7291038760418087,0.4305555555555556,8
+"c3: NEW production heuristic (Expected_PA, no hard lineup gate)",full_season,276,183,0.6630434782608695,0.6053805047500195,0.7162301685907976,0.4375,11
+"c3: NEW production heuristic (Expected_PA, no hard lineup gate)",first_half,139,95,0.6834532374100719,0.6020830898476759,0.7549561088629675,0.4722222222222222,11
+"c3: NEW production heuristic (Expected_PA, no hard lineup gate)",second_half,137,88,0.6423357664233577,0.5591991646090194,0.7177079359461592,0.4027777777777778,8
