@@ -200,6 +200,27 @@ fixes, both applied in `predictions.select_picks`:
   probability itself (a hitter projected for 4.2 PA gets real extra
   credit over one projected for 3.4, even at an identical per-AB rate),
   not an on/off cutoff.
+
+  **Shrunk, not used at full strength** (`config.EXPECTED_PA_SHRINKAGE =
+  0.3`): the first shipped version used the raw per-batter Expected_PA
+  directly, and a real, no-lookahead validation
+  (`scripts/validate_expected_pa_calibration.py`, ~35,000 real
+  hitter-days scored against real outcomes - not just the 2 picks/day
+  logged, ~100x the sample size) found that measurably WORSENED
+  `probability`'s calibration (Brier 0.244372 vs. 0.243381 for the flat
+  constant, paired t-test p=0.0013) - a real Jensen's-inequality effect:
+  `1-(1-p)**n` is concave in `n`, so plugging a single point estimate of
+  a batter's real (day-to-day variable - early exits, pinch-hits, extra
+  innings) plate appearances into it systematically OVERpredicts, worst
+  in the highest-probability bin (predicted 0.743 vs. actual 0.659).
+  Shrinking the estimate 70% of the way back toward the flat constant -
+  the same idea as `helpers.shrink_rate`'s existing Bayesian shrinkage of
+  WAVE itself - fixed it: a grid search on the same data found shrink
+  ~0.35 minimized Brier score, and a first-half/second-half
+  out-of-sample check (fit on one half, scored on the other) confirmed a
+  real improvement over the flat constant in BOTH directions, not just
+  an in-sample fit. `0.3` is a round value inside that validated
+  (0.25-0.40) range, not the single in-sample-best point.
 - **Probable-pitcher matchup blending** (`schedule.py`, `matchup.py`) - a new
   dependency (`MLB-StatsAPI`, since `pybaseball` has no schedule/lineup
   support at all) fetches today's probable starters and, via a log5

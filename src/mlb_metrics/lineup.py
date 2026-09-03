@@ -88,11 +88,24 @@ def compute_expected_plate_appearances(
     batting_order: pd.DataFrame,
     latest_team: pd.DataFrame,
     window: int | None = None,
+    shrinkage: float | None = None,
 ) -> pd.DataFrame:
     """[key_mlbam, Recent_Avg_Batting_Order, Expected_PA] - a real,
     empirically-derived estimate of how many at-bats a batter is likely to
     get TODAY, driven by where they've actually been hitting in the order
-    recently.
+    recently - SHRUNK toward the league-flat config.WAVE_TRIALS_PER_GAME
+    by `shrinkage` (default config.EXPECTED_PA_SHRINKAGE - see its own
+    docstring for the real calibration regression that using the raw,
+    unshrunk estimate at full strength was found to cause, and why: a
+    real batter's actual PA in a given game is variable - early exits,
+    pinch-hits, extra innings - and plugging a single point ESTIMATE of
+    it into 1-(1-p)**n (concave in n) systematically overpredicts the
+    true expected hit probability, worse the further the estimate sits
+    from the flat default). `Expected_PA` returned here is already the
+    shrunk value - hitters.assemble_hitters/
+    matchup.compute_matchup_hit_probability use it as-is, the same
+    "the exposed value IS the regularized one" convention compute_wave
+    already uses for WAVE itself (helpers.shrink_rate).
 
     Replaces the old LINEUP_TOP_HALF_MAX_SLOT hard cutoff (REMOVED - see
     its own docstring in config.py for the real full-season backtest that
@@ -134,9 +147,15 @@ def compute_expected_plate_appearances(
     real starters that history - the same "no information, use the
     average" default every other missing-signal fallback in this project
     uses, and never worse-informed than the flat WAVE_TRIALS_PER_GAME
-    constant it replaces.
+    constant it replaces. Shrinkage (below) applies uniformly to this
+    fallback too, not just the per-batter interpolated estimate - simpler
+    than a special case, and league_avg_pa is itself already just a
+    different point estimate of the same underlying quantity
+    WAVE_TRIALS_PER_GAME approximates, so it warrants the same real-vs-
+    variable-outcome caution.
     """
     window = window if window is not None else config.LINEUP_RECENT_WINDOW_GAMES
+    shrinkage = shrinkage if shrinkage is not None else config.EXPECTED_PA_SHRINKAGE
 
     pa_per_game = (
         data_with_game_id.groupby(["game_id", "batter"])["at_bat_number"]
@@ -164,6 +183,11 @@ def compute_expected_plate_appearances(
         expected_pa[known_slot] = np.interp(
             recent.loc[known_slot, "Recent_Avg_Batting_Order"], slots, values, left=values[0], right=values[-1]
         )
-    recent["Expected_PA"] = expected_pa
+
+    # Shrink the raw estimate toward the flat league constant (see
+    # config.EXPECTED_PA_SHRINKAGE's docstring for the real calibration
+    # evidence) - shrinkage=1.0 keeps the raw estimate unchanged,
+    # shrinkage=0.0 collapses back to the flat constant for everyone.
+    recent["Expected_PA"] = config.WAVE_TRIALS_PER_GAME + (expected_pa - config.WAVE_TRIALS_PER_GAME) * shrinkage
 
     return recent[["key_mlbam", "Recent_Avg_Batting_Order", "Expected_PA"]]

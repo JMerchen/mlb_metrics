@@ -109,7 +109,9 @@ def test_compute_lineup_consistency_accepts_a_custom_window(monkeypatch):
 def test_compute_expected_plate_appearances_uses_real_per_slot_pa_average():
     # Two leadoff (slot 1) starts averaging 5 real PA, two #9 (slot 9)
     # starts averaging 3 real PA - a real, empirically-derived table, not
-    # an assumed one.
+    # an assumed one. shrinkage=1.0 isolates the raw interpolation logic
+    # (no blending toward the flat constant) - see the dedicated shrinkage
+    # test below for that behavior.
     batting_order = pd.DataFrame(
         _order_rows("X", 10, [1, 2], 1) + _order_rows("X", 20, [1, 2], 9)
     )
@@ -117,7 +119,7 @@ def test_compute_expected_plate_appearances_uses_real_per_slot_pa_average():
     latest_team = pd.DataFrame([{"key_mlbam": 10, "team": "X"}, {"key_mlbam": 20, "team": "X"}])
 
     result = lineup.compute_expected_plate_appearances(
-        data_with_game_id, batting_order, latest_team, window=5
+        data_with_game_id, batting_order, latest_team, window=5, shrinkage=1.0
     ).set_index("key_mlbam")
 
     assert result.loc[10, "Recent_Avg_Batting_Order"] == 1
@@ -131,6 +133,7 @@ def test_compute_expected_plate_appearances_interpolates_fractional_slots():
     # (4 real PA/game) - a recent average slot of 2.0 should land exactly
     # halfway between those two real per-slot averages (4.5), not round
     # to the nearest whole slot and discard the fractional precision.
+    # shrinkage=1.0 isolates the raw interpolation logic.
     batting_order = pd.DataFrame(
         _order_rows("X", 10, [1], 1) + _order_rows("X", 10, [2], 3) + _order_rows("X", 20, [1, 2], 9)
     )
@@ -140,7 +143,7 @@ def test_compute_expected_plate_appearances_interpolates_fractional_slots():
     latest_team = pd.DataFrame([{"key_mlbam": 10, "team": "X"}])
 
     result = lineup.compute_expected_plate_appearances(
-        data_with_game_id, batting_order, latest_team, window=5
+        data_with_game_id, batting_order, latest_team, window=5, shrinkage=1.0
     ).set_index("key_mlbam")
 
     assert result.loc[10, "Recent_Avg_Batting_Order"] == 2.0
@@ -151,6 +154,7 @@ def test_compute_expected_plate_appearances_falls_back_to_league_average():
     # Batter 999 never started for their current team in the window - no
     # slot to interpolate from - must fall back to the real league-wide
     # average PA/game across all real starters, not a fabricated value.
+    # shrinkage=1.0 isolates the raw fallback logic.
     batting_order = pd.DataFrame(
         _order_rows("X", 10, [1, 2], 1) + _order_rows("X", 20, [1, 2], 9)
     )
@@ -158,11 +162,45 @@ def test_compute_expected_plate_appearances_falls_back_to_league_average():
     latest_team = pd.DataFrame([{"key_mlbam": 999, "team": "X"}])
 
     result = lineup.compute_expected_plate_appearances(
-        data_with_game_id, batting_order, latest_team, window=5
+        data_with_game_id, batting_order, latest_team, window=5, shrinkage=1.0
     ).set_index("key_mlbam")
 
     assert pd.isna(result.loc[999, "Recent_Avg_Batting_Order"])
     assert result.loc[999, "Expected_PA"] == pytest.approx(4.0)  # mean of 5,5,3,3
+
+
+def test_compute_expected_plate_appearances_shrinks_toward_flat_constant():
+    # Same fixture as the per-slot-average test above (raw Expected_PA
+    # would be 5.0 for the leadoff batter, 3.0 for the #9 batter), but at
+    # a real shrinkage of 0.4: shrunk = 3.5 + (raw - 3.5) * 0.4.
+    batting_order = pd.DataFrame(
+        _order_rows("X", 10, [1, 2], 1) + _order_rows("X", 20, [1, 2], 9)
+    )
+    data_with_game_id = pd.DataFrame(_pa_rows(10, [1, 2], 5) + _pa_rows(20, [1, 2], 3))
+    latest_team = pd.DataFrame([{"key_mlbam": 10, "team": "X"}, {"key_mlbam": 20, "team": "X"}])
+
+    result = lineup.compute_expected_plate_appearances(
+        data_with_game_id, batting_order, latest_team, window=5, shrinkage=0.4
+    ).set_index("key_mlbam")
+
+    assert result.loc[10, "Expected_PA"] == pytest.approx(3.5 + (5.0 - 3.5) * 0.4)
+    assert result.loc[20, "Expected_PA"] == pytest.approx(3.5 + (3.0 - 3.5) * 0.4)
+
+
+def test_compute_expected_plate_appearances_uses_config_shrinkage_by_default(monkeypatch):
+    monkeypatch.setattr(config, "EXPECTED_PA_SHRINKAGE", 0.0)
+
+    batting_order = pd.DataFrame(_order_rows("X", 10, [1, 2], 1))
+    data_with_game_id = pd.DataFrame(_pa_rows(10, [1, 2], 5))
+    latest_team = pd.DataFrame([{"key_mlbam": 10, "team": "X"}])
+
+    result = lineup.compute_expected_plate_appearances(
+        data_with_game_id, batting_order, latest_team, window=5
+    ).set_index("key_mlbam")
+
+    # shrinkage=0.0 collapses everyone back to the flat constant,
+    # regardless of their own real Expected_PA.
+    assert result.loc[10, "Expected_PA"] == pytest.approx(config.WAVE_TRIALS_PER_GAME)
 
 
 def test_compute_expected_plate_appearances_uses_its_own_shorter_default_window(monkeypatch):

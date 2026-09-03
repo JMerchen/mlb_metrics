@@ -373,6 +373,34 @@ LINEUP_WINDOW_GAMES = 20
 # already use for other recency-sensitive signals in this file.
 LINEUP_RECENT_WINDOW_GAMES = 7
 
+# Shrinkage applied to Expected_PA toward the league-flat WAVE_TRIALS_PER_GAME
+# (0.0 = ignore Expected_PA entirely and always use the flat constant; 1.0 =
+# trust the raw per-batter Expected_PA estimate completely). NOT 1.0, despite
+# Expected_PA being a real, empirically-derived, no-lookahead signal - real
+# no-lookahead validation (2026-09, scripts/validate_expected_pa_calibration.py,
+# ~35,000 real hitter-days scored against real outcomes) found using it at
+# full strength (1.0, this feature's first shipped version) made
+# `probability`'s calibration measurably WORSE than the flat constant it
+# replaced (Brier 0.244372 vs 0.243381, paired t-test p=0.0013) - a real
+# Jensen's-inequality effect: 1-(1-p)**n is concave in n, so plugging in a
+# single POINT ESTIMATE of a batter's real (day-to-day variable - early
+# exits, pinch-hits, extra innings, rainout-shortened games) plate
+# appearances systematically overpredicts the true expected hit
+# probability, worst at the high end (the calibration table showed the
+# unshrunk version overpredicting by ~0.08 in its top probability bin, vs
+# ~0.03 for the flat constant). A grid search over this same real data
+# found shrink~0.35 minimized Brier score; a first-half/second-half
+# out-of-sample check (fit on one half, scored on the other) confirmed the
+# improvement over the flat constant holds in BOTH directions (not just an
+# in-sample fit), with the two halves' own best-fit values landing at 0.25
+# and 0.40 - 0.3 is a round, defensible value within that validated range,
+# not the single best in-sample point (picking the single best point would
+# itself be a small confirmation-bias risk on the same data used to find
+# it). Same underlying idea as helpers.shrink_rate's Bayesian shrinkage of
+# WAVE itself toward the league average - trust a real signal partially,
+# not as if it were a certain fact.
+EXPECTED_PA_SHRINKAGE = 0.3
+
 # Fraction of the team's games in the window (or fewer, early in the season)
 # a batter must have actually started in to count as a regular, not a bench
 # player on a hot week or a recent call-up riding an unsustainable streak.
