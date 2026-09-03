@@ -1,0 +1,86 @@
+<title>MLB Metrics</title>
+<style>
+/*__STYLE_CSS__*/
+
+/* Methodology tab's own scoped styles (originally its own <style> block
+in docs/methodology.html - kept scoped the same way here). */
+/*__METHODOLOGY_STYLE__*/
+
+/* NFL tab's real football-green accent (originally a global :root
+override in docs/nfl.html, safe there since it was its own page - scoped
+to just this tab now that every tab shares one document). */
+#page-nfl{
+--accent:#4caf6b;
+--accent-strong:#7ed9a0;
+--on-accent:#0c1f13;
+}
+
+.sitePage[hidden]{display:none;}
+</style>
+
+<div class="container">
+
+<div class="siteHeader">
+
+<div class="brandRow">
+<svg class="brandMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+<circle cx="16" cy="16" r="14" fill="#f2a93c"/>
+<path d="M10 4 C14 10, 14 22, 10 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
+<path d="M22 4 C18 10, 18 22, 22 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
+</svg>
+<h1>MLB <span class="brandAccent">Metrics</span></h1>
+</div>
+
+<div class="tabGroup pageTabs" id="sitePageTabs">
+<button class="tabButton active" data-site-page="predictive" onclick="selectSitePage('predictive')">Predictive Metrics</button>
+<button class="tabButton" data-site-page="age-curves" onclick="selectSitePage('age-curves')">Age Curves</button>
+<button class="tabButton" data-site-page="dfs" onclick="selectSitePage('dfs')">DFS Rankings</button>
+<button class="tabButton" data-site-page="nfl" onclick="selectSitePage('nfl')">NFL</button>
+<button class="tabButton" data-site-page="methodology" onclick="selectSitePage('methodology')">Methodology</button>
+<button class="tabButton" data-site-page="assistant" onclick="selectSitePage('assistant')">Assistant</button>
+</div>
+
+</div>
+
+<section id="page-predictive" class="sitePage">
+<!--__INDEX_CONTENT__-->
+</section>
+
+<section id="page-age-curves" class="sitePage" hidden>
+<!--__AGE_CURVES_CONTENT__-->
+</section>
+
+<section id="page-dfs" class="sitePage" hidden>
+<!--__DFS_CONTENT__-->
+</section>
+
+<section id="page-nfl" class="sitePage" hidden>
+<!--__NFL_CONTENT__-->
+</section>
+
+<section id="page-methodology" class="sitePage" hidden>
+<!--__METHODOLOGY_CONTENT__-->
+</section>
+
+<section id="page-assistant" class="sitePage" hidden>
+<!--__ASSISTANT_CONTENT__-->
+</section>
+
+</div>
+
+<script>
+window.SITE_DATA = /*__SITE_DATA_JSON__*/{}/*__END_SITE_DATA_JSON__*/;
+</script>
+
+<!--__PAGE_SCRIPTS__-->
+
+<script>
+function selectSitePage(page){
+document.querySelectorAll('#sitePageTabs .tabButton').forEach(function(btn){
+btn.classList.toggle('active', btn.dataset.sitePage === page)
+})
+document.querySelectorAll('.sitePage').forEach(function(section){
+section.hidden = section.id !== ('page-' + page)
+})
+}
+</script>
