@@ -56,6 +56,44 @@ def _write_docs_data(tmp_path):
          "WAVE": 0.30, "Game_Hit_Probability": 0.70, "Approach": 0.5, "avg_batting_order": 1.0, "start_rate": 1.0},
     ]).to_csv(docs_data / "wave.csv", index=False)
 
+    game_pick_columns = [
+        "date", "home_team", "away_team", "predicted_winner", "predicted_probability",
+        "above_threshold", "status", "bet_side", "bet_team", "bet_units", "bet_profit_units",
+        "market_predicted_winner_probability",
+    ]
+    summary_row = {
+        "model_version": "all_time", "metric": "GamePick_Win_Probability", "n_bets_advised": 1,
+        "bets_won": 1, "bets_lost": 0, "win_rate_on_advised_bets": 1.0,
+        "win_rate_on_advised_bets_ci_low": 0.2, "win_rate_on_advised_bets_ci_high": 1.0,
+        "total_staked_units": 1.0, "total_profit_units": 0.9, "roi": 0.9, "roi_p_value": 0.5,
+        "current_bet_streak": 1, "best_bet_streak": 1, "n_market_resolved": 1, "market_accuracy": 1.0,
+        "market_accuracy_ci_low": 0.2, "market_accuracy_ci_high": 1.0, "market_brier_score": 0.1,
+        "market_log_loss": 0.2, "n_beat_closing_line_compared": 1, "beat_closing_line_rate": 1.0,
+        "beat_closing_line_rate_ci_low": 0.2, "beat_closing_line_rate_ci_high": 1.0,
+        "beat_closing_line_rate_p_value": 0.5,
+    }
+    empty_summary_row = {**summary_row, "model_version": "all_time", "n_bets_advised": 0, "bets_won": 0,
+                          "bets_lost": 0, "win_rate_on_advised_bets": float("nan"), "roi": float("nan")}
+
+    pd.DataFrame([
+        {"date": "2026-06-20", "home_team": "NYY", "away_team": "BOS", "predicted_winner": "NYY",
+         "predicted_probability": 0.55, "above_threshold": True, "status": "pending", "bet_side": "home",
+         "bet_team": "NYY", "bet_units": 1.0, "bet_profit_units": None, "market_predicted_winner_probability": 0.5},
+    ])[game_pick_columns].to_csv(docs_data / "game_picks_picks.csv", index=False)
+    pd.DataFrame([summary_row]).to_csv(docs_data / "game_picks_summary.csv", index=False)
+    pd.DataFrame([summary_row]).to_csv(docs_data / "game_picks_summary_by_version.csv", index=False)
+
+    # NFL: no resolved bets yet (real current-state shape - see module
+    # docstring) - exercises the NaN-summary and empty-history paths.
+    pd.DataFrame([
+        {"date": "2026-09-14", "season": 2026, "week": 1, "home_team": "KC", "away_team": "DEN",
+         "predicted_winner": "KC", "predicted_probability": 0.51, "above_threshold": False, "status": "pending",
+         "bet_side": None, "bet_team": None, "bet_units": 0.0, "bet_profit_units": None,
+         "market_predicted_winner_probability": 0.57},
+    ])[game_pick_columns + ["season", "week"]].to_csv(docs_data / "nfl_game_picks_picks.csv", index=False)
+    pd.DataFrame([empty_summary_row]).to_csv(docs_data / "nfl_game_picks_summary.csv", index=False)
+    pd.DataFrame([empty_summary_row]).to_csv(docs_data / "nfl_game_picks_summary_by_version.csv", index=False)
+
     return docs_data
 
 
@@ -86,6 +124,29 @@ def test_build_payload_picks_the_latest_date_only(tmp_path):
 
     assert payload["asOf"] == "2026-06-20"
     assert [p["name"] for p in payload["todaysPicks"]] == ["Test Player"]
+
+
+def test_build_payload_includes_game_picks_for_both_sports(tmp_path):
+    module = _load_module()
+    docs_data = _write_docs_data(tmp_path)
+
+    payload = module.build_payload(str(docs_data))
+
+    mlb = payload["mlbGamePicks"]
+    assert mlb["asOf"] == "2026-06-20"
+    assert mlb["upcomingPicks"][0]["home_team"] == "NYY"
+    assert mlb["upcomingPicks"][0]["date"] == "2026-06-20"  # a real string, not a Timestamp
+    assert mlb["summary"][0]["n_bets_advised"] == 1
+
+    # NFL: no resolved history yet - the empty-summary NaN cells must
+    # come through as null, not a bare NaN token, and the upcoming slate
+    # still surfaces even with zero bets advised so far.
+    nfl = payload["nflGamePicks"]
+    assert nfl["asOf"] == "2026-09-14"
+    assert nfl["upcomingPicks"][0]["home_team"] == "KC"
+    assert nfl["summary"][0]["n_bets_advised"] == 0
+    assert nfl["summary"][0]["win_rate_on_advised_bets"] is None
+    assert nfl["fullHistory"] == []  # only one date logged - nothing older to show as history
 
 
 def test_build_html_embeds_valid_json_between_markers(tmp_path):

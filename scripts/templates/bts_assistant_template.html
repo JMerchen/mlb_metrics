@@ -86,6 +86,18 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0;}
 .grade.recommended{color:var(--success);border-color:var(--success);}
 .grade.speculative{color:var(--text-dim);}
 
+.panel-head.with-stats{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
+.panel-head .stat-line{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400;}
+.panel-head .stat-line b{color:var(--text);font-weight:600;}
+.game{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--border);}
+.game:last-child{border-bottom:none;}
+.game .matchup{flex:1;min-width:0;font-size:13px;}
+.game .matchup .away{color:var(--text-dim);}
+.game .matchup .winner{font-weight:700;}
+.game .prob{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);font-variant-numeric:tabular-nums;}
+.bet-badge{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:3px 7px;border-radius:20px;border:1px solid var(--accent);color:var(--accent);white-space:nowrap;}
+.empty-note{padding:14px 16px;color:var(--text-dim);font-size:13px;line-height:1.5;}
+
 .chat-panel{display:flex;flex-direction:column;height:460px;}
 #messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;}
 .msg{display:flex;flex-direction:column;gap:4px;max-width:85%;}
@@ -121,13 +133,23 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0;}
     <h1>Beat the Streak Assistant</h1>
     <span class="asof" id="asof-badge"></span>
   </header>
-  <p class="subtitle">Ask about today's picks, WAVE/PAVE stats, or how the model works — grounded in the site's real, currently-live data. Read-only: it can discuss the picks, never change them.</p>
+  <p class="subtitle">Ask about today's picks — Beat the Streak, MLB Game Picks, and NFL Game Picks — WAVE/PAVE stats, or how the models work, grounded in the site's real, currently-live data. Read-only: it can discuss the picks, never change them.</p>
 
   <div class="stat-row" id="stat-row"></div>
 
   <div class="panel">
-    <div class="panel-head">Today's Picks</div>
+    <div class="panel-head">Today's Beat the Streak Picks</div>
     <div class="picks" id="picks-list"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head with-stats"><span>MLB Game Picks</span><span class="stat-line" id="mlb-gp-stat-line"></span></div>
+    <div class="picks" id="mlb-gp-list"></div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head with-stats"><span>NFL Game Picks</span><span class="stat-line" id="nfl-gp-stat-line"></span></div>
+    <div class="picks" id="nfl-gp-list"></div>
   </div>
 
   <div class="panel chat-panel">
@@ -174,9 +196,42 @@ function renderPicks(){
   `).join('') || '<div class="pick"><span class="name">No picks logged yet today.</span></div>';
 }
 
+function renderGamePicks(sport, data){
+  const listEl = document.getElementById(`${sport}-gp-list`);
+  const statEl = document.getElementById(`${sport}-gp-stat-line`);
+  const s = data.summary[0];
+
+  if (!data.asOf) {
+    listEl.innerHTML = '<div class="empty-note">No games scheduled yet.</div>';
+    statEl.textContent = '';
+    return;
+  }
+  if (s.n_bets_advised === 0) {
+    statEl.textContent = 'no bets resolved yet';
+  } else {
+    statEl.innerHTML = `<b>${fmtPct(s.win_rate_on_advised_bets)}</b> win rate · <b>${(s.roi*100).toFixed(1)}%</b> ROI · ${s.n_bets_advised} bets`;
+  }
+
+  listEl.innerHTML = data.upcomingPicks.map(g => {
+    const homeWins = g.predicted_winner === g.home_team;
+    const bet = g.above_threshold
+      ? `<span class="bet-badge">${esc(g.bet_side || 'bet')} ${g.bet_units ? g.bet_units.toFixed(1)+'u' : ''}</span>` : '';
+    return `<div class="game">
+      <div class="matchup">
+        <span class="${!homeWins ? 'winner' : ''} away">${esc(g.away_team)}</span> @
+        <span class="${homeWins ? 'winner' : ''}">${esc(g.home_team)}</span>
+      </div>
+      <span class="prob">${fmtPct(g.predicted_probability)}</span>
+      ${bet}
+    </div>`;
+  }).join('') || '<div class="empty-note">No games scheduled yet.</div>';
+}
+
 document.getElementById('asof-badge').textContent = 'as of ' + DATA.asOf;
 renderStats();
 renderPicks();
+renderGamePicks('mlb', DATA.mlbGamePicks);
+renderGamePicks('nfl', DATA.nflGamePicks);
 
 // --- Chat ---
 const METHODOLOGY = `This is the Beat the Streak picker for a real MLB stats project. Key terms:
@@ -191,17 +246,29 @@ const METHODOLOGY = `This is the Beat the Streak picker for a real MLB stats pro
 
 Recent real finding (Sept 2026, a full-season no-lookahead backtest across 153 real dates): the automated picker's old rule excluding any batter who didn't bat in the top half of the lineup was actively hurting accuracy - batters it excluded hit 73% afterward vs 66% for the ones it kept (e.g. Javier Sanoja: hits well, bats 6th-7th for Miami, was wrongly excluded despite starting 85%+ of games). That hard rule was removed. In its place, a batter's recent lineup slot is now converted into a real, data-derived Expected_PA (leadoff hitters really do get more at-bats than #9 hitters), blended INTO the hit-probability math instead of used as a cutoff - "more expected at-bats = more chances at a hit, even at a slightly lower average." The first version used that estimate at full strength, but a 35,000-hitter-day validation found it overcorrected (real at-bats vary game to game, so a fixed number was too confident) - the shipped version blends only 30% of the raw estimate with the old flat assumption, which tested as a real, statistically significant calibration improvement (Brier score 0.2429 vs 0.2434, p<0.0001).
 
-You have two tools to look up real current data beyond what's already given to you: searchPlayer and listPlayers. Use them for any specific player or filtered/sorted question rather than guessing. Never invent stats. If asked to change a pick, edit code, or do anything beyond answering questions, explain clearly that this chat is read-only and cannot modify anything - point them to the project if they want changes made.`;
+## MLB and NFL Automated Game Picks (separate from Beat the Streak - these predict GAME winners, not hitter streaks)
+
+Both sports use the same structure: a team-strength engine (win% and Pythagorean win% blended across rolling windows, strength of schedule, home starting pitcher or QB continuity folded in) produces a composite win probability for each matchup; picks above a real edge threshold vs. the market moneyline get logged with a Kelly-criterion bet size (fractional, capped per-bet and per-day). Every pick is graded against the real final score and the real market closing line - "beat_closing_line_rate" is how often the model's price was more accurate than the market's own closing price, a meaningful edge test independent of whether any single bet actually won. NFL's version is newer and has far less resolved history than MLB's - treat NFL stats as preliminary and say so if asked, rather than treating a small sample as settled.
+
+You have several tools to look up real current data beyond what's already given to you: searchPlayer and listPlayers (Beat the Streak hitters), listRecentGamePicks (MLB or NFL game-by-game history). Use them for any specific player, team, or filtered/sorted question rather than guessing. Never invent stats. If asked to change a pick, edit code, or do anything beyond answering questions, explain clearly that this chat is read-only and cannot modify anything - point them to the project if they want changes made.`;
 
 function buildContext(){
   return `${METHODOLOGY}
 
 Today's date: ${DATA.asOf}
-Today's logged picks (rank, name, combined hit probability, grade): ${JSON.stringify(DATA.todaysPicks)}
-Streak stats (all_time and by model version): ${JSON.stringify(DATA.streakByVersion)}
+Today's logged Beat the Streak picks (rank, name, combined hit probability, grade): ${JSON.stringify(DATA.todaysPicks)}
+Beat the Streak stats (all_time and by model version): ${JSON.stringify(DATA.streakByVersion)}
 Top 20 qualified hitters by Approach right now: ${JSON.stringify(DATA.topLeaders)}
 
-Answer the visitor's questions using this data and your tools. Be concise, specific, and honest about uncertainty (cite the Wilson CI / sample size when relevant). Format player stats compactly. This is your standing context for the whole conversation - the next message is the visitor's first question.`;
+MLB Game Picks - upcoming/most recent slate (${DATA.mlbGamePicks.asOf ?? 'none scheduled'}): ${JSON.stringify(DATA.mlbGamePicks.upcomingPicks)}
+MLB Game Picks stats (all_time and by model version): ${JSON.stringify(DATA.mlbGamePicks.summaryByVersion)}
+MLB Game Picks - last 8 resolved games: ${JSON.stringify(DATA.mlbGamePicks.recentHistory)}
+
+NFL Game Picks - upcoming/most recent slate (${DATA.nflGamePicks.asOf ?? 'none scheduled'}): ${JSON.stringify(DATA.nflGamePicks.upcomingPicks)}
+NFL Game Picks stats (all_time and by model version): ${JSON.stringify(DATA.nflGamePicks.summaryByVersion)}
+NFL Game Picks - last 8 resolved games: ${JSON.stringify(DATA.nflGamePicks.recentHistory)}
+
+Answer the visitor's questions using this data and your tools. Be concise, specific, and honest about uncertainty (cite the Wilson CI / sample size when relevant). Format stats compactly. This is your standing context for the whole conversation - the next message is the visitor's first question.`;
 }
 
 function searchPlayer(query){
@@ -214,6 +281,12 @@ function listPlayers({ team, sortBy, order, limit } = {}){
   const key = ['Approach','WAVE','Game_Hit_Probability','PA','avg_batting_order','start_rate'].includes(sortBy) ? sortBy : 'Approach';
   const dir = order === 'asc' ? 1 : -1;
   rows = [...rows].sort((a,b) => (a[key] - b[key]) * dir);
+  return rows.slice(0, Math.min(Number(limit) || 10, 25));
+}
+function listRecentGamePicks({ sport, team, limit } = {}){
+  const source = String(sport).toLowerCase() === 'nfl' ? DATA.nflGamePicks : DATA.mlbGamePicks;
+  let rows = source.fullHistory;
+  if (team) rows = rows.filter(g => g.home_team === team || g.away_team === team);
   return rows.slice(0, Math.min(Number(limit) || 10, 25));
 }
 
@@ -238,10 +311,25 @@ const tools = [
     },
     execute: (input) => listPlayers(input),
   },
+  {
+    name: 'listRecentGamePicks',
+    description: 'List recent/historical MLB or NFL Automated Game Picks (each with home/away team, predicted winner, probability, bet info, and real win/loss status). Use for "how has the model done on the Yankees lately", "show recent NFL picks", record-tracking questions, etc. Returns up to `limit` (max 25) rows, most recent first.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sport: { type: 'string', enum: ['mlb','nfl'], description: 'Required.' },
+        team: { type: 'string', description: '3-letter (MLB) or team code (NFL), e.g. NYY or KC. Omit for all teams.' },
+        limit: { type: 'number' },
+      },
+      required: ['sport'],
+    },
+    execute: (input) => listRecentGamePicks(input),
+  },
 ];
 
 let turns = [];
 let sample = null;
+let toolsAvailable = false;
 const messagesEl = document.getElementById('messages');
 const inputEl = document.getElementById('input');
 const sendBtn = document.getElementById('send');
@@ -260,8 +348,8 @@ function addMessage(role, text){
 const SUGGESTIONS = [
   "Why did today's picks get chosen?",
   "How does Expected_PA work?",
-  "Who's hot on my favorite team?",
-  "What's the current streak?",
+  "What are today's MLB Game Picks?",
+  "How accurate are the NFL picks so far?",
 ];
 
 function renderSuggestions(){
@@ -288,7 +376,7 @@ async function ask(){
 
   try {
     const { text: answer } = await sample(turns, {
-      tools,
+      ...(toolsAvailable ? { tools } : {}),
       cache: false,
       onText: ({ text }) => {
         if (!started) { bubble.classList.remove('thinking'); started = true; }
@@ -331,6 +419,9 @@ inputEl.addEventListener('keydown', (e) => {
     noticeEl.textContent = '';
     return;
   }
+  try {
+    toolsAvailable = Boolean((await sample.limits())?.tools);
+  } catch { toolsAvailable = false; }
   renderSuggestions();
   noticeEl.textContent = 'Chat uses your own Claude account — each question uses a bit of your usage. This page is a read-only assistant; it never edits the picks or the underlying model.';
 })();
