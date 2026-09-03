@@ -1,10 +1,11 @@
 """Builds the standalone HTML for the "Beat the Streak Assistant" Claude
 Artifact - a read-only chat page (uses the Artifact `sample` capability,
 see https://code.claude.com/docs) that answers visitor questions about
-the site's real, currently-live Beat the Streak data. It cannot write to
-this repo or modify any pick/model - it only ever sees a curated JSON
-snapshot of already-public docs/data/*.csv files, embedded into the page
-at build time.
+the site's real, currently-live Beat the Streak, MLB Automated Game
+Picks, and NFL Automated Game Picks data. It cannot write to this repo
+or modify any pick/model - it only ever sees a curated JSON snapshot of
+already-public docs/data/*.csv files, embedded into the page at build
+time.
 
 Run manually, or by a scheduled job that re-runs this after the daily
 pipeline (.github/workflows/daily_update.yml, 10:23 UTC) has refreshed
@@ -39,6 +40,52 @@ def _records(df: pd.DataFrame) -> list:
     return rounded.astype(object).where(rounded.notna(), None).to_dict("records")
 
 
+GAME_PICK_COLUMNS = [
+    "date", "home_team", "away_team", "predicted_winner", "predicted_probability",
+    "above_threshold", "status", "bet_side", "bet_team", "bet_units", "bet_profit_units",
+    "market_predicted_winner_probability",
+]
+
+
+def _game_picks_section(docs_data_dir: str, prefix: str, extra_columns: list | None = None) -> dict:
+    """Curates one sport's Automated Game Picks CSVs (`{prefix}_picks.csv`/
+    `{prefix}_summary.csv`/`{prefix}_summary_by_version.csv`) into
+    {asOf, upcomingPicks, recentHistory, summary, summaryByVersion,
+    fullHistory} - the same "small slice in the prompt, full table behind
+    a tool" split beat_the_streak/wave use. `extra_columns` (e.g. NFL's
+    ["season", "week"]) are appended to GAME_PICK_COLUMNS for that sport
+    only, since MLB has no such concept."""
+    columns = GAME_PICK_COLUMNS + (extra_columns or [])
+    picks = pd.read_csv(os.path.join(docs_data_dir, f"{prefix}_picks.csv"), parse_dates=["date"])
+    summary = pd.read_csv(os.path.join(docs_data_dir, f"{prefix}_summary.csv"))
+    by_version = pd.read_csv(os.path.join(docs_data_dir, f"{prefix}_summary_by_version.csv"))
+
+    if picks.empty:
+        return {
+            "asOf": None, "upcomingPicks": [], "recentHistory": [],
+            "summary": _records(summary), "summaryByVersion": _records(by_version), "fullHistory": [],
+        }
+
+    latest_date = picks["date"].max()
+    # A real Timestamp isn't JSON-serializable (and _records's .round(4)
+    # is meaningless on a datetime column, just a spurious warning) -
+    # stringify before selecting columns, same "date" shape
+    # beat_the_streak_picks.csv's rows already use in this payload.
+    picks = picks.assign(date=picks["date"].dt.strftime("%Y-%m-%d"))
+    latest_date_str = latest_date.strftime("%Y-%m-%d")
+    upcoming = picks[picks["date"] == latest_date_str].sort_values(["home_team"])[columns]
+    history = picks[picks["date"] < latest_date_str].sort_values("date", ascending=False)[columns]
+
+    return {
+        "asOf": str(latest_date.date()),
+        "upcomingPicks": _records(upcoming),
+        "recentHistory": _records(history.head(8)),
+        "summary": _records(summary),
+        "summaryByVersion": _records(by_version),
+        "fullHistory": _records(history),
+    }
+
+
 def build_payload(docs_data_dir: str) -> dict:
     picks = pd.read_csv(os.path.join(docs_data_dir, "beat_the_streak_picks.csv"), parse_dates=["date"])
     summary = pd.read_csv(os.path.join(docs_data_dir, "beat_the_streak_summary.csv"))
@@ -70,6 +117,8 @@ def build_payload(docs_data_dir: str) -> dict:
         "streakByVersion": _records(by_version),
         "topLeaders": _records(all_q.head(20)),
         "allQualified": _records(all_q),
+        "mlbGamePicks": _game_picks_section(docs_data_dir, "game_picks"),
+        "nflGamePicks": _game_picks_section(docs_data_dir, "nfl_game_picks", extra_columns=["season", "week"]),
     }
 
 
