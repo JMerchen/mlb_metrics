@@ -1,78 +1,21 @@
-<title>Beat the Streak Assistant</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
-<style>
-:root{
-  --bg:#faf7f2;
-  --bg-raised:#ffffff;
-  --bg-card:#f3ede2;
-  --bg-hover:#ece4d5;
-  --border:#e2d9c8;
-  --border-strong:#cfc2a8;
-  --text:#1c1a16;
-  --text-dim:#6b6459;
-  --accent:#c97b1f;
-  --accent-strong:#a8630f;
-  --on-accent:#fffaf2;
-  --success:#1f8f5f;
-  --danger:#c53a30;
-  --radius:10px;
-  --radius-sm:6px;
-  --font:'IBM Plex Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-  --font-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg:#0b0d10;
-    --bg-raised:#14171c;
-    --bg-card:#1a1e25;
-    --bg-hover:#20242c;
-    --border:#262b34;
-    --border-strong:#3a4150;
-    --text:#eef1f5;
-    --text-dim:#9aa1ac;
-    --accent:#f2a93c;
-    --accent-strong:#ffc266;
-    --on-accent:#1a1206;
-    --success:#3ecf8e;
-    --danger:#f0554f;
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#0b0d10;
-  --bg-raised:#14171c;
-  --bg-card:#1a1e25;
-  --bg-hover:#20242c;
-  --border:#262b34;
-  --border-strong:#3a4150;
-  --text:#eef1f5;
-  --text-dim:#9aa1ac;
-  --accent:#f2a93c;
-  --accent-strong:#ffc266;
-  --on-accent:#1a1206;
-  --success:#3ecf8e;
-  --danger:#f0554f;
-}
-*{box-sizing:border-box;}
-body{
-  margin:0;
-  background:var(--bg);
-  background-image:radial-gradient(circle at 15% 0%, rgba(201,123,31,.07), transparent 45%);
-  color:var(--text);
-  font-family:var(--font);
-  -webkit-font-smoothing:antialiased;
-}
-.wrap{max-width:760px;margin:0 auto;padding:28px 20px 60px;}
 
-header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap;}
-h1{font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0;}
+<style>
+/* Assistant tab: no own :root/font-loading - this section now lives
+inside the full site artifact (see full_site_template.html) and inherits
+style.css's real tokens/fonts, same as every other tab, instead of
+maintaining a second competing theme. */
+.wrap{max-width:760px;margin:0 auto;padding:28px 20px 60px;font-family:var(--font);}
+
+.wrap header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap;}
+.wrap h1{font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0;}
 .asof{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);}
 .subtitle{color:var(--text-dim);font-size:14px;margin:2px 0 22px;max-width:60ch;line-height:1.5;}
 
 .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:22px;}
 .stat{background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;}
-.stat .label{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:6px;}
-.stat .value{font-family:var(--font-mono);font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;}
-.stat .sub{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);margin-top:5px;}
+.stat .btsLabel{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:6px;}
+.stat .btsValue{font-family:var(--font-mono);font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;}
+.stat .btsSub{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);margin-top:5px;}
 
 .panel{background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:18px;overflow:hidden;}
 .panel-head{padding:11px 16px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim);}
@@ -83,17 +26,17 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0;}
 .pick .name{font-weight:600;flex:1;min-width:0;}
 .pick .prob{font-family:var(--font-mono);font-size:13px;font-variant-numeric:tabular-nums;color:var(--text-dim);}
 .grade{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:3px 7px;border-radius:20px;border:1px solid var(--border-strong);}
-.grade.recommended{color:var(--success);border-color:var(--success);}
-.grade.speculative{color:var(--text-dim);}
+.grade.btsRecommended{color:var(--success);border-color:var(--success);}
+.grade.btsSpeculative{color:var(--text-dim);}
 
 .panel-head.with-stats{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
 .panel-head .stat-line{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400;}
 .panel-head .stat-line b{color:var(--text);font-weight:600;}
 .game{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--border);}
 .game:last-child{border-bottom:none;}
-.game .matchup{flex:1;min-width:0;font-size:13px;}
-.game .matchup .away{color:var(--text-dim);}
-.game .matchup .winner{font-weight:700;}
+.game .btsMatchup{flex:1;min-width:0;font-size:13px;}
+.game .btsMatchup .away{color:var(--text-dim);}
+.game .btsMatchup .winner{font-weight:700;}
 .game .prob{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);font-variant-numeric:tabular-nums;}
 .bet-badge{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:3px 7px;border-radius:20px;border:1px solid var(--accent);color:var(--accent);white-space:nowrap;}
 .empty-note{padding:14px 16px;color:var(--text-dim);font-size:13px;line-height:1.5;}
@@ -166,14 +109,14 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0;}
 </div>
 
 <script>
-const DATA = /*__DATA_JSON__*/{}/*__END_DATA_JSON__*/;
+const ASSISTANT_DATA = /*__DATA_JSON__*/{}/*__END_DATA_JSON__*/;
 
 function fmtPct(x){ return (x*100).toFixed(1) + '%'; }
 function esc(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
 function renderStats(){
-  const all = DATA.streakSummary[0];
-  const top = DATA.topLeaders[0];
+  const all = ASSISTANT_DATA.streakSummary[0];
+  const top = ASSISTANT_DATA.topLeaders[0];
   const tiles = [
     { label: 'Current Streak', value: all.current_streak, sub: 'picks in a row' },
     { label: 'Longest Streak', value: all.longest_streak, sub: 'all-time best' },
@@ -181,17 +124,17 @@ function renderStats(){
     { label: "Today's Top Approach", value: top.name.split(' ').pop(), sub: `${top.team} · ${fmtPct(top.Game_Hit_Probability)} GHP` },
   ];
   document.getElementById('stat-row').innerHTML = tiles.map(t =>
-    `<div class="stat"><div class="label">${esc(t.label)}</div><div class="value">${esc(t.value)}</div><div class="sub">${esc(t.sub)}</div></div>`
+    `<div class="stat"><div class="btsLabel">${esc(t.label)}</div><div class="btsValue">${esc(t.value)}</div><div class="btsSub">${esc(t.sub)}</div></div>`
   ).join('');
 }
 
 function renderPicks(){
-  document.getElementById('picks-list').innerHTML = DATA.todaysPicks.map(p => `
+  document.getElementById('picks-list').innerHTML = ASSISTANT_DATA.todaysPicks.map(p => `
     <div class="pick">
       <span class="rank">#${p.rank}</span>
       <span class="name">${esc(p.name)}</span>
       <span class="prob">${fmtPct(p.combined_probability)}</span>
-      <span class="grade ${p.grade}">${p.grade === 'recommended' ? 'Recommended' : 'Speculative'}</span>
+      <span class="grade ${p.grade === 'recommended' ? 'btsRecommended' : 'btsSpeculative'}">${p.grade === 'recommended' ? 'Recommended' : 'Speculative'}</span>
     </div>
   `).join('') || '<div class="pick"><span class="name">No picks logged yet today.</span></div>';
 }
@@ -217,7 +160,7 @@ function renderGamePicks(sport, data){
     const bet = g.above_threshold
       ? `<span class="bet-badge">${esc(g.bet_side || 'bet')} ${g.bet_units ? g.bet_units.toFixed(1)+'u' : ''}</span>` : '';
     return `<div class="game">
-      <div class="matchup">
+      <div class="btsMatchup">
         <span class="${!homeWins ? 'winner' : ''} away">${esc(g.away_team)}</span> @
         <span class="${homeWins ? 'winner' : ''}">${esc(g.home_team)}</span>
       </div>
@@ -227,11 +170,11 @@ function renderGamePicks(sport, data){
   }).join('') || '<div class="empty-note">No games scheduled yet.</div>';
 }
 
-document.getElementById('asof-badge').textContent = 'as of ' + DATA.asOf;
+document.getElementById('asof-badge').textContent = 'as of ' + ASSISTANT_DATA.asOf;
 renderStats();
 renderPicks();
-renderGamePicks('mlb', DATA.mlbGamePicks);
-renderGamePicks('nfl', DATA.nflGamePicks);
+renderGamePicks('mlb', ASSISTANT_DATA.mlbGamePicks);
+renderGamePicks('nfl', ASSISTANT_DATA.nflGamePicks);
 
 // --- Chat ---
 const METHODOLOGY = `This is the Beat the Streak picker for a real MLB stats project. Key terms:
@@ -255,28 +198,28 @@ You have several tools to look up real current data beyond what's already given 
 function buildContext(){
   return `${METHODOLOGY}
 
-Today's date: ${DATA.asOf}
-Today's logged Beat the Streak picks (rank, name, combined hit probability, grade): ${JSON.stringify(DATA.todaysPicks)}
-Beat the Streak stats (all_time and by model version): ${JSON.stringify(DATA.streakByVersion)}
-Top 20 qualified hitters by Approach right now: ${JSON.stringify(DATA.topLeaders)}
+Today's date: ${ASSISTANT_DATA.asOf}
+Today's logged Beat the Streak picks (rank, name, combined hit probability, grade): ${JSON.stringify(ASSISTANT_DATA.todaysPicks)}
+Beat the Streak stats (all_time and by model version): ${JSON.stringify(ASSISTANT_DATA.streakByVersion)}
+Top 20 qualified hitters by Approach right now: ${JSON.stringify(ASSISTANT_DATA.topLeaders)}
 
-MLB Game Picks - upcoming/most recent slate (${DATA.mlbGamePicks.asOf ?? 'none scheduled'}): ${JSON.stringify(DATA.mlbGamePicks.upcomingPicks)}
-MLB Game Picks stats (all_time and by model version): ${JSON.stringify(DATA.mlbGamePicks.summaryByVersion)}
-MLB Game Picks - last 8 resolved games: ${JSON.stringify(DATA.mlbGamePicks.recentHistory)}
+MLB Game Picks - upcoming/most recent slate (${ASSISTANT_DATA.mlbGamePicks.asOf ?? 'none scheduled'}): ${JSON.stringify(ASSISTANT_DATA.mlbGamePicks.upcomingPicks)}
+MLB Game Picks stats (all_time and by model version): ${JSON.stringify(ASSISTANT_DATA.mlbGamePicks.summaryByVersion)}
+MLB Game Picks - last 8 resolved games: ${JSON.stringify(ASSISTANT_DATA.mlbGamePicks.recentHistory)}
 
-NFL Game Picks - upcoming/most recent slate (${DATA.nflGamePicks.asOf ?? 'none scheduled'}): ${JSON.stringify(DATA.nflGamePicks.upcomingPicks)}
-NFL Game Picks stats (all_time and by model version): ${JSON.stringify(DATA.nflGamePicks.summaryByVersion)}
-NFL Game Picks - last 8 resolved games: ${JSON.stringify(DATA.nflGamePicks.recentHistory)}
+NFL Game Picks - upcoming/most recent slate (${ASSISTANT_DATA.nflGamePicks.asOf ?? 'none scheduled'}): ${JSON.stringify(ASSISTANT_DATA.nflGamePicks.upcomingPicks)}
+NFL Game Picks stats (all_time and by model version): ${JSON.stringify(ASSISTANT_DATA.nflGamePicks.summaryByVersion)}
+NFL Game Picks - last 8 resolved games: ${JSON.stringify(ASSISTANT_DATA.nflGamePicks.recentHistory)}
 
 Answer the visitor's questions using this data and your tools. Be concise, specific, and honest about uncertainty (cite the Wilson CI / sample size when relevant). Format stats compactly. This is your standing context for the whole conversation - the next message is the visitor's first question.`;
 }
 
 function searchPlayer(query){
   const q = String(query).toLowerCase();
-  return DATA.allQualified.filter(p => p.name.toLowerCase().includes(q)).slice(0, 5);
+  return ASSISTANT_DATA.allQualified.filter(p => p.name.toLowerCase().includes(q)).slice(0, 5);
 }
 function listPlayers({ team, sortBy, order, limit } = {}){
-  let rows = DATA.allQualified;
+  let rows = ASSISTANT_DATA.allQualified;
   if (team) rows = rows.filter(p => p.team.toLowerCase() === String(team).toLowerCase());
   const key = ['Approach','WAVE','Game_Hit_Probability','PA','avg_batting_order','start_rate'].includes(sortBy) ? sortBy : 'Approach';
   const dir = order === 'asc' ? 1 : -1;
@@ -284,7 +227,7 @@ function listPlayers({ team, sortBy, order, limit } = {}){
   return rows.slice(0, Math.min(Number(limit) || 10, 25));
 }
 function listRecentGamePicks({ sport, team, limit } = {}){
-  const source = String(sport).toLowerCase() === 'nfl' ? DATA.nflGamePicks : DATA.mlbGamePicks;
+  const source = String(sport).toLowerCase() === 'nfl' ? ASSISTANT_DATA.nflGamePicks : ASSISTANT_DATA.mlbGamePicks;
   let rows = source.fullHistory;
   if (team) rows = rows.filter(g => g.home_team === team || g.away_team === team);
   return rows.slice(0, Math.min(Number(limit) || 10, 25));
