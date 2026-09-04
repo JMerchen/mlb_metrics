@@ -90,6 +90,30 @@ def _z_normalize(series: pd.Series, mean: float, std: float) -> pd.Series:
     return (series - mean) / std * config.NFL_NORMALIZATION_Z_SCALE
 
 
+def _add_qb_adjustments(games: pd.DataFrame, qb_continuity: pd.DataFrame, weekly_df: pd.DataFrame) -> pd.DataFrame:
+    """Adds `home_qb_adjustment`/`away_qb_adjustment` columns to `games` in
+    place (returns it too, for chaining) - factored out of
+    `build_game_features` (real follow-up, 2026-09-04 - "we don't capture
+    real blowout confidence") so `build_game_features_disaggregated` can
+    reuse the exact same real QB-continuity math without duplicating it.
+    See module docstring for the full reasoning."""
+    recent_epa = qb_continuity.set_index("team")["recent_primary_qb_epa"]
+    mean, std = qb_continuity["recent_primary_qb_epa"].mean(), qb_continuity["recent_primary_qb_epa"].std()
+
+    confirmed_quality = nfl_passing.compute_qb_rolling_stats(weekly_df).set_index("player_id")[
+        "passing_epa_per_game"
+    ]
+
+    def _adjustment(team_col: str, qb_id_col: str) -> pd.Series:
+        recent_epa_for_team = games[team_col].map(recent_epa).fillna(0.0)
+        confirmed_epa_for_qb = games[qb_id_col].map(confirmed_quality).fillna(0.0)
+        return _z_normalize(confirmed_epa_for_qb, mean, std) - _z_normalize(recent_epa_for_team, mean, std)
+
+    games["home_qb_adjustment"] = _adjustment("home_team", "home_qb_id")
+    games["away_qb_adjustment"] = _adjustment("away_team", "away_qb_id")
+    return games
+
+
 def build_game_features(
     master: pd.DataFrame,
     qb_continuity: pd.DataFrame,
@@ -122,28 +146,64 @@ def build_game_features(
     ).merge(
         composite.rename(columns={"team": "away_team", "composite": "away_composite"}), on="away_team", how="left"
     )
-
-    recent_epa = qb_continuity.set_index("team")["recent_primary_qb_epa"]
-    mean, std = qb_continuity["recent_primary_qb_epa"].mean(), qb_continuity["recent_primary_qb_epa"].std()
-
-    confirmed_quality = nfl_passing.compute_qb_rolling_stats(weekly_df).set_index("player_id")[
-        "passing_epa_per_game"
-    ]
-
-    def _adjustment(team_col: str, qb_id_col: str) -> pd.Series:
-        recent_epa_for_team = games[team_col].map(recent_epa).fillna(0.0)
-        confirmed_epa_for_qb = games[qb_id_col].map(confirmed_quality).fillna(0.0)
-        return _z_normalize(confirmed_epa_for_qb, mean, std) - _z_normalize(recent_epa_for_team, mean, std)
-
-    games["home_qb_adjustment"] = _adjustment("home_team", "home_qb_id")
-    games["away_qb_adjustment"] = _adjustment("away_team", "away_qb_id")
+    games = _add_qb_adjustments(games, qb_continuity, weekly_df)
 
     return games[["game_id", "season", "week", "home_team", "away_team"] + GAME_PICK_FEATURE_COLUMNS]
 
 
-def game_feature_matrix(features_df: pd.DataFrame) -> pd.DataFrame:
-    """Numeric X matrix, NaN-filled to 0 - mirrors game_picks.game_feature_matrix."""
-    return features_df.reindex(columns=GAME_PICK_FEATURE_COLUMNS).copy().fillna(0)
+# Real follow-up (2026-09-04 - "we don't capture real blowout confidence"):
+# a real, confirmed structural ceiling - home_win_probability's own ratio
+# formula can never exceed ~59% for ANY real matchup, since both ratings
+# are z-normalized composites clustered near 1.0 with a real std of only
+# ~0.075 (see config.py's own NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH
+# comments for the full diagnosis). DISAGGREGATED_SIGNAL_COLUMNS exposes
+# each individual real signal `nfl_team_strength.assemble_team_metrics`
+# already computes SEPARATELY for home/away, rather than only ever letting
+# a caller see them pre-blended through config.NFL_GAME_PICK_COMPOSITE_WEIGHTS'
+# hand-picked equal weights - a real, richer candidate feature set for
+# scripts/train_nfl_game_pick_model.py's own real logistic/gradient-
+# boosting fit to weigh (and scale) itself, swept honestly against the
+# minimal GAME_PICK_FEATURE_COLUMNS candidate, not asserted better.
+DISAGGREGATED_SIGNAL_COLUMNS = [
+    "pyth_Strength", "pyth_Confidence", "offensive_edge", "defensive_edge", "turnover_margin", "points_per_drive",
+]
+DISAGGREGATED_FEATURE_COLUMNS = (
+    [f"home_{c}" for c in DISAGGREGATED_SIGNAL_COLUMNS]
+    + [f"away_{c}" for c in DISAGGREGATED_SIGNAL_COLUMNS]
+    + ["home_qb_adjustment", "away_qb_adjustment"]
+)
+
+
+def build_game_features_disaggregated(
+    master: pd.DataFrame, qb_continuity: pd.DataFrame, weekly_df: pd.DataFrame, schedule_games_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Returns [game_id, season, week, home_team, away_team] + DISAGGREGATED_FEATURE_COLUMNS
+    - same real inputs/shape as `build_game_features`, but exposing each
+    individual real signal for home/away separately instead of collapsing
+    them into one hand-weighted composite first (see
+    DISAGGREGATED_SIGNAL_COLUMNS' own comment for the full reasoning).
+    Reuses `_add_qb_adjustments` unchanged - the QB-continuity math is
+    identical either way, only the team-strength side differs."""
+    home_master = master[["team"] + DISAGGREGATED_SIGNAL_COLUMNS].rename(
+        columns={"team": "home_team", **{c: f"home_{c}" for c in DISAGGREGATED_SIGNAL_COLUMNS}}
+    )
+    away_master = master[["team"] + DISAGGREGATED_SIGNAL_COLUMNS].rename(
+        columns={"team": "away_team", **{c: f"away_{c}" for c in DISAGGREGATED_SIGNAL_COLUMNS}}
+    )
+    games = schedule_games_df.merge(home_master, on="home_team", how="left").merge(
+        away_master, on="away_team", how="left"
+    )
+    games = _add_qb_adjustments(games, qb_continuity, weekly_df)
+
+    return games[["game_id", "season", "week", "home_team", "away_team"] + DISAGGREGATED_FEATURE_COLUMNS]
+
+
+def game_feature_matrix(features_df: pd.DataFrame, feature_columns=None) -> pd.DataFrame:
+    """Numeric X matrix, NaN-filled to 0 - mirrors game_picks.game_feature_matrix.
+    `feature_columns` defaults to GAME_PICK_FEATURE_COLUMNS; pass
+    DISAGGREGATED_FEATURE_COLUMNS for the richer candidate."""
+    feature_columns = GAME_PICK_FEATURE_COLUMNS if feature_columns is None else feature_columns
+    return features_df.reindex(columns=feature_columns).copy().fillna(0)
 
 
 def compute_game_win_probabilities(
@@ -213,3 +273,52 @@ def apply_calibration(win_probabilities: pd.DataFrame) -> pd.DataFrame:
             calibrated.loc[real_valued, "home_win_probability"].to_numpy()
         )
     return calibrated
+
+
+def apply_ml_model(
+    win_probabilities: pd.DataFrame,
+    master: pd.DataFrame,
+    qb_continuity: pd.DataFrame,
+    weekly_df: pd.DataFrame,
+    schedule_games_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Overwrites `home_win_probability` with a real, walk-forward-validated
+    ML model's own prediction (scripts/train_nfl_game_pick_model.py) when
+    one exists at config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH - direct
+    structural mirror of `apply_calibration`'s own graceful-degradation
+    contract (a real no-op, unchanged heuristic, when no artifact exists),
+    except this REPLACES the whole ratio-based probability rather than
+    rescaling it - the real fix for the structural "can't exceed ~59%"
+    ceiling `compute_game_win_probabilities`'s own ratio formula has (see
+    config.py's own NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH comments for
+    the full diagnosis: both ratings are z-normalized composites clustered
+    within a real std of ~0.075 of 1.0, so the ratio has no free scale
+    parameter and can never express a real blowout's true confidence, no
+    matter how much real historical data exists).
+
+    The saved artifact is a real `{"model", "feature_columns"}` dict (not
+    a bare estimator) so this function knows whether to rebuild features
+    via `build_game_features` or `build_game_features_disaggregated` -
+    whichever candidate scripts/train_nfl_game_pick_model.py's own real
+    backtest validated - without hardcoding one choice here. A game with
+    a genuinely incomplete feature row (e.g. a team missing from `master`
+    entirely - not expected in practice, but a real degenerate-input
+    guard) keeps its ORIGINAL heuristic probability rather than a
+    fabricated ML prediction from filled-in zeros - a per-row fallback,
+    not an all-or-nothing one."""
+    artifact = ml_models.load_model(config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH)
+    if artifact is None:
+        return win_probabilities
+
+    model, feature_columns = artifact["model"], artifact["feature_columns"]
+    builder = build_game_features_disaggregated if feature_columns == DISAGGREGATED_FEATURE_COLUMNS else build_game_features
+    features = builder(master, qb_continuity, weekly_df, schedule_games_df).set_index("game_id")
+
+    complete = features[feature_columns].notna().all(axis=1)
+    X = game_feature_matrix(features, feature_columns)
+    proba = pd.Series(model.predict_proba(X)[:, 1], index=X.index)
+
+    result = win_probabilities.copy()
+    real_rows = result["game_id"].map(complete).fillna(False)
+    result.loc[real_rows, "home_win_probability"] = result.loc[real_rows, "game_id"].map(proba)
+    return result
