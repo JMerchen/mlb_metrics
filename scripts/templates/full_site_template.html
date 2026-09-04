@@ -1,4 +1,4 @@
-<title>MLB Metrics</title>
+<title>Diamond &amp; Gridiron Metrics</title>
 <style>
 /*__STYLE_CSS__*/
 
@@ -17,6 +17,17 @@ to just this tab now that every tab shares one document). */
 
 .sitePage[hidden]{display:none;}
 .mlbSubpage[hidden]{display:none;}
+
+/* Per-sport sub-header shown at the top of the MLB/NFL tabs - the real
+site's own siteHeader/h1 said "MLB Metrics" globally because each sport
+lived on its own separate page; here one document holds both, so the
+top siteHeader carries the overall brand instead and each sport tab
+gets its own smaller heading (picks up --accent, which #page-nfl above
+already scopes to green for the NFL tab, orange everywhere else). */
+.sportHeader{display:flex;align-items:center;gap:10px;margin:4px 0 20px;}
+.sportMark{width:26px;height:26px;flex-shrink:0;}
+.sportHeading{font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0;}
+.sportHeading .brandAccent{color:var(--accent);}
 </style>
 
 <div class="container">
@@ -25,11 +36,13 @@ to just this tab now that every tab shares one document). */
 
 <div class="brandRow">
 <svg class="brandMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-<circle cx="16" cy="16" r="14" fill="#f2a93c"/>
-<path d="M10 4 C14 10, 14 22, 10 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
-<path d="M22 4 C18 10, 18 22, 22 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
+<path d="M16 2 A14 14 0 0 0 16 30 Z" fill="#f2a93c"/>
+<path d="M16 2 A14 14 0 0 1 16 30 Z" fill="#4caf6b"/>
+<path d="M10 6 C13 11, 13 21, 10 26" stroke="#0b0d10" stroke-width="1.6" fill="none"/>
+<path d="M19 11 L19 21" stroke="#0b0d10" stroke-width="1.6" fill="none"/>
+<path d="M17 14 L21 14 M17 16.5 L21 16.5 M17 19 L21 19" stroke="#0b0d10" stroke-width="1.2" fill="none"/>
 </svg>
-<h1>MLB <span class="brandAccent">Metrics</span></h1>
+<h1>Diamond &amp; Gridiron <span class="brandAccent">Metrics</span></h1>
 </div>
 
 <div class="tabGroup pageTabs" id="sitePageTabs">
@@ -46,6 +59,15 @@ to just this tab now that every tab shares one document). */
 </section>
 
 <section id="page-mlb" class="sitePage" hidden>
+
+<div class="sportHeader">
+<svg class="sportMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+<circle cx="16" cy="16" r="14" fill="#f2a93c"/>
+<path d="M10 4 C14 10, 14 22, 10 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
+<path d="M22 4 C18 10, 18 22, 22 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
+</svg>
+<h2 class="sportHeading">MLB <span class="brandAccent">Metrics</span></h2>
+</div>
 
 <div class="tabGroup" id="mlbSubTabs">
 <button class="tabButton active" data-mlb-sub="predictive" onclick="selectMlbSubpage('predictive')">Predictive Metrics</button>
@@ -68,6 +90,16 @@ to just this tab now that every tab shares one document). */
 </section>
 
 <section id="page-nfl" class="sitePage" hidden>
+
+<div class="sportHeader">
+<svg class="sportMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+<path d="M3 16 Q16 4 29 16 Q16 28 3 16 Z" fill="#4caf6b"/>
+<path d="M16 10.5 L16 21.5" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
+<path d="M13.3 13.2 L18.7 13.2 M13.3 16 L18.7 16 M13.3 18.8 L18.7 18.8" stroke="#0b0d10" stroke-width="1.4" fill="none"/>
+</svg>
+<h2 class="sportHeading">NFL <span class="brandAccent">Metrics</span></h2>
+</div>
+
 <!--__NFL_CONTENT__-->
 </section>
 
