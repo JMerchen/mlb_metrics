@@ -274,7 +274,12 @@ def build_html(docs_dir: str) -> str:
         with open(os.path.join(docs_dir, name)) as f:
             return f.read()
 
-    index_content = _extract_page_content(read("index.html"), "index.html")
+    # index.html is now the real site's own "Today's Summary" landing page
+    # (see docs/today.js) - not part of this build at all, since the
+    # artifact already has its own equivalent (the Assistant tab, with a
+    # live chat on top). The Predictive Metrics content this artifact
+    # wants lives at predictive.html now.
+    index_content = _extract_page_content(read("predictive.html"), "predictive.html")
     dfs_content = _extract_page_content(read("dfs.html"), "dfs.html")
     nfl_content = _extract_page_content(read("nfl.html"), "nfl.html")
     age_curves_content = _extract_page_content(read("age-curves.html"), "age-curves.html")
@@ -306,7 +311,11 @@ def build_html(docs_dir: str) -> str:
     # re-deriving that logic here - it becomes one section among the
     # real site's other tabs instead of standing alone.
     assistant_module = _load_bts_assistant_module()
-    assistant_content = assistant_module.build_html(os.path.join(docs_dir, "data"))
+    # include_style=False: this outer template already embeds style.css
+    # once, globally (see below) - the Assistant fragment's own .wrap/
+    # .stat-row/.panel/... CSS now lives there too, so it doesn't need
+    # its own copy embedded a second time.
+    assistant_content = assistant_module.build_html(os.path.join(docs_dir, "data"), include_style=False)
 
     with open(TEMPLATE_PATH) as f:
         template = f.read()

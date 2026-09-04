@@ -194,13 +194,36 @@ def test_nfl_game_picks_group_by_week_surfaces_the_whole_slate(tmp_path):
 
 
 def test_build_html_embeds_valid_json_between_markers(tmp_path):
+    # include_style=False: this test is only about the JSON-marker
+    # substitution, not the style.css embedding (covered separately below)
+    # - no need for this fixture to also carry a style.css.
     module = _load_module()
     docs_data = _write_docs_data(tmp_path)
 
-    html = module.build_html(str(docs_data))
+    html = module.build_html(str(docs_data), include_style=False)
 
     start = html.index(module.DATA_START) + len(module.DATA_START)
     end = html.index(module.DATA_END)
     embedded = json.loads(html[start:end])  # must be valid JSON, not a bare `NaN` token
     assert embedded["asOf"] == "2026-06-20"
     assert html.count("<script") == html.count("</script>")
+
+
+def test_build_html_include_style_embeds_docs_style_css(tmp_path):
+    """The standalone page (include_style=True, the default - used by
+    this script's own CLI) has no <link> to style.css, so it must embed
+    the real stylesheet directly to render correctly on its own; when
+    reused inside the full-site artifact (include_style=False), the outer
+    template already embeds style.css once and this must NOT duplicate
+    it."""
+    module = _load_module()
+    docs_data = _write_docs_data(tmp_path)
+    (tmp_path / "style.css").write_text(".btsRecommended{color:red;}")
+
+    html = module.build_html(str(docs_data))  # default include_style=True
+
+    assert ".btsRecommended{color:red;}" in html
+    assert html.count(".btsRecommended{color:red;}") == 1
+
+    html_without_style = module.build_html(str(docs_data), include_style=False)
+    assert ".btsRecommended{color:red;}" not in html_without_style
