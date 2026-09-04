@@ -32,17 +32,21 @@ to just this tab now that every tab shares one document). */
 </div>
 
 <div class="tabGroup pageTabs" id="sitePageTabs">
-<button class="tabButton active" data-site-page="predictive" onclick="selectSitePage('predictive')">Predictive Metrics</button>
+<button class="tabButton active" data-site-page="assistant" onclick="selectSitePage('assistant')">Assistant</button>
+<button class="tabButton" data-site-page="predictive" onclick="selectSitePage('predictive')">Predictive Metrics</button>
 <button class="tabButton" data-site-page="age-curves" onclick="selectSitePage('age-curves')">Age Curves</button>
 <button class="tabButton" data-site-page="dfs" onclick="selectSitePage('dfs')">DFS Rankings</button>
 <button class="tabButton" data-site-page="nfl" onclick="selectSitePage('nfl')">NFL</button>
 <button class="tabButton" data-site-page="methodology" onclick="selectSitePage('methodology')">Methodology</button>
-<button class="tabButton" data-site-page="assistant" onclick="selectSitePage('assistant')">Assistant</button>
 </div>
 
 </div>
 
-<section id="page-predictive" class="sitePage">
+<section id="page-assistant" class="sitePage">
+<!--__ASSISTANT_CONTENT__-->
+</section>
+
+<section id="page-predictive" class="sitePage" hidden>
 <!--__INDEX_CONTENT__-->
 </section>
 
@@ -60,10 +64,6 @@ to just this tab now that every tab shares one document). */
 
 <section id="page-methodology" class="sitePage" hidden>
 <!--__METHODOLOGY_CONTENT__-->
-</section>
-
-<section id="page-assistant" class="sitePage" hidden>
-<!--__ASSISTANT_CONTENT__-->
 </section>
 
 </div>
