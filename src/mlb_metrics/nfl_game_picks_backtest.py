@@ -113,7 +113,7 @@ def replay_season(
         history_weekly = reg_weekly[reg_weekly["week"] < week]
         history_pbp = reg_pbp[reg_pbp["week"] < week]
 
-        master = nfl_team_strength.assemble_team_metrics(history_sched, history_stats, history_pbp)
+        master = nfl_team_strength.assemble_team_metrics(history_sched, history_stats, history_pbp, current_season=season)
         qb_continuity = nfl_team_strength.compute_qb_continuity_adjustment(history_snaps, history_weekly, rosters_df)
 
         probs = nfl_game_picks.compute_game_win_probabilities(
@@ -251,3 +251,164 @@ def build_backtest_report(replay: pd.DataFrame) -> pd.DataFrame:
         })
 
     return pd.DataFrame(rows)
+
+
+# --- Multi-season replay (real cross-season carryover validation, 2026-09-04) ---
+
+
+def build_multi_season_history(
+    schedules_df: pd.DataFrame,
+    team_stats_df: pd.DataFrame,
+    weekly_df: pd.DataFrame,
+    snap_counts_df: pd.DataFrame,
+    rosters_df: pd.DataFrame,
+    pbp_df: pd.DataFrame,
+    seasons: list[int],
+    carryover_regression: float = None,
+    carryover_prior_strength: float = None,
+    season_aware: bool = True,
+) -> list[dict]:
+    """The expensive, no-lookahead per-week team-strength assembly a real
+    cross-season replay needs - split out from `replay_multi_season` so a
+    caller sweeping `composite_weights`/`home_field_weight` candidates
+    (which only affect the CHEAP nfl_game_picks.compute_game_win_probabilities
+    step, not team-strength assembly itself) can rebuild this ONCE per
+    (carryover_regression, carryover_prior_strength) pair and re-score
+    every composite/home-field candidate against the same real history
+    via `score_multi_season_snapshots`, instead of re-running
+    nfl_team_strength.assemble_team_metrics for every combination in a
+    full grid sweep - same "don't re-run the comparatively expensive
+    rebuild" reasoning `build_backtest_report`'s own docstring already
+    establishes for its train/test re-slicing.
+
+    Unlike `replay_season` (which only ever replays ONE season in
+    isolation, with no real prior-season data fed in at all - it cannot
+    exercise `nfl_team_strength._season_aware_blend`'s real cross-season
+    carryover mechanism), this builds `history` for each season AFTER the
+    first in `seasons` exactly the way `nfl_pipeline.py`'s own `run()`
+    does: the immediately PRIOR season's full real REG data plus the
+    current season's own real data STRICTLY BEFORE the week being
+    replayed, concatenated (rosters are not week-scoped - the whole
+    current season's real rosters plus last season's are always fair
+    game, same as `nfl_pipeline.py`). Real weeks 1 and 2 of the current
+    season ARE replayed here (unlike `replay_season`'s own week 1/2
+    exclusion) - a real prior season's history is available even at week
+    1, so there is a real prediction to make. The FIRST season in
+    `seasons` is never replayed itself - there is no real prior season
+    anywhere in the supplied data to build ITS OWN history from (the
+    exact real cold-start `replay_season`'s own module docstring already
+    documents, not something this function can fix by definition).
+
+    Returns one dict per real replayed (season, week) - {master,
+    qb_continuity, weekly, this_week_games}."""
+    snapshots = []
+    for season in seasons[1:]:
+        prior_season = season - 1
+        prior_sched = schedules_df[
+            (schedules_df["season"] == prior_season) & (schedules_df["game_type"] == "REG")
+            & schedules_df["home_score"].notna() & schedules_df["away_score"].notna()
+        ]
+        prior_stats = team_stats_df[(team_stats_df["season"] == prior_season) & (team_stats_df["season_type"] == "REG")]
+        prior_weekly = weekly_df[(weekly_df["season"] == prior_season) & (weekly_df["season_type"] == "REG")]
+        prior_snaps = snap_counts_df[(snap_counts_df["season"] == prior_season) & (snap_counts_df["game_type"] == "REG")]
+        prior_pbp = pbp_df[(pbp_df["season"] == prior_season) & (pbp_df["season_type"] == "REG")]
+        prior_rosters = rosters_df[rosters_df["season"] == prior_season]
+
+        season_all = schedules_df[schedules_df["season"] == season]
+        reg = season_all[season_all["game_type"] == "REG"]
+        reg_stats = team_stats_df[(team_stats_df["season"] == season) & (team_stats_df["season_type"] == "REG")]
+        reg_weekly = weekly_df[(weekly_df["season"] == season) & (weekly_df["season_type"] == "REG")]
+        reg_snaps = snap_counts_df[(snap_counts_df["season"] == season) & (snap_counts_df["game_type"] == "REG")]
+        reg_pbp = pbp_df[(pbp_df["season"] == season) & (pbp_df["season_type"] == "REG")]
+        season_rosters = rosters_df[rosters_df["season"] == season]
+
+        for week in sorted(reg["week"].unique()):
+            this_week_games = reg[
+                (reg["week"] == week) & reg["home_score"].notna() & reg["away_score"].notna()
+            ][[
+                "game_id", "season", "week", "home_team", "away_team", "home_qb_id", "away_qb_id",
+                "home_score", "away_score", "home_moneyline", "away_moneyline",
+            ]]
+            if this_week_games.empty:
+                continue
+
+            history_sched = pd.concat([prior_sched, reg[reg["week"] < week]], ignore_index=True)
+            history_stats = pd.concat([prior_stats, reg_stats[reg_stats["week"] < week]], ignore_index=True)
+            history_weekly = pd.concat([prior_weekly, reg_weekly[reg_weekly["week"] < week]], ignore_index=True)
+            history_snaps = pd.concat([prior_snaps, reg_snaps[reg_snaps["week"] < week]], ignore_index=True)
+            history_pbp = pd.concat([prior_pbp, reg_pbp[reg_pbp["week"] < week]], ignore_index=True)
+            history_rosters = pd.concat([prior_rosters, season_rosters], ignore_index=True)
+
+            master = nfl_team_strength.assemble_team_metrics(
+                history_sched, history_stats, history_pbp, current_season=season,
+                carryover_regression=carryover_regression, carryover_prior_strength=carryover_prior_strength,
+                season_aware=season_aware,
+            )
+            qb_continuity = nfl_team_strength.compute_qb_continuity_adjustment(
+                history_snaps, history_weekly, history_rosters
+            )
+            snapshots.append({
+                "master": master, "qb_continuity": qb_continuity,
+                "weekly": history_weekly, "this_week_games": this_week_games,
+            })
+    return snapshots
+
+
+def score_multi_season_snapshots(
+    snapshots: list[dict], composite_weights=None, home_field_weight: float = None
+) -> pd.DataFrame:
+    """Cheap re-scoring step (nfl_game_picks.compute_game_win_probabilities
+    only) against already-built `build_multi_season_history` snapshots -
+    the real performance payoff for a composite_weights/home_field_weight
+    grid sweep (see that function's own docstring). Returns REPLAY_COLUMNS,
+    same real shape as `replay_season`/`replay_multi_season`."""
+    if not snapshots:
+        return pd.DataFrame(columns=REPLAY_COLUMNS)
+
+    all_rows = []
+    for snap in snapshots:
+        probs = nfl_game_picks.compute_game_win_probabilities(
+            snap["master"], snap["qb_continuity"], snap["weekly"], snap["this_week_games"],
+            composite_weights=composite_weights, home_field_weight=home_field_weight,
+        )
+        rows = probs.merge(
+            snap["this_week_games"][["game_id", "home_score", "away_score", "home_moneyline", "away_moneyline"]],
+            on="game_id", how="left",
+        )
+        all_rows.append(rows)
+
+    result = pd.concat(all_rows, ignore_index=True)
+    result["home_won"] = (result["home_score"] > result["away_score"]).astype(float)
+
+    home_implied = result["home_moneyline"].apply(market_odds.moneyline_to_implied_probability)
+    away_implied = result["away_moneyline"].apply(market_odds.moneyline_to_implied_probability)
+    result["market_home_win_probability"] = market_odds.devig(home_implied, away_implied)
+
+    return result[REPLAY_COLUMNS]
+
+
+def replay_multi_season(
+    schedules_df: pd.DataFrame,
+    team_stats_df: pd.DataFrame,
+    weekly_df: pd.DataFrame,
+    snap_counts_df: pd.DataFrame,
+    rosters_df: pd.DataFrame,
+    pbp_df: pd.DataFrame,
+    seasons: list[int],
+    composite_weights=None,
+    home_field_weight: float = None,
+    carryover_regression: float = None,
+    carryover_prior_strength: float = None,
+    season_aware: bool = True,
+) -> pd.DataFrame:
+    """Convenience one-call wrapper: `build_multi_season_history` +
+    `score_multi_season_snapshots` (see both functions' own docstrings for
+    the full reasoning). Use the two-step form directly when sweeping
+    several `composite_weights`/`home_field_weight` candidates against the
+    SAME `carryover_regression`/`carryover_prior_strength` pair, to avoid
+    rebuilding team-strength assembly redundantly."""
+    snapshots = build_multi_season_history(
+        schedules_df, team_stats_df, weekly_df, snap_counts_df, rosters_df, pbp_df, seasons,
+        carryover_regression, carryover_prior_strength, season_aware,
+    )
+    return score_multi_season_snapshots(snapshots, composite_weights, home_field_weight)

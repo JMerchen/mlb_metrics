@@ -107,13 +107,46 @@ def test_compute_game_win_probabilities_exact_arithmetic(monkeypatch):
     weekly = pd.DataFrame([_weekly_epa("qb_home", 5.0), _weekly_epa("qb_away", -2.0)])
     schedule_games = _schedule_games()
 
-    result = nfl_game_picks.compute_game_win_probabilities(master, qb_continuity, weekly, schedule_games)
+    result = nfl_game_picks.compute_game_win_probabilities(
+        master, qb_continuity, weekly, schedule_games, home_field_weight=0.0
+    )
 
-    # QB continuity weight pinned to 0, so this reduces to a pure composite ratio:
+    # QB continuity weight pinned to 0, home-field weight pinned to 0, so
+    # this reduces to a pure composite ratio:
     # home_composite = 1.025, away_composite = 0.975
     expected = 1.025 / (1.025 + 0.975)
     assert result.iloc[0]["home_win_probability"] == pytest.approx(expected)
     assert result.iloc[0]["game_id"] == "2025_08_DEN_KC"
+
+
+def test_compute_game_win_probabilities_home_field_weight_pushes_home_side(monkeypatch):
+    # Real follow-up (2026-09-04 - "a little push or pull from home/
+    # away"): two otherwise-IDENTICAL teams should split exactly 50/50 at
+    # home_field_weight=0.0, and the home side should gain ground as the
+    # weight increases - a real regression guard for the new term.
+    monkeypatch.setattr(nfl_game_picks.config, "NFL_QB_CONTINUITY_WEIGHT", 0.0)
+    master = _master([
+        {"team": "KC", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "defensive_edge": 1.0, "true_power": 1.0,
+         "turnover_margin": 1.0, "points_per_drive": 1.0},
+        {"team": "DEN", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "defensive_edge": 1.0, "true_power": 1.0,
+         "turnover_margin": 1.0, "points_per_drive": 1.0},
+    ])
+    qb_continuity = pd.DataFrame([
+        {"team": "KC", "recent_primary_qb_id": "qb_home", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+        {"team": "DEN", "recent_primary_qb_id": "qb_away", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+    ])
+    weekly = pd.DataFrame([_weekly_epa("qb_home", 0.0), _weekly_epa("qb_away", 0.0)])
+    schedule_games = _schedule_games()
+
+    no_home_field = nfl_game_picks.compute_game_win_probabilities(
+        master, qb_continuity, weekly, schedule_games, home_field_weight=0.0
+    )
+    with_home_field = nfl_game_picks.compute_game_win_probabilities(
+        master, qb_continuity, weekly, schedule_games, home_field_weight=0.05
+    )
+
+    assert no_home_field.iloc[0]["home_win_probability"] == pytest.approx(0.5)
+    assert with_home_field.iloc[0]["home_win_probability"] > 0.5
 
 
 def test_apply_calibration_is_a_noop_with_no_saved_model(monkeypatch, tmp_path):
