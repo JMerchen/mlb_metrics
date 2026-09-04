@@ -22,7 +22,11 @@ def test_build_all_pitch_events_keeps_every_row_no_pre_filtering():
     result = pipeline.build_all_pitch_events(df)
 
     assert len(result) == 3
-    assert list(result.columns) == ["game_date", "batter", "pitcher", "pitch_type", "description", "zone"]
+    assert list(result.columns) == [
+        "game_date", "batter", "pitcher", "pitch_type", "description", "zone",
+        "balls", "strikes", "inning", "outs_when_up", "on_1b", "on_2b", "on_3b",
+        "bat_score", "fld_score",
+    ]
     assert set(result["pitcher"]) == {1, 2}
 
 
@@ -36,7 +40,11 @@ def test_build_all_pitch_events_degrades_gracefully_when_columns_missing():
     result = pipeline.build_all_pitch_events(df)
 
     assert len(result) == 1
-    assert list(result.columns) == ["game_date", "batter", "pitcher", "pitch_type", "description", "zone"]
+    assert list(result.columns) == [
+        "game_date", "batter", "pitcher", "pitch_type", "description", "zone",
+        "balls", "strikes", "inning", "outs_when_up", "on_1b", "on_2b", "on_3b",
+        "bat_score", "fld_score",
+    ]
 
 
 def test_run_excludes_games_on_or_after_as_of_date(monkeypatch, tmp_path):

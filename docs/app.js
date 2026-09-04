@@ -632,6 +632,27 @@ player.PA_R
 
 </div>
 
+<div>
+
+Decision Score
+
+</div>
+
+<div>
+
+${(
+Number(
+player.Decision_Score
+||
+0
+)
+)
+.toFixed(
+1
+)}%
+
+</div>
+
 `
 
 }

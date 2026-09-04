@@ -642,6 +642,72 @@ real if modest margin. This is the first of item #1's three slices where
 the new columns visibly moved the holdout numbers in the model's favor
 rather than landing flat - a genuinely useful addition, not just informational.
 
+### Decision Score: was swinging/taking advised? (`decision_score.py`, 2026-09-04)
+
+A new plate-discipline metric, requested at both the player and team level:
+per pitch, was swinging or taking the "advised" choice for *this* batter,
+right now - given the count, the pitch's real Statcast `zone`, their own
+recency-windowed OPS in that specific zone, and the game situation - and
+how consistently they actually do the advised thing. `Decision_Score` is
+that compliance rate (0-100), reusing the exact "window -> per-player
+aggregate -> fixed-weight blend" primitive `hitters.compute_wave` already
+established (`hitters.blend_windows`/`side_window_agg`/`slice_by_days`,
+un-prefixed and reused across the module boundary for the first time,
+with `column="zone"` looped over the 13 real zone codes). The threshold a
+zone's OPS has to clear to make swinging "advised" is the batter's own
+overall windowed OPS (never a league average - "their windowed ops in
+that zone" was read literally) times a count-context multiplier and a
+high-leverage-situation multiplier; a low-sample zone's raw OPS is
+shrunk toward that same batter's own overall OPS via `helpers.shrink_rate`
+(strength `config.DECISION_SCORE_ZONE_SHRINKAGE_STRENGTH`), not toward a
+league prior. Merged into `wave.csv` (`Decision_Score`, `Decision_Score_N`),
+surfaced as a new stat tile in Player Search and as a new column in the
+Top WAVE Players table (`docs/app.js`'s `buildTable` derives columns from
+the data itself, so no extra JS was needed there).
+
+**The user asked for this to be backtested before shipping, not asserted -
+so it was**, real and no-lookahead: `scripts/backtest_decision_score.py`
+builds each batter's real windowed overall/zone OPS reference from 2025-03
+through 2025-06 only, then applies it - never re-fit - to 2025-07 through
+2025-09 (the rest of the same season, avoiding an offseason discontinuity).
+The core finding is strongly validated: on the held-out test pitches that
+actually ended a plate appearance (n=86,389), PAs where the batter's real
+choice matched the zone-based advice had a real, meaningfully better mean
+PA value (on-base + total bases) than PAs where it didn't - 0.768 vs.
+0.624 - with both a pooled Mann-Whitney test (p=4.1e-153) and, more
+importantly, a per-batter PAIRED test restricted to the 490 batters with
+enough real PAs in both groups (mean paired difference 0.129, p=5.1e-25)
+clearing significance. The paired test matters here specifically because
+compliance isn't randomly assigned - a batter's own overall skill could
+otherwise confound a pooled comparison - and it held up anyway.
+
+**Two honest negative findings, reported rather than hidden**, both from
+the same backtest's real grid sweep (54 shrinkage/count-multiplier/
+leverage-multiplier combinations, see `data/decision_score_backtest_results.csv`
+for the full grid):
+1. The count-context multiplier (`config.DECISION_SCORE_HITTER_COUNT_MULTIPLIER`/
+   `..._PITCHER_COUNT_MULTIPLIER`) and the situational-leverage multiplier
+   (`config.DECISION_SCORE_HIGH_LEVERAGE_MULTIPLIER`) do NOT strengthen
+   the effect at any tested magnitude - the paired effect *monotonically
+   weakens* as the count multiplier moves away from neutral (paired
+   p=5.1e-25/diff=0.129 at 1.0/1.0, down to p=1.3e-8/diff=0.064 at
+   1.15/0.85, and barely surviving at p=0.048/diff=0.022 at the extreme
+   1.30/0.70), and the leverage multiplier showed no measurable effect
+   either direction. Rather than force these inputs in anyway or quietly
+   drop them from the code, both ship at neutral 1.0 (a documented no-op)
+   - the classification logic (`classify_count_context`, the high-leverage
+   flag) is still real and computed, it just doesn't move the threshold.
+2. `scripts/backtest_decision_score_team_level.py` tested whether a
+   team's real average Decision_Score (of the batters who actually hit for
+   them that game, 2,328 real team-games) associates with real wins,
+   univariate and controlling for the existing team model's
+   `pyth_strength` (the real incremental-signal test). It's only marginal
+   alone (coef 0.080, p=0.053) and NOT significant once `pyth_strength` is
+   in the model (coef 0.061, p=0.159). Per the user's own explicit
+   instruction going in ("if it's not significant, don't use it at the
+   team level"), **no team-level Decision Score display was built and
+   `teams.py` was not touched.**
+
 ### Hitter hit log (`data/predictions/hitter_hit_log.csv`, data asset - not yet a live signal)
 
 Investigating why Beat the Streak's day-survival rate sits at ~50% found a

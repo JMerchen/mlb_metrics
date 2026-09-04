@@ -97,6 +97,70 @@ WHOPS_WTB_WINDOWS = [
 # Trials-per-game used for WTB's Expected_Bases (same role as WAVE_TRIALS_PER_GAME).
 WTB_TRIALS_PER_GAME = 3.5
 
+# --- Decision Score (plate-discipline "was swinging/taking advised") ---
+#
+# decision_score.py's core idea: per pitch, compare the batter's OWN
+# recency-windowed OPS in that specific zone (shrunk toward their own
+# overall windowed OPS, NOT a league prior - the metric is deliberately
+# self-referential, "is this a good zone FOR ME") against a count/
+# situation-adjusted bar built from that same overall OPS, to decide
+# whether swinging was "advised".
+#
+# Real, no-lookahead backtest (scripts/backtest_decision_score.py; train
+# 2025-03 through 2025-06, ~400K real pitches; test 2025-07 through
+# 2025-09, ~342K real pitches held out entirely from the train-built
+# reference): the ZONE signal itself is strongly validated - PA-ending
+# pitches where the batter's real choice matched the zone-based advice
+# scored a real 0.768 mean PA value (on-base + total bases) vs. 0.624 for
+# mismatched ones (n=86,389 PA-ending test pitches, pooled Mann-Whitney
+# p<0.0001; a per-batter PAIRED test on the same comparison, n=490
+# batters with >=5 real PAs in both groups, ALSO p<0.0001 - the real
+# robustness check against "some batters are just better at everything"
+# confounding a pooled test alone can't rule out).
+#
+# HONEST NEGATIVE FINDING: a two-round grid sweep (18 then 15 candidates,
+# the second at finer granularity around 1.0) found the count-context
+# swing-threshold multiplier MONOTONICALLY WEAKENS this same real effect
+# at every magnitude tested - the matched/unmatched PA-value gap shrinks
+# smoothly from 0.144 (hitter=pitcher=1.0, no adjustment) down to 0.077
+# (hitter=1.15/pitcher=0.85, the original hand-picked guess) as the
+# multipliers move further from 1.0, with NO tested value improving on
+# the neutral baseline. The situational-leverage multiplier showed no
+# measurable effect either direction (too small a share of real pitches
+# qualify as "high leverage" by this definition to move the aggregate).
+# Both are therefore shipped at 1.0 (no-op) - the classification logic
+# (classify_count_context, the high-leverage flag) stays real and
+# computed, just not yet wired to move the advice threshold, since this
+# backtest could not find a way to do that which improves on the
+# zone-only baseline. Full sweep results: data/decision_score_backtest_results.csv.
+
+# Real-unit (plate-appearance) pseudo-observation strength for
+# helpers.shrink_rate, applied to a batter's per-zone OBP/SLG before
+# blending into Zone_OPS - a zone naturally sees far fewer PAs than a
+# batter's full at-bat total (13 real Statcast zone codes to split
+# across), so small-sample zones need more aggressive shrinkage than
+# WAVE_SHRINKAGE_STRENGTH's 50.0 at-bats. Backtest-validated at 20.0 (see
+# above) - the strongest of {10, 20, 40} swept on the paired test.
+DECISION_SCORE_ZONE_SHRINKAGE_STRENGTH = 20.0
+
+# Count-context swing-threshold multipliers (classify_count_context):
+# real "hitter's count" (3-0/3-1/2-0)/"pitcher's count" (0-2/1-2)
+# buckets, kept and still computed - see the honest negative finding
+# above for why both are 1.0 (no-op) rather than the originally-guessed
+# 1.15/0.85, which the real backtest found weakens the effect.
+DECISION_SCORE_HITTER_COUNT_MULTIPLIER = 1.0
+DECISION_SCORE_PITCHER_COUNT_MULTIPLIER = 1.0
+
+# Game-situation swing-threshold multiplier: would apply (instead of 1.0)
+# when ALL of inning >= DECISION_SCORE_HIGH_LEVERAGE_MIN_INNING, the
+# score is within DECISION_SCORE_HIGH_LEVERAGE_MAX_SCORE_DIFF runs, and a
+# runner is in scoring position (on_2b or on_3b) - kept at 1.0 (no-op),
+# same honest negative finding as the count multipliers above (no tested
+# value showed a measurable effect).
+DECISION_SCORE_HIGH_LEVERAGE_MULTIPLIER = 1.0
+DECISION_SCORE_HIGH_LEVERAGE_MIN_INNING = 7
+DECISION_SCORE_HIGH_LEVERAGE_MAX_SCORE_DIFF = 2
+
 # --- Team-level metrics ---
 
 # strength / current_strength / pyth_strength blend: 10g/30g/81g/full.
