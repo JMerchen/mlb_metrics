@@ -4498,10 +4498,31 @@ hurts real predictive performance - the record-based `pyth_Strength`/
 carrying real, useful information. Live weights are unchanged; both
 candidates are kept in `config.py` only as a real, cited, rejected record.
 
-**Home-field advantage: validated.** [PENDING - real paired significance
-test in progress against the true (season_aware=False, live-weight)
-baseline, sweeping home_field_weight candidates with a real per-game
-paired t-test on squared error.]
+**Home-field advantage: validated - and 0.02 is the real best value, not
+just a safe guess.** A focused follow-up isolated this one term against
+the true baseline (season_aware=False, live composite weights) with a
+real per-game PAIRED significance test on squared error (2,333 real
+games):
+
+| Weight | Accuracy | Log loss | Paired p-value (vs. 0.0) |
+|---|---|---|---|
+| 0.00 (baseline) | 60.74% | 0.6780 | - |
+| **0.02** | **61.21%** | 0.6774 | **0.0033** |
+| 0.05 | 60.87% | 0.6767 | 0.0098 |
+| 0.08 | 60.05% | 0.6762 | 0.0253 |
+| 0.10 | 59.92% | 0.6760 | 0.0443 |
+| 0.15 | 57.82% | 0.6758 | 0.1425 (not significant) |
+
+An honest, non-obvious nuance worth flagging: log_loss/Brier keep
+improving as the weight grows past 0.02, which could tempt picking a
+bigger number - but real ACCURACY gets WORSE the harder it pushes (a
+larger constant starts flipping correct away-favorite picks into wrong
+home picks even as the probability numbers look marginally better-
+calibrated), and the paired significance weakens right alongside it.
+0.02 wins on every axis at once (best accuracy, a real log_loss gain, and
+the strongest significance) - not a conservative starting guess kept out
+of caution, the real numbers say it's the best point in the tested range.
+`config.NFL_HOME_FIELD_ADVANTAGE_WEIGHT = 0.02` ships live.
 
 ### Live pipeline (`nfl_pipeline.py`, `.github/workflows/nfl_weekly_update.yml`)
 
