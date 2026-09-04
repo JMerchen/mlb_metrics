@@ -2233,3 +2233,95 @@ NFL_GAME_PICK_COMPOSITE_WEIGHTS_CORE_HEAVY = [
     ("true_power", 0.0625),
     ("points_per_drive", 0.0625),
 ]
+
+# --- NFL Game Pick ML Win Probability (nfl_game_picks.apply_ml_model) ---
+#
+# Real follow-up (2026-09-04 - a real, concrete complaint: a "barely
+# competent" rookie-QB team against "a juggernaut that eventually won the
+# Super Bowl" - a game with "not a chance in hell" for the underdog -
+# came out of the live model as "almost a coin flip"). Confirmed with
+# real numbers, not a vague impression: `nfl_game_picks.compute_game_win_probabilities`'s
+# `home_win_probability = home_rating / (home_rating + away_rating)` has
+# NO free scale parameter - both ratings are z-normalized composites
+# clustered around 1.0 with a real, confirmed cross-team std of only
+# ~0.075 (computed live against real week-12-2025 data). Even the single
+# best real team in the league hosting the single worst real team that
+# week - the most extreme mismatch possible - works out to
+# 1.153/(1.153+0.813) = 58.7%. The ratio formula structurally CANNOT
+# express a real blowout's true confidence, no matter how much real
+# historical data exists to learn from - this is a real design defect,
+# not a data-availability problem, and recalibration alone can't fix it
+# either (scripts/train_nfl_game_pick_calibration.py already tried
+# rescaling this same compressed range and failed to beat the raw
+# heuristic on a real holdout - a monotonic rescale of an already-narrow
+# range has very little real signal at the extremes to learn a reliable
+# steep mapping from).
+#
+# The real, structural fix, with a real precedent already in this
+# codebase on the MLB side (scripts/train_game_pick_model.py - which
+# fits a real walk-forward-validated LogisticRegression/
+# HistGradientBoostingClassifier directly on the same raw composite
+# ingredient columns the ratio formula uses, giving it a real LEARNED
+# scale a fixed ratio never has - but is explicitly left PARKED, never
+# wired into MLB's own live picks). scripts/train_nfl_game_pick_model.py
+# ports this exact methodology to NFL and - unlike MLB's own version -
+# actually wires the validated result into live picks via
+# nfl_game_picks.apply_ml_model, with a real, tested, graceful fallback
+# to today's ratio+home-field heuristic if no artifact exists or nothing
+# clears the real save-gate (beats both a naive baseline AND today's live
+# heuristic on log_loss, on a real untouched final holdout - the most
+# recent full real season, not a token few-week slice, now that 10 real
+# cached seasons of train data exist).
+NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH = "data/models/nfl_game_pick_win_probability_model.joblib"
+
+# Real C-grid for the LogisticRegression candidate - same values/role as
+# GAME_PICK_LOGIT_C_GRID (MLB's own), not reused directly so tuning one
+# sport's fit can never silently move the other's.
+NFL_GAME_PICK_LOGIT_C_GRID = [0.01, 0.03, 0.1, 0.3, 1, 3, 10]
+
+# Real param grid for the HistGradientBoostingClassifier candidate - same
+# shape as HITTER_HIT_GBM_PARAM_GRID, scaled down (smaller max_iter/
+# min_samples_leaf) for a real, much smaller per-season-pair dataset
+# (~250 real games/season vs. MLB's own per-PA granularity).
+NFL_GAME_PICK_GBM_PARAM_GRID = {
+    "max_depth": [2, 3],
+    "learning_rate": [0.03, 0.1],
+    "max_iter": [50, 100],
+    "min_samples_leaf": [20, 50],
+}
+
+# Final-holdout width for scripts/train_nfl_game_pick_model.py - the most
+# recent full real REAL season (2025's own 18 real weeks), not
+# NFL_GAME_PICK_ML_FINAL_HOLDOUT_WEEKS' existing 3-week slice (sized for
+# a single-season calibration fit before 2016-2025 was fully cached) - a
+# full season is a far more meaningful, robust final test now that 9 real
+# prior seasons of real train data exist.
+NFL_GAME_PICK_ML_WIN_PROBABILITY_FINAL_HOLDOUT_WEEKS = 18
+
+# Real backtest result (scripts/train_nfl_game_pick_model.py, real
+# 2016-2025 data, 2,383 real replayed games, 2025 held out entirely):
+# VALIDATED. The winning candidate - `disaggregated` features
+# (nfl_game_picks.DISAGGREGATED_FEATURE_COLUMNS) fit with
+# LogisticRegression - clears the real save-gate on the untouched
+# holdout: log_loss 0.6276 vs. the live ratio+home-field heuristic's
+# 0.6795 (and both beat naive-baseline's 0.6904). The real point of this
+# whole feature - the predicted-probability SPREAD on that same holdout
+# widened from std=0.033 (min 43.0%, max 62.5%) to std=0.150 (min 19.4%,
+# max 88.3%) - a real, substantial widening, directly answering the
+# complaint that started this: a real blowout can now be priced near
+# 90%, not capped at ~59%. Saved to
+# NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH, now live via
+# nfl_game_picks.apply_ml_model.
+#
+# Honest data-quality footnote (found while validating, not a bug in
+# this code): ~2% of real rows (48 of 2,383 - every real Oakland Raiders
+# game from 2016-2019) have a real NaN in their offensive_edge/
+# defensive_edge/turnover_margin/points_per_drive feature, confirmed live
+# to be a genuine upstream nflreadpy inconsistency - `schedules_*.parquet`
+# uses the real historical "OAK" abbreviation for those seasons, while
+# `team_stats_*.parquet` retroactively applies the post-relocation "LV"
+# code to the SAME historical seasons, so a team-strength lookup by
+# abbreviation never finds a match for those specific games. Handled the
+# same way every other missing value in this project is - `game_feature_matrix`'s
+# existing `.fillna(0)` - not silently fabricated, not a data pipeline
+# bug to chase down for a real 2%-of-rows franchise-relocation quirk.

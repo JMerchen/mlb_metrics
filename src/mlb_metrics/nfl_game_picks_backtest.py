@@ -412,3 +412,37 @@ def replay_multi_season(
         carryover_regression, carryover_prior_strength, season_aware,
     )
     return score_multi_season_snapshots(snapshots, composite_weights, home_field_weight)
+
+
+# --- Real feature+outcome training log (2026-09-04 - fixing the ML win-probability ceiling) ---
+
+
+def assemble_nfl_game_pick_log(snapshots: list[dict], feature_fn=nfl_game_picks.build_game_features) -> pd.DataFrame:
+    """Real feature+outcome training log for
+    scripts/train_nfl_game_pick_model.py, built from
+    `build_multi_season_history`'s own already-built snapshots (real,
+    no-lookahead `master`/`qb_continuity`/`weekly`/`this_week_games` per
+    replayed week, spanning every real cached season) - zero new data
+    fetching, zero new team-strength code, purely wiring together what
+    the season-carryover work already built.
+
+    `feature_fn` defaults to `nfl_game_picks.build_game_features` (the
+    minimal, MLB-precedented candidate - home/away composite + QB
+    adjustments); pass `nfl_game_picks.build_game_features_disaggregated`
+    for the richer candidate (see that function's own docstring). Returns
+    one row per real snapshot game with that feature set's own columns
+    plus a real `home_won` outcome column, derived from `this_week_games`'s
+    real `home_score`/`away_score` - a genuine completed game, never an
+    upcoming/unplayed one (every `build_multi_season_history` snapshot's
+    `this_week_games` is already filtered to real completed scores)."""
+    rows = []
+    for snap in snapshots:
+        features = feature_fn(snap["master"], snap["qb_continuity"], snap["weekly"], snap["this_week_games"])
+        outcomes = snap["this_week_games"][["game_id", "home_score", "away_score"]]
+        merged = features.merge(outcomes, on="game_id", how="left")
+        merged["home_won"] = (merged["home_score"] > merged["away_score"]).astype(float)
+        rows.append(merged.drop(columns=["home_score", "away_score"]))
+
+    if not rows:
+        return pd.DataFrame()
+    return pd.concat(rows, ignore_index=True)

@@ -221,6 +221,14 @@ def run(
             probs = nfl_game_picks.compute_game_win_probabilities(
                 master, qb_continuity, history["weekly"], this_week_games
             )
+            # Real follow-up (2026-09-04 - the ratio heuristic above
+            # structurally can't exceed ~59% for any real matchup, see
+            # config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH's own
+            # comments): a real, walk-forward-validated ML model
+            # (scripts/train_nfl_game_pick_model.py), if one has cleared
+            # its own real save-gate, replaces home_win_probability
+            # entirely - a real no-op (unchanged heuristic) otherwise.
+            probs = nfl_game_picks.apply_ml_model(probs, master, qb_continuity, history["weekly"], this_week_games)
             probs = nfl_game_picks.apply_calibration(probs)
 
             market = _build_market_probabilities(this_week_games)

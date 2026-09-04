@@ -158,3 +158,139 @@ def test_apply_calibration_is_a_noop_with_no_saved_model(monkeypatch, tmp_path):
     result = nfl_game_picks.apply_calibration(win_probabilities)
 
     assert result.equals(win_probabilities)
+
+
+# --- Real fix for the ratio formula's structural "can't exceed ~59%" ceiling (2026-09-04) ---
+
+
+def _master_disaggregated(rows):
+    """Same shape as `_master`, plus `offensive_edge` -
+    build_game_features_disaggregated's own DISAGGREGATED_SIGNAL_COLUMNS
+    needs it too, unlike the plain composite tests above."""
+    return pd.DataFrame(rows)
+
+
+def test_build_game_features_disaggregated_returns_the_right_columns():
+    master = _master_disaggregated([
+        {"team": "KC", "pyth_Strength": 1.1, "pyth_Confidence": 1.05, "offensive_edge": 1.02,
+         "defensive_edge": 1.0, "turnover_margin": 1.0, "points_per_drive": 1.0},
+        {"team": "DEN", "pyth_Strength": 0.9, "pyth_Confidence": 0.95, "offensive_edge": 0.98,
+         "defensive_edge": 1.0, "turnover_margin": 1.0, "points_per_drive": 1.0},
+    ])
+    qb_continuity = pd.DataFrame([
+        {"team": "KC", "recent_primary_qb_id": "qb_home", "recent_primary_qb_epa": 5.0, "recent_primary_qb_games": 8},
+        {"team": "DEN", "recent_primary_qb_id": "qb_away", "recent_primary_qb_epa": -2.0, "recent_primary_qb_games": 8},
+    ])
+    weekly = pd.DataFrame([_weekly_epa("qb_home", 5.0), _weekly_epa("qb_away", -2.0)])
+    schedule_games = _schedule_games()
+
+    features = nfl_game_picks.build_game_features_disaggregated(master, qb_continuity, weekly, schedule_games)
+
+    assert list(features.columns) == (
+        ["game_id", "season", "week", "home_team", "away_team"] + nfl_game_picks.DISAGGREGATED_FEATURE_COLUMNS
+    )
+    row = features.iloc[0]
+    assert row["home_pyth_Strength"] == pytest.approx(1.1)
+    assert row["away_offensive_edge"] == pytest.approx(0.98)
+    assert row["home_qb_adjustment"] == pytest.approx(0.0)  # confirmed starter IS the recent-primary QB
+
+
+def test_apply_ml_model_is_a_noop_with_no_saved_model(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        nfl_game_picks.config, "NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH", str(tmp_path / "does_not_exist.joblib")
+    )
+    win_probabilities = pd.DataFrame([{"game_id": "2025_08_DEN_KC", "home_win_probability": 0.6}])
+    master = _master([
+        {"team": "KC", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "defensive_edge": 1.0, "true_power": 1.0,
+         "turnover_margin": 1.0, "points_per_drive": 1.0},
+        {"team": "DEN", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "defensive_edge": 1.0, "true_power": 1.0,
+         "turnover_margin": 1.0, "points_per_drive": 1.0},
+    ])
+    qb_continuity = pd.DataFrame([
+        {"team": "KC", "recent_primary_qb_id": "qb_home", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+        {"team": "DEN", "recent_primary_qb_id": "qb_away", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+    ])
+    weekly = pd.DataFrame([_weekly_epa("qb_home", 0.0), _weekly_epa("qb_away", 0.0)])
+
+    result = nfl_game_picks.apply_ml_model(win_probabilities, master, qb_continuity, weekly, _schedule_games())
+
+    assert result.equals(win_probabilities)
+
+
+def test_apply_ml_model_overwrites_home_win_probability_with_a_real_artifact(monkeypatch, tmp_path):
+    # A real, tiny sklearn LogisticRegression - fit on synthetic data
+    # engineered so it's guaranteed to predict something far from 0.5 on
+    # the real test game below (a genuinely different number than the
+    # ratio heuristic's own compressed range would ever produce) - a real
+    # regression guard that apply_ml_model actually uses the model's OWN
+    # prediction, not just something that happens to look plausible.
+    from sklearn.linear_model import LogisticRegression
+
+    X_fit = pd.DataFrame({
+        "home_composite": [1.2, 0.8, 1.3, 0.7],
+        "away_composite": [0.8, 1.2, 0.7, 1.3],
+        "home_qb_adjustment": [0.0, 0.0, 0.0, 0.0],
+        "away_qb_adjustment": [0.0, 0.0, 0.0, 0.0],
+    })
+    y_fit = [1, 0, 1, 0]
+    model = LogisticRegression().fit(X_fit, y_fit)
+
+    model_path = tmp_path / "nfl_game_pick_win_probability_model.joblib"
+    nfl_game_picks.ml_models.save_model(
+        {"model": model, "feature_columns": nfl_game_picks.GAME_PICK_FEATURE_COLUMNS}, str(model_path)
+    )
+    monkeypatch.setattr(nfl_game_picks.config, "NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH", str(model_path))
+
+    win_probabilities = pd.DataFrame([{"game_id": "2025_08_DEN_KC", "home_win_probability": 0.55}])
+    master = _master([
+        {"team": "KC", "pyth_Strength": 1.3, "pyth_Confidence": 1.3, "defensive_edge": 1.3, "true_power": 1.3,
+         "turnover_margin": 1.3, "points_per_drive": 1.3},
+        {"team": "DEN", "pyth_Strength": 0.7, "pyth_Confidence": 0.7, "defensive_edge": 0.7, "true_power": 0.7,
+         "turnover_margin": 0.7, "points_per_drive": 0.7},
+    ])
+    qb_continuity = pd.DataFrame([
+        {"team": "KC", "recent_primary_qb_id": "qb_home", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+        {"team": "DEN", "recent_primary_qb_id": "qb_away", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+    ])
+    weekly = pd.DataFrame([_weekly_epa("qb_home", 0.0), _weekly_epa("qb_away", 0.0)])
+
+    result = nfl_game_picks.apply_ml_model(win_probabilities, master, qb_continuity, weekly, _schedule_games())
+
+    assert result.iloc[0]["home_win_probability"] != pytest.approx(0.55)  # real overwrite, not the original heuristic
+    assert result.iloc[0]["home_win_probability"] == pytest.approx(model.predict_proba(
+        pd.DataFrame([{"home_composite": 1.3, "away_composite": 0.7, "home_qb_adjustment": 0.0, "away_qb_adjustment": 0.0}])
+    )[0, 1])
+
+
+def test_apply_ml_model_falls_back_per_row_for_a_team_missing_from_master(monkeypatch, tmp_path):
+    # A real degenerate-input guard: a game whose team isn't in `master`
+    # at all (not expected in practice) keeps its ORIGINAL heuristic
+    # probability rather than a fabricated ML prediction built from a
+    # filled-in-zero feature row.
+    from sklearn.linear_model import LogisticRegression
+
+    X_fit = pd.DataFrame({
+        "home_composite": [1.2, 0.8], "away_composite": [0.8, 1.2],
+        "home_qb_adjustment": [0.0, 0.0], "away_qb_adjustment": [0.0, 0.0],
+    })
+    model = LogisticRegression().fit(X_fit, [1, 0])
+    model_path = tmp_path / "model.joblib"
+    nfl_game_picks.ml_models.save_model(
+        {"model": model, "feature_columns": nfl_game_picks.GAME_PICK_FEATURE_COLUMNS}, str(model_path)
+    )
+    monkeypatch.setattr(nfl_game_picks.config, "NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH", str(model_path))
+
+    win_probabilities = pd.DataFrame([{"game_id": "2025_08_DEN_KC", "home_win_probability": 0.55}])
+    master = _master([
+        {"team": "KC", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "defensive_edge": 1.0, "true_power": 1.0,
+         "turnover_margin": 1.0, "points_per_drive": 1.0},
+        # DEN deliberately absent from master - a real missing-team case.
+    ])
+    qb_continuity = pd.DataFrame([
+        {"team": "KC", "recent_primary_qb_id": "qb_home", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+    ])
+    weekly = pd.DataFrame([_weekly_epa("qb_home", 0.0)])
+
+    result = nfl_game_picks.apply_ml_model(win_probabilities, master, qb_continuity, weekly, _schedule_games())
+
+    assert result.iloc[0]["home_win_probability"] == pytest.approx(0.55)  # unchanged - real fallback

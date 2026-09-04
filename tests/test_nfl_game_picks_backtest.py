@@ -230,6 +230,41 @@ def test_build_multi_season_history_and_score_snapshots_match_replay_multi_seaso
     )
 
 
+def test_assemble_nfl_game_pick_log_real_shape_and_outcome():
+    # Real follow-up (2026-09-04 - fixing the ML win-probability
+    # ceiling): assemble_nfl_game_pick_log must produce one real row per
+    # replayed game, carrying the real feature columns plus a real
+    # `home_won` outcome derived from the snapshot's own real scores -
+    # home team always wins 24-17 in this fixture (see _tiny_season's own
+    # docstring), so every real row must show home_won == 1.0.
+    schedules, team_stats, weekly, snap_counts, rosters, pbp = _tiny_two_seasons(num_weeks=4)
+    snapshots = bt.build_multi_season_history(schedules, team_stats, weekly, snap_counts, rosters, pbp, seasons=[2024, 2025])
+
+    from mlb_metrics import nfl_game_picks
+
+    rows = bt.assemble_nfl_game_pick_log(snapshots)
+
+    assert list(rows.columns) == (
+        ["game_id", "season", "week", "home_team", "away_team"] + nfl_game_picks.GAME_PICK_FEATURE_COLUMNS + ["home_won"]
+    )
+    assert set(rows["season"]) == {2025}  # only the second season is ever replayed (see build_multi_season_history)
+    assert (rows["home_won"] == 1.0).all()
+    assert not rows[nfl_game_picks.GAME_PICK_FEATURE_COLUMNS].isna().any().any()
+
+
+def test_assemble_nfl_game_pick_log_accepts_the_disaggregated_feature_fn():
+    schedules, team_stats, weekly, snap_counts, rosters, pbp = _tiny_two_seasons(num_weeks=4)
+    snapshots = bt.build_multi_season_history(schedules, team_stats, weekly, snap_counts, rosters, pbp, seasons=[2024, 2025])
+
+    from mlb_metrics import nfl_game_picks
+
+    rows = bt.assemble_nfl_game_pick_log(snapshots, nfl_game_picks.build_game_features_disaggregated)
+
+    assert list(rows.columns) == (
+        ["game_id", "season", "week", "home_team", "away_team"] + nfl_game_picks.DISAGGREGATED_FEATURE_COLUMNS + ["home_won"]
+    )
+
+
 def test_build_backtest_report_splits_by_train_max_week():
     replay = pd.DataFrame([
         {"week": 3, "home_win_probability": 0.7, "market_home_win_probability": 0.6, "home_won": 1.0},
