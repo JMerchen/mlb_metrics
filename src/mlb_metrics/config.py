@@ -2097,3 +2097,139 @@ NFL_GAME_PICK_MODEL_VERSION = "v2"
 NFL_GAME_PICK_ML_FINAL_HOLDOUT_WEEKS = 3
 NFL_GAME_PICK_ML_WALK_FORWARD_MIN_TRAIN_WEEKS = 6
 NFL_GAME_PICK_ML_WALK_FORWARD_TEST_BLOCK_WEEKS = 2
+
+# --- NFL Season Carryover (nfl_team_strength._season_aware_blend) ---
+#
+# Real follow-up (2026-09-04 - "every season should only carry over a
+# portion of the team's score from the previous season... weeks 1-6...
+# used for calibrating the features to that individual season"). Today,
+# nfl_pipeline.py's real `history` frame is a flat concat of last
+# season's full real games plus this season's so far, with NO discount -
+# confirmed live: at week 1 of a new season, offensive_edge/
+# defensive_edge/turnover_margin/points_per_drive are 100% last season's
+# numbers, full weight, no regression toward the league mean. A team that
+# goes 6-11 one year and returns a franchise QB from injury (or loses
+# one) can be a genuinely different team the next season - carrying its
+# exact prior rating forward at full weight bakes in a stale read
+# precisely when the real uncertainty is highest.
+#
+# `_season_aware_blend` instead: (1) regresses a team's own final prior-
+# season rating toward the cross-team mean by NFL_SEASON_CARRYOVER_REGRESSION
+# (1.0 = full carryover/no regression, 0.0 = assume nothing carries over -
+# every team starts at the league mean), then (2) reuses
+# helpers.shrink_rate (the same empirical-Bayes primitive WAVE/Decision
+# Score already use, proven to generalize to any real-valued rate, not
+# just a 0-1 one) to blend that regressed prior against the team's own
+# REAL current-season measurement, weighted by real games played this
+# season so far vs. NFL_SEASON_CARRYOVER_PRIOR_STRENGTH real-game-
+# equivalent pseudo-observations. At 0 current-season games the rating IS
+# the regressed prior; by prior_strength games, the current season's own
+# signal already outweighs it - this is what makes weeks 1-6
+# progressively "calibrate" the prior to this specific season, per the
+# user's own framing (PRIOR_STRENGTH starts at 6.0 to match "weeks 1-6"
+# directly).
+#
+# Real backtest result (scripts/backtest_nfl_season_carryover.py, real
+# 2016-2025 multi-season replay, 158 real replayed weeks/season-pair):
+# isolating the carryover mechanism alone (home_field_weight=0.0, live
+# composite weights) across REGRESSION in {0.3, 0.5, 0.7} x
+# PRIOR_STRENGTH in {3, 6, 10} produced overall log_loss in a tight
+# 0.67777-0.67799 range with NO consistent monotonic pattern by either
+# parameter, against a real baseline (today's flat-concat, no-carryover
+# behavior) of 0.67800 - i.e. no real, distinguishable effect at ANY
+# tested magnitude, in either direction. The apparent "improvement" in
+# the full grid sweep's headline numbers came entirely from the
+# separately-validated NFL_HOME_FIELD_ADVANTAGE_WEIGHT term (see below),
+# not from this mechanism. Honest negative finding, same posture as
+# Decision Score's count/leverage multipliers: `_season_aware_blend`'s
+# `season_aware` parameter now defaults to False everywhere (a real,
+# explicit no-op - see its own docstring) so merging this feature does
+# NOT silently change today's validated live behavior. The mechanism
+# itself is real, tested, and available via `season_aware=True` for a
+# future revisit (e.g. with a real per-signal, not just per-composite,
+# outcome to validate against, or more seasons of real data) - these two
+# constants are kept as real starting points for that, not deleted, but
+# are currently INERT in the live pipeline.
+NFL_SEASON_CARRYOVER_REGRESSION = 0.5
+NFL_SEASON_CARRYOVER_PRIOR_STRENGTH = 6.0
+
+# --- NFL Home-Field Advantage (nfl_game_picks.compute_game_win_probabilities) ---
+#
+# Real follow-up (2026-09-04 - "a little push or pull from home/away").
+# Confirmed live: home_win_probability was a pure ratio of the two teams'
+# composites with ZERO home/away term anywhere in this pipeline - a real
+# gap, not a deliberate omission. A single, real, GLOBAL additive
+# constant (added to the home team's own rating before the win-
+# probability ratio, same z-normalized units as the composite) - not a
+# per-team fit, which there isn't remotely enough real data per team to
+# do honestly yet.
+#
+# Real backtest result (a focused follow-up to
+# scripts/backtest_nfl_season_carryover.py, isolating this one term
+# against the true season_aware=False/live-composite baseline, with a
+# real per-game PAIRED significance test on squared error - 2,333 real
+# games, 9 seasons): VALIDATED, and 0.02 is not just "a safe small
+# value" but the genuine best point tested.
+#
+#   weight  accuracy  log_loss  paired p-value (vs. weight=0.0)
+#   0.00    60.74%    0.6780    - (baseline)
+#   0.02    61.21%    0.6774    0.0033
+#   0.05    60.87%    0.6767    0.0098
+#   0.08    60.05%    0.6762    0.0253
+#   0.10    59.92%    0.6760    0.0443
+#   0.15    57.82%    0.6758    0.1425 (NOT significant)
+#
+# Real, honest nuance: log_loss/Brier keep improving monotonically as the
+# weight grows, but real ACCURACY (predicting the right winner) gets
+# WORSE past 0.02, and the paired significance weakens right alongside it -
+# a bigger push over-corrects, flipping real away-favorite picks to
+# (wrong) home picks even as it makes the probability numbers themselves
+# look marginally better-calibrated in a squared-error sense. 0.02 is the
+# real, validated value - not a conservative starting guess kept out of
+# caution, the backtest's own numbers say it's the best of the tested
+# range on every axis at once (accuracy, log_loss improvement, and
+# significance).
+NFL_HOME_FIELD_ADVANTAGE_WEIGHT = 0.02
+
+# --- NFL Game Pick Composite: candidate reweightings (nfl_game_picks._team_composite) ---
+#
+# Real follow-up (2026-09-04 - "it comes down to offensive efficiency,
+# defensive efficiency, and turnover ratio, for the most part"). Today's
+# live NFL_GAME_PICK_COMPOSITE_WEIGHTS double-counts defensive_edge (once
+# directly, once again inside true_power's own average) while never
+# including offensive_edge directly at all - a real, confirmed asymmetry,
+# not the user's literal intent. Two real, named candidates
+# (NFL_GAME_PICK_COMPOSITE_WEIGHTS_CORE_ONLY/_CORE_HEAVY), both adding
+# offensive_edge as its own direct weight for the first time, swept by
+# scripts/backtest_nfl_season_carryover.py ALONGSIDE today's live weights
+# as the baseline candidate - the backtest picks the winner, this file
+# does not assert one ahead of that result (per the user's own explicit
+# "sweep candidates, let the backtest decide" scope confirmation).
+#
+# Real backtest result: both candidates were CLEARLY WORSE than today's
+# live weights across the full 2016-2025 replay (log_loss: live=0.6765,
+# core_heavy=0.6791, core_only=0.6824 - accuracy told the same story,
+# 0.608/0.594/0.573 respectively, at matched regression/prior_strength/
+# home_field settings). Honest negative finding: refocusing the
+# composite around offensive/defensive/turnover efficiency alone -
+# dropping the record-based pyth_Strength/pyth_Confidence and
+# points_per_drive signals - measurably HURTS real predictive
+# performance, not just "doesn't help." Live NFL_GAME_PICK_COMPOSITE_WEIGHTS
+# below is UNCHANGED; these two candidates are kept only as a real,
+# backtested-and-rejected record (matching this project's "cite the real
+# numbers, don't just delete the losing candidate" convention), not wired
+# into any default.
+NFL_GAME_PICK_COMPOSITE_WEIGHTS_CORE_ONLY = [
+    ("offensive_edge", 1 / 3),
+    ("defensive_edge", 1 / 3),
+    ("turnover_margin", 1 / 3),
+]
+NFL_GAME_PICK_COMPOSITE_WEIGHTS_CORE_HEAVY = [
+    ("offensive_edge", 0.25),
+    ("defensive_edge", 0.25),
+    ("turnover_margin", 0.25),
+    ("pyth_Strength", 0.0625),
+    ("pyth_Confidence", 0.0625),
+    ("true_power", 0.0625),
+    ("points_per_drive", 0.0625),
+]

@@ -46,7 +46,7 @@ def _ts_row(team, opp, season, week, gid):
     }
 
 
-def _tiny_season(num_weeks=8):
+def _tiny_season(num_weeks=8, season=2025):
     """A real (small, synthetic) round-robin among 4 teams across
     `num_weeks` weeks - reused across replay_season tests. Home team
     always wins 24-17, so real results are deterministic and hand-checkable."""
@@ -59,35 +59,48 @@ def _tiny_season(num_weeks=8):
     for week in range(1, num_weeks + 1):
         pairings = weekly_pairings[(week - 1) % len(weekly_pairings)]
         for game_num, (home, away) in enumerate(pairings, start=1):
-            gid = f"2025_{week:02d}_{game_num}"
-            sched_rows.append(_game(gid, 2025, week, home, away, 24, 17))
+            gid = f"{season}_{week:02d}_{game_num}"
+            sched_rows.append(_game(gid, season, week, home, away, 24, 17))
             for team, opp in [(home, away), (away, home)]:
-                ts_rows.append(_ts_row(team, opp, 2025, week, gid))
+                ts_rows.append(_ts_row(team, opp, season, week, gid))
                 weekly_rows.append({
-                    "player_id": f"{team}_qb", "position": "QB", "season": 2025, "week": week,
+                    "player_id": f"{team}_qb", "position": "QB", "season": season, "week": week,
                     "season_type": "REG", "game_id": gid,
                     "attempts": 30, "completions": 20, "passing_yards": 200, "passing_tds": 1,
                     "passing_interceptions": 0, "carries": 2, "rushing_yards": 5, "rushing_tds": 0,
                     "passing_epa": 1.0,
                 })
                 snap_rows.append({
-                    "game_id": gid, "season": 2025, "week": week, "game_type": "REG",
+                    "game_id": gid, "season": season, "week": week, "game_type": "REG",
                     "team": team, "position": "QB", "pfr_player_id": f"{team}_pfr",
                     "offense_snaps": 60, "offense_pct": 0.95,
                 })
                 points = POINTS_BY_TEAM[team]
                 for play_id, (score, score_post) in enumerate([(0, 0), (0, points)], start=1):
                     pbp_rows.append({
-                        "game_id": gid, "season": 2025, "week": week, "season_type": "REG",
+                        "game_id": gid, "season": season, "week": week, "season_type": "REG",
                         "play_id": play_id, "posteam": team, "fixed_drive": 1,
                         "posteam_score": score, "posteam_score_post": score_post,
                     })
     rosters = pd.DataFrame([
-        {"season": 2025, "gsis_id": f"{t}_qb", "pfr_id": f"{t}_pfr"} for t in ["A", "B", "C", "D"]
+        {"season": season, "gsis_id": f"{t}_qb", "pfr_id": f"{t}_pfr"} for t in ["A", "B", "C", "D"]
     ])
     return (
         pd.DataFrame(sched_rows), pd.DataFrame(ts_rows), pd.DataFrame(weekly_rows),
         pd.DataFrame(snap_rows), rosters, pd.DataFrame(pbp_rows),
+    )
+
+
+def _tiny_two_seasons(num_weeks=8):
+    """Two consecutive real (small, synthetic) seasons (2024, 2025), same
+    shape as `_tiny_season`, concatenated - the minimum real fixture that
+    exercises build_multi_season_history/replay_multi_season's own
+    cross-season carryover (a single-season fixture, like `_tiny_season`
+    on its own, has no real prior season to carry over from at all)."""
+    prior = _tiny_season(num_weeks=num_weeks, season=2024)
+    current = _tiny_season(num_weeks=num_weeks, season=2025)
+    return tuple(
+        pd.concat([prior[i], current[i]], ignore_index=True) for i in range(len(prior))
     )
 
 
@@ -183,6 +196,38 @@ def test_beat_closing_line_rate_no_market_data_returns_nan():
 
     assert result["n_compared"] == 0
     assert pd.isna(result["rate"])
+
+
+def test_replay_multi_season_excludes_the_first_season_and_includes_weeks_1_and_2():
+    # Real follow-up (2026-09-04): unlike replay_season, a real prior
+    # season's history means weeks 1-2 of the SECOND season have a real
+    # prediction to make - and the first season in the list is never
+    # itself replayed (no real prior season exists for it in this data).
+    schedules, team_stats, weekly, snap_counts, rosters, pbp = _tiny_two_seasons(num_weeks=4)
+
+    replay = bt.replay_multi_season(
+        schedules, team_stats, weekly, snap_counts, rosters, pbp, seasons=[2024, 2025]
+    )
+
+    assert set(replay["season"]) == {2025}
+    assert replay["week"].min() == 1
+    assert not replay["home_win_probability"].isna().any()
+
+
+def test_build_multi_season_history_and_score_snapshots_match_replay_multi_season():
+    # score_multi_season_snapshots re-scoring already-built snapshots must
+    # produce byte-identical output to the one-call replay_multi_season
+    # wrapper - the whole point of splitting them is a cheap re-score, not
+    # a different real result.
+    schedules, team_stats, weekly, snap_counts, rosters, pbp = _tiny_two_seasons(num_weeks=4)
+
+    snapshots = bt.build_multi_season_history(schedules, team_stats, weekly, snap_counts, rosters, pbp, seasons=[2024, 2025])
+    from_snapshots = bt.score_multi_season_snapshots(snapshots)
+    direct = bt.replay_multi_season(schedules, team_stats, weekly, snap_counts, rosters, pbp, seasons=[2024, 2025])
+
+    pd.testing.assert_frame_equal(
+        from_snapshots.reset_index(drop=True), direct.reset_index(drop=True)
+    )
 
 
 def test_build_backtest_report_splits_by_train_max_week():

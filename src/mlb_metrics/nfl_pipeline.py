@@ -197,8 +197,17 @@ def run(
         if real_history_games.empty:
             print("No real completed games in history yet (brand-new season with no prior-season data) - skipping prediction.")
         else:
+            # current_season is passed EXPLICITLY, not left to
+            # assemble_team_metrics' own default inference
+            # (history["schedules"]["season"].max()) - at week 1 of a new
+            # season, `history["schedules"]` contains ONLY the prior
+            # season's real rows (this season's own games haven't been
+            # played yet), so that inference would silently resolve to
+            # the WRONG season - exactly the real cold-start case the
+            # season-carryover feature exists to handle correctly (real
+            # follow-up, 2026-09-04).
             master = nfl_team_strength.assemble_team_metrics(
-                history["schedules"], history["team_stats"], history["pbp"]
+                history["schedules"], history["team_stats"], history["pbp"], current_season=season
             )
             qb_continuity = nfl_team_strength.compute_qb_continuity_adjustment(
                 history["snap_counts"], history["weekly"], history["rosters_weekly"]

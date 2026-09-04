@@ -36,6 +36,18 @@ This is a first-pass, unvalidated blend, same spirit as MLB's own
 game_picks.py before its own backtest existed: meant to be logged and
 tracked (nfl_game_predictions.py/nfl_game_evaluation.py) and compared
 against reality before ever being trusted.
+
+Real follow-up (2026-09-04 - "a little push or pull from home/away"):
+`compute_game_win_probabilities` now adds a single, real, GLOBAL
+`config.NFL_HOME_FIELD_ADVANTAGE_WEIGHT` to the home side's own rating
+before the win-probability ratio (there was previously NO home/away term
+anywhere in this pipeline - confirmed live, a real gap, not a deliberate
+omission). `_team_composite`/`build_game_features`/
+`compute_game_win_probabilities` also gained explicit
+`composite_weights`/`home_field_weight` override parameters (default
+None -> the two config constants above) - see
+scripts/backtest_nfl_season_carryover.py, which sweeps both alongside
+nfl_team_strength.py's own season-carryover shrinkage.
 """
 
 import pandas as pd
@@ -50,13 +62,20 @@ GAME_PICK_FEATURE_COLUMNS = [
 ]
 
 
-def _team_composite(master: pd.DataFrame) -> pd.DataFrame:
-    """One row per team: [team, composite] - the equal-weighted blend of
-    config.NFL_GAME_PICK_COMPOSITE_WEIGHTS' four columns. All four inputs
-    are already z-normalized to mean 1.0 (config.NFL_NORMALIZATION_Z_SCALE),
-    so a straight weighted sum needs no further rescaling - direct mirror
-    of game_picks._team_composite."""
-    composite = sum(master[col] * weight for col, weight in config.NFL_GAME_PICK_COMPOSITE_WEIGHTS)
+def _team_composite(master: pd.DataFrame, weights=None) -> pd.DataFrame:
+    """One row per team: [team, composite] - the weighted blend of
+    `weights` (defaults to config.NFL_GAME_PICK_COMPOSITE_WEIGHTS). All
+    inputs are already z-normalized to mean 1.0
+    (config.NFL_NORMALIZATION_Z_SCALE), so a straight weighted sum needs
+    no further rescaling - direct mirror of game_picks._team_composite.
+    `weights` is an explicit override parameter (same
+    "config default, backtest-sweepable override" pattern as
+    decision_score.py's own compute_zone_ops/compute_decision_advice) so
+    scripts/backtest_nfl_season_carryover.py can sweep candidate weight
+    sets (config.NFL_GAME_PICK_COMPOSITE_WEIGHTS_CORE_ONLY/_CORE_HEAVY)
+    without monkeypatching the config module."""
+    weights = config.NFL_GAME_PICK_COMPOSITE_WEIGHTS if weights is None else weights
+    composite = sum(master[col] * weight for col, weight in weights)
     return pd.DataFrame({"team": master["team"], "composite": composite})
 
 
@@ -76,6 +95,7 @@ def build_game_features(
     qb_continuity: pd.DataFrame,
     weekly_df: pd.DataFrame,
     schedule_games_df: pd.DataFrame,
+    composite_weights=None,
 ) -> pd.DataFrame:
     """Returns [game_id, season, week, home_team, away_team] + GAME_PICK_FEATURE_COLUMNS
     - the raw, unblended per-team/matchup ingredients compute_game_win_probabilities
@@ -92,8 +112,10 @@ def build_game_features(
     for the same REG-season/real-score filtering convention; this function
     does NOT filter on game_type or completion status itself, since an
     UPCOMING game has no score yet by definition - the caller decides which
-    games to feature)."""
-    composite = _team_composite(master)
+    games to feature). `composite_weights` is passed straight through to
+    `_team_composite` (see that function's own docstring for the
+    override-parameter reasoning)."""
+    composite = _team_composite(master, composite_weights)
 
     games = schedule_games_df.merge(
         composite.rename(columns={"team": "home_team", "composite": "home_composite"}), on="home_team", how="left"
@@ -129,6 +151,8 @@ def compute_game_win_probabilities(
     qb_continuity: pd.DataFrame,
     weekly_df: pd.DataFrame,
     schedule_games_df: pd.DataFrame,
+    composite_weights=None,
+    home_field_weight: float = None,
 ) -> pd.DataFrame:
     """Returns [game_id, season, week, home_team, away_team, home_win_probability]
     - one row per game in `schedule_games_df`.
@@ -140,11 +164,26 @@ def compute_game_win_probabilities(
     these composites aren't calibrated win percentages, so a ratio is the
     honestly-explainable choice, same reasoning as game_picks.compute_game_win_probabilities.
     Both ratings are floored to config.NFL_GAME_PICK_RATING_FLOOR before
-    dividing, purely as a degenerate-input guard."""
-    games = build_game_features(master, qb_continuity, weekly_df, schedule_games_df)
+    dividing, purely as a degenerate-input guard.
 
+    `composite_weights`/`home_field_weight` are explicit override
+    parameters (default None -> config.NFL_GAME_PICK_COMPOSITE_WEIGHTS/
+    config.NFL_HOME_FIELD_ADVANTAGE_WEIGHT), same "config default,
+    backtest-sweepable override" pattern as decision_score.py's own
+    compute_decision_advice - lets
+    scripts/backtest_nfl_season_carryover.py sweep candidates without
+    monkeypatching the config module."""
+    home_field_weight = config.NFL_HOME_FIELD_ADVANTAGE_WEIGHT if home_field_weight is None else home_field_weight
+    games = build_game_features(master, qb_continuity, weekly_df, schedule_games_df, composite_weights)
+
+    # Real follow-up (2026-09-04 - "a little push or pull from home/
+    # away"): a single, real, GLOBAL additive home-field term (see
+    # config.NFL_HOME_FIELD_ADVANTAGE_WEIGHT's own docstring for why this
+    # is a league-wide constant, not a per-team fit) - added to the HOME
+    # side only, same z-normalized rating units as the composite.
     home_rating = (
         games["home_composite"] + config.NFL_QB_CONTINUITY_WEIGHT * games["home_qb_adjustment"]
+        + home_field_weight
     ).clip(lower=config.NFL_GAME_PICK_RATING_FLOOR)
     away_rating = (
         games["away_composite"] + config.NFL_QB_CONTINUITY_WEIGHT * games["away_qb_adjustment"]
