@@ -204,6 +204,31 @@ PAGE_JS_PATCHERS = {
 VERBATIM_JS = ["dfs_solver.js", "nfl_draft_assistant.js"]
 
 
+REAL_SITE_ONLY_NAV_MARKERS = (
+    # The MLB umbrella's own sub-header + Predictive Metrics/DFS/Age
+    # Curves subtabs, and NFL's own sub-header - added to the real
+    # docs/*.html pages so their own nav mirrors the artifact's MLB/NFL
+    # umbrella tabs when browsing the real site directly. The merged
+    # artifact already builds its own copy of both higher up the DOM (see
+    # full_site_template.html), so these must NOT also flow into the
+    # page's own extracted content - besides being a visual duplicate,
+    # <a href="./dfs.html">-style links wouldn't work inside the
+    # single-page artifact anyway.
+    '<div class="sportHeader">',
+    '<div class="tabGroup" id="mlbSubTabs">',
+)
+
+
+def _skip_real_site_only_nav(html: str, start: int) -> int:
+    pos = start
+    for marker in REAL_SITE_ONLY_NAV_MARKERS:
+        candidate = html[pos:].lstrip()
+        if candidate.startswith(marker):
+            marker_pos = pos + (len(html[pos:]) - len(candidate))
+            pos = html.index("</div>", marker_pos) + len("</div>")
+    return pos
+
+
 def _extract_page_content(html: str, filename: str) -> str:
     """Everything between the shared header/nav (dropped - the merged
     page builds ONE top-level nav instead) and the trailing <script>
@@ -219,7 +244,7 @@ def _extract_page_content(html: str, filename: str) -> str:
     while closes < 2:
         pos = html.index("</div>", pos) + len("</div>")
         closes += 1
-    content_start = pos
+    content_start = _skip_real_site_only_nav(html, pos)
     # methodology.html has no <script> tag at all (purely static) -
     # fall back to </body> for that one page.
     script_pos = html.find("<script", content_start)

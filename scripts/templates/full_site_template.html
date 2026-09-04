@@ -18,16 +18,11 @@ to just this tab now that every tab shares one document). */
 .sitePage[hidden]{display:none;}
 .mlbSubpage[hidden]{display:none;}
 
-/* Per-sport sub-header shown at the top of the MLB/NFL tabs - the real
-site's own siteHeader/h1 said "MLB Metrics" globally because each sport
-lived on its own separate page; here one document holds both, so the
-top siteHeader carries the overall brand instead and each sport tab
-gets its own smaller heading (picks up --accent, which #page-nfl above
-already scopes to green for the NFL tab, orange everywhere else). */
-.sportHeader{display:flex;align-items:center;gap:10px;margin:4px 0 20px;}
-.sportMark{width:26px;height:26px;flex-shrink:0;}
-.sportHeading{font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0;}
-.sportHeading .brandAccent{color:var(--accent);}
+/* .sportHeader/.sportMark/.sportHeading (the per-sport sub-header shown
+at the top of the MLB/NFL tabs) now live in the shared stylesheet,
+already embedded just above this comment - the real docs/*.html pages
+use the same per-sport sub-header now too, so this is genuinely shared,
+not artifact-only. */
 </style>
 
 <div class="container">
