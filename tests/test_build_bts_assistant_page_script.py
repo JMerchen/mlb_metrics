@@ -149,6 +149,50 @@ def test_build_payload_includes_game_picks_for_both_sports(tmp_path):
     assert nfl["fullHistory"] == []  # only one date logged - nothing older to show as history
 
 
+def test_nfl_game_picks_group_by_week_surfaces_the_whole_slate(tmp_path):
+    """Real bug: NFL weeks span multiple days (Thu/Sun/Mon) - filtering
+    upcomingPicks by the single latest date (like MLB, which really is
+    one date per slate) only ever surfaced the week's last game (Monday
+    Night Football). group_by_week groups by the whole (season, week)
+    slate instead, mirroring docs/nfl.js's own renderNflTodaysGamePicks."""
+    module = _load_module()
+    docs_data = _write_docs_data(tmp_path)
+
+    game_pick_columns = [
+        "date", "home_team", "away_team", "predicted_winner", "predicted_probability",
+        "above_threshold", "status", "bet_side", "bet_team", "bet_units", "bet_profit_units",
+        "market_predicted_winner_probability", "season", "week",
+    ]
+    week1_early = {
+        "date": "2026-09-10", "season": 2026, "week": 1, "home_team": "SF", "away_team": "LA",
+        "predicted_winner": "SF", "predicted_probability": 0.54, "above_threshold": False, "status": "pending",
+        "bet_side": None, "bet_team": None, "bet_units": 0.0, "bet_profit_units": None,
+        "market_predicted_winner_probability": 0.5,
+    }
+    week1_late = {
+        "date": "2026-09-14", "season": 2026, "week": 1, "home_team": "KC", "away_team": "DEN",
+        "predicted_winner": "KC", "predicted_probability": 0.51, "above_threshold": False, "status": "pending",
+        "bet_side": None, "bet_team": None, "bet_units": 0.0, "bet_profit_units": None,
+        "market_predicted_winner_probability": 0.57,
+    }
+    week0_resolved = {
+        "date": "2026-09-04", "season": 2026, "week": 0, "home_team": "DAL", "away_team": "NYG",
+        "predicted_winner": "DAL", "predicted_probability": 0.6, "above_threshold": True, "status": "win",
+        "bet_side": "home", "bet_team": "DAL", "bet_units": 1.2, "bet_profit_units": 1.0,
+        "market_predicted_winner_probability": 0.55,
+    }
+    pd.DataFrame([week0_resolved, week1_early, week1_late])[game_pick_columns].to_csv(
+        docs_data / "nfl_game_picks_picks.csv", index=False
+    )
+
+    payload = module.build_payload(str(docs_data))
+    nfl = payload["nflGamePicks"]
+
+    upcoming_teams = {(g["home_team"], g["away_team"]) for g in nfl["upcomingPicks"]}
+    assert upcoming_teams == {("SF", "LA"), ("KC", "DEN")}  # whole week 1 slate, not just the Monday game
+    assert [g["home_team"] for g in nfl["fullHistory"]] == ["DAL"]  # week 0 correctly relegated to history
+
+
 def test_build_html_embeds_valid_json_between_markers(tmp_path):
     module = _load_module()
     docs_data = _write_docs_data(tmp_path)

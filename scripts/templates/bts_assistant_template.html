@@ -36,8 +36,8 @@ maintaining a second competing theme. */
 .game:last-child{border-bottom:none;}
 .game .btsMatchup{flex:1;min-width:0;font-size:13px;}
 .game .btsMatchup .away{color:var(--text-dim);}
-.game .btsMatchup .winner{font-weight:700;}
-.game .prob{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);font-variant-numeric:tabular-nums;}
+.game .btsMatchup .winner{font-weight:700;color:var(--on-accent);background:var(--accent);padding:1px 7px;border-radius:4px;}
+.game .prob{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);font-variant-numeric:tabular-nums;white-space:nowrap;}
 .bet-badge{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:3px 7px;border-radius:20px;border:1px solid var(--accent);color:var(--accent);white-space:nowrap;}
 .empty-note{padding:14px 16px;color:var(--text-dim);font-size:13px;line-height:1.5;}
 
@@ -157,8 +157,15 @@ function renderGamePicks(sport, data){
 
   listEl.innerHTML = data.upcomingPicks.map(g => {
     const homeWins = g.predicted_winner === g.home_team;
-    const bet = g.above_threshold
-      ? `<span class="bet-badge">${esc(g.bet_side || 'bet')} ${g.bet_units ? g.bet_units.toFixed(1)+'u' : ''}</span>` : '';
+    // bet_units > 0 is the real "was a bet advised" signal, same as the
+    // dashboard's own renderTodaysGamePicks/renderNflTodaysGamePicks -
+    // above_threshold alone (the model's own edge flag) does NOT mean a
+    // bet was placed (Kelly sizing/daily caps can still zero it out), so
+    // using it here showed a bet badge on games the dashboard didn't.
+    const betUnits = Number(g.bet_units);
+    const betAdvised = betUnits > 0;
+    const bet = betAdvised
+      ? `<span class="bet-badge">Bet ${esc(g.bet_team)} ${betUnits.toFixed(2)}u</span>` : '';
     return `<div class="game">
       <div class="btsMatchup">
         <span class="${!homeWins ? 'winner' : ''} away">${esc(g.away_team)}</span> @
