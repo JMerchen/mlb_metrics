@@ -4524,6 +4524,90 @@ the strongest significance) - not a conservative starting guess kept out
 of caution, the real numbers say it's the best point in the tested range.
 `config.NFL_HOME_FIELD_ADVANTAGE_WEIGHT = 0.02` ships live.
 
+### Real fix: the ratio formula's structural "can't exceed ~59%" ceiling (2026-09-04)
+
+A real, concrete complaint about a real historical game: a "barely
+competent" rookie-QB team against "a juggernaut that eventually won the
+Super Bowl" - a real "not a chance in hell" mismatch - came out of the
+live model as "almost a coin flip." Confirmed with real numbers, not a
+vague impression: `home_win_probability = home_rating / (home_rating +
+away_rating)` has NO free scale parameter - both ratings are z-normalized
+composites clustered around 1.0 with a real cross-team std of only
+~0.075. Even the single best real team hosting the single worst real team
+in a given week - the most extreme mismatch possible - works out to
+`1.153/(1.153+0.813) = 58.7%`. **The model could not express a real
+blowout's true confidence, no matter how much real historical data
+existed to learn from** - a structural defect, not a data problem, and
+recalibration alone couldn't fix it either (`train_nfl_game_pick_calibration.py`
+already tried rescaling this same compressed range and failed to beat
+the raw heuristic on a real holdout - little real signal at the extremes
+to learn a reliable steep mapping from).
+
+**The fix, with a real precedent already in this codebase on the MLB
+side**: `scripts/train_game_pick_model.py` fits a real, walk-forward-
+validated `LogisticRegression`/`HistGradientBoostingClassifier` directly
+on the raw composite ingredients instead of rescaling the ratio's
+output - a fitted model's own coefficients give it a real LEARNED scale
+a fixed ratio never has. MLB's own version is explicitly left parked,
+never wired into live picks. `scripts/train_nfl_game_pick_model.py` ports
+that exact methodology to NFL - and, unlike MLB's own version, actually
+finishes the job.
+
+Two real feature-set candidates swept honestly: `composite` (today's
+minimal 4-feature set - home/away composite + QB adjustments) and
+`disaggregated` (a richer set exposing each individual real signal -
+pyth_Strength, pyth_Confidence, offensive_edge, defensive_edge,
+turnover_margin, points_per_drive - separately for home/away). Both
+swept through LogisticRegression and HistGradientBoostingClassifier via
+real walk-forward CV across all 10 cached seasons (2016-2025, 2,383 real
+games), with the full real most recent season (2025, 18 real weeks) held
+out entirely as the final test - not a token few-week slice, now that 9
+real prior seasons of train data exist.
+
+**Real result - VALIDATED, both candidates cleared the save-gate (beat
+naive baseline AND today's live heuristic on holdout log_loss)**:
+
+| | Holdout log_loss | Holdout accuracy |
+|---|---|---|
+| Naive baseline | 0.6904 | - |
+| Live heuristic (ratio + home-field) | 0.6795 | 59.9% |
+| `composite` (HistGradientBoostingClassifier) | 0.6616 | 61.4% |
+| **`disaggregated` (LogisticRegression) - winner** | **0.6276** | **61.4%** |
+
+**The real point of this whole feature - does it fix the actual
+complaint** - predicted-probability spread on the same real holdout:
+
+| | min | p5 | median | p95 | max | std |
+|---|---|---|---|---|---|---|
+| Live heuristic | 43.0% | 45.5% | 50.4% | 56.0% | 62.5% | 0.033 |
+| **New model** | **19.4%** | 29.9% | 54.4% | 79.2% | **88.3%** | **0.150** |
+
+A real blowout can now be priced near 90%, not capped at ~59% - directly
+answering the complaint. The 5 most lopsided real holdout games (by how
+far the live heuristic strayed from 50%) all moved further toward their
+real winner under the new model (e.g. a game the heuristic called 59.9%
+moved to 88.3%, and the real favorite did win).
+
+**Honest data-quality footnote found while validating (not a bug in this
+code)**: ~2% of real rows (48 of 2,383 - every real Oakland Raiders game
+2016-2019) carry a real NaN in their offensive_edge/defensive_edge/
+turnover_margin/points_per_drive feature - a genuine upstream nflreadpy
+inconsistency (`schedules_*.parquet` uses the real historical "OAK" code
+for those seasons, `team_stats_*.parquet` retroactively applies the
+post-relocation "LV" code to the same historical seasons, so a
+team-strength lookup by abbreviation never matches). Handled the same way
+every other missing value in this project is (`game_feature_matrix`'s
+existing `.fillna(0)`), not silently fabricated.
+
+The winning model (refit on the full 2,383-game real dataset after
+clearing the gate, same "use every real data point once validated"
+precedent `train_nfl_game_pick_calibration.py` already established) is
+saved to `config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH` and live via
+`nfl_game_picks.apply_ml_model` - wired into `nfl_pipeline.py` right
+after the ratio heuristic, with a real, tested, graceful fallback to
+that heuristic (per-row, not all-or-nothing) if the artifact is ever
+missing or a game's own features are genuinely incomplete.
+
 ### Live pipeline (`nfl_pipeline.py`, `.github/workflows/nfl_weekly_update.yml`)
 
 Runs weekly (Tuesday mornings, after Monday Night Football has resolved
