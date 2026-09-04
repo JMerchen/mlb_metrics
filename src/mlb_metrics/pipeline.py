@@ -52,6 +52,12 @@ def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
     platoon split, generalized to home/road via _blend_windows' existing
     `column` parameter (already proven for compute_pitch_family_rates).
 
+    Also carries `zone`, `balls`, `strikes` (the PA-ENDING pitch's own
+    real Statcast values), used by decision_score.compute_zone_ops/
+    compute_batter_overall_ops - the batter's real per-zone OBP/SLG needs
+    to know which zone the PA actually concluded in, same "already on
+    every real row" reasoning as the quality-of-contact columns above.
+
     A `df` missing one or more of these optional columns entirely (never
     happens with a real pybaseball.statcast() pull - see
     data.fetch_statcast_range's docstring - but does happen with an older/
@@ -63,7 +69,7 @@ def build_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
     quality_columns = [
         "type", "launch_speed", "estimated_ba_using_speedangle",
         "estimated_woba_using_speedangle", "launch_speed_angle", "pitch_type",
-        "inning_topbot",
+        "inning_topbot", "zone", "balls", "strikes",
     ]
     missing = [c for c in quality_columns if c not in df.columns]
     if missing:
@@ -94,8 +100,21 @@ def build_all_pitch_events(df: pd.DataFrame) -> pd.DataFrame:
     filtered by their own consumer (helpers.pitch_type_family/
     is_out_of_zone), not pre-filtered here - dropping on `pitch_type`
     unconditionally would wrongly exclude real plate-discipline-relevant
-    pitches that have no pitch_type but a perfectly real description/zone."""
-    columns = ["game_date", "batter", "pitcher", "pitch_type", "description", "zone"]
+    pitches that have no pitch_type but a perfectly real description/zone.
+
+    Also carries `balls`/`strikes` (the real count this specific pitch was
+    thrown on) and real situational columns (`inning`, `outs_when_up`,
+    `on_1b`/`on_2b`/`on_3b`, `bat_score`, `fld_score`) - needed by
+    decision_score.compute_decision_advice's per-pitch "was swinging or
+    taking advised" classification, which is fundamentally a per-pitch
+    question (the count/situation at THIS pitch), the same "every real
+    pitch, not just PA-enders" reasoning the rest of this function's
+    docstring already gives for plate discipline."""
+    columns = [
+        "game_date", "batter", "pitcher", "pitch_type", "description", "zone",
+        "balls", "strikes", "inning", "outs_when_up", "on_1b", "on_2b", "on_3b",
+        "bat_score", "fld_score",
+    ]
     missing = [c for c in columns if c not in df.columns]
     if missing:
         df = df.assign(**{c: pd.NA for c in missing})

@@ -823,6 +823,44 @@ and recency-window-blended, same as every other windowed signal here.</p>
 <a class="methodLink" href="https://www.mlb.com/glossary/statcast" target="_blank" rel="noopener">Learn more &rarr;</a>
 </div>
 
+<div class="methodCard" id="decision-score">
+<h3>Decision Score</h3>
+<p class="methodLabel">What it is</p>
+<p>A plate-discipline metric: per real pitch, was swinging or taking the
+better choice FOR THIS BATTER right now, given the pitch's real Statcast
+zone and their own recency-windowed OPS-equivalent production in that
+specific zone (shrunk toward their own overall OPS, never a league
+average - "is this a good zone for me," not "is this objectively a good
+pitch")? Decision_Score is the real % of pitches where a batter's actual
+swing/take choice matched that advice.</p>
+<p class="methodLabel">How we use it</p>
+<p><code>decision_score.compute_decision_score</code> builds each
+batter's real windowed OBP/SLG/OPS overall and per zone
+(<code>compute_batter_overall_ops</code>/<code>compute_zone_ops</code>,
+shrunk via <code>helpers.shrink_rate</code>,
+<code>config.DECISION_SCORE_ZONE_SHRINKAGE_STRENGTH</code> pseudo-PAs),
+then compares each pitch's zone-OPS against that batter's own overall OPS
+to classify the advised action. A real, no-lookahead backtest
+(<code>scripts/backtest_decision_score.py</code>; train Mar-Jun 2025,
+test Jul-Sep 2025, held out entirely from the reference it's graded
+against) validated the core zone signal: PA-ending pitches where the
+batter's real choice matched the advice scored a real 0.768 mean PA value
+(on-base + total bases) vs. 0.624 for mismatched ones (n=86,389,
+p&lt;0.0001 pooled AND per-batter-paired). A real, honest negative
+finding from that same backtest: hand-designed count-context/game-
+situation threshold adjustments did NOT improve on the zone-only
+baseline at any magnitude swept, so both ship at a neutral 1.0 (the
+classifiers themselves - <code>classify_count_context</code>, the real
+high-leverage flag - stay in the code, just not yet wired to move the
+threshold). A separate real, no-lookahead significance test at the team
+level (does a team's average Decision_Score, weighted by who actually
+played, predict real game outcomes beyond the existing team model) did
+NOT clear a real bar (p=0.16 controlling for pyth_Strength) - so
+Decision_Score is a player-level-only metric here, not part of any team
+rating or Automated Game Pick.</p>
+<a class="methodLink" href="https://baseballsavant.mlb.com/leaderboard/swing-take" target="_blank" rel="noopener">Learn more &rarr;</a>
+</div>
+
 </div>
 </section>
 

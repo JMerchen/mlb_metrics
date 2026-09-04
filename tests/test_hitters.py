@@ -36,6 +36,12 @@ def _at_bats(batter, throws, rows):
             "type": pd.NA, "launch_speed": pd.NA, "estimated_ba_using_speedangle": pd.NA,
             "estimated_woba_using_speedangle": pd.NA, "launch_speed_angle": pd.NA,
             "pitch_type": pd.NA, "inning_topbot": pd.NA,
+            # zone/balls/strikes (decision_score.compute_batter_overall_ops/
+            # compute_zone_ops) defaulted to null too - none of these
+            # existing call sites specify a real PA-ending zone/count, so
+            # none of their PAs contribute real per-zone signal either (see
+            # test_decision_score.py for that dedicated case).
+            "zone": pd.NA, "balls": pd.NA, "strikes": pd.NA,
         })
     return result
 
@@ -95,9 +101,18 @@ def _pitches_seen(batter, rows):
     """rows: list of (game_date, description, zone) tuples - each becomes
     a real pitch row for hitters.compute_plate_discipline
     (pipeline.build_all_pitch_events's own shape - no PA-ending filter,
-    every real pitch the batter saw)."""
+    every real pitch the batter saw). balls/strikes/inning/bat_score/
+    fld_score/on_2b/on_3b (decision_score.compute_decision_advice) are
+    defaulted to null/0 - none of these existing call sites specify a
+    real count/situation, so every one of their pitches reads as a
+    neutral count in a low-leverage situation (see test_decision_score.py
+    for the dedicated count/situation cases)."""
     return [
-        {"batter": batter, "game_date": pd.Timestamp(date), "description": description, "zone": zone}
+        {
+            "batter": batter, "game_date": pd.Timestamp(date), "description": description, "zone": zone,
+            "balls": pd.NA, "strikes": pd.NA, "inning": 1, "bat_score": 0, "fld_score": 0,
+            "on_2b": pd.NA, "on_3b": pd.NA,
+        }
         for date, description, zone in rows
     ]
 
@@ -701,6 +716,13 @@ def test_assemble_hitters_merges_plate_discipline_when_all_pitches_provided():
     assert row["Whiff_Rate"] == pytest.approx(1.0)
     assert row["Chase_Rate"] == pytest.approx(1.0)
 
+    # Decision_Score/Decision_Score_N (decision_score.compute_decision_score)
+    # is wired through the same all_pitches optional input - this fixture's
+    # `dt` carries no real zone data (see _at_bats), so Decision_Score just
+    # needs to come through as a real (fillna(0)-safe) number, not crash.
+    assert "Decision_Score" in result.columns and "Decision_Score_N" in result.columns
+    assert row["Decision_Score_N"] == 1  # the one real pitch _pitches_seen logged
+
 
 def test_assemble_hitters_omits_plate_discipline_columns_when_all_pitches_not_provided():
     dt = pd.DataFrame(_at_bats(1, "R", [("2026-06-15", "single"), ("2026-06-16", "field_out")]))
@@ -714,6 +736,7 @@ def test_assemble_hitters_omits_plate_discipline_columns_when_all_pitches_not_pr
     result = hitters.assemble_hitters(dt, data_with_game_id, names, latest_team)
 
     assert "Whiff_Rate" not in result.columns and "Chase_Rate" not in result.columns
+    assert "Decision_Score" not in result.columns and "Decision_Score_N" not in result.columns
 
 
 def test_assemble_hitters_lineup_consistency_missing_batter_is_null_not_zero():

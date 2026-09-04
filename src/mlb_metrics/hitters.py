@@ -19,9 +19,15 @@ per-pitch signal, not a per-PA one).
 
 All three of WAVE/WHOPS/WTB share the same shape: split at-bats by the
 opposing pitcher's throwing hand, compute a rate per recency window, and
-blend the windows with fixed weights (see config.py). `_blend_windows`
+blend the windows with fixed weights (see config.py). `blend_windows`
 implements that shared shape once instead of the ~6x duplicated inline
-blocks in the original script.
+blocks in the original script. `blend_windows`/`side_window_agg`/
+`slice_by_days` (no longer underscore-prefixed - genuinely reused outside
+this module now) are also the machinery decision_score.py's
+compute_batter_overall_ops/compute_zone_ops build on, via the same
+generalized `column` parameter compute_pitch_family_rates/
+compute_home_road_split already proved out (column="zone" here, looped
+over each real Statcast zone code).
 
 Note on population: each blended side-metric is anchored on batters who
 have at least one full-season at-bat *against that side* (matching the
@@ -40,14 +46,14 @@ def _window_key(days_back):
     return "full" if days_back is None else f"d{days_back}"
 
 
-def _slice_by_days(frame: pd.DataFrame, latest, days_back):
+def slice_by_days(frame: pd.DataFrame, latest, days_back):
     if days_back is None:
         return frame
     cutoff = latest - pd.Timedelta(days=days_back)
     return frame[frame["game_date"] >= cutoff]
 
 
-def _side_window_agg(
+def side_window_agg(
     dt: pd.DataFrame, latest, days_back, side: str, stat_fns: dict, column: str = "p_throws"
 ) -> pd.DataFrame:
     """One row per batter: `n` (at-bat count) plus the sum of each stat in
@@ -65,7 +71,7 @@ def _side_window_agg(
     like `helpers.estimate_rbi` that read more than one column
     (`bat_score`/`post_bat_score`). Existing `events`-only classifiers
     (`helpers.is_hit`, etc.) are passed as `lambda df: helpers.is_hit(df["events"])`."""
-    window_df = _slice_by_days(dt, latest, days_back)
+    window_df = slice_by_days(dt, latest, days_back)
     side_df = window_df[window_df[column] == side].copy()
     side_df["n"] = 1
     for name, fn in stat_fns.items():
@@ -74,7 +80,7 @@ def _side_window_agg(
     return side_df[cols].groupby("batter", as_index=False).sum()
 
 
-def _blend_windows(dt: pd.DataFrame, windows, side: str, stat_fns: dict, rate_fns: dict, column: str = "p_throws"):
+def blend_windows(dt: pd.DataFrame, windows, side: str, stat_fns: dict, rate_fns: dict, column: str = "p_throws"):
     """Blend one or more rate functions across `windows` for one side of `column`.
 
     rate_fns: dict of name -> function(window_agg_df) -> per-batter rate Series.
@@ -90,7 +96,7 @@ def _blend_windows(dt: pd.DataFrame, windows, side: str, stat_fns: dict, rate_fn
     full_counts = None
 
     for days_back, weight in windows:
-        agg = _side_window_agg(dt, latest, days_back, side, stat_fns, column=column)
+        agg = side_window_agg(dt, latest, days_back, side, stat_fns, column=column)
         base = agg[["batter"]]
         for name, rate_fn in rate_fns.items():
             rate = rate_fn(agg).fillna(0)
@@ -141,11 +147,11 @@ def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None) -> p
     stat_fns = {"hit": lambda df: helpers.is_hit(df["events"])}
     rate_fns = {"rate": lambda agg: helpers.shrink_rate(agg["hit"], agg["n"], league_rate, strength)}
 
-    r_blended, r_full = _blend_windows(dt, config.WAVE_WINDOWS, "R", stat_fns, rate_fns)
-    l_blended, l_full = _blend_windows(dt, config.WAVE_WINDOWS, "L", stat_fns, rate_fns)
+    r_blended, r_full = blend_windows(dt, config.WAVE_WINDOWS, "R", stat_fns, rate_fns)
+    l_blended, l_full = blend_windows(dt, config.WAVE_WINDOWS, "L", stat_fns, rate_fns)
 
     # Renamed per-side up front (not just "n") - both r_full/l_full now
-    # also carry a raw "hit" column (widened _blend_windows return), so
+    # also carry a raw "hit" column (widened blend_windows return), so
     # merging them without renaming would collide into pandas' hit_x/hit_y
     # merge suffixes.
     wave = r_full.rename(columns={"n": "r_at_bat", "hit": "r_hit"})
@@ -200,8 +206,8 @@ def compute_whops(dt: pd.DataFrame) -> pd.DataFrame:
     rate_fns = {"ops": ops_rate, "rc": rc_rate}
     windows = config.WHOPS_WTB_WINDOWS
 
-    r_blended, r_full = _blend_windows(dt, windows, "R", stat_fns, rate_fns)
-    l_blended, l_full = _blend_windows(dt, windows, "L", stat_fns, rate_fns)
+    r_blended, r_full = blend_windows(dt, windows, "R", stat_fns, rate_fns)
+    l_blended, l_full = blend_windows(dt, windows, "L", stat_fns, rate_fns)
 
     whops = r_full.rename(columns={"n": "pa_rfull"})
     whops = whops.merge(r_blended.rename(columns={"ops": "whops_R", "rc": "rcw_R"}), on="batter", how="left")
@@ -228,8 +234,8 @@ def compute_wtb(dt: pd.DataFrame) -> pd.DataFrame:
     rate_fns = {"slg": lambda agg: agg["sv"] / agg["n"]}
     windows = config.WHOPS_WTB_WINDOWS
 
-    r_blended, r_full = _blend_windows(dt, windows, "R", stat_fns, rate_fns)
-    l_blended, l_full = _blend_windows(dt, windows, "L", stat_fns, rate_fns)
+    r_blended, r_full = blend_windows(dt, windows, "R", stat_fns, rate_fns)
+    l_blended, l_full = blend_windows(dt, windows, "L", stat_fns, rate_fns)
 
     wtb = r_full.rename(columns={"n": "pa_rfull"})
     wtb = wtb.merge(r_blended.rename(columns={"slg": "WTB_r"}), on="batter", how="left")
@@ -277,8 +283,8 @@ def compute_extended_dk_rates(dt: pd.DataFrame) -> pd.DataFrame:
     }
     windows = config.WHOPS_WTB_WINDOWS
 
-    r_blended, r_full = _blend_windows(dt, windows, "R", stat_fns, rate_fns)
-    l_blended, l_full = _blend_windows(dt, windows, "L", stat_fns, rate_fns)
+    r_blended, r_full = blend_windows(dt, windows, "R", stat_fns, rate_fns)
+    l_blended, l_full = blend_windows(dt, windows, "L", stat_fns, rate_fns)
 
     r_blended = r_blended.rename(columns={"bb_rate": "BB_rate_R", "hbp_rate": "HBP_rate_R", "rbi_rate": "RBI_rate_R"})
     l_blended = l_blended.rename(columns={"bb_rate": "BB_rate_L", "hbp_rate": "HBP_rate_L", "rbi_rate": "RBI_rate_L"})
@@ -316,7 +322,7 @@ def compute_quality_of_contact(dt: pd.DataFrame) -> pd.DataFrame:
     would silently bias every rate toward 0 instead of measuring contact
     quality. This means `n` here is a batted-ball count, not a
     plate-appearance count, unlike every other function in this file - the
-    shared `_blend_windows`/`_side_window_agg` machinery still applies
+    shared `blend_windows`/`side_window_agg` machinery still applies
     completely unmodified, since it operates on whatever frame it's given.
 
     Deliberately reuses config.WHOPS_WTB_WINDOWS (not a new dedicated
@@ -348,8 +354,8 @@ def compute_quality_of_contact(dt: pd.DataFrame) -> pd.DataFrame:
     }
     windows = config.WHOPS_WTB_WINDOWS
 
-    r_blended, r_full = _blend_windows(batted, windows, "R", stat_fns, rate_fns)
-    l_blended, l_full = _blend_windows(batted, windows, "L", stat_fns, rate_fns)
+    r_blended, r_full = blend_windows(batted, windows, "R", stat_fns, rate_fns)
+    l_blended, l_full = blend_windows(batted, windows, "L", stat_fns, rate_fns)
 
     r_blended = r_blended.rename(
         columns={"exit_velo": "Exit_Velo_R", "barrel_rate": "Barrel_Rate_R", "xba": "xBA_R", "xwoba": "xwOBA_R"}
@@ -380,7 +386,7 @@ def compute_pitch_family_rates(dt: pd.DataFrame) -> pd.DataFrame:
     family (fastball/breaking/offspeed - helpers.pitch_type_family) instead
     of by opposing-pitcher throwing hand - the same WAVE formula
     (hit_sum / n, config.WAVE_WINDOWS) computed a third way via
-    _blend_windows/_side_window_agg's generalized `column` parameter
+    blend_windows/side_window_agg's generalized `column` parameter
     (column="pitch_family" here instead of the default "p_throws").
 
     This is the batter half of the pitch-type-specific platoon matchup
@@ -410,7 +416,7 @@ def compute_pitch_family_rates(dt: pd.DataFrame) -> pd.DataFrame:
     blended = {}
     full = {}
     for family in ("fastball", "breaking", "offspeed"):
-        family_blended, family_full = _blend_windows(
+        family_blended, family_full = blend_windows(
             families, windows, family, stat_fns, rate_fns, column="pitch_family"
         )
         blended[family] = family_blended.rename(columns={"rate": family})
@@ -435,7 +441,7 @@ def compute_home_road_split(dt: pd.DataFrame) -> pd.DataFrame:
     """Recency-windowed at-bat hit rate, split by whether the PA happened
     at HOME or on the ROAD instead of by opposing-pitcher throwing hand -
     the same WAVE formula (hit_sum / n, config.WAVE_WINDOWS) computed a
-    fourth way via _blend_windows/_side_window_agg's generalized `column`
+    fourth way via blend_windows/side_window_agg's generalized `column`
     parameter (column="home_road" here), same pattern
     compute_pitch_family_rates already established for pitch-type family.
 
@@ -472,7 +478,7 @@ def compute_home_road_split(dt: pd.DataFrame) -> pd.DataFrame:
     blended = {}
     full = {}
     for side, label in (("home", "Home"), ("away", "Away")):
-        side_blended, side_full = _blend_windows(home_road, windows, side, stat_fns, rate_fns, column="home_road")
+        side_blended, side_full = blend_windows(home_road, windows, side, stat_fns, rate_fns, column="home_road")
         blended[label] = side_blended.rename(columns={"rate": label})
         full[label] = side_full.rename(columns={"n": f"{label}_n"})
 
@@ -534,7 +540,7 @@ def compute_plate_discipline(all_pitches: pd.DataFrame) -> pd.DataFrame:
     blended = {"Whiff_Rate": None, "Chase_Rate": None}
 
     for days_back, weight in config.WAVE_WINDOWS:
-        window_df = _slice_by_days(classified, latest, days_back)
+        window_df = slice_by_days(classified, latest, days_back)
         agg = window_df.groupby("batter", as_index=False)[list(stats)].sum()
         base = agg[["batter"]]
         window_rates = {
@@ -587,7 +593,7 @@ def compute_game_hit_probability(data_with_game_id: pd.DataFrame, shrinkage_stre
     blended = None
     full_counts = None
     for days_back, weight in config.GAME_HIT_PROB_WINDOWS:
-        window_games = _slice_by_days(game_hits, latest, days_back)
+        window_games = slice_by_days(game_hits, latest, days_back)
         agg = window_games.groupby("batter", as_index=False)[["had_hit", "game"]].sum()
         rate = helpers.shrink_rate(agg["had_hit"], agg["game"], league_rate, strength).fillna(0)
         contribution = agg[["batter"]].assign(rate=rate.values).set_index("batter")["rate"] * weight
@@ -701,11 +707,19 @@ def assemble_hitters(
     `all_pitches` (pipeline.build_all_pitch_events's output - EVERY real
     pitch, not `dt`'s PA-ending-only frame) is likewise optional so
     existing callers/tests are unaffected; when given, it adds
-    Whiff_Rate/Chase_Rate (compute_plate_discipline) - the same optional-
-    input shape pitchers.assemble_pitchers's own `pitch_arsenal` parameter
-    uses, for the same reason (a per-PITCH signal genuinely needs a
-    different input than every PA-level signal here).
+    Whiff_Rate/Chase_Rate (compute_plate_discipline) AND Decision_Score/
+    Decision_Score_N (decision_score.compute_decision_score, which also
+    takes `dt` - real per-zone OPS needs the real PA outcome, which only
+    exists on the PA-ending row) - the same optional-input shape
+    pitchers.assemble_pitchers's own `pitch_arsenal` parameter uses, for
+    the same reason (a per-PITCH signal genuinely needs a different input
+    than every PA-level signal here).
     """
+    # Local import (not module-level) - decision_score.py itself imports
+    # this module for blend_windows/side_window_agg/slice_by_days, so a
+    # top-level import here would be circular.
+    from mlb_metrics import decision_score
+
     wave = compute_wave(dt)
     wtb = compute_wtb(dt)
     extended_dk_rates = compute_extended_dk_rates(dt)
@@ -745,6 +759,15 @@ def assemble_hitters(
         plate_discipline = compute_plate_discipline(all_pitches)
         hitters = hitters.merge(plate_discipline, on="key_mlbam", how="left")
         columns = columns + ["Whiff_Rate", "Chase_Rate"]
+
+        # Decision Score (decision_score.py): also needs `dt` (the
+        # PA-ending-events frame - real per-zone OPS needs the real PA
+        # outcome, which only exists on the PA-ending row), not just
+        # `all_pitches` - the same two-input shape decision_score.py's own
+        # module docstring documents.
+        decision = decision_score.compute_decision_score(all_pitches, dt)
+        hitters = hitters.merge(decision, on="key_mlbam", how="left")
+        columns = columns + ["Decision_Score", "Decision_Score_N"]
 
     hitters = hitters[columns].fillna(0)
 
