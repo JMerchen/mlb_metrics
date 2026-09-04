@@ -6,12 +6,12 @@
 
 <meta charset="utf-8">
 
-<title>Diamond &amp; Gridiron Metrics</title>
+<title>Diamond &amp; Gridiron Metrics - Today's Summary</title>
 
 <link
 rel="icon"
 type="image/svg+xml"
-href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTQiIGZpbGw9IiNmMmE5M2MiLz48cGF0aCBkPSJNMTAgNCBDMTQgMTAsIDE0IDIyLCAxMCAyOCIgc3Ryb2tlPSIjMGIwZDEwIiBzdHJva2Utd2lkdGg9IjEuOCIgZmlsbD0ibm9uZSIvPjxwYXRoIGQ9Ik0yMiA0IEMxOCAxMCwgMTggMjIsIDIyIDI4IiBzdHJva2U9IiMwYjBkMTAiIHN0cm9rZS13aWR0aD0iMS44IiBmaWxsPSJub25lIi8+PC9zdmc+">
+href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHBhdGggZD0iTTE2IDIgQTE0IDE0IDAgMCAwIDE2IDMwIFoiIGZpbGw9IiNmMmE5M2MiLz48cGF0aCBkPSJNMTYgMiBBMTQgMTQgMCAwIDEgMTYgMzAgWiIgZmlsbD0iIzRjYWY2YiIvPjxwYXRoIGQ9Ik0xMCA2IEMxMyAxMSwgMTMgMjEsIDEwIDI2IiBzdHJva2U9IiMwYjBkMTAiIHN0cm9rZS13aWR0aD0iMS42IiBmaWxsPSJub25lIi8+PHBhdGggZD0iTTE5IDExIEwxOSAyMSIgc3Ryb2tlPSIjMGIwZDEwIiBzdHJva2Utd2lkdGg9IjEuNiIgZmlsbD0ibm9uZSIvPjxwYXRoIGQ9Ik0xNyAxNCBMMjEgMTQgTTE3IDE2LjUgTDIxIDE2LjUgTTE3IDE5IEwyMSAxOSIgc3Ryb2tlPSIjMGIwZDEwIiBzdHJva2Utd2lkdGg9IjEuMiIgZmlsbD0ibm9uZSIvPjwvc3ZnPg==">
 
 <link
 rel="stylesheet"
@@ -37,258 +37,44 @@ href="./style.css">
 </div>
 
 <div class="tabGroup pageTabs">
-<a class="tabButton active" href="./index.html">MLB</a>
+<a class="tabButton active" href="./index.html">Today's Summary</a>
+<a class="tabButton" href="./predictive.html">MLB</a>
 <a class="tabButton" href="./nfl.html">NFL</a>
 <a class="tabButton" href="./methodology.html">Methodology</a>
 </div>
 
 </div>
 
-<div class="sportHeader">
-<svg class="sportMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-<circle cx="16" cy="16" r="14" fill="#f2a93c"/>
-<path d="M10 4 C14 10, 14 22, 10 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
-<path d="M22 4 C18 10, 18 22, 22 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
-</svg>
-<h2 class="sportHeading">MLB <span class="brandAccent">Metrics</span></h2>
-</div>
-
-<div class="tabGroup" id="mlbSubTabs">
-<a class="tabButton active" href="./index.html">Predictive Metrics</a>
-<a class="tabButton" href="./dfs.html">DFS Rankings</a>
-<a class="tabButton" href="./age-curves.html">Age Curves</a>
-</div>
-
-<h2>
-Beat the Streak Tracker
-</h2>
-
-<div class="tabGroup" id="btsTabs">
-<button class="tabButton active" data-view="ourPicks" onclick="selectBtsView('ourPicks')">Our Picks</button>
-<button class="tabButton" data-view="hitStreaks" onclick="selectBtsView('hitStreaks')">Hit Streaks</button>
-<button class="tabButton" data-view="modelOdds" onclick="selectBtsView('modelOdds')">Model Odds</button>
-</div>
-
-<div id="ourPicksSection">
-
-<div
-class="streakStats"
-id="streakStats">
-
-Loading...
-
-</div>
-
-<h3>
-Today's Picks
-</h3>
-
-<div
-class="todaysPicks"
-id="todaysPicks">
-
-Loading...
-
-</div>
-
-<h3>
-Pick History
-</h3>
-
-<div
-class="scrollbox"
-id="streakHistoryTable">
-
-Loading...
-
-</div>
-
-</div>
-
-<div id="hitStreaksSection" style="display:none;">
-
-<div
-class="scrollbox"
-id="hitStreaksTable">
-
-Loading...
-
-</div>
-
-</div>
-
-<div id="modelOddsSection" style="display:none;">
-
-<div
-class="scrollbox"
-id="modelOddsTable">
-
-Loading...
-
-</div>
-
-</div>
-
-<hr>
-
-<h2>
-Player Search
-</h2>
-
-<select id="playerType">
-
-<option value="wave">
-
-Hitter (WAVE)
-
-</option>
-
-<option value="pave">
-
-Pitcher (PAVE)
-
-</option>
-
-</select>
-
-<input
-id="playerSearch"
-placeholder="Search player"
-onkeydown="if(event.key==='Enter'){searchPlayer()}">
-
-<button onclick="searchPlayer()">
-
-Search
-
-</button>
-
-<div id="playerChoices">
-
-</div>
-
-<br>
-
-<div id="playerResult">
-
-</div>
-
-<hr>
-
-<h2>
-Probable Pitchers
-</h2>
-
-<div
-class="scrollbox"
-id="probablePitchersTable">
-
-Loading...
-
-</div>
-
-<hr>
-
-<h2>
-Automated Game Picks
-</h2>
-
-<div
-class="streakStats"
-id="gamePickStats">
-
-Loading...
-
-</div>
-
-<h3>
-Today's Picks
-</h3>
-
-<div
-class="todaysPicks"
-id="todaysGamePicks">
-
-Loading...
-
-</div>
-
-<h3>
-Pick History
-</h3>
-
-<div
-class="scrollbox"
-id="gamePickHistoryTable">
-
-Loading...
-
-</div>
-
-<hr>
-
-<h2>
-Team Confidence
-</h2>
-
-<div
-id="teamButtons">
-
-Loading...
-
-</div>
-
-<br>
-
-<div
-id="teamResult">
-
-Select a team
-
-</div>
-
-<hr>
-
-<div class="leaderboards">
-
-<div>
-
-<h2>
-Top WAVE Players
-</h2>
-
-<div
-class="scrollbox"
-id="waveTable">
-
-Loading...
-
-</div>
-
-</div>
-
-<div>
-
-<h2>
-Top PAVE Players
-</h2>
-
-<div
-class="scrollbox"
-id="paveTable">
-
-Loading...
-
-</div>
-
-</div>
-
+<div class="wrap">
+  <header>
+    <h1>Today's Summary</h1>
+    <span class="asof" id="asof-badge"></span>
+  </header>
+  <p class="subtitle">Today's Beat the Streak picks, MLB Game Picks, and NFL Game Picks at a glance - the same real, currently-live data behind every other tab, distilled to one page. See the <a href="./predictive.html">MLB</a> and <a href="./nfl.html">NFL</a> tabs for the full dashboards, or <a href="./methodology.html">Methodology</a> for how the models work.</p>
+
+  <div class="stat-row" id="stat-row">Loading...</div>
+
+  <div class="panel">
+    <div class="panel-head">Today's Beat the Streak Picks</div>
+    <div class="picks" id="picks-list">Loading...</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head with-stats"><span>MLB Game Picks</span><span class="stat-line" id="mlb-gp-stat-line"></span></div>
+    <div class="picks" id="mlb-gp-list">Loading...</div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-head with-stats"><span>NFL Game Picks</span><span class="stat-line" id="nfl-gp-stat-line"></span></div>
+    <div class="picks" id="nfl-gp-list">Loading...</div>
+  </div>
 </div>
 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
-<script src="./app.js"></script>
+<script src="./today.js"></script>
 
 </body>
 

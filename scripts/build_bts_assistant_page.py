@@ -141,10 +141,25 @@ def build_payload(docs_data_dir: str) -> dict:
     }
 
 
-def build_html(docs_data_dir: str) -> str:
+def build_html(docs_data_dir: str, include_style: bool = True) -> str:
     payload = build_payload(docs_data_dir)
     with open(TEMPLATE_PATH) as f:
         template = f.read()
+
+    # The template's own .wrap/.stat-row/.panel/.pick/.game/... "summary
+    # card" CSS now lives in the shared docs/style.css (also used by the
+    # real site's own Today's Summary page), not duplicated here - this
+    # script's own standalone output (its `--output` CLI, and its own
+    # tests) is a self-contained page with no <link>, so by default it
+    # embeds style.css directly to still render correctly on its own.
+    # build_full_site_artifact.py passes include_style=False since its
+    # own outer template already embeds style.css once, globally - this
+    # is just here to avoid embedding the whole stylesheet twice.
+    if include_style:
+        docs_dir = os.path.dirname(os.path.normpath(docs_data_dir))
+        with open(os.path.join(docs_dir, "style.css")) as f:
+            style_css = f.read()
+        template = f"<style>\n{style_css}\n</style>\n" + template
 
     start = template.index(DATA_START) + len(DATA_START)
     end = template.index(DATA_END)
