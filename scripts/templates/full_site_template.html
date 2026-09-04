@@ -16,6 +16,7 @@ to just this tab now that every tab shares one document). */
 }
 
 .sitePage[hidden]{display:none;}
+.mlbSubpage[hidden]{display:none;}
 </style>
 
 <div class="container">
@@ -33,9 +34,7 @@ to just this tab now that every tab shares one document). */
 
 <div class="tabGroup pageTabs" id="sitePageTabs">
 <button class="tabButton active" data-site-page="assistant" onclick="selectSitePage('assistant')">Assistant</button>
-<button class="tabButton" data-site-page="predictive" onclick="selectSitePage('predictive')">Predictive Metrics</button>
-<button class="tabButton" data-site-page="age-curves" onclick="selectSitePage('age-curves')">Age Curves</button>
-<button class="tabButton" data-site-page="dfs" onclick="selectSitePage('dfs')">DFS Rankings</button>
+<button class="tabButton" data-site-page="mlb" onclick="selectSitePage('mlb')">MLB</button>
 <button class="tabButton" data-site-page="nfl" onclick="selectSitePage('nfl')">NFL</button>
 <button class="tabButton" data-site-page="methodology" onclick="selectSitePage('methodology')">Methodology</button>
 </div>
@@ -46,16 +45,26 @@ to just this tab now that every tab shares one document). */
 <!--__ASSISTANT_CONTENT__-->
 </section>
 
-<section id="page-predictive" class="sitePage" hidden>
+<section id="page-mlb" class="sitePage" hidden>
+
+<div class="tabGroup" id="mlbSubTabs">
+<button class="tabButton active" data-mlb-sub="predictive" onclick="selectMlbSubpage('predictive')">Predictive Metrics</button>
+<button class="tabButton" data-mlb-sub="dfs" onclick="selectMlbSubpage('dfs')">DFS Rankings</button>
+<button class="tabButton" data-mlb-sub="age-curves" onclick="selectMlbSubpage('age-curves')">Age Curves</button>
+</div>
+
+<div id="mlb-predictive" class="mlbSubpage">
 <!--__INDEX_CONTENT__-->
-</section>
+</div>
 
-<section id="page-age-curves" class="sitePage" hidden>
-<!--__AGE_CURVES_CONTENT__-->
-</section>
-
-<section id="page-dfs" class="sitePage" hidden>
+<div id="mlb-dfs" class="mlbSubpage" hidden>
 <!--__DFS_CONTENT__-->
+</div>
+
+<div id="mlb-age-curves" class="mlbSubpage" hidden>
+<!--__AGE_CURVES_CONTENT__-->
+</div>
+
 </section>
 
 <section id="page-nfl" class="sitePage" hidden>
@@ -81,6 +90,15 @@ btn.classList.toggle('active', btn.dataset.sitePage === page)
 })
 document.querySelectorAll('.sitePage').forEach(function(section){
 section.hidden = section.id !== ('page-' + page)
+})
+}
+
+function selectMlbSubpage(sub){
+document.querySelectorAll('#mlbSubTabs .tabButton').forEach(function(btn){
+btn.classList.toggle('active', btn.dataset.mlbSub === sub)
+})
+document.querySelectorAll('.mlbSubpage').forEach(function(section){
+section.hidden = section.id !== ('mlb-' + sub)
 })
 }
 </script>

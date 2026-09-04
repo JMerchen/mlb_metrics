@@ -133,11 +133,21 @@ def test_build_html_end_to_end_against_real_docs(tmp_path):
     assert "wave" in site_data and "nfl_bestball_rankings" in site_data
 
     assert html.count("<script") == html.count("</script>")
+    # Top-level pages: Assistant, MLB (an umbrella - see below), NFL,
+    # Methodology.
     missing_sections = [
-        pid for pid in ["page-predictive", "page-age-curves", "page-dfs", "page-nfl", "page-methodology", "page-assistant"]
+        pid for pid in ["page-assistant", "page-mlb", "page-nfl", "page-methodology"]
         if f'<section id="{pid}"' not in html
     ]
     assert missing_sections == []  # see the note above `in`/`not in` on the full `html` string in assert
+
+    # Predictive Metrics/DFS Rankings/Age Curves are nested subpages under
+    # the MLB umbrella tab, not their own top-level sections.
+    missing_mlb_subpages = [
+        pid for pid in ["mlb-predictive", "mlb-dfs", "mlb-age-curves"]
+        if f'<div id="{pid}"' not in html
+    ]
+    assert missing_mlb_subpages == []
 
     # The real collision this module's docstring documents fixing.
     for dup_id in ["playerSearch", "playerChoices", "playerResult"]:
