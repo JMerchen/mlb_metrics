@@ -266,7 +266,7 @@ def build_multi_season_history(
     seasons: list[int],
     carryover_regression: float = None,
     carryover_prior_strength: float = None,
-    season_aware: bool = True,
+    season_aware: bool = False,
 ) -> list[dict]:
     """The expensive, no-lookahead per-week team-strength assembly a real
     cross-season replay needs - split out from `replay_multi_season` so a
@@ -399,7 +399,7 @@ def replay_multi_season(
     home_field_weight: float = None,
     carryover_regression: float = None,
     carryover_prior_strength: float = None,
-    season_aware: bool = True,
+    season_aware: bool = False,
 ) -> pd.DataFrame:
     """Convenience one-call wrapper: `build_multi_season_history` +
     `score_multi_season_snapshots` (see both functions' own docstrings for

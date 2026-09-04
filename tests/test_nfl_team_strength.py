@@ -259,7 +259,8 @@ def test_season_aware_blend_at_zero_current_games_is_exactly_the_regressed_prior
     ])
 
     result = nfl_team_strength._season_aware_blend(
-        stats, "team", "value", current_season=2025, windows=_ONE_WINDOW, prior_strength=6.0, regression=0.5,
+        stats, "team", "value", current_season=2025, windows=_ONE_WINDOW,
+        prior_strength=6.0, regression=0.5, season_aware=True,
     )
 
     # league_mean = 0.0; regressed_prior = 0.0 + 0.5*(10.0-0.0) = 5.0 / -5.0
@@ -282,7 +283,8 @@ def test_season_aware_blend_shrinks_toward_regressed_prior_as_current_season_acc
     ])
 
     result = nfl_team_strength._season_aware_blend(
-        stats, "team", "value", current_season=2025, windows=_ONE_WINDOW, prior_strength=6.0, regression=0.5,
+        stats, "team", "value", current_season=2025, windows=_ONE_WINDOW,
+        prior_strength=6.0, regression=0.5, season_aware=True,
     )
 
     assert result.loc["A"] == pytest.approx(4.0)
@@ -318,7 +320,8 @@ def test_season_aware_blend_team_with_no_prior_season_row_regresses_to_league_me
     ])
 
     result = nfl_team_strength._season_aware_blend(
-        stats, "team", "value", current_season=2025, windows=_ONE_WINDOW, prior_strength=6.0, regression=0.5,
+        stats, "team", "value", current_season=2025, windows=_ONE_WINDOW,
+        prior_strength=6.0, regression=0.5, season_aware=True,
     )
 
     # league_mean (real prior-season teams only) = 15.0; C has no real
@@ -327,6 +330,26 @@ def test_season_aware_blend_team_with_no_prior_season_row_regresses_to_league_me
     count = 1 * 0.0  # C's own real n=1, value=0.0
     expected_c = (count + 6.0 * 15.0) / (1 + 6.0)
     assert result.loc["C"] == pytest.approx(expected_c)
+
+
+def test_season_aware_blend_default_is_off_even_with_real_prior_season_present():
+    # Real follow-up (2026-09-04): the backtest found no measurable
+    # benefit from the carryover mechanism itself (isolated from the
+    # separately-validated home-field term) - shipped OFF by default
+    # (season_aware=False) so merging this feature does not silently
+    # change today's real live behavior. With 2 real seasons present, the
+    # DEFAULT call (no season_aware kwarg) must still reduce to the flat
+    # blend, not the shrink math - same "shipped neutral, mechanism still
+    # real and available via explicit override" posture as Decision
+    # Score's own count/leverage multipliers.
+    stats = pd.DataFrame([
+        {"team": "A", "season": 2024, "week": 1, "value": 10.0},
+        {"team": "A", "season": 2025, "week": 1, "value": 20.0},
+    ])
+
+    result = nfl_team_strength._season_aware_blend(stats, "team", "value", current_season=2025, windows=_ONE_WINDOW)
+
+    assert result.loc["A"] == pytest.approx(15.0)  # flat mean, not a shrink toward a regressed prior
 
 
 def _snap_row(team, season, week, pfr_player_id, offense_snaps, offense_pct=0.9, game_type="REG", position="QB"):

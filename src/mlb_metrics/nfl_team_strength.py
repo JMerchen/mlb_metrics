@@ -59,13 +59,20 @@ reaches a live pick.
 Real follow-up (2026-09-04 - "every season should only carry over a
 portion of the team's score from the previous season... weeks 1-6...
 calibrating the features to that individual season"): `offensive_edge`/
-`defensive_edge`/`turnover_margin`/`points_per_drive` are now
-season-aware (`_season_aware_blend` - see its own docstring and
-config.py's `NFL_SEASON_CARRYOVER_*` comments) rather than treating a
-concatenated prior-season+current-season history as one flat, un-
-weighted sequence the way `compute_strength_metrics`'s own rolling win%/
-Pythagorean windows still do (a real, structurally different, and
-explicitly out-of-scope refactor for this pass).
+`defensive_edge`/`turnover_margin`/`points_per_drive` gained a real
+season-aware carryover mechanism (`_season_aware_blend` - see its own
+docstring and config.py's `NFL_SEASON_CARRYOVER_*` comments) as an
+alternative to treating a concatenated prior-season+current-season
+history as one flat, unweighted sequence the way `compute_strength_metrics`'s
+own rolling win%/Pythagorean windows still do (a real, structurally
+different, and explicitly out-of-scope refactor for this pass). A real
+multi-season (2016-2025) backtest (scripts/backtest_nfl_season_carryover.py)
+found NO measurable isolated benefit from this mechanism at any tested
+magnitude - honest negative finding, same posture as Decision Score's
+count/leverage multipliers - so `season_aware` defaults to False
+everywhere (a real no-op reproducing today's exact validated behavior);
+the mechanism itself is real, tested, and available via an explicit
+override for a future revisit.
 """
 
 import numpy as np
@@ -246,7 +253,7 @@ def _recency_window_blend(df: pd.DataFrame, group_col: str, value_col: str, wind
 
 def _season_aware_blend(
     stats_df: pd.DataFrame, group_col: str, value_col: str, current_season: int,
-    windows=None, prior_strength: float = None, regression: float = None, season_aware: bool = True,
+    windows=None, prior_strength: float = None, regression: float = None, season_aware: bool = False,
 ) -> pd.Series:
     """Real cross-season-carryover blend (see config.py's own
     NFL_SEASON_CARRYOVER_*/NFL_HOME_FIELD_ADVANTAGE_WEIGHT comments for
@@ -321,7 +328,7 @@ EPA_COLS = ["passing_epa", "rushing_epa", "receiving_epa"]
 
 def compute_team_offense_defense_edge(
     team_stats_df: pd.DataFrame, current_season: int = None,
-    carryover_regression: float = None, carryover_prior_strength: float = None, season_aware: bool = True,
+    carryover_regression: float = None, carryover_prior_strength: float = None, season_aware: bool = False,
 ) -> pd.DataFrame:
     """One row per team: `offensive_edge` (real total EPA - passing +
     rushing + receiving - produced per game, season-aware-blended per
@@ -373,7 +380,7 @@ def compute_team_offense_defense_edge(
 
 def compute_team_turnover_margin(
     team_stats_df: pd.DataFrame, current_season: int = None,
-    carryover_regression: float = None, carryover_prior_strength: float = None, season_aware: bool = True,
+    carryover_regression: float = None, carryover_prior_strength: float = None, season_aware: bool = False,
 ) -> pd.DataFrame:
     """One row per team: `turnover_margin` - real takeaways forced minus
     real turnovers given away, per game, season-aware-blended per
@@ -412,7 +419,7 @@ def compute_team_turnover_margin(
 
 def compute_team_points_per_drive(
     pbp_df: pd.DataFrame, current_season: int = None,
-    carryover_regression: float = None, carryover_prior_strength: float = None, season_aware: bool = True,
+    carryover_regression: float = None, carryover_prior_strength: float = None, season_aware: bool = False,
 ) -> pd.DataFrame:
     """One row per team: `points_per_drive` - real points scored per real
     offensive drive, season-aware-blended per `_season_aware_blend`.
@@ -538,7 +545,7 @@ def compute_qb_continuity_adjustment(
 
 def assemble_team_metrics(
     schedules_df: pd.DataFrame, team_stats_df: pd.DataFrame, pbp_df: pd.DataFrame, current_season: int = None,
-    carryover_regression: float = None, carryover_prior_strength: float = None, season_aware: bool = True,
+    carryover_regression: float = None, carryover_prior_strength: float = None, season_aware: bool = False,
 ) -> pd.DataFrame:
     """Build the final NFL team output table - direct structural port of
     teams.assemble_team_metrics. See module docstring for the full

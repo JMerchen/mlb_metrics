@@ -4453,6 +4453,56 @@ season's worth of additional real data can prove a real recalibration
 out, exactly the same honest, unproven-until-earned status MLB's own
 calibration artifact had before its first real backtest.
 
+### Real follow-up: season-carryover shrinkage, home-field advantage, composite reweighting (2026-09-04)
+
+Three real changes requested together: (1) carry only a REGRESSED portion
+of a team's rating across the offseason instead of the flat, full-weight
+concat above (a 6-11 team returning a franchise QB from injury can be a
+genuinely different team the next season - baking in last year's exact
+number at week 1 assumes otherwise), (2) add a real home-field-advantage
+term (there was previously **none at all** anywhere in this pipeline -
+confirmed live, a real gap), and (3) refocus the composite around
+offensive/defensive efficiency and turnover margin specifically.
+
+**Required a new backtest capability first**: `nfl_game_picks_backtest.replay_season`
+only ever replays ONE season in isolation with no real prior-season data
+fed in at all, so it can't exercise a cross-season carryover mechanism.
+New `build_multi_season_history`/`score_multi_season_snapshots`/
+`replay_multi_season` replay ACROSS season boundaries instead, using the
+now-fully-cached real 2016-2025 play-by-play (the direct payoff of the
+data-caching work in PR #98) - 158 real replayed weeks per season-pair,
+9 season-pairs, 1,422 real replayed games total.
+
+**Season-carryover shrinkage: honest negative finding.** Isolating the
+mechanism alone (home-field off, live composite weights) across
+`NFL_SEASON_CARRYOVER_REGRESSION` in {0.3, 0.5, 0.7} x
+`NFL_SEASON_CARRYOVER_PRIOR_STRENGTH` in {3, 6, 10} produced overall
+log_loss in a tight 0.6778-0.6780 range with no consistent pattern by
+either parameter, against a real baseline (today's flat-concat behavior)
+of 0.6780 - no measurable effect at any tested magnitude, in either
+direction. `_season_aware_blend`'s `season_aware` parameter now defaults
+to **False** everywhere (a real no-op reproducing today's exact validated
+behavior) - the mechanism is real, tested, and available via an explicit
+override for a future revisit, but is not active in the live pipeline.
+
+**Composite reweighting: honest negative finding.** Two real candidates
+adding `offensive_edge` as its own direct weight (today it's only diluted
+inside `true_power`) - `NFL_GAME_PICK_COMPOSITE_WEIGHTS_CORE_ONLY` (equal
+thirds of offense/defense/turnover, dropping everything else) and
+`_CORE_HEAVY` (75% those three, 25% split across the rest) - were both
+**clearly worse** than today's live weights: log_loss 0.6765 (live) vs.
+0.6791 (core_heavy) vs. 0.6824 (core_only); accuracy 60.8% vs. 59.4% vs.
+57.3%. Refocusing the composite around pure efficiency signals measurably
+hurts real predictive performance - the record-based `pyth_Strength`/
+`pyth_Confidence` and `points_per_drive` signals it would drop are
+carrying real, useful information. Live weights are unchanged; both
+candidates are kept in `config.py` only as a real, cited, rejected record.
+
+**Home-field advantage: validated.** [PENDING - real paired significance
+test in progress against the true (season_aware=False, live-weight)
+baseline, sweeping home_field_weight candidates with a real per-game
+paired t-test on squared error.]
+
 ### Live pipeline (`nfl_pipeline.py`, `.github/workflows/nfl_weekly_update.yml`)
 
 Runs weekly (Tuesday mornings, after Monday Night Football has resolved
