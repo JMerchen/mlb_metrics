@@ -47,14 +47,24 @@ GAME_PICK_COLUMNS = [
 ]
 
 
-def _game_picks_section(docs_data_dir: str, prefix: str, extra_columns: list | None = None) -> dict:
+def _game_picks_section(
+    docs_data_dir: str, prefix: str, extra_columns: list | None = None, group_by_week: bool = False
+) -> dict:
     """Curates one sport's Automated Game Picks CSVs (`{prefix}_picks.csv`/
     `{prefix}_summary.csv`/`{prefix}_summary_by_version.csv`) into
     {asOf, upcomingPicks, recentHistory, summary, summaryByVersion,
     fullHistory} - the same "small slice in the prompt, full table behind
     a tool" split beat_the_streak/wave use. `extra_columns` (e.g. NFL's
     ["season", "week"]) are appended to GAME_PICK_COLUMNS for that sport
-    only, since MLB has no such concept."""
+    only, since MLB has no such concept.
+
+    `group_by_week=True` (NFL) selects "upcoming" by the latest full
+    (season, week) slate instead of the single latest date - real NFL
+    weeks span multiple days (Thu/Sun/Mon), so filtering by exact date
+    alone (like MLB, which is genuinely one date per slate) only ever
+    picked up the week's last game (Monday Night Football) instead of
+    the whole week - mirrors docs/nfl.js's own renderNflTodaysGamePicks,
+    which groups by `${season}_${week}` for the same reason."""
     columns = GAME_PICK_COLUMNS + (extra_columns or [])
     picks = pd.read_csv(os.path.join(docs_data_dir, f"{prefix}_picks.csv"), parse_dates=["date"])
     summary = pd.read_csv(os.path.join(docs_data_dir, f"{prefix}_summary.csv"))
@@ -73,8 +83,15 @@ def _game_picks_section(docs_data_dir: str, prefix: str, extra_columns: list | N
     # beat_the_streak_picks.csv's rows already use in this payload.
     picks = picks.assign(date=picks["date"].dt.strftime("%Y-%m-%d"))
     latest_date_str = latest_date.strftime("%Y-%m-%d")
-    upcoming = picks[picks["date"] == latest_date_str].sort_values(["home_team"])[columns]
-    history = picks[picks["date"] < latest_date_str].sort_values("date", ascending=False)[columns]
+
+    if group_by_week:
+        slate_key = picks["season"].astype(str) + "_" + picks["week"].astype(str).str.zfill(2)
+        latest_slate = slate_key.max()
+        upcoming = picks[slate_key == latest_slate].sort_values(["home_team"])[columns]
+        history = picks[slate_key < latest_slate].sort_values("date", ascending=False)[columns]
+    else:
+        upcoming = picks[picks["date"] == latest_date_str].sort_values(["home_team"])[columns]
+        history = picks[picks["date"] < latest_date_str].sort_values("date", ascending=False)[columns]
 
     return {
         "asOf": str(latest_date.date()),
@@ -118,7 +135,9 @@ def build_payload(docs_data_dir: str) -> dict:
         "topLeaders": _records(all_q.head(20)),
         "allQualified": _records(all_q),
         "mlbGamePicks": _game_picks_section(docs_data_dir, "game_picks"),
-        "nflGamePicks": _game_picks_section(docs_data_dir, "nfl_game_picks", extra_columns=["season", "week"]),
+        "nflGamePicks": _game_picks_section(
+            docs_data_dir, "nfl_game_picks", extra_columns=["season", "week"], group_by_week=True
+        ),
     }
 
 
