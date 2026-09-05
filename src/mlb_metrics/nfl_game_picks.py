@@ -322,3 +322,52 @@ def apply_ml_model(
     real_rows = result["game_id"].map(complete).fillna(False)
     result.loc[real_rows, "home_win_probability"] = result.loc[real_rows, "game_id"].map(proba)
     return result
+
+
+def apply_market_tiebreak(
+    win_probabilities: pd.DataFrame,
+    market_probabilities: pd.DataFrame,
+    disagreement_threshold: float = None,
+) -> pd.DataFrame:
+    """Defers to the real market's own (devigged) probability when our
+    own prediction disagrees with it by a lot - see config.py's
+    NFL_GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD comments for the full
+    real backtest (1,482 real games, all of 2016-2025, proper walk-
+    forward, no lookahead): at every disagreement magnitude tested, the
+    market was more accurate than our own model in that specific zone,
+    and deferring ONLY there (not overall) raised real overall accuracy
+    with zero risk to the rest of the season.
+
+    `market_probabilities` needs real [home_team, away_team,
+    market_home_win_probability] - the same shape
+    nfl_pipeline._build_market_probabilities already produces (matches
+    `nfl_game_predictions.select_game_picks`'s own `market_probabilities`
+    contract). Matched on (home_team, away_team) - safe for a single
+    real week's slate (no team plays itself twice in one week), the same
+    scope every caller already uses this at.
+
+    A real, useful side effect, not something requiring special-casing
+    elsewhere: `market_home_win_probability` is DEVIGGED, always <= the
+    RAW vigged implied probability `nfl_game_predictions.advise_bets`
+    compares against for the same side (market_odds.devig's own
+    docstring) - so a deferred game's real edge is <= 0 by construction,
+    naturally suppressing bet advice on exactly the bucket this backtest
+    proved unreliable.
+
+    Graceful degradation: a game with no real market probability
+    (missing moneylines, or absent from `market_probabilities` entirely)
+    keeps its original probability unchanged - disagreement can't be
+    measured, so no defer decision is made."""
+    threshold = (
+        config.NFL_GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD if disagreement_threshold is None else disagreement_threshold
+    )
+    merged = win_probabilities.merge(
+        market_probabilities[["home_team", "away_team", "market_home_win_probability"]],
+        on=["home_team", "away_team"], how="left",
+    )
+    disagreement = (merged["home_win_probability"] - merged["market_home_win_probability"]).abs()
+    should_defer = (disagreement >= threshold).fillna(False).to_numpy()
+
+    result = win_probabilities.copy()
+    result.loc[should_defer, "home_win_probability"] = merged.loc[should_defer, "market_home_win_probability"].to_numpy()
+    return result
