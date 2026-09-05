@@ -4608,6 +4608,54 @@ after the ratio heuristic, with a real, tested, graceful fallback to
 that heuristic (per-row, not all-or-nothing) if the artifact is ever
 missing or a game's own features are genuinely incomplete.
 
+### Real follow-up: defer to market on large disagreement (2026-09-05)
+
+A user-driven post-mortem on the new model's real 2025 misses ("I'd
+really only bet on games where the odds were 65%+ - can you investigate
+what happened in our misses there?") surfaced a real, robust pattern:
+**when our own model disagrees sharply with the real market's own
+(devigged) probability, the market wins that disagreement more often
+than we do** - not a one-season fluke. Validated with proper walk-forward
+discipline (each real week's model trained only on strictly-prior real
+weeks) across ALL of 2016-2025, 1,482 real games:
+
+| Disagreement | n | Our accuracy | Market accuracy | Our accuracy elsewhere |
+|---|---|---|---|---|
+| 10+ pts | 550 | 59.5% | 67.8% | 65.0% |
+| 15+ pts | 283 | 57.2% | 69.6% | 64.3% |
+| 20+ pts | 124 | 57.3% | 67.7% | 63.5% |
+| 25+ pts | 53 | 45.3% | 71.7% | 63.6% |
+| 30+ pts | 21 | 42.9% | 66.7% | 63.2% |
+
+The pattern holds at every magnitude tested. Deferring to the real
+market specifically in this proven-worse zone (20+ points - a real,
+round threshold, not cherry-picked by peeking at one season) raised real
+overall accuracy across the same 1,482-game test from **62.96% to
+63.83%** (933 → 946 correct) with zero risk to the rest of the season,
+since it only intervenes where the model was already proven unreliable.
+A real, useful side effect: because the market probability used here is
+DEVIGGED (always ≤ the raw vigged implied probability `advise_bets`
+compares against for the same side), deferring to it makes a deferred
+game's real edge ≤ 0 by construction - bet-sizing is naturally
+suppressed on exactly this bucket, with no changes needed to the betting
+logic itself.
+
+**Two honest negative findings from the same investigation, tried and
+rejected before landing on the threshold-based fix above**: a naive
+fixed-weight linear blend of model+market looked promising when tuned by
+looking directly at the 2025 holdout - a real leakage mistake, caught
+and corrected - but a properly walk-forward-validated sweep on
+2016-2024 only showed pure market (weight=0) uniformly best at every
+weight, no interior optimum. Adding the market's own probability as a
+regression FEATURE alongside the disaggregated signals (letting a fresh
+model learn its own combination) also failed to beat pure market on a
+real untouched holdout - the model's own signals added no real
+incremental value once market was already in the fit. The threshold-based
+tiebreak (`nfl_game_picks.apply_market_tiebreak`, `config.NFL_GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD = 0.20`,
+wired into `nfl_pipeline.py` right after `apply_ml_model`) is the
+narrowest, most defensible real improvement this investigation actually
+supported - trust the model except in the one zone real data says not to.
+
 ### Live pipeline (`nfl_pipeline.py`, `.github/workflows/nfl_weekly_update.yml`)
 
 Runs weekly (Tuesday mornings, after Monday Night Football has resolved

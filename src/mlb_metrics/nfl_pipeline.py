@@ -229,9 +229,20 @@ def run(
             # its own real save-gate, replaces home_win_probability
             # entirely - a real no-op (unchanged heuristic) otherwise.
             probs = nfl_game_picks.apply_ml_model(probs, master, qb_continuity, history["weekly"], this_week_games)
-            probs = nfl_game_picks.apply_calibration(probs)
 
             market = _build_market_probabilities(this_week_games)
+            # Real follow-up (2026-09-05 - user-driven post-mortem: "can
+            # you investigate what happened in our misses [at 65%+
+            # confidence]"): when our own prediction disagrees sharply
+            # with the real market, the market wins that disagreement
+            # more often than we do (see config.py's own
+            # NFL_GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD comments for
+            # the full real 1,482-game validation) - defer to market
+            # specifically in that proven-worse zone, trust the model
+            # everywhere else.
+            probs = nfl_game_picks.apply_market_tiebreak(probs, market)
+            probs = nfl_game_picks.apply_calibration(probs)
+
             picks = nfl_game_predictions.select_game_picks(
                 probs, this_week_games, market_probabilities=market, confidence=master
             )

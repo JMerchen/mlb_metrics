@@ -294,3 +294,61 @@ def test_apply_ml_model_falls_back_per_row_for_a_team_missing_from_master(monkey
     result = nfl_game_picks.apply_ml_model(win_probabilities, master, qb_continuity, weekly, _schedule_games())
 
     assert result.iloc[0]["home_win_probability"] == pytest.approx(0.55)  # unchanged - real fallback
+
+
+# --- Real follow-up: defer to market on large disagreement (2026-09-05) ---
+
+
+def _win_probs(rows):
+    return pd.DataFrame(rows)
+
+
+def _market(rows):
+    return pd.DataFrame(rows)
+
+
+def test_apply_market_tiebreak_no_op_below_the_threshold():
+    win_probabilities = _win_probs([
+        {"game_id": "g1", "home_team": "KC", "away_team": "DEN", "home_win_probability": 0.60},
+    ])
+    market = _market([{"home_team": "KC", "away_team": "DEN", "market_home_win_probability": 0.55}])
+
+    result = nfl_game_picks.apply_market_tiebreak(win_probabilities, market, disagreement_threshold=0.20)
+
+    assert result.iloc[0]["home_win_probability"] == pytest.approx(0.60)  # 0.05 disagreement - below threshold
+
+
+def test_apply_market_tiebreak_defers_to_market_above_the_threshold():
+    win_probabilities = _win_probs([
+        {"game_id": "g1", "home_team": "KC", "away_team": "DEN", "home_win_probability": 0.70},
+    ])
+    market = _market([{"home_team": "KC", "away_team": "DEN", "market_home_win_probability": 0.40}])
+
+    result = nfl_game_picks.apply_market_tiebreak(win_probabilities, market, disagreement_threshold=0.20)
+
+    # 0.30 real disagreement clears the 0.20 threshold - overwritten with
+    # the real market's own devigged probability, not just a flipped side.
+    assert result.iloc[0]["home_win_probability"] == pytest.approx(0.40)
+
+
+def test_apply_market_tiebreak_is_a_noop_with_no_market_data_for_a_game():
+    win_probabilities = _win_probs([
+        {"game_id": "g1", "home_team": "KC", "away_team": "DEN", "home_win_probability": 0.90},
+    ])
+    market = _market([{"home_team": "SF", "away_team": "LA", "market_home_win_probability": 0.10}])  # a different game
+
+    result = nfl_game_picks.apply_market_tiebreak(win_probabilities, market, disagreement_threshold=0.20)
+
+    assert result.iloc[0]["home_win_probability"] == pytest.approx(0.90)  # can't measure disagreement - real no-op
+
+
+def test_apply_market_tiebreak_default_threshold_matches_config():
+    win_probabilities = _win_probs([
+        {"game_id": "g1", "home_team": "KC", "away_team": "DEN", "home_win_probability": 0.85},
+    ])
+    market = _market([{"home_team": "KC", "away_team": "DEN", "market_home_win_probability": 0.60}])
+
+    result = nfl_game_picks.apply_market_tiebreak(win_probabilities, market)  # no override - real config default
+
+    # 0.25 disagreement clears config.NFL_GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD (0.20).
+    assert result.iloc[0]["home_win_probability"] == pytest.approx(0.60)

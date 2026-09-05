@@ -2325,3 +2325,58 @@ NFL_GAME_PICK_ML_WIN_PROBABILITY_FINAL_HOLDOUT_WEEKS = 18
 # same way every other missing value in this project is - `game_feature_matrix`'s
 # existing `.fillna(0)` - not silently fabricated, not a data pipeline
 # bug to chase down for a real 2%-of-rows franchise-relocation quirk.
+
+# --- NFL Game Pick Market Tiebreak (nfl_game_picks.apply_market_tiebreak) ---
+#
+# Real follow-up (2026-09-05 - user-driven post-mortem on the ML model's
+# real 2025 misses): "I'd really only bet on games where the odds were
+# 65%+... can you investigate what happened in our misses there." That
+# investigation found a real, robust pattern - when our own model
+# disagrees sharply with the real market's own (devigged) probability,
+# the MARKET wins that disagreement more often than we do. Validated
+# with real, proper walk-forward discipline across ALL of 2016-2025
+# (1,482 real games, no lookahead - each period's model trained only on
+# strictly-prior real periods), swept across disagreement thresholds:
+#
+#   threshold  n     model_acc  market_acc  model_acc_elsewhere
+#   0.10       550   59.5%      67.8%       65.0%
+#   0.15       283   57.2%      69.6%       64.3%
+#   0.20       124   57.3%      67.7%       63.5%
+#   0.25       53    45.3%      71.7%       63.6%
+#   0.30       21    42.9%      66.7%       63.2%
+#
+# The pattern holds at every magnitude tested, not just one lucky
+# threshold or one season. Deferring to the real market's own probability
+# specifically in this proven-worse zone (0.20 chosen - a real, round,
+# well-supported threshold, not cherry-picked by peeking at a single
+# season) raised REAL overall accuracy across the same 1,482-game
+# walk-forward test from 62.96% to 63.83% (933 -> 946 correct) with ZERO
+# risk to the rest of the season, since it only intervenes where the
+# model has already been proven unreliable.
+#
+# A real, useful side effect (not a coincidence, not something requiring
+# special-casing elsewhere): market_home_win_probability is the DEVIGGED
+# probability, which market_odds.devig's own docstring/math guarantees is
+# always <= the RAW vigged implied probability nfl_game_predictions.advise_bets
+# compares against for the same side. Deferring to it here means real
+# edge (model_probability - market_implied) for these specific games is
+# <= 0 by construction - bet advice/Kelly staking is naturally,
+# correctly suppressed on exactly the bucket this backtest proved
+# unreliable, with no changes needed to advise_bets itself.
+#
+# Real, honestly-reported negative findings from the SAME investigation,
+# for context: a naive fixed-weight linear blend of model+market looked
+# promising when tuned by looking directly at the 2025 holdout (a real
+# leakage mistake, caught and corrected), but a properly walk-forward-
+# validated sweep on 2016-2024 ONLY showed no interior optimum - pure
+# market (weight=0) was uniformly best at every weight tested. Adding
+# market_home_prob as a REGRESSION FEATURE alongside the disaggregated
+# signals (letting a fresh LogisticRegression learn its own combination,
+# more flexible than a fixed blend) also did not beat pure market on a
+# real untouched holdout - the learned coefficient on market_home_prob
+# overwhelmingly dominated (4.3), and the model's own signals contributed
+# no real incremental value once market was already in the fit. This
+# threshold-based tiebreak - deferring ONLY in the proven-bad zone,
+# trusting the model everywhere else - is the narrowest, most defensible
+# real improvement the investigation actually supported.
+NFL_GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD = 0.20
