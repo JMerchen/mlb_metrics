@@ -162,7 +162,9 @@ def run_backtest(raw_dir: str = "data/raw", season: int | None = None) -> pd.Dat
 
         # --- Shared matchup pool for candidates 1 and 2 ---
         matched_pool = wave.merge(matchup_probability, on="key_mlbam", how="inner")
-        matched_pool["Matchup_Approach"] = matched_pool["Approach"] * matched_pool["Matchup_Hit_Probability"]
+        matched_pool["Matchup_Approach"] = matchup.compute_matchup_approach(
+            matched_pool["Approach"], matched_pool["Matchup_Hit_Probability"]
+        )
 
         # --- Candidate 1: "WAVE vs PAVE" - best-faith reconstruction of
         # the user's own original manual method. PA qualifier only: no

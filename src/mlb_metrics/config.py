@@ -597,6 +597,32 @@ MATCHUP_LEAGUE_ARSENAL_FALLBACK = {"fastball": 0.5521, "breaking": 0.3012, "offs
 # comment with the real numbers, honestly, either direction.
 MATCHUP_PITCH_ARSENAL_WEIGHT = 0.0
 
+# Real user complaint (2026-09-08): live Matchup_Approach (see
+# matchup.compute_matchup_approach, used by predictions.select_picks's
+# rank_metric) is `hitters.Approach * Matchup_Hit_Probability ** weight`.
+# `Approach` itself already multiplies TWO overlapping hitter-only signals
+# (Game_Hit_Probability * probability - both WAVE-derived, highly
+# correlated), so a real opponent matchup gets only ONE multiplicative say
+# against a hitter-only side that effectively counts twice. Confirmed with
+# real live numbers the same day: the #1 pick (Game_Hit_Probability=0.677,
+# probability=0.671, Matchup_Hit_Probability=0.705, Matchup_Approach=0.320)
+# barely edged out the #2 pick (0.628, 0.667, Matchup_Hit_Probability=
+# 0.757 - a real, better matchup - Matchup_Approach=0.317) despite a
+# meaningfully better matchup, because the #1 pick's own two compounding
+# hitter-only terms almost entirely canceled out a real matchup edge.
+#
+# weight=1.0 (below) reproduces today's exact formula bit-for-bit - the
+# real null hypothesis, same "ships at the unweighted default until a
+# backtest earns a different value" precedent as MATCHUP_PITCH_ARSENAL_WEIGHT
+# above. Raising the exponent increases Matchup_Hit_Probability's LOG-ODDS
+# contribution relative to Approach's fixed contribution - a real lever on
+# relative ranking (NOT the same as e.g. replacing Approach with a
+# geometric mean of its own two terms, which would be a pure monotonic
+# rename and change no ranking at all - worth remembering so this doesn't
+# get "fixed" that way instead). See scripts/backtest_matchup_weight.py
+# for the real, walk-forward-validated sweep before this changes from 1.0.
+MATCHUP_APPROACH_WEIGHT = 1.0
+
 # --- Automated Game Picks ---
 #
 # Predicts a winner for each of today's games from team-level metrics (not

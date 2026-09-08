@@ -43,7 +43,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import pandas as pd
 
-from mlb_metrics import config, data, dfs_backtest, dfs_ml, evaluation, predictions
+from mlb_metrics import config, data, dfs_backtest, dfs_ml, evaluation, matchup, predictions
 
 DEFAULT_MARGIN_GRID = [0.0, 0.02, 0.05, 0.1]
 
@@ -65,7 +65,9 @@ def build_date_pools(dates, persisted: pd.DataFrame, team_schedule: pd.DataFrame
             continue
 
         pick_pool = day["outputs"]["wave"].merge(day["matchup_probability"], on="key_mlbam", how="inner")
-        pick_pool["Matchup_Approach"] = pick_pool["Approach"] * pick_pool["Matchup_Hit_Probability"]
+        pick_pool["Matchup_Approach"] = matchup.compute_matchup_approach(
+            pick_pool["Approach"], pick_pool["Matchup_Hit_Probability"]
+        )
         pick_pool = pick_pool.merge(
             game_pk_lookup[game_pk_lookup["date"] == date][["key_mlbam", "game_pk"]], on="key_mlbam", how="left"
         )

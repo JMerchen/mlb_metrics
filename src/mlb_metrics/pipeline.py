@@ -334,7 +334,9 @@ def run(
                 outputs["wave"], outputs["pave"], outputs["confidence"], schedule_df
             )
             pick_pool = outputs["wave"].merge(matchup_probability, on="key_mlbam", how="inner")
-            pick_pool["Matchup_Approach"] = pick_pool["Approach"] * pick_pool["Matchup_Hit_Probability"]
+            pick_pool["Matchup_Approach"] = matchup.compute_matchup_approach(
+                pick_pool["Approach"], pick_pool["Matchup_Hit_Probability"]
+            )
             rank_metric = "Matchup_Approach"
 
             # Quant-analytics item #4, slice 2: schedule_df already carries
