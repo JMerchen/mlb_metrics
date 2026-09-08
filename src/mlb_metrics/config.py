@@ -366,8 +366,35 @@ HITTER_MODEL_VERSION = "v4-model-shortlist"
 # constant's own validated value/meaning as a streak-counting bar is
 # untouched; only "what happens below it" changed from "nothing shown" to
 # "shown, honestly labeled."
+#
+# The deferred revisit finally happened for real (2026-09-08, following a
+# real user report: "the site has shown every batter as Speculative for
+# weeks"). scripts/backtest_matchup_weight.py's real bar sweep - same
+# "highest bar with full day coverage, at the best resolved hit-rate/Brier
+# plateau" methodology 0.77 itself was derived with, now against 164 real
+# 2026 dates instead of a 42-day mostly-NaN-matchup replay - found 0.77
+# has ZERO day coverage across the ENTIRE real sample (0/164 dates would
+# ever show a "recommended" pick), directly confirming the report wasn't
+# a fluke:
+#
+#   bar   day_coverage  n_recommended  hit_rate  brier
+#   0.65  1.000         667            0.7241    0.2014
+#   0.68  0.839         331            0.7221    0.2011
+#   0.70  0.477         120            0.7083    0.2059
+#   0.72  0.155         29             0.7586    0.1828  (small n - not trusted)
+#   0.75  0.006         1              1.0000    0.0608  (n=1 - not a real plateau)
+#   0.77  0.000         0              n/a       n/a     (today's value - never clears)
+#
+# 0.65 is the real, honest pick under the ORIGINAL methodology's own
+# priority order (full day coverage first, THEN best hit-rate/Brier among
+# candidates clearing it) - it's not just the only full-coverage bar, it
+# also has the best Brier and a competitive hit rate among the two
+# largest, most robust samples (0.65 and 0.68). This reuses live
+# Matchup_Approach at MATCHUP_APPROACH_WEIGHT=1.0 (unchanged - see that
+# constant's own docstring for the honest negative finding on raising it),
+# so this bar and that weight were validated together, not independently.
 DAILY_PICK_MAX = 2
-DAILY_PICK_MIN_PROBABILITY = 0.77
+DAILY_PICK_MIN_PROBABILITY = 0.65
 
 # Quant-analytics item #4, slice 2 ("decision theory for the actual game
 # structure" - correlation from being in the same game): predictions.
@@ -596,6 +623,58 @@ MATCHUP_LEAGUE_ARSENAL_FALLBACK = {"fastball": 0.5521, "breaking": 0.3012, "offs
 # Re-run once a real matchup-weight backtest exists and update this
 # comment with the real numbers, honestly, either direction.
 MATCHUP_PITCH_ARSENAL_WEIGHT = 0.0
+
+# Real user complaint (2026-09-08): live Matchup_Approach (see
+# matchup.compute_matchup_approach, used by predictions.select_picks's
+# rank_metric) is `hitters.Approach * Matchup_Hit_Probability ** weight`.
+# `Approach` itself already multiplies TWO overlapping hitter-only signals
+# (Game_Hit_Probability * probability - both WAVE-derived, highly
+# correlated), so a real opponent matchup gets only ONE multiplicative say
+# against a hitter-only side that effectively counts twice. Confirmed with
+# real live numbers the same day: the #1 pick (Game_Hit_Probability=0.677,
+# probability=0.671, Matchup_Hit_Probability=0.705, Matchup_Approach=0.320)
+# barely edged out the #2 pick (0.628, 0.667, Matchup_Hit_Probability=
+# 0.757 - a real, better matchup - Matchup_Approach=0.317) despite a
+# meaningfully better matchup, because the #1 pick's own two compounding
+# hitter-only terms almost entirely canceled out a real matchup edge.
+#
+# weight=1.0 (below) reproduces today's exact formula bit-for-bit - the
+# real null hypothesis, same "ships at the unweighted default until a
+# backtest earns a different value" precedent as MATCHUP_PITCH_ARSENAL_WEIGHT
+# above. Raising the exponent increases Matchup_Hit_Probability's LOG-ODDS
+# contribution relative to Approach's fixed contribution - a real lever on
+# relative ranking (NOT the same as e.g. replacing Approach with a
+# geometric mean of its own two terms, which would be a pure monotonic
+# rename and change no ranking at all - worth remembering so this doesn't
+# get "fixed" that way instead).
+#
+# That real, walk-forward-validated sweep (scripts/backtest_matchup_weight.py)
+# has now run, against 164 real 2026 dates (122 train, 41 untouched
+# holdout), reusing dfs_backtest.derive_historical_team_schedule/
+# _compute_date_outputs for a genuine no-lookahead per-date recompute:
+#
+#   weight  train any_of_top_2  train Brier   holdout any_of_top_2  holdout Brier
+#   1.0     0.8850              0.2056        0.8537                0.2153
+#   1.5     0.8850              0.2056        (not tested - tied w/ 1.0 on train)
+#   2.0     0.8584              0.2065        -
+#   2.5     0.8584              0.2066        -
+#   3.0     0.8584              0.2073        -
+#   4.0     0.8761              0.2062        -
+#
+# An honest NEGATIVE finding: weight=1.0 was ALREADY the best real
+# candidate on train (tied with 1.5, both beating every higher weight),
+# so it's also what got confirmed on the untouched holdout - no weight
+# change ships. Real anecdotal cases (like the 2026-09-08 complaint
+# above) show the lever genuinely CAN flip a close call the "obviously
+# right" direction - but averaged over a full real season, Approach's
+# own hitter-quality double-count is pulling real weight, not dead
+# weight: a hitter's own recent form is, on net, still more informative
+# than a single day's matchup, and over-weighting matchup HURTS more
+# picks than it helps. Reported honestly rather than shipped anyway -
+# same "beat the live baseline on the untouched holdout or don't ship"
+# bar every feature in this project clears. Revisit if a future backtest
+# on a wider real sample tells a different story.
+MATCHUP_APPROACH_WEIGHT = 1.0
 
 # --- Automated Game Picks ---
 #

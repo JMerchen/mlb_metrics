@@ -348,3 +348,32 @@ def compute_matchup_hit_probability(
     ).clip(0, 1)
 
     return matchup[["key_mlbam", "Matchup_Hit_Probability"]]
+
+
+def compute_matchup_approach(
+    approach: pd.Series, matchup_hit_probability: pd.Series, weight: float = None
+) -> pd.Series:
+    """The real `rank_metric` predictions.select_picks ranks candidates by
+    once a matchup is available: `approach * matchup_hit_probability ** weight`.
+
+    Was previously a bare `approach * matchup_hit_probability` inlined
+    identically in 6 places (pipeline.py plus 5 backtest scripts) - pulled
+    into one shared, backtestable function (config-default + explicit
+    override param, same pattern as e.g. game_picks.compute_game_win_probabilities's
+    `composite_weights`) so live and backtest code can't drift apart on
+    this formula, and so a real weight sweep (scripts/backtest_matchup_weight.py)
+    has one real function to call instead of a duplicated inline expression.
+
+    `weight=1.0` (config.MATCHUP_APPROACH_WEIGHT's shipped default)
+    reproduces the original bare-multiplication formula bit-for-bit - the
+    real null hypothesis. A real, honest fix, not a cosmetic one: raising
+    `weight` increases matchup_hit_probability's LOG-ODDS contribution to
+    the product relative to `approach`'s fixed contribution, which DOES
+    change relative ranking between two candidates. This is NOT the same
+    as replacing `approach` with a monotonic transform of itself (e.g. a
+    geometric mean of its own two multiplied-together terms) - a uniform
+    transform of the same product preserves every pairwise ordering and
+    would change nothing; see config.MATCHUP_APPROACH_WEIGHT's own
+    docstring for the real numbers this was built to fix."""
+    w = config.MATCHUP_APPROACH_WEIGHT if weight is None else weight
+    return approach * (matchup_hit_probability**w)

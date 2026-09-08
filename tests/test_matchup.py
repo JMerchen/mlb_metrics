@@ -440,3 +440,46 @@ def test_compute_matchup_hit_probability_applies_pitch_arsenal_at_nonzero_weight
     # applied on top of (not instead of) the platoon/park-adjusted rate the
     # baseline call already produces.
     assert result.loc[1, "Matchup_Hit_Probability"] != pytest.approx(baseline.loc[1, "Matchup_Hit_Probability"])
+
+
+def test_compute_matchup_approach_default_weight_matches_bare_multiplication():
+    # config.MATCHUP_APPROACH_WEIGHT ships at 1.0 - a real regression guard
+    # that this stays bit-for-bit identical to the original bare
+    # `approach * matchup_hit_probability` formula it replaced everywhere
+    # it was inlined (pipeline.py + 5 backtest scripts).
+    approach = pd.Series([0.454, 0.419])
+    matchup_hit_probability = pd.Series([0.7045, 0.757])
+
+    result = matchup.compute_matchup_approach(approach, matchup_hit_probability)
+
+    assert result.iloc[0] == pytest.approx(approach.iloc[0] * matchup_hit_probability.iloc[0])
+    assert result.iloc[1] == pytest.approx(approach.iloc[1] * matchup_hit_probability.iloc[1])
+
+
+def test_compute_matchup_approach_explicit_weight_overrides_config(monkeypatch):
+    from mlb_metrics import config
+
+    monkeypatch.setattr(config, "MATCHUP_APPROACH_WEIGHT", 3.0)
+    approach = pd.Series([0.5])
+    matchup_hit_probability = pd.Series([0.8])
+
+    result = matchup.compute_matchup_approach(approach, matchup_hit_probability, weight=1.0)
+
+    # Explicit weight=1.0 wins over the monkeypatched config default of 3.0.
+    assert result.iloc[0] == pytest.approx(0.5 * 0.8)
+
+
+def test_compute_matchup_approach_higher_weight_can_flip_the_ranking():
+    # Real complaint case (2026-09-08 live numbers): a slightly-better
+    # hitter (higher approach) in a WORSE matchup barely beats a
+    # slightly-worse hitter in a meaningfully BETTER matchup at weight=1.0
+    # - raising the weight should be able to flip that ordering, since it
+    # increases matchup's log-odds say relative to approach's fixed one.
+    approach = pd.Series([0.454, 0.419])  # candidate A, candidate B
+    matchup_hit_probability = pd.Series([0.7045, 0.757])  # A's matchup is worse than B's
+
+    default = matchup.compute_matchup_approach(approach, matchup_hit_probability, weight=1.0)
+    assert default.iloc[0] > default.iloc[1]  # A (worse matchup) still wins at weight=1.0
+
+    weighted = matchup.compute_matchup_approach(approach, matchup_hit_probability, weight=4.0)
+    assert weighted.iloc[1] > weighted.iloc[0]  # B (better matchup) wins once matchup is weighted up

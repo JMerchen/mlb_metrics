@@ -46,7 +46,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 import pandas as pd
 
-from mlb_metrics import config, data, dfs_backtest, dfs_ml, evaluation, predictions
+from mlb_metrics import config, data, dfs_backtest, dfs_ml, evaluation, matchup, predictions
 
 
 def build_date_pools(dates, persisted: pd.DataFrame, team_schedule: pd.DataFrame) -> list[dict]:
@@ -64,7 +64,9 @@ def build_date_pools(dates, persisted: pd.DataFrame, team_schedule: pd.DataFrame
             continue
 
         pick_pool = day["outputs"]["wave"].merge(day["matchup_probability"], on="key_mlbam", how="inner")
-        pick_pool["Matchup_Approach"] = pick_pool["Approach"] * pick_pool["Matchup_Hit_Probability"]
+        pick_pool["Matchup_Approach"] = matchup.compute_matchup_approach(
+            pick_pool["Approach"], pick_pool["Matchup_Hit_Probability"]
+        )
 
         hitter_features = dfs_ml.build_hitter_features(
             day["outputs"]["wave"], day["outputs"]["pave"], day["outputs"]["confidence"],

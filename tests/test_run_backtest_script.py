@@ -111,22 +111,25 @@ def test_run_backtest_reconstructs_resolves_and_summarizes(tmp_path, monkeypatch
 
     docs_data_dir = tmp_path / "docs_data"
     streak_picks = pd.read_csv(docs_data_dir / "beat_the_streak_picks.csv")
-    # 06-18's pick (0.80 predicted) clears config.DAILY_PICK_MIN_PROBABILITY
-    # (0.77) and gets a hit, graded "recommended"; 06-19's (0.70) doesn't
-    # clear the bar, but is still a real logged candidate - shown as its
-    # own real row (miss) graded "speculative" rather than collapsed into a
-    # no_pick placeholder.
+    # Both picks clear config.HITTER_MIN_PROBABILITY (0.7) to even get
+    # selected/logged at all - and since config.DAILY_PICK_MIN_PROBABILITY
+    # (0.65) is now BELOW that selection floor, anything logged through
+    # this joint-probability-gate reconstruction path automatically clears
+    # the display bar too, so both grade "recommended" (a real, honest
+    # consequence of the 2026-09-08 bar recalibration - "speculative" is
+    # only reachable live via the model-shortlist path, which doesn't
+    # apply here; see evaluation.py's own dedicated tests for that path's
+    # speculative-grading coverage).
     assert len(streak_picks) == 2
     hit_row = streak_picks[streak_picks["date"] == "2026-06-18"].iloc[0]
     assert hit_row["status"] == "hit"
     assert hit_row["grade"] == "recommended"
-    speculative_row = streak_picks[streak_picks["date"] == "2026-06-19"].iloc[0]
-    assert speculative_row["status"] == "miss"
-    assert speculative_row["grade"] == "speculative"
+    miss_row = streak_picks[streak_picks["date"] == "2026-06-19"].iloc[0]
+    assert miss_row["status"] == "miss"
+    assert miss_row["grade"] == "recommended"
     streak_summary = pd.read_csv(docs_data_dir / "beat_the_streak_summary.csv")
-    # Only the "recommended"-grade 06-18 pick counts toward the tracked
-    # streak - the "speculative" 06-19 miss is a real no-op for it, exactly
-    # like a no_pick day was before this change.
-    assert streak_summary.loc[0, "n_days_resolved"] == 1
-    assert streak_summary.loc[0, "current_streak"] == 1
+    # Both days count toward the tracked streak now - 06-18's hit builds it
+    # to 1, 06-19's real miss resets it back to 0.
+    assert streak_summary.loc[0, "n_days_resolved"] == 2
+    assert streak_summary.loc[0, "current_streak"] == 0
     assert streak_summary.loc[0, "longest_streak"] == 1

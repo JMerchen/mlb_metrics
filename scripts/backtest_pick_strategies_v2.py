@@ -125,7 +125,9 @@ def run_backtest(raw_dir: str = "data/raw", season: int | None = None) -> pd.Dat
         teams_playing_today = set(todays_schedule["team"])
 
         matched_pool = wave.merge(matchup_probability, on="key_mlbam", how="inner")
-        matched_pool["Matchup_Approach"] = matched_pool["Approach"] * matched_pool["Matchup_Hit_Probability"]
+        matched_pool["Matchup_Approach"] = matchup.compute_matchup_approach(
+            matched_pool["Approach"], matched_pool["Matchup_Hit_Probability"]
+        )
         matched_pool["combined_probability"] = matched_pool[
             ["Game_Hit_Probability", "probability", "Matchup_Hit_Probability"]
         ].astype(float).mean(axis=1, skipna=True)
