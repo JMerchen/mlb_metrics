@@ -317,11 +317,14 @@ automatically to `Matchup_Hit_Probability` whenever it's present on the
 table passed in - a hitter needs `probability`, `Game_Hit_Probability`,
 *and* a good matchup all above `HITTER_MIN_PROBABILITY`, not just the first
 two. `pipeline.run` ranks that qualified pool by `Matchup_Approach`
-(`Approach * Matchup_Hit_Probability`) on days matchup data is available,
-falling back to `Approach` alone (no matchup qualifier at all) if the
-schedule fetch fails - the same resilience pattern as the fetch itself.
-`predicted_probability`/`metric` logged still reflect `Game_Hit_Probability`
-either way, so `DAILY_PICK_MIN_PROBABILITY`'s calibration is unaffected.
+(`matchup.compute_matchup_approach(Approach, Matchup_Hit_Probability)` -
+`Approach * Matchup_Hit_Probability ** MATCHUP_APPROACH_WEIGHT`, see the
+real follow-up below for that weight's own backtest) on days matchup data
+is available, falling back to `Approach` alone (no matchup qualifier at
+all) if the schedule fetch fails - the same resilience pattern as the
+fetch itself. `predicted_probability`/`metric` logged still reflect
+`Game_Hit_Probability` either way, so `DAILY_PICK_MIN_PROBABILITY`'s
+calibration is unaffected by the ranking formula itself.
 
 `WAVE`/`PAVE`/`Bullpen_PAVE` are all AB-level and reliably reproducible from
 persisted Statcast at any past as-of-date, which made a 30-day backtest
@@ -518,6 +521,91 @@ missing-data convention in `helpers.py`. The retrain that followed the
 fix succeeded end to end (run 32281354568) - see the significance report
 above and the DFS ML retrain table below for what these four columns
 actually contributed once real data was behind them.
+
+### Real follow-up: weight matchup properly, recalibrate the stale "Speculative" bar (2026-09-08)
+
+Two related real user complaints: (1) "matchup isn't weighted enough" -
+a concrete example where the #1 Beat the Streak pick faced elite
+pitching when a hitter in a real, meaningfully better matchup ranked
+#2; and (2) "the site has shown every batter as Speculative for weeks,"
+both on the dashboard and the BTS Assistant page (confirmed: both read
+the exact same `grade` column, one root cause not two bugs).
+
+**Root cause of (1), confirmed with real numbers**: `Matchup_Approach`
+was a bare `Approach * Matchup_Hit_Probability`, and `Approach` itself
+already multiplies together two overlapping, highly correlated
+hitter-only signals (`Game_Hit_Probability * probability`) - a real
+double-count of hitter quality - before the one real opponent-adjusted
+signal gets just one multiplicative say. Real 2026-09-08 logged numbers:
+the #1 pick (GHP=0.677, probability=0.671, Matchup_Hit_Probability=0.705,
+Matchup_Approach=0.320) barely edged out the #2 pick (0.628, 0.667,
+**Matchup_Hit_Probability=0.757** - a real better matchup - Matchup_Approach=0.317)
+despite the meaningfully better matchup.
+
+**Root cause of (2), confirmed with real data**: the #1 pick's own
+`Game_Hit_Probability` ran 0.85-0.93 through mid-July, then fell to a
+steady 0.65-0.72 from late August onward - every day since landed below
+`DAILY_PICK_MIN_PROBABILITY` (0.77). Not a silent bug - this constant's
+own docstring already documented catching an earlier 5-day zero-
+`recommended`-day stretch (Aug 11-15) and *deliberately deferring* a
+real recalibration. That revisit was overdue.
+
+`matchup.compute_matchup_approach(approach, matchup_hit_probability,
+weight)` replaces the bare multiplication (duplicated identically
+across 6 files) with a real, tunable lever:
+`approach * matchup_hit_probability ** weight`. Raising the exponent
+increases matchup's LOG-ODDS contribution relative to approach's fixed
+contribution - a real change to relative ranking, unlike e.g. replacing
+`Approach` with a monotonic transform of itself (a geometric mean of its
+own two terms), which would change no ranking at all.
+
+`scripts/backtest_matchup_weight.py` ran both questions together, real
+and walk-forward-validated (weight picked on 122 real training dates,
+confirmed on 41 untouched holdout dates, reusing
+`dfs_backtest.derive_historical_team_schedule`/`_compute_date_outputs`
+for genuine no-lookahead per-date recomputes over all of 2026's
+persisted Statcast):
+
+| weight | train any_of_top_2 | train Brier |
+|---|---|---|
+| 1.0 (live) | 0.8850 | 0.2056 |
+| 1.5 | 0.8850 | 0.2056 |
+| 2.0 | 0.8584 | 0.2065 |
+| 2.5 | 0.8584 | 0.2066 |
+| 3.0 | 0.8584 | 0.2073 |
+| 4.0 | 0.8761 | 0.2062 |
+
+**An honest negative finding**: weight=1.0 was already the best real
+candidate on train (tied with 1.5), confirmed again on the untouched
+holdout (0.8537 any-of-top-2, 0.2153 Brier, identical at both weights) -
+`MATCHUP_APPROACH_WEIGHT` ships unchanged at 1.0. The anecdotal
+complaint is real and the lever genuinely works (re-ranking the exact
+2026-09-08 slate at weight=2.0 correctly flips the #1 pick to the
+better-matchup candidate) - but averaged over a full real season,
+`Approach`'s hitter-quality double-count is pulling real weight, not
+dead weight: a hitter's own recent form is, on net, still more
+informative than a single day's matchup, and over-weighting matchup
+hurts more picks than it helps.
+
+The bar recalibration, however, is a real, conclusive fix. Using the
+same weight=1.0 formula, a fresh sweep of `DAILY_PICK_MIN_PROBABILITY`
+across all 164 real 2026 dates - the same "highest bar with full day
+coverage, at the best hit-rate/Brier plateau" methodology 0.77 was
+originally derived with - found 0.77 now has **zero day coverage across
+the entire real sample** (0/164 dates would ever show a "recommended"
+pick), directly confirming the complaint wasn't a fluke:
+
+| bar | day coverage | n | hit rate | Brier |
+|---|---|---|---|---|
+| 0.65 | 100.0% | 667 | 72.4% | 0.2014 |
+| 0.68 | 83.9% | 331 | 72.2% | 0.2011 |
+| 0.70 | 47.7% | 120 | 70.8% | 0.2059 |
+| 0.72 | 15.5% | 29 | 75.9% | 0.1828 |
+| 0.77 (old) | 0.0% | 0 | n/a | n/a |
+
+`DAILY_PICK_MIN_PROBABILITY` moves to **0.65** - full day coverage on a
+robust, real 667-pick sample, with the best Brier of any full-coverage
+candidate. `MATCHUP_APPROACH_WEIGHT` stays validated at 1.0.
 
 ### Real pitch-type-specific platoon matchup (`pitchers.compute_pitch_arsenal`, `hitters.compute_pitch_family_rates`, `matchup._pitch_arsenal_multiplier`)
 
