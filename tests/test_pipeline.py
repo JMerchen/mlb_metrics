@@ -576,6 +576,18 @@ def test_run_resolves_game_picks_across_two_runs(monkeypatch, tmp_path):
     monkeypatch.setattr(pipeline, "compute_outputs", lambda df: _minimal_outputs_with_confidence())
     monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", _no_schedule)
 
+    # This test is about the day-1/day-2 resolve wiring, not about
+    # calibration - bypass game_picks.apply_calibration's real, LIVE
+    # saved artifact (data/models/game_pick_calibration_model.joblib,
+    # retrained weekly by ml_training_update.yml). Confirmed as a real
+    # flake, not hypothetical: a real Sept 2026 retrain (commit
+    # "ML signal training update", be2bb3e) shifted the calibrated
+    # probability on this exact fixture enough to erase the edge below,
+    # taking bet_units to 0 and failing this test with nothing wrong in
+    # the pipeline code itself - calibration behavior already has its own
+    # dedicated tests and doesn't need to also hold here.
+    monkeypatch.setattr(pipeline.game_picks, "apply_calibration", lambda win_probabilities: win_probabilities)
+
     schedule_games_day1 = pd.DataFrame([{
         "game_pk": 100, "date": pd.Timestamp("2026-06-19"), "home_team": "NYY", "away_team": "BOS",
         "home_probable_pitcher_key_mlbam": 501, "away_probable_pitcher_key_mlbam": 502,
@@ -588,7 +600,8 @@ def test_run_resolves_game_picks_across_two_runs(monkeypatch, tmp_path):
     # weaker opposing pitcher), so this real vigged price (implied
     # probabilities sum to 1.0348, a real ~3.5% vig) guarantees a real,
     # unambiguous positive edge on the home side regardless of the exact
-    # model probability this fixture happens to produce.
+    # model probability this fixture happens to produce (calibration
+    # bypassed above so a live retrain can never flip this).
     market_day1 = pd.DataFrame([{
         "home_team": "NYY", "away_team": "BOS", "market_home_win_probability": 0.4203,
         "market_provider": "DraftKings", "home_moneyline": 130, "away_moneyline": -150,
