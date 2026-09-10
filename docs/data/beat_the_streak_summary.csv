@@ -1,2 +1,2 @@
 model_version,metric,max_picks,min_probability,n_days_resolved,day_survival_rate,day_survival_rate_ci_low,day_survival_rate_ci_high,longest_streak,current_streak
-all_time,Game_Hit_Probability,2,0.65,88,0.48863636363636365,0.3868786464057155,0.5913446960184867,8,4
+all_time,Game_Hit_Probability,2,0.65,89,0.4943820224719101,0.3929145023562317,0.596314447590243,8,6
