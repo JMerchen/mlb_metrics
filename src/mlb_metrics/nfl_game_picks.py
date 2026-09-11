@@ -198,6 +198,74 @@ def build_game_features_disaggregated(
     return games[["game_id", "season", "week", "home_team", "away_team"] + DISAGGREGATED_FEATURE_COLUMNS]
 
 
+# Real follow-up (2026-09-11 - "it's a comparison... if the difference
+# between team A offense and team B defense is 15 and the difference
+# between team B offense and team A defense is 4, we're saying it'll be
+# an offensive game where team A has the advantage... we're looking at
+# ratios and magnitudes between opponents, not straight efficiency").
+# DISAGGREGATED_FEATURE_COLUMNS gives the model each team's own
+# offensive_edge/defensive_edge as four SEPARATE, never-differenced
+# numbers - a linear model COULD in principle learn to combine them the
+# way the user describes, but nothing ever hands it the explicit
+# matchup-comparison feature, and nothing compares the two differentials
+# to EACH OTHER (the exact "who has the bigger real advantage" question
+# the user's own worked example asks). Both offensive_edge/defensive_edge
+# are already z-normalized to the same scale (config.NFL_NORMALIZATION_Z_SCALE,
+# mean 1.0 - see _team_composite's own docstring for why a straight
+# combination needs no further rescaling), so a plain difference is the
+# honest, dimensionally-consistent operation here.
+MATCHUP_DIFFERENTIAL_COLUMNS = [
+    "home_offense_vs_away_defense", "away_offense_vs_home_defense", "net_offensive_matchup_edge",
+]
+# Two real candidates (config-default + explicit override params only
+# where they'd otherwise be needed - these are just column-name lists,
+# no tunable weight involved): matchup_added keeps every existing
+# disaggregated signal AND adds the 3 new differentials; matchup_focused
+# tests the user's stronger claim - drop the 4 raw standalone
+# offensive_edge/defensive_edge columns entirely (no natural opponent-
+# specific comparison on their own) and keep ONLY the matchup
+# differentials alongside the signals that were never part of an O/D
+# comparison to begin with.
+MATCHUP_ADDED_FEATURE_COLUMNS = DISAGGREGATED_FEATURE_COLUMNS + MATCHUP_DIFFERENTIAL_COLUMNS
+_NON_EDGE_DISAGGREGATED_SIGNALS = [c for c in DISAGGREGATED_SIGNAL_COLUMNS if c not in ("offensive_edge", "defensive_edge")]
+MATCHUP_FOCUSED_FEATURE_COLUMNS = (
+    [f"home_{c}" for c in _NON_EDGE_DISAGGREGATED_SIGNALS]
+    + [f"away_{c}" for c in _NON_EDGE_DISAGGREGATED_SIGNALS]
+    + MATCHUP_DIFFERENTIAL_COLUMNS
+    + ["home_qb_adjustment", "away_qb_adjustment"]
+)
+
+
+def build_game_features_matchup(
+    master: pd.DataFrame, qb_continuity: pd.DataFrame, weekly_df: pd.DataFrame, schedule_games_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Returns [game_id, season, week, home_team, away_team] +
+    MATCHUP_ADDED_FEATURE_COLUMNS - `build_game_features_disaggregated`'s
+    own real output plus MATCHUP_DIFFERENTIAL_COLUMNS appended. One real
+    builder for both matchup candidates (MATCHUP_ADDED_FEATURE_COLUMNS/
+    MATCHUP_FOCUSED_FEATURE_COLUMNS): the FOCUSED candidate simply selects
+    a subset of this same output's columns (see game_feature_matrix's own
+    `.reindex(columns=...)`, already tolerant of a subset selection) -
+    no second builder needed.
+
+    `net_offensive_matchup_edge = home_offense_vs_away_defense -
+    away_offense_vs_home_defense` is the direct real encoding of the
+    user's own worked example: a 15-point home-offense-vs-away-defense
+    edge against a 4-point away-offense-vs-home-defense edge nets to +11
+    toward the home side - which team has the bigger REAL advantage this
+    specific game, not either differential read in isolation. A negative
+    `home_offense_vs_away_defense` directly encodes "the defense can
+    handle this offense," per the user's own framing - no separate
+    sign-handling needed, the arithmetic already carries it."""
+    games = build_game_features_disaggregated(master, qb_continuity, weekly_df, schedule_games_df)
+    games = games.copy()
+    games["home_offense_vs_away_defense"] = games["home_offensive_edge"] - games["away_defensive_edge"]
+    games["away_offense_vs_home_defense"] = games["away_offensive_edge"] - games["home_defensive_edge"]
+    games["net_offensive_matchup_edge"] = games["home_offense_vs_away_defense"] - games["away_offense_vs_home_defense"]
+
+    return games[["game_id", "season", "week", "home_team", "away_team"] + MATCHUP_ADDED_FEATURE_COLUMNS]
+
+
 def game_feature_matrix(features_df: pd.DataFrame, feature_columns=None) -> pd.DataFrame:
     """Numeric X matrix, NaN-filled to 0 - mirrors game_picks.game_feature_matrix.
     `feature_columns` defaults to GAME_PICK_FEATURE_COLUMNS; pass
@@ -275,6 +343,35 @@ def apply_calibration(win_probabilities: pd.DataFrame) -> pd.DataFrame:
     return calibrated
 
 
+# Real follow-up (2026-09-11 - matchup-differential candidates): a real
+# saved artifact's `feature_columns` uniquely identifies which of
+# scripts/train_nfl_game_pick_model.py's own FEATURE_SET_CANDIDATES
+# produced it - this list is the single real place that mapping lives, so
+# `apply_ml_model` never silently mismatches a saved model's own expected
+# features against the wrong builder. Checked in order, first match wins;
+# `build_game_features` (the original composite-only builder) is the real
+# fallback for anything unrecognized, same as the original binary check
+# this generalizes - a hand-edited or stale artifact degrades to the
+# oldest, safest builder rather than crashing.
+_FEATURE_COLUMN_BUILDERS = [
+    (DISAGGREGATED_FEATURE_COLUMNS, build_game_features_disaggregated),
+    (MATCHUP_ADDED_FEATURE_COLUMNS, build_game_features_matchup),
+    (MATCHUP_FOCUSED_FEATURE_COLUMNS, build_game_features_matchup),
+]
+
+
+def resolve_feature_builder(feature_columns: list):
+    """The real feature-building function that produces `feature_columns`
+    - public (not `_`-prefixed) so scripts/train_nfl_game_pick_model.py
+    can reuse the SAME resolution logic `apply_ml_model` uses, to score
+    whichever model is CURRENTLY live against a real holdout without
+    duplicating this mapping in two places."""
+    for known_columns, builder in _FEATURE_COLUMN_BUILDERS:
+        if feature_columns == known_columns:
+            return builder
+    return build_game_features
+
+
 def apply_ml_model(
     win_probabilities: pd.DataFrame,
     master: pd.DataFrame,
@@ -298,20 +395,23 @@ def apply_ml_model(
 
     The saved artifact is a real `{"model", "feature_columns"}` dict (not
     a bare estimator) so this function knows whether to rebuild features
-    via `build_game_features` or `build_game_features_disaggregated` -
-    whichever candidate scripts/train_nfl_game_pick_model.py's own real
-    backtest validated - without hardcoding one choice here. A game with
-    a genuinely incomplete feature row (e.g. a team missing from `master`
-    entirely - not expected in practice, but a real degenerate-input
-    guard) keeps its ORIGINAL heuristic probability rather than a
-    fabricated ML prediction from filled-in zeros - a per-row fallback,
-    not an all-or-nothing one."""
+    via `build_game_features`/`build_game_features_disaggregated`/
+    `build_game_features_matchup` - whichever candidate
+    scripts/train_nfl_game_pick_model.py's own real backtest validated -
+    without hardcoding one choice here (`_FEATURE_COLUMN_BUILDERS` below
+    resolves this by real feature-column-list identity; unrecognized as a
+    real degenerate-input guard against a stale/hand-edited artifact, not
+    an expected live case). A game with a genuinely incomplete feature row
+    (e.g. a team missing from `master` entirely - not expected in
+    practice, but a real degenerate-input guard) keeps its ORIGINAL
+    heuristic probability rather than a fabricated ML prediction from
+    filled-in zeros - a per-row fallback, not an all-or-nothing one."""
     artifact = ml_models.load_model(config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH)
     if artifact is None:
         return win_probabilities
 
     model, feature_columns = artifact["model"], artifact["feature_columns"]
-    builder = build_game_features_disaggregated if feature_columns == DISAGGREGATED_FEATURE_COLUMNS else build_game_features
+    builder = resolve_feature_builder(feature_columns)
     features = builder(master, qb_continuity, weekly_df, schedule_games_df).set_index("game_id")
 
     complete = features[feature_columns].notna().all(axis=1)

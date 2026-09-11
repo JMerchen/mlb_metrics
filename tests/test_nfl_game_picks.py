@@ -296,6 +296,134 @@ def test_apply_ml_model_falls_back_per_row_for_a_team_missing_from_master(monkey
     assert result.iloc[0]["home_win_probability"] == pytest.approx(0.55)  # unchanged - real fallback
 
 
+# --- Real follow-up: matchup-specific offense-vs-defense differentials (2026-09-11) ---
+
+
+def test_build_game_features_matchup_matches_the_users_own_worked_example():
+    # The user's own worked example: "if the difference between team A
+    # offense and team B defense is 15 and the difference between team B
+    # offense and team A defense is 4, we're saying it'll be an offensive
+    # game where team A has the advantage." KC (home) offense=20 vs DEN
+    # (away) defense=5 -> 15; DEN offense=10 vs KC defense=6 -> 4; net
+    # edge = 15-4 = 11 toward KC (home) - the real, direct "who has the
+    # bigger advantage" answer, not either differential in isolation.
+    master = _master_disaggregated([
+        {"team": "KC", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "offensive_edge": 20.0,
+         "defensive_edge": 6.0, "turnover_margin": 1.0, "points_per_drive": 1.0},
+        {"team": "DEN", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "offensive_edge": 10.0,
+         "defensive_edge": 5.0, "turnover_margin": 1.0, "points_per_drive": 1.0},
+    ])
+    qb_continuity = pd.DataFrame([
+        {"team": "KC", "recent_primary_qb_id": "qb_home", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+        {"team": "DEN", "recent_primary_qb_id": "qb_away", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+    ])
+    weekly = pd.DataFrame([_weekly_epa("qb_home", 0.0), _weekly_epa("qb_away", 0.0)])
+
+    features = nfl_game_picks.build_game_features_matchup(master, qb_continuity, weekly, _schedule_games())
+
+    assert list(features.columns) == (
+        ["game_id", "season", "week", "home_team", "away_team"] + nfl_game_picks.MATCHUP_ADDED_FEATURE_COLUMNS
+    )
+    row = features.iloc[0]
+    assert row["home_offense_vs_away_defense"] == pytest.approx(15.0)  # KC off (20) vs DEN def (5)
+    assert row["away_offense_vs_home_defense"] == pytest.approx(4.0)  # DEN off (10) vs KC def (6)
+    assert row["net_offensive_matchup_edge"] == pytest.approx(11.0)  # 15 - 4, real net advantage toward KC
+
+
+def test_build_game_features_matchup_negative_differential_means_defense_wins():
+    # "if one turns negative, we know the defense can handle the
+    # offense" - KC's own offense (5) is genuinely weaker than DEN's real
+    # defense (12), so home_offense_vs_away_defense is negative - the
+    # arithmetic already carries the sign, no separate handling needed.
+    master = _master_disaggregated([
+        {"team": "KC", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "offensive_edge": 5.0,
+         "defensive_edge": 1.0, "turnover_margin": 1.0, "points_per_drive": 1.0},
+        {"team": "DEN", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "offensive_edge": 1.0,
+         "defensive_edge": 12.0, "turnover_margin": 1.0, "points_per_drive": 1.0},
+    ])
+    qb_continuity = pd.DataFrame([
+        {"team": "KC", "recent_primary_qb_id": "qb_home", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+        {"team": "DEN", "recent_primary_qb_id": "qb_away", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+    ])
+    weekly = pd.DataFrame([_weekly_epa("qb_home", 0.0), _weekly_epa("qb_away", 0.0)])
+
+    features = nfl_game_picks.build_game_features_matchup(master, qb_continuity, weekly, _schedule_games())
+
+    row = features.iloc[0]
+    assert row["home_offense_vs_away_defense"] == pytest.approx(-7.0)  # KC off (5) vs DEN def (12) - defense wins
+
+
+def test_matchup_focused_feature_columns_drops_raw_offense_defense_but_keeps_the_differentials():
+    columns = set(nfl_game_picks.MATCHUP_FOCUSED_FEATURE_COLUMNS)
+    assert "home_offensive_edge" not in columns
+    assert "away_defensive_edge" not in columns
+    assert "home_offense_vs_away_defense" in columns
+    assert "net_offensive_matchup_edge" in columns
+    # Signals with no natural opponent-specific comparison are untouched.
+    assert "home_pyth_Strength" in columns
+    assert "home_turnover_margin" in columns
+
+
+def test_apply_ml_model_resolves_matchup_added_builder(monkeypatch, tmp_path):
+    from sklearn.linear_model import LogisticRegression
+
+    n = len(nfl_game_picks.MATCHUP_ADDED_FEATURE_COLUMNS)
+    X_fit = pd.DataFrame([[0.0] * n, [1.0] * n], columns=nfl_game_picks.MATCHUP_ADDED_FEATURE_COLUMNS)
+    model = LogisticRegression().fit(X_fit, [0, 1])
+    model_path = tmp_path / "model.joblib"
+    nfl_game_picks.ml_models.save_model(
+        {"model": model, "feature_columns": nfl_game_picks.MATCHUP_ADDED_FEATURE_COLUMNS}, str(model_path)
+    )
+    monkeypatch.setattr(nfl_game_picks.config, "NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH", str(model_path))
+
+    win_probabilities = pd.DataFrame([{"game_id": "2025_08_DEN_KC", "home_win_probability": 0.55}])
+    master = _master_disaggregated([
+        {"team": "KC", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "offensive_edge": 1.0,
+         "defensive_edge": 1.0, "turnover_margin": 1.0, "points_per_drive": 1.0},
+        {"team": "DEN", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "offensive_edge": 1.0,
+         "defensive_edge": 1.0, "turnover_margin": 1.0, "points_per_drive": 1.0},
+    ])
+    qb_continuity = pd.DataFrame([
+        {"team": "KC", "recent_primary_qb_id": "qb_home", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+        {"team": "DEN", "recent_primary_qb_id": "qb_away", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+    ])
+    weekly = pd.DataFrame([_weekly_epa("qb_home", 0.0), _weekly_epa("qb_away", 0.0)])
+
+    result = nfl_game_picks.apply_ml_model(win_probabilities, master, qb_continuity, weekly, _schedule_games())
+
+    assert result.iloc[0]["home_win_probability"] != pytest.approx(0.55)  # real overwrite - resolved the right builder
+
+
+def test_apply_ml_model_resolves_matchup_focused_builder(monkeypatch, tmp_path):
+    from sklearn.linear_model import LogisticRegression
+
+    n = len(nfl_game_picks.MATCHUP_FOCUSED_FEATURE_COLUMNS)
+    X_fit = pd.DataFrame([[0.0] * n, [1.0] * n], columns=nfl_game_picks.MATCHUP_FOCUSED_FEATURE_COLUMNS)
+    model = LogisticRegression().fit(X_fit, [0, 1])
+    model_path = tmp_path / "model.joblib"
+    nfl_game_picks.ml_models.save_model(
+        {"model": model, "feature_columns": nfl_game_picks.MATCHUP_FOCUSED_FEATURE_COLUMNS}, str(model_path)
+    )
+    monkeypatch.setattr(nfl_game_picks.config, "NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH", str(model_path))
+
+    win_probabilities = pd.DataFrame([{"game_id": "2025_08_DEN_KC", "home_win_probability": 0.55}])
+    master = _master_disaggregated([
+        {"team": "KC", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "offensive_edge": 1.0,
+         "defensive_edge": 1.0, "turnover_margin": 1.0, "points_per_drive": 1.0},
+        {"team": "DEN", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "offensive_edge": 1.0,
+         "defensive_edge": 1.0, "turnover_margin": 1.0, "points_per_drive": 1.0},
+    ])
+    qb_continuity = pd.DataFrame([
+        {"team": "KC", "recent_primary_qb_id": "qb_home", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+        {"team": "DEN", "recent_primary_qb_id": "qb_away", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+    ])
+    weekly = pd.DataFrame([_weekly_epa("qb_home", 0.0), _weekly_epa("qb_away", 0.0)])
+
+    result = nfl_game_picks.apply_ml_model(win_probabilities, master, qb_continuity, weekly, _schedule_games())
+
+    assert result.iloc[0]["home_win_probability"] != pytest.approx(0.55)  # real overwrite - resolved the right builder
+
+
 # --- Real follow-up: defer to market on large disagreement (2026-09-05) ---
 
 
