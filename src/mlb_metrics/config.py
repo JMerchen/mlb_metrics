@@ -2252,8 +2252,34 @@ NFL_SEASON_CARRYOVER_PRIOR_STRENGTH = 6.0
 # mirroring MLB's own proven pattern, generalized symmetrically to BOTH
 # offense and defense per the user's own stated intent). 0.0 is the real
 # null hypothesis (today's live, unadjusted behavior, an exact no-op);
-# 1.0 matches MLB's own full 1:1 netting. Ships at 0.0 pending a real
-# backtest - see scripts/backtest_nfl_opponent_adjustment.py.
+# 1.0 matches MLB's own full 1:1 netting.
+#
+# Real backtest result (scripts/backtest_nfl_opponent_adjustment.py, all
+# 10 real cached seasons 2016-2025, 2,383 real replayed games): every
+# nonzero weight beat the weight=0.0 baseline's point-estimate accuracy
+# AND log_loss, monotonically improving with weight - 1.0 looked best
+# (61.72% accuracy, 0.6771 log_loss vs. baseline's 61.21%/0.6774).
+#
+# A REAL paired significance test (per-game squared error, weight=X vs.
+# weight=0.0 on the SAME real games, scipy.stats.ttest_rel - same
+# discipline NFL_HOME_FIELD_ADVANTAGE_WEIGHT was validated with) tells a
+# different, more honest story: NONE of the 4 nonzero weights clear
+# p<0.05 (0.25: p=0.50, 0.5: p=0.41, 0.75: p=0.33, 1.0: p=0.26 - closer
+# to significant as weight increases, but never crossing the bar). The
+# real, per-team rank movement IS genuine (e.g. a real team's
+# offensive_edge rank moving 8-9 spots once opponent quality is netted
+# out - see the backtest's own rank-divergence report), it just doesn't
+# translate into a statistically distinguishable improvement at the
+# level of the final win-probability composite on this sample.
+#
+# Same honest-negative-finding posture as NFL_SEASON_CARRYOVER_REGRESSION/
+# _PRIOR_STRENGTH above (another case where an attractive point-estimate
+# grid result carried no real, distinguishable effect once tested
+# properly) - ships at 0.0, unchanged from its real null default. The
+# mechanism itself is real, tested, and available via a nonzero
+# `opponent_adjustment_weight` for a future revisit (e.g. with more
+# seasons of real data, or isolated per-signal rather than only via the
+# final composite), not deleted.
 NFL_OPPONENT_ADJUSTMENT_WEIGHT = 0.0
 NFL_OPPONENT_ADJUSTMENT_WEIGHT_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
 

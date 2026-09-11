@@ -4744,6 +4744,55 @@ wired into `nfl_pipeline.py` right after `apply_ml_model`) is the
 narrowest, most defensible real improvement this investigation actually
 supported - trust the model except in the one zone real data says not to.
 
+### Real follow-up: opponent-adjust offensive_edge/defensive_edge (2026-09-11, honest negative finding)
+
+Real user complaint: "offensive and defensive efficiency needs to be
+with respect to how other teams did... if a team only throws for 200
+yards in a game... but if they were facing a historically good pass
+defense, that might actually indicate a really good pass attack."
+Investigation confirmed a real, nuanced gap: MLB's own
+`teams.compute_offensive_edge` IS genuinely opponent-adjusted (nets a
+team's own bases-produced-per-game against the SPECIFIC opponent's own
+real bases-allowed rate, a no-lookahead `.shift(1)`/`.rolling()`
+computation per game), but MLB's DEFENSIVE side
+(`compute_suppression_resistance`) is NOT - only z-normalized against
+the league average. NFL's own `offensive_edge`/`defensive_edge` had
+NEITHER side opponent-adjusted at all before this.
+
+Built `nfl_team_strength._prior_rolling_series` - a real per-game,
+no-lookahead-as-of-that-specific-game rolling baseline, mirroring MLB's
+own proven pattern - and used it to net each real game's own EPA
+produced/allowed against the SPECIFIC opponent's own known baseline
+heading into that game, symmetrically on BOTH sides, gated by a real
+`config.NFL_OPPONENT_ADJUSTMENT_WEIGHT`.
+
+**Real backtest** (`scripts/backtest_nfl_opponent_adjustment.py`, all 10
+cached seasons 2016-2025, 2,383 real replayed games): every nonzero
+weight beat the weight=0.0 baseline's point-estimate accuracy AND
+log_loss, monotonically improving with weight:
+
+| weight | accuracy | log_loss | Brier | paired p-value vs. weight=0.0 |
+|---|---|---|---|---|
+| 0.0 (baseline) | 61.21% | 0.6774 | 0.2422 | - |
+| 0.25 | 61.47% | 0.6774 | 0.2421 | 0.50 |
+| 0.50 | 61.34% | 0.6773 | 0.2421 | 0.41 |
+| 0.75 | 61.51% | 0.6772 | 0.2421 | 0.33 |
+| 1.0 (MLB's full netting) | 61.72% | 0.6771 | 0.2420 | 0.26 |
+
+**Honest negative finding**: a real paired significance test (per-game
+squared error, same games, `scipy.stats.ttest_rel` - same discipline
+`NFL_HOME_FIELD_ADVANTAGE_WEIGHT` was validated with) shows NONE of the
+4 nonzero weights clear p<0.05, despite the attractive, monotonic
+point-estimate trend - the same trap `NFL_SEASON_CARRYOVER_REGRESSION`/
+`_PRIOR_STRENGTH` already caught once this session. The mechanism itself
+is real (a real team's `offensive_edge` rank moves 8-9 spots once
+opponent quality is netted out - see the backtest's own rank-divergence
+report), it just doesn't translate into a statistically distinguishable
+improvement at the level of the final win-probability composite on this
+sample. `NFL_OPPONENT_ADJUSTMENT_WEIGHT` ships unchanged at 0.0 - the
+mechanism stays available (via a nonzero override) for a future revisit
+with more data or a more isolated validation.
+
 ### Live pipeline (`nfl_pipeline.py`, `.github/workflows/nfl_weekly_update.yml`)
 
 Runs weekly (Tuesday mornings, after Monday Night Football has resolved
