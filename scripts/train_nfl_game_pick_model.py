@@ -114,8 +114,37 @@ def _standardize(X: pd.DataFrame) -> pd.DataFrame:
 
 
 def _fit_logit_report(y: pd.Series, X: pd.DataFrame, label: str):
+    """Real bug caught and fixed (2026-09-11, while explaining the
+    matchup-differential negative finding to the user): statsmodels.Logit
+    refuses to fit AT ALL when even one row has a real NaN anywhere in
+    its own input - it doesn't silently drop that row the way
+    `nfl_game_picks.game_feature_matrix`'s `.fillna(0)` does for the
+    actual model-fitting path. offensive_edge/defensive_edge/
+    turnover_margin/points_per_drive (and, now, the matchup differentials
+    derived from them) genuinely DO have real missing values for ~1-2% of
+    real rows (e.g. a team with too little real history yet that week -
+    confirmed directly: 24-26 of 2383 real rows) - one real NaN anywhere
+    in ANY column being fit was silently failing the ENTIRE univariate
+    fit for that column, and the combined multivariate fit too (even for
+    columns like pyth_Strength that have almost no missing values of
+    their own), which is why this report showed "fit failed" for nearly
+    every column except pyth_Strength/pyth_Confidence/the QB adjustments
+    - not because those signals are somehow unfittable, but because this
+    diagnostic was silently broken for them. Real rows with a genuine
+    missing value in THIS specific fit's own columns are dropped before
+    fitting (not filled with 0 - unlike the live/backtest model path,
+    this is a pure diagnostic report, so dropping the real unknown rather
+    than asserting a fabricated 0 is the more honest choice here)."""
+    combined = pd.concat([y.rename("_y"), X], axis=1).dropna()
+    dropped = len(X) - len(combined)
+    if dropped:
+        print(f"  {label}: dropping {dropped} real row(s) with a genuine missing value in this feature set")
+    if combined.empty:
+        print(f"  {label}: no real rows left after dropping missing values - skipping")
+        return None
+    y_clean, X_clean = combined["_y"], combined.drop(columns="_y")
     try:
-        result = sm.Logit(y, sm.add_constant(X)).fit(disp=0)
+        result = sm.Logit(y_clean, sm.add_constant(X_clean)).fit(disp=0)
     except Exception as exc:
         print(f"  {label}: fit failed ({exc})")
         return None
