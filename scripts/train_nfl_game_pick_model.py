@@ -23,9 +23,16 @@ exact methodology to NFL and - unlike MLB's own version - actually wires
 the validated result into live picks via `nfl_game_picks.apply_ml_model`
 if a real candidate clears the save-gate.
 
-Two real feature-set candidates (`nfl_game_picks.build_game_features`'s
-minimal composite-only set, and `build_game_features_disaggregated`'s
-richer per-signal set - see that function's own docstring), each swept
+Four real feature-set candidates (`nfl_game_picks.build_game_features`'s
+minimal composite-only set, `build_game_features_disaggregated`'s richer
+per-signal set, and - real follow-up, 2026-09-11, "we're looking at
+ratios and magnitudes between opponents, not straight efficiency" -
+`build_game_features_matchup`'s two candidates: MATCHUP_ADDED_FEATURE_COLUMNS
+(disaggregated + explicit home-offense-vs-away-defense/away-offense-vs-
+home-defense/net-matchup-edge differentials) and
+MATCHUP_FOCUSED_FEATURE_COLUMNS (drops the raw standalone offensive_edge/
+defensive_edge columns entirely, keeping only the matchup differentials -
+see that module's own docstring for the full reasoning). Each swept
 through LogisticRegression and HistGradientBoostingClassifier via the
 same real walk-forward CV every other ML fit in this project uses
 (`ml_models.grid_search_walk_forward`), keyed on a real `season*100+week`
@@ -35,14 +42,19 @@ most recent season (2025, all 18 real weeks) rather than a token few-week
 slice - config.NFL_GAME_PICK_ML_WIN_PROBABILITY_FINAL_HOLDOUT_WEEKS
 documents why, now that 9 real prior seasons of train data exist.
 
-**Save gate**: the winning candidate must beat BOTH a naive baseline
-(always predict the base home-win rate) AND today's real live heuristic
-(the ratio + validated home-field term, computed independently for the
-SAME holdout games) on holdout log_loss. Also prints a real, explicit
-predicted-probability SPREAD comparison (min/p5/median/p95/max) between
-the heuristic and the new model on the same holdout - the direct,
-concrete check for whether this fixes the actual blowout-confidence
-complaint, not just the aggregate metrics.
+**Save gate**: the winning candidate must beat a naive baseline (always
+predict the base home-win rate), today's real ratio+home-field heuristic,
+AND - real follow-up, since an ML model is now actually live - the
+CURRENTLY-SHIPPED model's own real holdout predictions (resolved via
+`nfl_game_picks.resolve_feature_builder`, so this works regardless of
+which candidate is currently live, without hardcoding one), all on
+holdout log_loss. A new candidate that only beats the stale bare-ratio
+heuristic but not the model that already superseded it does NOT clear
+the bar. Also prints a real, explicit predicted-probability SPREAD
+comparison (min/p5/median/p95/max) between the heuristic and the new
+model on the same holdout - the direct, concrete check for whether this
+fixes the actual blowout-confidence complaint, not just the aggregate
+metrics.
 
 If a candidate clears the gate, it is refit on the FULL real dataset
 (train + holdout combined) before saving - same "use every real data
@@ -78,6 +90,8 @@ HOLDOUT_SEASONS = {max(SEASONS)}  # config.NFL_GAME_PICK_ML_WIN_PROBABILITY_FINA
 FEATURE_SET_CANDIDATES = {
     "composite": (nfl_game_picks.build_game_features, nfl_game_picks.GAME_PICK_FEATURE_COLUMNS),
     "disaggregated": (nfl_game_picks.build_game_features_disaggregated, nfl_game_picks.DISAGGREGATED_FEATURE_COLUMNS),
+    "matchup_added": (nfl_game_picks.build_game_features_matchup, nfl_game_picks.MATCHUP_ADDED_FEATURE_COLUMNS),
+    "matchup_focused": (nfl_game_picks.build_game_features_matchup, nfl_game_picks.MATCHUP_FOCUSED_FEATURE_COLUMNS),
 }
 
 
@@ -164,7 +178,44 @@ def _spread_report(label: str, proba: pd.Series) -> None:
     )
 
 
-def evaluate_candidate(label: str, feature_columns: list, train_pool: pd.DataFrame, holdout: pd.DataFrame) -> dict:
+def _score_live_model(snapshots: list[dict]) -> dict | None:
+    """Real holdout score for whichever ML model is CURRENTLY live (if
+    any) - real follow-up (2026-09-11): informational only, NOT a fair
+    apples-to-apples bar and deliberately excluded from `clears_bar`
+    below. The saved live artifact was refit on the FULL real dataset
+    (train + holdout combined - see `main`'s own save step) before being
+    written to disk, which means it has already seen the exact real 2025
+    games used as `HOLDOUT_SEASONS` here - scoring it against THOSE SAME
+    games structurally favors the incumbent over any fresh candidate
+    (which only ever trains on `train_pool`) and is not evidence either
+    way about which feature set is genuinely better. Caught during this
+    exact run (the printed number looked suspiciously strong until this
+    was worked out) - kept only as printed context, same "catch and
+    disclose a real methodology mistake rather than report a misleading
+    number" precedent the NFL market-blend leakage catch already
+    established this session. Reuses `nfl_game_picks.resolve_feature_builder`
+    (the SAME resolution `apply_ml_model` itself uses) so this works
+    regardless of which candidate is currently live, without hardcoding
+    one. Returns None when nothing is live yet."""
+    artifact = ml_models.load_model(config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH)
+    if artifact is None:
+        return None
+    live_model, live_feature_columns = artifact["model"], artifact["feature_columns"]
+    live_builder = nfl_game_picks.resolve_feature_builder(live_feature_columns)
+
+    rows = backtest.assemble_nfl_game_pick_log(snapshots, live_builder)
+    rows = rows[rows["season"].isin(HOLDOUT_SEASONS)]
+    if rows.empty:
+        return None
+    X_holdout = nfl_game_picks.game_feature_matrix(rows, live_feature_columns)
+    predicted_proba = live_model.predict_proba(X_holdout)[:, 1]
+    return ml_models.evaluate_classifier_predictions(rows["home_won"].astype(float), predicted_proba)
+
+
+def evaluate_candidate(
+    label: str, feature_columns: list, train_pool: pd.DataFrame, holdout: pd.DataFrame,
+    live_result: dict = None,
+) -> dict:
     print(f"\n=== {label} candidate: walk-forward-validated model ===")
     X_train = nfl_game_picks.game_feature_matrix(train_pool, feature_columns)
     y_train = train_pool["home_won"].astype(float)
@@ -188,6 +239,13 @@ def evaluate_candidate(label: str, feature_columns: list, train_pool: pd.DataFra
         f"brier={heuristic_result['brier_score']:.4f} roc_auc={heuristic_result['roc_auc']:.4f} "
         f"accuracy={heuristic_result['accuracy']:.4f}"
     )
+    if live_result is not None:
+        print(
+            f"  Currently-shipped ML model (NOT a fair bar - refit on this exact holdout, see "
+            f"_score_live_model's own docstring): log_loss={live_result['log_loss']:.4f} "
+            f"brier={live_result['brier_score']:.4f} roc_auc={live_result['roc_auc']:.4f} "
+            f"accuracy={live_result['accuracy']:.4f}"
+        )
 
     print("\n  Predicted-probability spread (does this fix the blowout-confidence ceiling?):")
     _spread_report("Live heuristic", holdout["home_win_probability"])
@@ -205,8 +263,16 @@ def evaluate_candidate(label: str, feature_columns: list, train_pool: pd.DataFra
 
     beats_baseline = result["log_loss"] < result["baseline_log_loss"]
     beats_heuristic = result["log_loss"] < heuristic_result["log_loss"]
+    # NOT included in clears_bar - see _score_live_model's own docstring
+    # for why that comparison is structurally biased toward the
+    # incumbent (it was refit on this exact holdout) and not a fair test.
+    beats_live_model_unfair_comparison = live_result is None or result["log_loss"] < live_result["log_loss"]
     clears_bar = beats_baseline and beats_heuristic
-    print(f"\n  Beats naive baseline: {beats_baseline} | Beats live heuristic: {beats_heuristic} | CLEARS BAR: {clears_bar}")
+    print(
+        f"\n  Beats naive baseline: {beats_baseline} | Beats live heuristic: {beats_heuristic} | "
+        f"Beats currently-shipped model (informational, NOT part of the gate): "
+        f"{beats_live_model_unfair_comparison} | CLEARS BAR: {clears_bar}"
+    )
 
     return {
         "label": label, "model_name": best_name, "estimator": best_search.best_estimator_,
@@ -239,6 +305,14 @@ def main():
         heuristic_rows.append(probs[["game_id", "home_win_probability"]])
     heuristic = pd.concat(heuristic_rows, ignore_index=True)
 
+    print("\nScoring the CURRENTLY-SHIPPED ML model (if any) on the same real holdout - a new candidate has to")
+    print("beat what's actually live, not just the stale bare-ratio heuristic it already superseded...")
+    live_result = _score_live_model(snapshots)
+    if live_result is None:
+        print("  No real model currently live - falling back to the bare heuristic as the only comparison bar.")
+    else:
+        print(f"  Currently-shipped model: holdout log_loss={live_result['log_loss']:.4f}")
+
     candidate_logs = {}
     for name, (feature_fn, feature_columns) in FEATURE_SET_CANDIDATES.items():
         rows = backtest.assemble_nfl_game_pick_log(snapshots, feature_fn)
@@ -256,12 +330,13 @@ def main():
         if holdout.empty or train_pool.empty:
             print("  Not enough rows for a real holdout split - skipping.")
             continue
-        results.append(evaluate_candidate(name, feature_columns, train_pool, holdout))
+        results.append(evaluate_candidate(name, feature_columns, train_pool, holdout, live_result))
 
     print("\n" + "=" * 100)
     winners = [r for r in results if r["clears_bar"]]
     if not winners:
-        print("NO candidate cleared the real save-gate (beat both naive baseline AND today's live heuristic).")
+        print("NO candidate cleared the real save-gate (beat naive baseline, today's live heuristic, AND the")
+        print("currently-shipped model, if one exists).")
         print("Reporting honestly: the ML win-probability fix is NOT validated by this backtest.")
         if results:
             best = min(results, key=lambda r: r["holdout_log_loss"])

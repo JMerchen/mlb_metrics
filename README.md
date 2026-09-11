@@ -4793,6 +4793,70 @@ sample. `NFL_OPPONENT_ADJUSTMENT_WEIGHT` ships unchanged at 0.0 - the
 mechanism stays available (via a nonzero override) for a future revisit
 with more data or a more isolated validation.
 
+### Real follow-up: matchup-specific offense-vs-defense differentials (2026-09-11, honest negative finding)
+
+Real follow-up to the above: "Real world, we know that offense and
+defense efficiency matters... really, it's a comparison. So if the
+difference between team A offense and team B defense is 15 and the
+difference between team B offense and team A defense is 4, we're saying
+it'll be an offensive game where team A has the advantage... if one
+turns negative, we know the defense can handle the offense. We're
+looking at ratios and magnitudes between opponents, not straight
+efficiency." A genuinely different mechanism from the opponent-
+adjustment work above (which regressed PAST games against an opponent's
+own prior baseline, still landing in one standalone per-team composite
+number) - this operates at game-PREDICTION time: explicit differentials
+between THIS game's two matchups.
+
+Three new real columns (`nfl_game_picks.build_game_features_matchup`):
+`home_offense_vs_away_defense = home_offensive_edge - away_defensive_edge`,
+`away_offense_vs_home_defense = away_offensive_edge - home_defensive_edge`,
+and `net_offensive_matchup_edge` (their difference - directly the "who
+has the bigger real advantage" question the user's own worked example
+asks; a negative `home_offense_vs_away_defense` directly encodes "the
+defense can handle this offense," no separate sign-handling needed).
+Two real candidates added to `scripts/train_nfl_game_pick_model.py`'s
+existing sweep: `matchup_added` (keeps every existing disaggregated
+signal, adds the 3 differentials) and `matchup_focused` (drops the 4 raw
+standalone offensive_edge/defensive_edge columns entirely, keeping only
+the matchup differentials + the signals that never had a natural
+opponent-specific comparison).
+
+**A real methodology bug caught and fixed before reporting**: this
+follow-up also added a comparison against the CURRENTLY-SHIPPED model's
+own holdout predictions, intended as a real, stricter save-gate ("beat
+what's actually live, not just the stale bare-ratio heuristic it already
+superseded"). But the shipped artifact is refit on the FULL real dataset
+(train + holdout combined) before being saved - it has already seen the
+exact 2025 games used as the holdout here, so scoring it against those
+SAME games structurally favors the incumbent and isn't a fair test. Kept
+as printed, informational context only - excluded from the real
+pass/fail gate, same "catch a real methodology mistake and disclose it
+rather than report a misleading number" precedent the NFL market-blend
+leakage catch already established this session.
+
+**Honest negative finding, on the real, fair comparison** (all 4
+candidates trained identically on the same train-pool, scored on the
+same untouched real 2025 holdout, 272 real games):
+
+| candidate | holdout log_loss |
+|---|---|
+| composite | 0.6616 |
+| **disaggregated (currently shipped)** | **0.6276** |
+| matchup_added | 0.6329 |
+| matchup_focused | 0.6329 |
+
+Both new matchup-differential candidates land clearly worse than the
+already-shipped `disaggregated` feature set - the explicit matchup
+comparison doesn't help beyond what the model can already extract from
+each team's own separate `offensive_edge`/`defensive_edge` signals (a
+linear model already has enough freedom to approximate the same
+combination, and evidently does). No config or shipped-artifact change -
+`nfl_game_picks.build_game_features_matchup`/`resolve_feature_builder`
+stay in the codebase, real and tested, available for a future revisit
+(e.g. combined with the opponent-adjustment mechanism above, or as a GBM
+rather than logistic-regression feature).
+
 ### Live pipeline (`nfl_pipeline.py`, `.github/workflows/nfl_weekly_update.yml`)
 
 Runs weekly (Tuesday mornings, after Monday Night Football has resolved
