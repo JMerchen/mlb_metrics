@@ -251,6 +251,52 @@ def _recency_window_blend(df: pd.DataFrame, group_col: str, value_col: str, wind
     return blended
 
 
+def _prior_rolling_series(df: pd.DataFrame, group_col: str, value_col: str, windows) -> pd.Series:
+    """Real per-GAME, no-lookahead-as-of-that-specific-game version of
+    `_recency_window_blend` - real follow-up (2026-09-11, "offensive and
+    defensive efficiency needs to be with respect to how other teams
+    did... if a team only throws for 200 yards against a historically
+    good pass defense, that might indicate a really good pass attack").
+    `_recency_window_blend` returns ONE current snapshot value per group
+    (as of "now"); this returns a value for EVERY real row of `df`,
+    computed using ONLY that row's own group's rows STRICTLY BEFORE its
+    own `(season, week)` - the real per-game opponent-quality baseline
+    `compute_team_offense_defense_edge` needs to net a specific game's
+    own_epa/epa_allowed against what the SPECIFIC opponent faced that
+    week was already known to produce/allow heading in, not an
+    end-of-history number that would leak later games into an earlier
+    one's adjustment.
+
+    Mirrors `teams.compute_offensive_edge`'s own proven `.shift(1)` +
+    `.rolling()` pattern (the exact real precedent already shipped and
+    validated on the MLB side for this same "opponent's own prior rate,
+    not a final snapshot" requirement) - generalized to this module's own
+    multi-window weighted blend (`config.NFL_TEAM_STRENGTH_WINDOWS`'s
+    shape) instead of MLB's single windowed sum.
+
+    A row with zero real prior games in its own group (that team's
+    first-ever game anywhere in `df`) gets NaN - a real "no opponent
+    history yet" case, not a fabricated number. Every window here shares
+    `min_periods=1`/`.expanding()`, so once a row DOES have at least one
+    real prior game, every window is simultaneously defined (never a
+    partial-NaN blend needing weight renormalization) - confirmed by
+    construction, not assumed."""
+    if df.empty:
+        return pd.Series(dtype=float, index=df.index)
+    ordered = df.sort_values([group_col, "season", "week"])
+    shifted = ordered.groupby(group_col)[value_col].shift(1)
+
+    blended = None
+    for games_back, weight in windows:
+        grouped_shifted = shifted.groupby(ordered[group_col])
+        window_mean = (
+            grouped_shifted.expanding().mean() if games_back is None
+            else grouped_shifted.rolling(games_back, min_periods=1).mean()
+        ).droplevel(0)
+        blended = window_mean * weight if blended is None else blended + window_mean * weight
+    return blended.reindex(df.index)
+
+
 def _season_aware_blend(
     stats_df: pd.DataFrame, group_col: str, value_col: str, current_season: int,
     windows=None, prior_strength: float = None, regression: float = None, season_aware: bool = False,
@@ -329,6 +375,7 @@ EPA_COLS = ["passing_epa", "rushing_epa", "receiving_epa"]
 def compute_team_offense_defense_edge(
     team_stats_df: pd.DataFrame, current_season: int = None,
     carryover_regression: float = None, carryover_prior_strength: float = None, season_aware: bool = False,
+    opponent_adjustment_weight: float = None,
 ) -> pd.DataFrame:
     """One row per team: `offensive_edge` (real total EPA - passing +
     rushing + receiving - produced per game, season-aware-blended per
@@ -344,10 +391,33 @@ def compute_team_offense_defense_edge(
     same honest way every other z-scored signal here does, not a manual
     flip here. `current_season` defaults to `team_stats_df`'s own max real
     season (always correct under this project's no-lookahead contract -
-    no caller ever includes a season later than "now")."""
+    no caller ever includes a season later than "now").
+
+    Real follow-up (2026-09-11, "offensive and defensive efficiency needs
+    to be with respect to how other teams did... if a team only throws
+    for 200 yards against a historically good pass defense, that might
+    indicate a really good pass attack"): both `own_epa` and `epa_allowed`
+    are netted, per real game, against the SPECIFIC opponent's own known
+    baseline heading into that game - `own_epa - weight * (that
+    opponent's own prior_epa_allowed)` and `epa_allowed - weight * (that
+    opponent's own prior_epa_produced)`, via `_prior_rolling_series` (a
+    real, no-lookahead-as-of-that-specific-game rolling baseline, NOT an
+    end-of-history snapshot that would leak later games into an earlier
+    one's adjustment - mirrors `teams.compute_offensive_edge`'s own
+    already-shipped `.shift(1)`/`.rolling()` MLB precedent for this exact
+    requirement). `opponent_adjustment_weight=0.0` (the config default
+    until backtest-validated - see config.NFL_OPPONENT_ADJUSTMENT_WEIGHT's
+    own docstring) is an exact no-op: `own_epa`/`epa_allowed` pass through
+    completely unchanged, byte-identical to before this adjustment
+    existed. `opponent_adjustment_weight=1.0` matches MLB's own full 1:1
+    netting. A game whose opponent has zero real prior games yet (the
+    opponent's own first game in the dataset) gets no adjustment for that
+    one game (`.fillna(0)`), same honest "no real opponent history yet"
+    fallback `teams.compute_offensive_edge` itself uses."""
     ts = team_stats_df[team_stats_df["season_type"] == "REG"].copy()
     ts["epa_total"] = ts[EPA_COLS].sum(axis=1)
     current_season = int(ts["season"].max()) if current_season is None else current_season
+    weight = config.NFL_OPPONENT_ADJUSTMENT_WEIGHT if opponent_adjustment_weight is None else opponent_adjustment_weight
 
     own = ts[["team", "opponent_team", "season", "week", "game_id", "epa_total"]].rename(
         columns={"epa_total": "own_epa"}
@@ -361,13 +431,32 @@ def compute_team_offense_defense_edge(
     merged = own.merge(allowed, left_on=["team", "opponent_team", "season", "week"],
                         right_on=["team", "opp_team", "season", "week"], how="left")
 
+    # Each team's own real prior-rolling baseline heading into ITS OWN
+    # game that week - season-agnostic/continuous across season
+    # boundaries here (the existing `_recency_window_blend` default's own
+    # convention), independent of whether `season_aware` carryover is
+    # enabled for the FINAL blended value below - that mechanism applies
+    # afterward, orthogonally, to the resulting adjusted per-game values.
+    merged["prior_epa_produced"] = _prior_rolling_series(merged, "team", "own_epa", config.NFL_TEAM_STRENGTH_WINDOWS)
+    merged["prior_epa_allowed"] = _prior_rolling_series(merged, "team", "epa_allowed", config.NFL_TEAM_STRENGTH_WINDOWS)
+
+    opp_priors = merged[["team", "season", "week", "prior_epa_produced", "prior_epa_allowed"]].rename(columns={
+        "team": "opponent_team",
+        "prior_epa_produced": "opp_prior_epa_produced",
+        "prior_epa_allowed": "opp_prior_epa_allowed",
+    })
+    merged = merged.merge(opp_priors, on=["opponent_team", "season", "week"], how="left")
+
+    merged["own_epa_adjusted"] = merged["own_epa"] - weight * merged["opp_prior_epa_allowed"].fillna(0)
+    merged["epa_allowed_adjusted"] = merged["epa_allowed"] - weight * merged["opp_prior_epa_produced"].fillna(0)
+
     result = pd.DataFrame({
         "offensive_edge": _season_aware_blend(
-            merged, "team", "own_epa", current_season,
+            merged, "team", "own_epa_adjusted", current_season,
             prior_strength=carryover_prior_strength, regression=carryover_regression, season_aware=season_aware,
         ),
         "defensive_edge": _season_aware_blend(
-            merged, "team", "epa_allowed", current_season,
+            merged, "team", "epa_allowed_adjusted", current_season,
             prior_strength=carryover_prior_strength, regression=carryover_regression, season_aware=season_aware,
         ),
     })
@@ -546,6 +635,7 @@ def compute_qb_continuity_adjustment(
 def assemble_team_metrics(
     schedules_df: pd.DataFrame, team_stats_df: pd.DataFrame, pbp_df: pd.DataFrame, current_season: int = None,
     carryover_regression: float = None, carryover_prior_strength: float = None, season_aware: bool = False,
+    opponent_adjustment_weight: float = None,
 ) -> pd.DataFrame:
     """Build the final NFL team output table - direct structural port of
     teams.assemble_team_metrics. See module docstring for the full
@@ -569,12 +659,18 @@ def assemble_team_metrics(
     whole carryover mechanism (see `_season_aware_blend`'s own docstring)
     - the real "today's live behavior" baseline
     scripts/backtest_nfl_season_carryover.py compares every candidate
-    against."""
+    against. `opponent_adjustment_weight` (real follow-up, 2026-09-11 -
+    see `compute_team_offense_defense_edge`'s own docstring) is the same
+    "config default, explicit override" pattern (None ->
+    config.NFL_OPPONENT_ADJUSTMENT_WEIGHT) letting
+    scripts/backtest_nfl_opponent_adjustment.py sweep candidates the same
+    way."""
     current_season = int(schedules_df["season"].max()) if current_season is None else current_season
     record = build_team_record(schedules_df)
     current_strength, sos = compute_strength_metrics(record)
     edge = compute_team_offense_defense_edge(
-        team_stats_df, current_season, carryover_regression, carryover_prior_strength, season_aware
+        team_stats_df, current_season, carryover_regression, carryover_prior_strength, season_aware,
+        opponent_adjustment_weight,
     )
     turnovers = compute_team_turnover_margin(
         team_stats_df, current_season, carryover_regression, carryover_prior_strength, season_aware

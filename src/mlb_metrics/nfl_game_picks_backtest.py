@@ -267,6 +267,7 @@ def build_multi_season_history(
     carryover_regression: float = None,
     carryover_prior_strength: float = None,
     season_aware: bool = False,
+    opponent_adjustment_weight: float = None,
 ) -> list[dict]:
     """The expensive, no-lookahead per-week team-strength assembly a real
     cross-season replay needs - split out from `replay_multi_season` so a
@@ -342,7 +343,7 @@ def build_multi_season_history(
             master = nfl_team_strength.assemble_team_metrics(
                 history_sched, history_stats, history_pbp, current_season=season,
                 carryover_regression=carryover_regression, carryover_prior_strength=carryover_prior_strength,
-                season_aware=season_aware,
+                season_aware=season_aware, opponent_adjustment_weight=opponent_adjustment_weight,
             )
             qb_continuity = nfl_team_strength.compute_qb_continuity_adjustment(
                 history_snaps, history_weekly, history_rosters
@@ -400,16 +401,18 @@ def replay_multi_season(
     carryover_regression: float = None,
     carryover_prior_strength: float = None,
     season_aware: bool = False,
+    opponent_adjustment_weight: float = None,
 ) -> pd.DataFrame:
     """Convenience one-call wrapper: `build_multi_season_history` +
     `score_multi_season_snapshots` (see both functions' own docstrings for
     the full reasoning). Use the two-step form directly when sweeping
     several `composite_weights`/`home_field_weight` candidates against the
-    SAME `carryover_regression`/`carryover_prior_strength` pair, to avoid
-    rebuilding team-strength assembly redundantly."""
+    SAME `carryover_regression`/`carryover_prior_strength`/
+    `opponent_adjustment_weight` combination, to avoid rebuilding
+    team-strength assembly redundantly."""
     snapshots = build_multi_season_history(
         schedules_df, team_stats_df, weekly_df, snap_counts_df, rosters_df, pbp_df, seasons,
-        carryover_regression, carryover_prior_strength, season_aware,
+        carryover_regression, carryover_prior_strength, season_aware, opponent_adjustment_weight,
     )
     return score_multi_season_snapshots(snapshots, composite_weights, home_field_weight)
 

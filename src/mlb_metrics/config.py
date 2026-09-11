@@ -2232,6 +2232,57 @@ NFL_GAME_PICK_ML_WALK_FORWARD_TEST_BLOCK_WEEKS = 2
 NFL_SEASON_CARRYOVER_REGRESSION = 0.5
 NFL_SEASON_CARRYOVER_PRIOR_STRENGTH = 6.0
 
+# Real user complaint (2026-09-11): "offensive and defensive efficiency
+# needs to be with respect to how other teams did... if a team only
+# throws for 200 yards against a historically good pass defense, that
+# might indicate a really good pass attack." Confirmed by reading the
+# code: MLB's own teams.compute_offensive_edge IS genuinely opponent-
+# adjusted (nets a team's own bases-produced-per-game against the
+# SPECIFIC opponent's own real bases-allowed rate, a no-lookahead
+# `.shift(1)`/`.rolling()` computation per game - not an end-of-season
+# comparison), but MLB's DEFENSIVE side (compute_suppression_resistance)
+# is NOT - only z-normalized against the league average. NFL's own
+# offensive_edge/defensive_edge had NEITHER side opponent-adjusted at
+# all before this - both were purely each team's own raw rolling EPA,
+# with zero netting against the quality of opponents actually faced.
+#
+# See nfl_team_strength.compute_team_offense_defense_edge's own
+# docstring for the real mechanism (_prior_rolling_series - a genuine
+# per-game, no-lookahead-as-of-that-specific-game opponent baseline,
+# mirroring MLB's own proven pattern, generalized symmetrically to BOTH
+# offense and defense per the user's own stated intent). 0.0 is the real
+# null hypothesis (today's live, unadjusted behavior, an exact no-op);
+# 1.0 matches MLB's own full 1:1 netting.
+#
+# Real backtest result (scripts/backtest_nfl_opponent_adjustment.py, all
+# 10 real cached seasons 2016-2025, 2,383 real replayed games): every
+# nonzero weight beat the weight=0.0 baseline's point-estimate accuracy
+# AND log_loss, monotonically improving with weight - 1.0 looked best
+# (61.72% accuracy, 0.6771 log_loss vs. baseline's 61.21%/0.6774).
+#
+# A REAL paired significance test (per-game squared error, weight=X vs.
+# weight=0.0 on the SAME real games, scipy.stats.ttest_rel - same
+# discipline NFL_HOME_FIELD_ADVANTAGE_WEIGHT was validated with) tells a
+# different, more honest story: NONE of the 4 nonzero weights clear
+# p<0.05 (0.25: p=0.50, 0.5: p=0.41, 0.75: p=0.33, 1.0: p=0.26 - closer
+# to significant as weight increases, but never crossing the bar). The
+# real, per-team rank movement IS genuine (e.g. a real team's
+# offensive_edge rank moving 8-9 spots once opponent quality is netted
+# out - see the backtest's own rank-divergence report), it just doesn't
+# translate into a statistically distinguishable improvement at the
+# level of the final win-probability composite on this sample.
+#
+# Same honest-negative-finding posture as NFL_SEASON_CARRYOVER_REGRESSION/
+# _PRIOR_STRENGTH above (another case where an attractive point-estimate
+# grid result carried no real, distinguishable effect once tested
+# properly) - ships at 0.0, unchanged from its real null default. The
+# mechanism itself is real, tested, and available via a nonzero
+# `opponent_adjustment_weight` for a future revisit (e.g. with more
+# seasons of real data, or isolated per-signal rather than only via the
+# final composite), not deleted.
+NFL_OPPONENT_ADJUSTMENT_WEIGHT = 0.0
+NFL_OPPONENT_ADJUSTMENT_WEIGHT_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
+
 # --- NFL Home-Field Advantage (nfl_game_picks.compute_game_win_probabilities) ---
 #
 # Real follow-up (2026-09-04 - "a little push or pull from home/away").

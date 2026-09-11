@@ -129,7 +129,11 @@ def test_compute_strength_metrics_pyth_strength_favors_larger_point_differential
 def test_compute_team_offense_defense_edge_uses_opponents_own_row():
     # Real pattern: what team B's offense produced against A that week IS
     # what A's defense allowed - taken from B's own team_stats row via
-    # opponent_team, not recomputed.
+    # opponent_team, not recomputed. No opponent_adjustment_weight passed
+    # here - defaults to config.NFL_OPPONENT_ADJUSTMENT_WEIGHT (0.0, the
+    # real null hypothesis) - AND neither team has any prior game in this
+    # fixture anyway, so this also confirms the exact no-op fallback for
+    # a team with no real opponent history yet, at any weight.
     team_stats = pd.DataFrame([
         {"team": "A", "opponent_team": "B", "season": 2025, "week": 1, "game_id": "g1",
          "season_type": "REG", "passing_epa": 5.0, "rushing_epa": 2.0, "receiving_epa": 0.0},
@@ -146,6 +150,82 @@ def test_compute_team_offense_defense_edge_uses_opponents_own_row():
     assert result.loc["A", "defensive_edge"] == pytest.approx(-2.0)  # B's own real EPA that game (what A allowed)
     assert result.loc["B", "offensive_edge"] == pytest.approx(-2.0)
     assert result.loc["B", "defensive_edge"] == pytest.approx(7.0)
+
+
+def test_prior_rolling_series_uses_only_strictly_prior_rows():
+    df = pd.DataFrame([
+        {"team": "A", "season": 2025, "week": 1, "v": 10.0},
+        {"team": "A", "season": 2025, "week": 2, "v": 20.0},
+        {"team": "A", "season": 2025, "week": 3, "v": 30.0},
+        {"team": "B", "season": 2025, "week": 1, "v": 100.0},
+    ])
+
+    result = nfl_team_strength._prior_rolling_series(df, "team", "v", config.NFL_TEAM_STRENGTH_WINDOWS)
+
+    # A's week 1 and B's week 1: no real prior game for either team - NaN,
+    # not a fabricated 0.
+    assert pd.isna(result.iloc[0])
+    assert pd.isna(result.iloc[3])
+    # A's week 2: exactly one real prior game (week 1's 10.0) - every
+    # window (3/7/full) has only that one point to average, so the
+    # weighted blend collapses to it exactly regardless of window weights.
+    assert result.iloc[1] == pytest.approx(10.0)
+    # A's week 3: two real prior games (10.0, 20.0) - mean 15.0 for every
+    # window (both fit inside the 3-game window too).
+    assert result.iloc[2] == pytest.approx(15.0)
+
+
+def test_prior_rolling_series_empty_input_returns_empty_series():
+    df = pd.DataFrame(columns=["team", "season", "week", "v"])
+    result = nfl_team_strength._prior_rolling_series(df, "team", "v", config.NFL_TEAM_STRENGTH_WINDOWS)
+    assert result.empty
+
+
+def test_compute_team_offense_defense_edge_opponent_adjustment_flips_a_weak_raw_performance():
+    # The exact real complaint (2026-09-11): "if a team only throws for
+    # 200 yards in a game, just going off numbers will say that that's
+    # low. But if they were facing a historically good pass defense, that
+    # might actually indicate a really good pass attack."
+    #
+    # ELITE has a real, established defensive baseline BEFORE week 3:
+    # allowed -5.0 EPA in each of weeks 1-2 (a real, historically strong
+    # defense - two different real opponents, Y1/Y2, each produced only
+    # -5.0 EPA against them). In week 3, X plays ELITE and produces a
+    # real, mediocre-looking -3.0 EPA (own_epa) - raw numbers alone call
+    # that a below-average offensive week.
+    team_stats = pd.DataFrame([
+        {"team": "ELITE", "opponent_team": "Y1", "season": 2025, "week": 1, "game_id": "g1",
+         "season_type": "REG", "passing_epa": 10.0, "rushing_epa": 0.0, "receiving_epa": 0.0},
+        {"team": "Y1", "opponent_team": "ELITE", "season": 2025, "week": 1, "game_id": "g1",
+         "season_type": "REG", "passing_epa": -5.0, "rushing_epa": 0.0, "receiving_epa": 0.0},
+        {"team": "ELITE", "opponent_team": "Y2", "season": 2025, "week": 2, "game_id": "g2",
+         "season_type": "REG", "passing_epa": 10.0, "rushing_epa": 0.0, "receiving_epa": 0.0},
+        {"team": "Y2", "opponent_team": "ELITE", "season": 2025, "week": 2, "game_id": "g2",
+         "season_type": "REG", "passing_epa": -5.0, "rushing_epa": 0.0, "receiving_epa": 0.0},
+        {"team": "ELITE", "opponent_team": "X", "season": 2025, "week": 3, "game_id": "g3",
+         "season_type": "REG", "passing_epa": 8.0, "rushing_epa": 0.0, "receiving_epa": 0.0},
+        {"team": "X", "opponent_team": "ELITE", "season": 2025, "week": 3, "game_id": "g3",
+         "season_type": "REG", "passing_epa": -3.0, "rushing_epa": 0.0, "receiving_epa": 0.0},
+    ])
+
+    # Raw (weight=0.0, today's live default): X's real own_epa that game
+    # (-3.0) passes straight through, unadjusted - still looks weak.
+    raw = nfl_team_strength.compute_team_offense_defense_edge(
+        team_stats, opponent_adjustment_weight=0.0
+    ).set_index("team")
+    assert raw.loc["X", "offensive_edge"] == pytest.approx(-3.0)
+
+    # Opponent-adjusted (weight=1.0, MLB's own full netting): ELITE's real
+    # prior_epa_allowed heading into week 3 is -5.0 (weeks 1-2, both real
+    # games). X's adjusted own_epa = -3.0 - 1.0*(-5.0) = +2.0 - the SAME
+    # real raw performance now reads as a genuinely GOOD offensive week,
+    # once netted against exactly how tough that specific defense had
+    # already proven itself to be BEFORE this game (no lookahead - only
+    # weeks 1-2 inform week 3's adjustment).
+    adjusted = nfl_team_strength.compute_team_offense_defense_edge(
+        team_stats, opponent_adjustment_weight=1.0
+    ).set_index("team")
+    assert adjusted.loc["X", "offensive_edge"] == pytest.approx(2.0)
 
 
 def test_compute_team_turnover_margin_uses_own_row_both_sides():
