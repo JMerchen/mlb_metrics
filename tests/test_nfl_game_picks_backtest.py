@@ -230,6 +230,56 @@ def test_build_multi_season_history_and_score_snapshots_match_replay_multi_seaso
     )
 
 
+def test_score_multi_season_snapshots_apply_ml_model_check_is_a_noop_with_no_saved_model(monkeypatch, tmp_path):
+    # Real, critical contract (2026-09-12 fix - the discovered wrong-
+    # target validation bug): apply_ml_model_check=True must call
+    # nfl_game_picks.apply_ml_model on top of the heuristic - which is a
+    # real no-op (byte-identical output) when no valid model artifact
+    # exists, same graceful-degradation contract apply_ml_model itself
+    # already documents. With no real artifact at the (monkeypatched,
+    # nonexistent) model path, apply_ml_model_check=True must produce
+    # output identical to apply_ml_model_check=False (the prior, only
+    # ever tested behavior).
+    from mlb_metrics import nfl_game_picks
+
+    monkeypatch.setattr(
+        nfl_game_picks.config, "NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH", str(tmp_path / "does_not_exist.joblib")
+    )
+    schedules, team_stats, weekly, snap_counts, rosters, pbp = _tiny_two_seasons(num_weeks=4)
+
+    snapshots = bt.build_multi_season_history(schedules, team_stats, weekly, snap_counts, rosters, pbp, seasons=[2024, 2025])
+    without_check = bt.score_multi_season_snapshots(snapshots)
+    with_check = bt.score_multi_season_snapshots(snapshots, apply_ml_model_check=True)
+
+    pd.testing.assert_frame_equal(
+        without_check.reset_index(drop=True), with_check.reset_index(drop=True)
+    )
+
+
+def test_replay_multi_season_threads_apply_ml_model_check(monkeypatch, tmp_path):
+    # replay_multi_season is a thin wrapper - confirm it actually passes
+    # apply_ml_model_check through to score_multi_season_snapshots rather
+    # than silently dropping it (the exact kind of gap that let the
+    # opponent-adjustment backtest validate against the wrong target for
+    # months before this fix).
+    from mlb_metrics import nfl_game_picks
+
+    monkeypatch.setattr(
+        nfl_game_picks.config, "NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH", str(tmp_path / "does_not_exist.joblib")
+    )
+    schedules, team_stats, weekly, snap_counts, rosters, pbp = _tiny_two_seasons(num_weeks=4)
+
+    snapshots = bt.build_multi_season_history(schedules, team_stats, weekly, snap_counts, rosters, pbp, seasons=[2024, 2025])
+    from_snapshots = bt.score_multi_season_snapshots(snapshots, apply_ml_model_check=True)
+    direct = bt.replay_multi_season(
+        schedules, team_stats, weekly, snap_counts, rosters, pbp, seasons=[2024, 2025], apply_ml_model_check=True
+    )
+
+    pd.testing.assert_frame_equal(
+        from_snapshots.reset_index(drop=True), direct.reset_index(drop=True)
+    )
+
+
 def test_assemble_nfl_game_pick_log_real_shape_and_outcome():
     # Real follow-up (2026-09-04 - fixing the ML win-probability
     # ceiling): assemble_nfl_game_pick_log must produce one real row per

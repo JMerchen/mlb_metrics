@@ -26,6 +26,29 @@ candidate weight and cached), unlike `composite_weights`/
 `NFL_OPPONENT_ADJUSTMENT_WEIGHT_GRID` triggers exactly one real,
 full-history rebuild, no more.
 
+**Corrected 2026-09-12 - was validating against the wrong target.**
+Every run of this script before this date scored ONLY
+`nfl_game_picks.compute_game_win_probabilities`'s ratio+home-field
+heuristic (`score_multi_season_snapshots`'s old, no-argument default) -
+but the real live pipeline (`nfl_pipeline.py`) ALWAYS overwrites that
+heuristic's `home_win_probability` with `apply_ml_model`'s own
+prediction whenever a trained ML model exists at
+`config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH`, which it does today
+(the validated disaggregated LogisticRegression). So the original
+"honest negative finding" this script reported (not statistically
+significant) measured a code path real users never see. This script now
+passes `apply_ml_model_check=True` to `replay_multi_season`, mirroring
+`nfl_pipeline.py`'s real live sequence exactly
+(`compute_game_win_probabilities` -> `apply_ml_model`) - see
+`score_multi_season_snapshots`'s own docstring for the full mechanism.
+Tested this way, the corrected finding is decisive, not just
+non-significant: opponent-adjusting `offensive_edge`/`defensive_edge`
+(replacing their raw values, weight=1.0) SIGNIFICANTLY WORSENS the real
+shipped model's holdout log_loss (0.6339 vs. 0.6276 at weight=0.0,
+paired significance p=0.0087 on the same 272 2025 holdout games) - see
+`config.NFL_OPPONENT_ADJUSTMENT_WEIGHT`'s own docstring and README.md's
+matching "Real follow-up" section for the full writeup.
+
 **The real bar, reported honestly either way**: a candidate weight must
 beat the TRUE baseline (weight=0.0 - today's actual live behavior, live
 composite weights, validated home-field term) on real accuracy/log_loss
@@ -156,7 +179,7 @@ def main():
               f"(expensive - rebuilds team strength for every real replayed week)...")
         replay = backtest.replay_multi_season(
             schedules, team_stats, weekly, snap_counts, rosters, pbp, SEASONS,
-            opponent_adjustment_weight=weight,
+            opponent_adjustment_weight=weight, apply_ml_model_check=True,
         )
         print(f"  {len(replay):,} real replayed games.")
         row = _score(replay, weight)

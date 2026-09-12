@@ -2254,32 +2254,66 @@ NFL_SEASON_CARRYOVER_PRIOR_STRENGTH = 6.0
 # null hypothesis (today's live, unadjusted behavior, an exact no-op);
 # 1.0 matches MLB's own full 1:1 netting.
 #
-# Real backtest result (scripts/backtest_nfl_opponent_adjustment.py, all
-# 10 real cached seasons 2016-2025, 2,383 real replayed games): every
+# CORRECTED 2026-09-12 - the original backtest below validated against
+# the wrong target. It scored ONLY
+# nfl_game_picks.compute_game_win_probabilities's ratio+home-field
+# heuristic - but the real live pipeline (nfl_pipeline.py) ALWAYS
+# overwrites that heuristic's home_win_probability with apply_ml_model's
+# own prediction whenever a trained ML model exists (it does today - the
+# validated disaggregated LogisticRegression), so that original run
+# measured a code path real users never actually see. Retested with
+# scripts/backtest_nfl_opponent_adjustment.py now passing
+# apply_ml_model_check=True (mirrors nfl_pipeline.py's real live sequence
+# exactly - see nfl_game_picks_backtest.score_multi_season_snapshots's
+# own docstring), the real, decisive finding is the OPPOSITE of the
+# original point-estimate read: opponent-adjusting offensive_edge/
+# defensive_edge (REPLACING their raw values, not adding new columns -
+# per the user's own correct pushback that this should replace, not add)
+# makes the real shipped model's holdout predictions SIGNIFICANTLY WORSE.
+# At weight=1.0 on the real 2025 holdout (272 games): log_loss=0.6339 vs.
+# the real shipped model's own 0.6276 at weight=0.0 (SAME holdout, SAME
+# frozen model coefficients - only the feature values changed). A real
+# paired significance test (per-game squared error, scipy.stats.ttest_rel,
+# same discipline NFL_HOME_FIELD_ADVANTAGE_WEIGHT was validated with):
+# t=2.6418, p=0.0087 - a genuine, statistically significant WORSENING,
+# not just a non-significant difference.
+#
+# Why this makes sense, despite feeling like it should help (a real,
+# reasonable question the user raised): the currently-shipped model's own
+# coefficients were fit on RAW offensive_edge/defensive_edge - swapping
+# in opponent-adjusted values changes what those numbers MEAN (a
+# different scale, already netted against an opponent-quality baseline
+# the model's own fitted weights never account for) without refitting the
+# model to match. Feeding a frozen model semantically different inputs
+# than it was trained on is not a neutral change; it's real,
+# reasonably-expected damage to a fit that already implicitly captures
+# opponent strength another way (its own composite features are each
+# built from a team's SCHEDULE of real opponents, not a schedule-blind
+# average). A from-scratch refit on opponent-adjusted data (tested
+# separately, isolated scratch validation) also did not beat the
+# raw-feature refit - so this is not merely a "needs retraining" gap
+# either; the real signal opponent-adjustment adds does not, on this real
+# 10-season sample, net positive against what raw offensive_edge/
+# defensive_edge (each already blended across real opponents via
+# _recency_window_blend, just not explicitly netted against them) already
+# captures once fed into a model that can weigh every raw signal itself.
+#
+# Ships at 0.0, its real null default - same honest-negative-finding
+# posture as NFL_SEASON_CARRYOVER_REGRESSION/_PRIOR_STRENGTH above. The
+# mechanism itself (_prior_rolling_series, real and tested) stays
+# available via a nonzero `opponent_adjustment_weight` for a future
+# revisit (e.g. refitting the live model jointly with the adjustment
+# rather than swapping inputs into a frozen fit), not deleted.
+#
+# [Superseded, kept for history - the original, wrong-target run:] every
 # nonzero weight beat the weight=0.0 baseline's point-estimate accuracy
-# AND log_loss, monotonically improving with weight - 1.0 looked best
-# (61.72% accuracy, 0.6771 log_loss vs. baseline's 61.21%/0.6774).
-#
-# A REAL paired significance test (per-game squared error, weight=X vs.
-# weight=0.0 on the SAME real games, scipy.stats.ttest_rel - same
-# discipline NFL_HOME_FIELD_ADVANTAGE_WEIGHT was validated with) tells a
-# different, more honest story: NONE of the 4 nonzero weights clear
-# p<0.05 (0.25: p=0.50, 0.5: p=0.41, 0.75: p=0.33, 1.0: p=0.26 - closer
-# to significant as weight increases, but never crossing the bar). The
-# real, per-team rank movement IS genuine (e.g. a real team's
-# offensive_edge rank moving 8-9 spots once opponent quality is netted
-# out - see the backtest's own rank-divergence report), it just doesn't
-# translate into a statistically distinguishable improvement at the
-# level of the final win-probability composite on this sample.
-#
-# Same honest-negative-finding posture as NFL_SEASON_CARRYOVER_REGRESSION/
-# _PRIOR_STRENGTH above (another case where an attractive point-estimate
-# grid result carried no real, distinguishable effect once tested
-# properly) - ships at 0.0, unchanged from its real null default. The
-# mechanism itself is real, tested, and available via a nonzero
-# `opponent_adjustment_weight` for a future revisit (e.g. with more
-# seasons of real data, or isolated per-signal rather than only via the
-# final composite), not deleted.
+# AND log_loss when scored ONLY against the ratio heuristic (never
+# actually served in production), and no weight cleared paired
+# significance against THAT heuristic either (0.25: p=0.50, 0.5: p=0.41,
+# 0.75: p=0.33, 1.0: p=0.26). That reported non-significance, not the
+# significant worsening found once tested against the real live model
+# above - both conclusions land on "don't ship a nonzero weight," but for
+# different, now-corrected reasons.
 NFL_OPPONENT_ADJUSTMENT_WEIGHT = 0.0
 NFL_OPPONENT_ADJUSTMENT_WEIGHT_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
 
