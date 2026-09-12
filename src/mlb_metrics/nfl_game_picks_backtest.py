@@ -356,13 +356,46 @@ def build_multi_season_history(
 
 
 def score_multi_season_snapshots(
-    snapshots: list[dict], composite_weights=None, home_field_weight: float = None
+    snapshots: list[dict], composite_weights=None, home_field_weight: float = None,
+    apply_ml_model_check: bool = False,
 ) -> pd.DataFrame:
-    """Cheap re-scoring step (nfl_game_picks.compute_game_win_probabilities
-    only) against already-built `build_multi_season_history` snapshots -
-    the real performance payoff for a composite_weights/home_field_weight
-    grid sweep (see that function's own docstring). Returns REPLAY_COLUMNS,
-    same real shape as `replay_season`/`replay_multi_season`."""
+    """Cheap re-scoring step against already-built `build_multi_season_history`
+    snapshots - the real performance payoff for a composite_weights/
+    home_field_weight grid sweep (see that function's own docstring).
+    Returns REPLAY_COLUMNS, same real shape as `replay_season`/
+    `replay_multi_season`.
+
+    `apply_ml_model_check=False` (the default, and every existing caller's
+    real behavior, unchanged) scores ONLY
+    nfl_game_picks.compute_game_win_probabilities's ratio+home-field
+    heuristic - this is NOT what nfl_pipeline.py's real live pipeline ever
+    actually serves for a real game whenever a trained ML model exists at
+    config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH (confirmed: it always
+    does today), because the live sequence is
+    `compute_game_win_probabilities` -> `apply_ml_model`, and
+    `apply_ml_model` COMPLETELY OVERWRITES `home_win_probability` whenever
+    a real validated model is present. Every backtest built on this
+    function before 2026-09-12 (including the shipped, "honest negative
+    finding" `NFL_OPPONENT_ADJUSTMENT_WEIGHT` sweep) validated candidate
+    changes to compute_game_win_probabilities's OWN inputs
+    (composite_weights/home_field_weight/team-strength features) against
+    that retired ratio-only target - not against what real users actually
+    see, since the real live model discards those inputs' own effect on
+    home_win_probability entirely and predicts from its own fitted
+    feature set instead.
+
+    Pass `apply_ml_model_check=True` to mirror nfl_pipeline.py's real live
+    sequence exactly: after the ratio+home-field heuristic is computed,
+    nfl_game_picks.apply_ml_model is applied on top of it, using each
+    snapshot's own real `master`/`qb_continuity`/`weekly`/
+    `this_week_games` to rebuild whatever feature set the currently-saved
+    model artifact actually needs (via
+    nfl_game_picks.resolve_feature_builder) - a real no-op, unchanged
+    heuristic, if no valid model artifact exists (same graceful-
+    degradation contract `apply_ml_model` itself already documents). A
+    caller testing a feature meant to feed the REAL live model (as opposed
+    to one meant to only ever affect the heuristic fallback) must pass
+    this as True or its finding does not describe live behavior."""
     if not snapshots:
         return pd.DataFrame(columns=REPLAY_COLUMNS)
 
@@ -372,6 +405,10 @@ def score_multi_season_snapshots(
             snap["master"], snap["qb_continuity"], snap["weekly"], snap["this_week_games"],
             composite_weights=composite_weights, home_field_weight=home_field_weight,
         )
+        if apply_ml_model_check:
+            probs = nfl_game_picks.apply_ml_model(
+                probs, snap["master"], snap["qb_continuity"], snap["weekly"], snap["this_week_games"],
+            )
         rows = probs.merge(
             snap["this_week_games"][["game_id", "home_score", "away_score", "home_moneyline", "away_moneyline"]],
             on="game_id", how="left",
@@ -402,19 +439,21 @@ def replay_multi_season(
     carryover_prior_strength: float = None,
     season_aware: bool = False,
     opponent_adjustment_weight: float = None,
+    apply_ml_model_check: bool = False,
 ) -> pd.DataFrame:
     """Convenience one-call wrapper: `build_multi_season_history` +
     `score_multi_season_snapshots` (see both functions' own docstrings for
-    the full reasoning). Use the two-step form directly when sweeping
-    several `composite_weights`/`home_field_weight` candidates against the
-    SAME `carryover_regression`/`carryover_prior_strength`/
-    `opponent_adjustment_weight` combination, to avoid rebuilding
-    team-strength assembly redundantly."""
+    the full reasoning, including `apply_ml_model_check`'s own critical
+    "is this testing real live behavior" contract). Use the two-step form
+    directly when sweeping several `composite_weights`/`home_field_weight`
+    candidates against the SAME `carryover_regression`/
+    `carryover_prior_strength`/`opponent_adjustment_weight` combination, to
+    avoid rebuilding team-strength assembly redundantly."""
     snapshots = build_multi_season_history(
         schedules_df, team_stats_df, weekly_df, snap_counts_df, rosters_df, pbp_df, seasons,
         carryover_regression, carryover_prior_strength, season_aware, opponent_adjustment_weight,
     )
-    return score_multi_season_snapshots(snapshots, composite_weights, home_field_weight)
+    return score_multi_season_snapshots(snapshots, composite_weights, home_field_weight, apply_ml_model_check)
 
 
 # --- Real feature+outcome training log (2026-09-04 - fixing the ML win-probability ceiling) ---
