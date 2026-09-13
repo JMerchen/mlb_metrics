@@ -201,7 +201,18 @@ PAGE_JS_PATCHERS = {
 
 # Verbatim - no loadCSV/network/image dependency to patch (see module
 # docstring point 5 for why nfl_dfs_solver.js is deliberately excluded).
-VERBATIM_JS = ["dfs_solver.js", "nfl_draft_assistant.js"]
+# consensus_board.js is real, shared rendering logic nfl.js's own
+# NFL Draft Board tab calls directly (buildConsensusTable) - it has no
+# loadCSV/network call of its own to patch (nfl.js's own patched loadCSV
+# still supplies the data), so it's verbatim here exactly like
+# nfl_draft_assistant.js's own functions are. Must be listed BEFORE
+# nfl.js in this list (Python dicts/lists preserve insertion order) so
+# its declarations exist before nfl.js's own bottom-of-file
+# loadNflDraftBoard() call runs - each file gets its own <script> tag
+# (see page_scripts below), so script EXECUTION order follows list
+# order even though each file's own top-level `function` declarations
+# stay scoped to that file's own tag.
+VERBATIM_JS = ["dfs_solver.js", "nfl_draft_assistant.js", "consensus_board.js"]
 
 
 REAL_SITE_ONLY_NAV_MARKERS = (

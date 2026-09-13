@@ -2,7 +2,7 @@
 // (consensus_rankings.build_consensus_ranking's own output shape) -
 // used by both docs/prospects.js (MLB prospects + MLB draft board) and
 // docs/nfl.js (NFL draft board). A real, small, testable file loaded via
-// its own <script> tag BEFORE either page's own bootstrap script, same
+// its own script tag BEFORE either page's own bootstrap script, same
 // "tested pure-logic file feeds an untested bootstrap file's DOM wiring
 // via plain globals" split docs/nfl_draft_assistant.js/docs/nfl.js
 // already establish - this file deliberately has NO top-level

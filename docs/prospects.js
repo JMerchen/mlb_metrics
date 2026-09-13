@@ -1,7 +1,7 @@
 // Prospects page bootstrap - separate from app.js since this page is
 // standalone (see docs/prospects.html). Real rendering logic
 // (loadCSV/prepareConsensusColumns/formatConsensusValue/buildConsensusTable)
-// lives in docs/consensus_board.js (loaded via its own <script> tag
+// lives in docs/consensus_board.js (loaded via its own script tag
 // before this file, see that file's own comment for why) - this file is
 // purely the page's own DOM wiring, same "tested pure-logic file feeds
 // an untested bootstrap file" split as docs/nfl_draft_assistant.js/

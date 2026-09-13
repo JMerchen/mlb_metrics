@@ -651,7 +651,7 @@ formatted,
 
 // Real NFL draft-eligible college consensus board - rendering logic
 // (prepareConsensusColumns/formatConsensusValue/buildConsensusTable)
-// lives in docs/consensus_board.js (loaded via its own <script> tag
+// lives in docs/consensus_board.js (loaded via its own script tag
 // before this file - see that file's own comment for why), shared with
 // docs/prospects.js's own two MLB boards rather than reimplemented here.
 async function loadNflDraftBoard(){
