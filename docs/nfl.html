@@ -68,6 +68,7 @@ this block isn't in the shared stylesheet. */
 <div class="tabGroup" id="nflTabs">
 <button class="tabButton active" data-nfl-tab="preseason" onclick="selectNflTab('preseason')">Preseason</button>
 <button class="tabButton" data-nfl-tab="gamepicks" onclick="selectNflTab('gamepicks')">Game Picks</button>
+<button class="tabButton" data-nfl-tab="draftboard" onclick="selectNflTab('draftboard')">Draft Board</button>
 </div>
 
 <div id="gamePicksSection" style="display:none">
@@ -223,11 +224,32 @@ Loading...
 
 </div>
 
+<div id="draftBoardSection" style="display:none">
+
+<h3>
+NFL Draft-Eligible College Board
+</h3>
+
+<p style="opacity:.75; max-width:700px;">
+Real consensus board - several already-published third-party college
+big boards blended into one ranking, not a new model (see the
+<a href="https://github.com/JMerchen/mlb_metrics#consensus-rankings-prospect_sourcespy-mlb_draft_sourcespy-nfl_draft_sourcespy-consensus_rankingspy" style="color:inherit">README</a>
+for the full methodology). Updates weekly.
+</p>
+
+<div class="scrollbox" id="nflDraftBoardTable">
+Loading...
+</div>
+
+</div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
 <script src="./nfl_draft_assistant.js"></script>
+
+<script src="./consensus_board.js"></script>
 
 <script src="./nfl.js"></script>
 

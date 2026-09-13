@@ -71,6 +71,7 @@ btn.classList.toggle("active", btn.dataset.nflTab === tab)
 })
 document.getElementById("preseasonSection").style.display = tab === "preseason" ? "" : "none"
 document.getElementById("gamePicksSection").style.display = tab === "gamepicks" ? "" : "none"
+document.getElementById("draftBoardSection").style.display = tab === "draftboard" ? "" : "none"
 }
 
 function selectBestballPosition(position){
@@ -648,6 +649,23 @@ formatted,
 
 }
 
+// Real NFL draft-eligible college consensus board - rendering logic
+// (prepareConsensusColumns/formatConsensusValue/buildConsensusTable)
+// lives in docs/consensus_board.js (loaded via its own script tag
+// before this file - see that file's own comment for why), shared with
+// docs/prospects.js's own two MLB boards rather than reimplemented here.
+async function loadNflDraftBoard(){
+try{
+const draftBoard = await loadCSV("./data/nfl_draft_board.csv")
+buildConsensusTable(draftBoard, "nflDraftBoardTable")
+}catch(e){
+console.log("no nfl_draft_board.csv yet", e)
+buildConsensusTable([], "nflDraftBoardTable")
+}
+}
+
 loadAll()
 
 loadNflGamePicks()
+
+loadNflDraftBoard()
