@@ -4936,13 +4936,13 @@ many mock drafts into one consensus big board, applied here across
 several already-published third-party rankings for the same player pool:
 
 - **MLB organizational prospects** (`scripts/run_prospect_rankings.py` ->
-  `data/prospect_rankings.csv`): real minor leaguers already in an MLB
+  `docs/data/prospect_rankings.csv`): real minor leaguers already in an MLB
   org who haven't yet debuted in the majors.
 - **MLB draft-eligible college board** (`scripts/run_mlb_draft_board.py`
-  -> `data/mlb_draft_board.csv`): current college juniors/seniors/
+  -> `docs/data/mlb_draft_board.csv`): current college juniors/seniors/
   eligible underclassmen ahead of the next MLB draft.
 - **NFL draft-eligible college board** (`scripts/run_nfl_draft_board.py`
-  -> `data/nfl_draft_board.csv`): current college players ahead of the
+  -> `docs/data/nfl_draft_board.csv`): current college players ahead of the
   next NFL draft.
 
 **The aggregation engine** (`consensus_rankings.build_consensus_ranking`)

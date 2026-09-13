@@ -1,7 +1,7 @@
 """Runs the real MLB draft-eligible college board - fetches every real
 source in mlb_draft_sources.SOURCE_FETCHERS, builds one consensus ranking
 (consensus_rankings.build_consensus_ranking via board_runner.run_board),
-and writes the full real ranking to data/mlb_draft_board.csv.
+and writes the full real ranking to docs/data/mlb_draft_board.csv.
 
 Real, honest scope: current college juniors/seniors/eligible
 underclassmen not yet drafted - this is NOT the organizational prospect
@@ -22,7 +22,7 @@ from mlb_metrics import board_runner, mlb_draft_sources
 
 
 def main():
-    output_path = os.path.join(os.path.dirname(__file__), "..", "data", "mlb_draft_board.csv")
+    output_path = os.path.join(os.path.dirname(__file__), "..", "docs", "data", "mlb_draft_board.csv")
     consensus = board_runner.run_board(
         mlb_draft_sources.SOURCE_FETCHERS, output_path, "MLB Draft-Eligible College Board", top_n=100
     )

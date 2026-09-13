@@ -2,7 +2,7 @@
 every real source in prospect_sources.SOURCE_FETCHERS, builds one
 consensus ranking (consensus_rankings.build_consensus_ranking via
 board_runner.run_board), and writes the full real ranking to
-data/prospect_rankings.csv.
+docs/data/prospect_rankings.csv.
 
 Real, honest scope (see prospect_sources.py's own module docstring): a
 "prospect" here means any real minor leaguer already in an MLB
@@ -24,7 +24,7 @@ from mlb_metrics import board_runner, prospect_sources
 
 
 def main():
-    output_path = os.path.join(os.path.dirname(__file__), "..", "data", "prospect_rankings.csv")
+    output_path = os.path.join(os.path.dirname(__file__), "..", "docs", "data", "prospect_rankings.csv")
     consensus = board_runner.run_board(
         prospect_sources.SOURCE_FETCHERS, output_path, "MLB Prospect Rankings", top_n=100
     )

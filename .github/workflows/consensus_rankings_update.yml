@@ -40,7 +40,7 @@ jobs:
 
       - name: Create output folder
         run: |
-          mkdir -p data
+          mkdir -p docs/data
 
       # Each board is its own step (not chained with &&) so one board's
       # real failure never blocks the other two from still updating - the
@@ -69,7 +69,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add data/prospect_rankings.csv data/mlb_draft_board.csv data/nfl_draft_board.csv
+          git add docs/data/prospect_rankings.csv docs/data/mlb_draft_board.csv docs/data/nfl_draft_board.csv
 
           git commit -m "Consensus rankings weekly update" || echo "No changes"
 

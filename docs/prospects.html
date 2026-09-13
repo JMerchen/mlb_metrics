@@ -6,7 +6,7 @@
 
 <meta charset="utf-8">
 
-<title>Diamond &amp; Gridiron Metrics - Age Curves</title>
+<title>Diamond &amp; Gridiron Metrics - Prospects</title>
 
 <link
 rel="icon"
@@ -57,68 +57,68 @@ href="./style.css">
 <div class="tabGroup" id="mlbSubTabs">
 <a class="tabButton" href="./predictive.html">Predictive Metrics</a>
 <a class="tabButton" href="./dfs.html">DFS Rankings</a>
-<a class="tabButton active" href="./age-curves.html">Age Curves</a>
-<a class="tabButton" href="./prospects.html">Prospects</a>
+<a class="tabButton" href="./age-curves.html">Age Curves</a>
+<a class="tabButton active" href="./prospects.html">Prospects</a>
 </div>
 
 <p style="opacity:.75; max-width:700px;">
-Pick a current hitter or pitcher and a stat, and see how their season
-compares to historical players at the same age, and what a next season
-might look like based on what those comparable players actually did. See
-the
-<a href="https://github.com/JMerchen/mlb_metrics#age-curves-docsage-curveshtml-exploratory---separate-page" style="color:inherit">README</a>
-for the full methodology, known limitations, and backtest numbers.
+Real consensus boards - not a new model, several already-published
+third-party rankings for the same player pool blended into one ranking
+(a missing-from-a-source player is imputed at that source's own real
+length + a penalty, not excluded - see the
+<a href="https://github.com/JMerchen/mlb_metrics#consensus-rankings-prospect_sourcespy-mlb_draft_sourcespy-nfl_draft_sourcespy-consensus_rankingspy" style="color:inherit">README</a>
+for the full methodology). Updates weekly - real breakage in an
+individual source is expected occasionally and degrades to "fewer
+sources this week," never a missing board.
 </p>
 
-<div class="tabGroup" id="metricTabs">
-<span class="tabGroupLabel">Hitter:</span>
-<button class="tabButton active" data-metric="OPS" onclick="selectMetric('OPS')">OPS</button>
-<button class="tabButton" data-metric="AVG" onclick="selectMetric('AVG')">AVG</button>
-<button class="tabButton" data-metric="OBP" onclick="selectMetric('OBP')">OBP</button>
-<button class="tabButton" data-metric="SLG" onclick="selectMetric('SLG')">SLG</button>
-<span class="tabGroupLabel">Pitcher:</span>
-<button class="tabButton" data-metric="K9" onclick="selectMetric('K9')">K9</button>
-<button class="tabButton" data-metric="BB9" onclick="selectMetric('BB9')">BB9</button>
-<button class="tabButton" data-metric="HR9" onclick="selectMetric('HR9')">HR9</button>
-<button class="tabButton" data-metric="FIP" onclick="selectMetric('FIP')">FIP</button>
+<div class="tabGroup" id="prospectsTabs">
+<button class="tabButton active" data-prospects-tab="farmsystem" onclick="selectProspectsTab('farmsystem')">Farm System Top 100</button>
+<button class="tabButton" data-prospects-tab="draftboard" onclick="selectProspectsTab('draftboard')">MLB Draft Board</button>
 </div>
 
-<input
-id="playerSearch"
-placeholder="Search player">
-
-<button onclick="searchPlayer()">
-Search
-</button>
-
-<div id="playerChoices">
-</div>
-
-<br>
-
-<div id="playerResult">
-</div>
-
-<div style="max-width:900px; margin-top:20px;">
-<canvas id="ageCurveChart" height="120"></canvas>
-</div>
+<div id="farmSystemSection">
 
 <h3>
-Comparable Players
+MLB Organizational Prospects
 </h3>
 
-<div class="scrollbox" id="comparablesTable">
+<p style="opacity:.75; max-width:700px;">
+Real minor leaguers already in an MLB organization who haven't yet
+debuted in the majors - NOT the upcoming draft class (see the MLB Draft
+Board tab for that).
+</p>
+
+<div class="scrollbox" id="prospectRankingsTable">
+Loading...
 </div>
 
-<br>
+</div>
+
+<div id="draftBoardSection" style="display:none">
+
+<h3>
+MLB Draft-Eligible College Board
+</h3>
+
+<p style="opacity:.75; max-width:700px;">
+Real current college juniors/seniors/eligible underclassmen ahead of the
+next MLB draft.
+</p>
+
+<div class="scrollbox" id="mlbDraftBoardTable">
+Loading...
+</div>
+
+</div>
 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="./consensus_board.js"></script>
 
-<script src="./age-curves.js"></script>
+<script src="./prospects.js"></script>
 
 </body>
 
