@@ -19,13 +19,26 @@ make this visible rather than presenting it as more independent than it
 is. These pages are also real, JS-heavy sites more likely than
 prospect_sources.py's targets to need real fixes once they actually run
 in CI (a static `pd.read_html` may not see content a browser renders
-client-side) - flagged honestly, not assumed to already work."""
+client-side) - flagged honestly, not assumed to already work.
+
+**Real result from the first live CI run (2026-09-13)**: BOTH real
+fetches here actually got a real 200 OK with real HTML back (unlike
+prospect_sources.py's Baseball America, which hit a real 403) - the
+static `pd.read_html` concern above did NOT block them. What DID break
+both was the same real pandas 3.x `pd.read_html` bug prospect_sources.py's
+own module docstring documents (point 1: raw bytes/str must be wrapped in
+a real file-like object) - fixed here the same way."""
 
 import datetime
+import io
 
 import pandas as pd
 
-_REQUEST_HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; mlb-metrics-draft-board/1.0)"}
+_REQUEST_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (compatible; mlb-metrics-draft-board/1.0; +https://github.com/JMerchen/mlb_metrics)",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+}
 
 
 def _empty() -> pd.DataFrame:
@@ -37,6 +50,12 @@ def _first_table_with_columns(tables, required_columns: set) -> pd.DataFrame | N
         if required_columns.issubset(set(table.columns)):
             return table
     return None
+
+
+def _read_html_tables(content: bytes):
+    """See prospect_sources._read_html_tables's own docstring for the
+    full real pandas 3.x bug this works around."""
+    return pd.read_html(io.StringIO(content.decode("utf-8", errors="replace")))
 
 
 def fetch_nfl_mock_draft_database_consensus(season: int = None) -> pd.DataFrame:
@@ -51,7 +70,7 @@ def fetch_nfl_mock_draft_database_consensus(season: int = None) -> pd.DataFrame:
 
         response = requests.get(url, timeout=30, headers=_REQUEST_HEADERS)
         response.raise_for_status()
-        tables = pd.read_html(response.content)
+        tables = _read_html_tables(response.content)
     except Exception as exc:
         print(f"[nfl_draft_sources] NFL Mock Draft Database fetch failed: {exc}")
         return _empty()
@@ -82,7 +101,7 @@ def fetch_fantasypros_big_board(url: str = None) -> pd.DataFrame:
 
         response = requests.get(url, timeout=30, headers=_REQUEST_HEADERS)
         response.raise_for_status()
-        tables = pd.read_html(response.content)
+        tables = _read_html_tables(response.content)
     except Exception as exc:
         print(f"[nfl_draft_sources] FantasyPros fetch failed: {exc}")
         return _empty()

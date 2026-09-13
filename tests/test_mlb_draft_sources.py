@@ -86,6 +86,39 @@ def test_fetch_d1baseball_college_draft_accepts_url_override_for_a_real_broken_d
     assert (result["source_url"] == override_url).all()
 
 
+def test_fetch_baseball_america_college_draft_returns_empty_on_http_error(monkeypatch):
+    # Real, confirmed live behavior (2026-09-13 CI run): Baseball America
+    # returns a real 403 Forbidden - raise_for_status must surface that
+    # as a real failure, not silently proceed to parse an error page.
+    class _ForbiddenResponse:
+        content = b"<!DOCTYPE html><html>Forbidden</html>"
+
+        def raise_for_status(self):
+            raise RuntimeError("403 Client Error: Forbidden")
+
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _ForbiddenResponse())
+    )
+
+    result = mlb_draft_sources.fetch_baseball_america_college_draft(season=2026)
+
+    assert result.empty
+
+
+def test_read_html_tables_handles_a_real_raw_html_bytes_response():
+    # Real, confirmed bug (2026-09-13 CI run): pd.read_html on this
+    # project's pinned pandas raises FileNotFoundError when given raw
+    # bytes/str directly - _read_html_tables must wrap it in a real
+    # file-like object first.
+    html = b"<!DOCTYPE html><html><body><table><tr><th>Rank</th><th>Name</th></tr>" \
+           b"<tr><td>1</td><td>Real Player</td></tr></table></body></html>"
+
+    tables = mlb_draft_sources._read_html_tables(html)
+
+    assert len(tables) == 1
+    assert list(tables[0]["Name"]) == ["Real Player"]
+
+
 def test_fetch_all_sources_isolates_one_sources_failure_from_the_others(monkeypatch):
     def _working():
         return pd.DataFrame([{"rank": 1, "player_name": "Real Player"}])

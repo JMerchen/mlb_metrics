@@ -69,7 +69,18 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add docs/data/prospect_rankings.csv docs/data/mlb_draft_board.csv docs/data/nfl_draft_board.csv
+          # A real, confirmed bug from this workflow's first live run
+          # (2026-09-13): board_runner.run_board writes NOTHING when
+          # every real source for a board fails that day (see its own
+          # docstring) - a plain `git add <path>` on a file that was
+          # never written fails with a real nonzero exit ("did not match
+          # any files"), which fails this whole step under GitHub
+          # Actions' default `bash -e` even though "no real update
+          # happened this run" is not itself an error condition. Only
+          # add a path that actually exists.
+          for f in docs/data/prospect_rankings.csv docs/data/mlb_draft_board.csv docs/data/nfl_draft_board.csv; do
+            [ -f "$f" ] && git add "$f"
+          done
 
           git commit -m "Consensus rankings weekly update" || echo "No changes"
 
