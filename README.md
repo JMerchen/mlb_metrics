@@ -4927,6 +4927,83 @@ live pipeline's predictable-week logic - elimination-game dynamics, rest
 advantages, and small sample don't fit the same statistical treatment as
 the regular season.
 
+## Consensus Rankings (`prospect_sources.py`, `mlb_draft_sources.py`, `nfl_draft_sources.py`, `consensus_rankings.py`)
+
+Three real boards built the same way (2026-09-13), per a real user
+request: "we don't need a new model, we just need to make multiple
+models talk to one another" - the same idea as a public site averaging
+many mock drafts into one consensus big board, applied here across
+several already-published third-party rankings for the same player pool:
+
+- **MLB organizational prospects** (`scripts/run_prospect_rankings.py` ->
+  `data/prospect_rankings.csv`): real minor leaguers already in an MLB
+  org who haven't yet debuted in the majors.
+- **MLB draft-eligible college board** (`scripts/run_mlb_draft_board.py`
+  -> `data/mlb_draft_board.csv`): current college juniors/seniors/
+  eligible underclassmen ahead of the next MLB draft.
+- **NFL draft-eligible college board** (`scripts/run_nfl_draft_board.py`
+  -> `data/nfl_draft_board.csv`): current college players ahead of the
+  next NFL draft.
+
+**The aggregation engine** (`consensus_rankings.build_consensus_ranking`)
+is real, generic, and shared by all three - each real source contributes
+its own real published rank for a player, or (if that source doesn't
+list them) a real, source-length-aware IMPUTED rank of
+`len(that source's list) + config.CONSENSUS_UNRANKED_PENALTY_ROWS` -
+missing from a 300-player board is a much stronger signal than missing
+from a 100-player board, and this imputation scales with each source's
+own real length rather than one arbitrary constant. A player's real
+`consensus_score` is the mean of these real (or imputed) ranks across
+every real source; `sources_ranked_by` reports how many sources actually
+listed them (not imputed) so a real 8-of-8 agreement is never confused
+with a real 1-of-8 outlier; `source_ranks` carries the full real
+per-source breakdown - the literal "show the underlying models" point of
+this feature, not a black-box output number. Player name matching across
+independently-formatted sources goes through `normalize_player_name`
+(accent-stripping, punctuation, common suffixes) plus a real, hand-
+maintained `config.PLAYER_NAME_ALIASES` override table for confirmed
+mismatches that normalization alone can't fix (e.g. a nickname one
+outlet uses vs. the legal name another does) - empty until a real
+mismatch is found in production, extended as they surface.
+
+**Real, honest limitation, disclosed rather than hidden**: this
+project's own development environment could not reach ANY of the target
+sites directly (a hard, confirmed network policy blocked every attempt,
+including the plain public MLB Stats API) - every source fetcher below
+was written and unit-tested against a MOCKED page/response shape, never
+against the real live site, because there was no way to inspect the real
+one from here. Each fetcher is defensive by construction (any failure -
+network, parsing, an unexpected page structure - returns a real empty
+DataFrame rather than raising, see `board_runner.run_board`'s own
+per-source isolation), so a real breakage degrades to "fewer sources
+this week," never a failed pipeline run - but real breakage should be
+EXPECTED the first several times these scripts run for real in GitHub
+Actions (a normally-unrestricted network, unlike this development
+sandbox), and the specific scraped columns/URLs will likely need real
+fixes once that happens. This is a deliberate, user-chosen tradeoff
+("ship blind, iterate on failures") over waiting for a way to verify
+each source first.
+
+Sources per board today (2 each - a real, live "multiple models talking
+to one another," not a single-source list, even before any more are
+added):
+- MLB prospects: MLB Pipeline (via `pybaseball.top_prospects()`, the
+  lowest-risk fetcher here since pybaseball's own maintainers keep it
+  working against MLB.com), Baseball America.
+- MLB draft board: Baseball America, D1Baseball (whose real URL has
+  already shown a numeric revision suffix within one draft class - a
+  confirmed fragility, `fetch_d1baseball_college_draft`'s own `url`
+  parameter exists specifically so a broken default can be overridden
+  without a code change).
+- NFL draft board: NFL Mock Draft Database's own "Consensus Big Board"
+  (itself already an aggregate of 100+ other real big boards/mock
+  drafts - a disclosed, not hidden, methodology choice), FantasyPros.
+
+Runs weekly (`.github/workflows/consensus_rankings_update.yml`) - draft
+boards and organizational prospect rankings move on the order of days-to-
+weeks, not hours, so a daily rerun would spend real, shared Actions
+minutes for no real new signal most days.
+
 ## Running
 
 ```

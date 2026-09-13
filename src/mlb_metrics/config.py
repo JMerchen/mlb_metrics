@@ -2556,3 +2556,28 @@ NFL_GAME_PICK_ML_WIN_PROBABILITY_FINAL_HOLDOUT_WEEKS = 18
 # trusting the model everywhere else - is the narrowest, most defensible
 # real improvement the investigation actually supported.
 NFL_GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD = 0.20
+
+# --- Consensus Rankings (consensus_rankings.build_consensus_ranking) ---
+# 2026-09-13: real, published-third-party-rankings aggregation ("multiple
+# models talking to each other") behind 3 boards - MLB organizational
+# prospects, MLB draft-eligible college players, NFL draft-eligible
+# college players. See consensus_rankings.py's own module docstring for
+# the full imputation reasoning; this is not a backtest-swept constant
+# (there is no real outcome to validate a ranking-of-unproven-amateurs
+# against the way a win-probability model has real game results) - it
+# ships at a small, defensible, hand-picked value (1 spot past a source's
+# own real published length) and stays open to revision if a discovered
+# real case argues for a different value.
+CONSENSUS_UNRANKED_PENALTY_ROWS = 1
+
+# Real, hand-maintained overrides for player names confirmed (from real
+# production mismatches, not hypothetically) to normalize differently
+# across publishers despite referring to the SAME real player - e.g. a
+# nickname one outlet uses vs. the legal name another does, which
+# normalize_player_name's own accent/punctuation/suffix handling cannot
+# fix by construction. Empty until a real mismatch is found and confirmed
+# - the same "note discoveries, extend later" posture as every other
+# hand-maintained alias table in this project. Keys are matched against
+# the RAW name string before normalization (i.e. add the exact raw string
+# one source publishes, mapped to the exact raw string used elsewhere).
+PLAYER_NAME_ALIASES: dict[str, str] = {}

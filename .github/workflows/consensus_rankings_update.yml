@@ -1,0 +1,88 @@
+name: Consensus Rankings Update
+
+on:
+  # 14:17 UTC Wednesday = 7:17 AM Arizona time (UTC-7, fixed - no DST,
+  # same convention every other cron in this repo already uses). Weekly,
+  # not daily: draft boards/organizational prospect rankings move on the
+  # order of days-to-weeks, not hours - a daily rerun would burn shared
+  # Actions minutes (a real, finite budget - see daily_update.yml's own
+  # history) for no real new signal most days. Wednesday, distinct from
+  # nfl_weekly_update.yml's own Tuesday slot, so the two never compete
+  # for the same runner window.
+  schedule:
+    - cron: "17 14 * * 3"
+  workflow_dispatch:
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: |
+          pytest
+
+      - name: Create output folder
+        run: |
+          mkdir -p data
+
+      # Each board is its own step (not chained with &&) so one board's
+      # real failure never blocks the other two from still updating - the
+      # same per-source isolation contract prospect_sources.py/
+      # mlb_draft_sources.py/nfl_draft_sources.py's own fetchers already
+      # apply one level down. Every script itself already degrades
+      # gracefully (see board_runner.run_board's own docstring) and exits
+      # 0 even when every one of its sources fails, so `continue-on-error`
+      # exists here only as a real second layer of protection against an
+      # unexpected crash this project hasn't seen yet, not the primary
+      # failure-handling mechanism.
+      - name: Update MLB prospect rankings
+        continue-on-error: true
+        run: python scripts/run_prospect_rankings.py
+
+      - name: Update MLB draft board
+        continue-on-error: true
+        run: python scripts/run_mlb_draft_board.py
+
+      - name: Update NFL draft board
+        continue-on-error: true
+        run: python scripts/run_nfl_draft_board.py
+
+      - name: Commit updates
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          git add data/prospect_rankings.csv data/mlb_draft_board.csv data/nfl_draft_board.csv
+
+          git commit -m "Consensus rankings weekly update" || echo "No changes"
+
+          # Retry with a rebase before each attempt - same real push-race
+          # fix as daily_update.yml's own "Commit updates" step.
+          branch=$(git rev-parse --abbrev-ref HEAD)
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              exit 0
+            fi
+            echo "Push attempt $attempt failed - pulling/rebasing and retrying..."
+            git pull --rebase origin "$branch"
+            sleep 5
+          done
+          echo "::error::Failed to push after 5 attempts"
+          exit 1
