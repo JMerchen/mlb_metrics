@@ -11,3 +11,4 @@ pulp
 nflreadpy
 requests
 lxml
+html5lib
