@@ -5018,15 +5018,19 @@ once confirmed, never asserted ahead of it. NFL Mock Draft Database was
 confirmed JS-rendered (zero real `<table>` elements) and replaced with
 DraftTek entirely (see above).
 
-**Real, current per-board status as of run #5 (2026-09-14)**, honestly:
-- **MLB prospects**: working end to end - MLB Pipeline alone returned 96
-  real players; Baseball America remains 403-blocked (below).
-  `docs/data/prospect_rankings.csv` is real, live data (single-source
-  today, not yet a true multi-source consensus).
-- **NFL draft board**: working end to end - FantasyPros alone returned
-  100 real players; DraftTek's real `Prospect` column-name fix (above)
-  targets getting a genuine second source live next run.
-  `docs/data/nfl_draft_board.csv` is real, live data.
+**Real, current per-board status as of run #6 (2026-09-14)**, honestly:
+- **NFL draft board**: a genuine, real multi-source consensus, working
+  end to end - DraftTek AND FantasyPros both succeeded (100 real players
+  each), 197 real players ranked by 2 of 2 real sources. This is the
+  first board to actually deliver the feature's own stated goal
+  ("multiple models talking to one another"), not a single-source
+  passthrough. `docs/data/nfl_draft_board.csv` is real, live,
+  multi-source data.
+- **MLB prospects**: working, but still single-source - MLB Pipeline
+  alone returned 96 real players; Baseball America remains
+  403-blocked (below), same durable-block reasoning as the MLB draft
+  board's own two sources. `docs/data/prospect_rankings.csv` is real,
+  live data, not yet a true multi-source consensus.
 - **MLB draft board**: still fully blocked. BOTH real sources
   (Baseball America, D1Baseball) have returned a real, durable
   `403 Forbidden` on every one of 5 straight live runs, unchanged even
