@@ -110,12 +110,14 @@ def fetch_mlb_pipeline_prospects() -> pd.DataFrame:
         return _empty()
 
     if len(tables) < 2:
-        print("[prospect_sources] MLB Pipeline page had an unexpected number of tables - skipping this source.")
+        print(f"[prospect_sources] MLB Pipeline page had an unexpected number of tables ({len(tables)}) - "
+              f"skipping this source. Columns per table: {[list(t.columns) for t in tables]}")
         return _empty()
 
     raw = pd.concat(tables[:2], ignore_index=True)
     if "Rk" not in raw.columns or "Name" not in raw.columns:
-        print("[prospect_sources] MLB Pipeline returned an unexpected shape - skipping this source.")
+        print(f"[prospect_sources] MLB Pipeline returned an unexpected shape - skipping this source. "
+              f"Columns found: {list(raw.columns)}")
         return _empty()
     raw = raw.sort_values(by="Rk")
 
@@ -154,7 +156,8 @@ def fetch_baseball_america_prospects(season: int = None) -> pd.DataFrame:
     if table is None:
         table = _first_table_with_columns(tables, {"Rk", "Name"})
     if table is None:
-        print("[prospect_sources] Baseball America page had no recognizable ranking table - skipping.")
+        print(f"[prospect_sources] Baseball America page had no recognizable ranking table - skipping. "
+              f"Found {len(tables)} tables with columns: {[list(t.columns) for t in tables]}")
         return _empty()
 
     rank_col = "Rank" if "Rank" in table.columns else "Rk"

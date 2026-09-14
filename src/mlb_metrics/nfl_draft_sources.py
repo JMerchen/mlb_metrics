@@ -79,7 +79,8 @@ def fetch_nfl_mock_draft_database_consensus(season: int = None) -> pd.DataFrame:
     if table is None:
         table = _first_table_with_columns(tables, {"Rk", "Name"})
     if table is None:
-        print("[nfl_draft_sources] NFL Mock Draft Database page had no recognizable ranking table - skipping.")
+        print(f"[nfl_draft_sources] NFL Mock Draft Database page had no recognizable ranking table - skipping. "
+              f"Found {len(tables)} tables with columns: {[list(t.columns) for t in tables]}")
         return _empty()
 
     rank_col = "Rank" if "Rank" in table.columns else "Rk"
@@ -110,7 +111,8 @@ def fetch_fantasypros_big_board(url: str = None) -> pd.DataFrame:
     if table is None:
         table = _first_table_with_columns(tables, {"Rank", "Name"})
     if table is None:
-        print("[nfl_draft_sources] FantasyPros page had no recognizable ranking table - skipping.")
+        print(f"[nfl_draft_sources] FantasyPros page had no recognizable ranking table - skipping. "
+              f"Found {len(tables)} tables with columns: {[list(t.columns) for t in tables]}")
         return _empty()
 
     name_col = "Player" if "Player" in table.columns else "Name"

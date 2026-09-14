@@ -77,7 +77,8 @@ def fetch_baseball_america_college_draft(season: int = None) -> pd.DataFrame:
     if table is None:
         table = _first_table_with_columns(tables, {"Rk", "Name"})
     if table is None:
-        print("[mlb_draft_sources] Baseball America page had no recognizable ranking table - skipping.")
+        print(f"[mlb_draft_sources] Baseball America page had no recognizable ranking table - skipping. "
+              f"Found {len(tables)} tables with columns: {[list(t.columns) for t in tables]}")
         return _empty()
 
     rank_col = "Rank" if "Rank" in table.columns else "Rk"
@@ -113,7 +114,8 @@ def fetch_d1baseball_college_draft(url: str = None, season: int = None) -> pd.Da
     if table is None:
         table = _first_table_with_columns(tables, {"Rk", "Name"})
     if table is None:
-        print("[mlb_draft_sources] D1Baseball page had no recognizable ranking table - skipping.")
+        print(f"[mlb_draft_sources] D1Baseball page had no recognizable ranking table - skipping. "
+              f"Found {len(tables)} tables with columns: {[list(t.columns) for t in tables]}")
         return _empty()
 
     rank_col = "Rank" if "Rank" in table.columns else "Rk"
