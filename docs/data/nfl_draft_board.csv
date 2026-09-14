@@ -1,101 +1,198 @@
-consensus_rank,rank,player_name,TEAM,POS,BEST,WORST,AVG.,STD.DEV,source_url,consensus_score,sources_ranked_by,source_ranks
-1,1,Fernando Mendoza (Indiana),Fernando Mendoza (Indiana),QB1,1,4.0,2.0,1.4,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,1.0,1,{'FantasyPros': 1.0}
-2,2,Caleb Downs (Ohio State),Caleb Downs (Ohio State),S1,2,4.0,3.0,0.8,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,2.0,1,{'FantasyPros': 2.0}
-3,3,Arvell Reese (Ohio State),Arvell Reese (Ohio State),LB1,1,5.0,3.3,1.7,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,3.0,1,{'FantasyPros': 3.0}
-4,4,Jeremiyah Love (Notre Dame),Jeremiyah Love (Notre Dame),RB1,2,10.0,7.0,3.6,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,4.0,1,{'FantasyPros': 4.0}
-5,5,Rueben Bain Jr. (Miami),Rueben Bain Jr. (Miami),EDGE1,2,18.0,7.7,7.3,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,5.0,1,{'FantasyPros': 5.0}
-6,6,Jordyn Tyson (Arizona State),Jordyn Tyson (Arizona State),WR1,7,10.0,8.7,1.3,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,6.0,1,{'FantasyPros': 6.0}
-7,7,Francis Mauigoa (Miami),Francis Mauigoa (Miami),OT1,6,13.0,9.0,2.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,7.0,1,{'FantasyPros': 7.0}
-8,8,Keldric Faulk (Auburn),Keldric Faulk (Auburn),DE1,7,12.0,9.0,2.2,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,8.0,1,{'FantasyPros': 8.0}
-9,9,David Bailey (Texas Tech),David Bailey (Texas Tech),DT1,3,19.0,9.3,6.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,9.0,1,{'FantasyPros': 9.0}
-10,10,Spencer Fano (Utah),Spencer Fano (Utah),OT2,7,16.0,10.3,4.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,10.0,1,{'FantasyPros': 10.0}
-11,11,Mansoor Delane (Virginia Tech),Mansoor Delane (Virginia Tech),CB1,11,13.0,11.7,0.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,11.0,1,{'FantasyPros': 11.0}
-12,12,Jermod McCoy (Tennessee),Jermod McCoy (Tennessee),CB2,9,16.0,12.0,2.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,12.0,1,{'FantasyPros': 12.0}
-13,13,Carnell Tate (Ohio State),Carnell Tate (Ohio State),WR2,5,20.0,12.3,6.1,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,13.0,1,{'FantasyPros': 13.0}
-14,14,Peter Woods (Clemson),Peter Woods (Clemson),DT2,5,24.0,14.3,7.8,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,14.0,1,{'FantasyPros': 14.0}
-15,15,Ty Simpson (Alabama),Ty Simpson (Alabama),QB2,6,26.0,15.3,8.2,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,15.0,1,{'FantasyPros': 15.0}
-16,16,Kenyon Sadiq (Oregon),Kenyon Sadiq (Oregon),TE1,10,24.0,17.0,5.7,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,16.0,1,{'FantasyPros': 16.0}
-17,17,Denzel Boston (Washington),Denzel Boston (Washington),WR3,12,20.0,17.3,3.8,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,17.0,1,{'FantasyPros': 17.0}
-18,18,Sonny Styles (Ohio State),Sonny Styles (Ohio State),LB2,13,26.0,20.0,5.3,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,18.0,1,{'FantasyPros': 18.0}
-19,19,Kadyn Proctor (Alabama),Kadyn Proctor (Alabama),OT3,17,22.0,20.0,2.2,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,19.0,1,{'FantasyPros': 19.0}
-20,20,Avieon Terrell (Clemson),Avieon Terrell (Clemson),CB3,16,26.0,20.3,4.2,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,20.0,1,{'FantasyPros': 20.0}
-21,21,Cashius Howell (Texas A&M),Cashius Howell (Texas A&M),EDGE2,18,28.0,22.7,4.1,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,21.0,1,{'FantasyPros': 21.0}
-22,22,K.C. Concepcion (Texas A&M),K.C. Concepcion (Texas A&M),WR4,21,24.0,22.7,1.3,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,22.0,1,{'FantasyPros': 22.0}
-23,23,Caleb Lomu (Utah),Caleb Lomu (Utah),OT4,19,27.0,23.0,3.3,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,23.0,1,{'FantasyPros': 23.0}
-24,24,Makai Lemon,USC,WR5,15,40.0,23.3,11.8,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,24.0,1,{'FantasyPros': 24.0}
-25,25,Olaivavega Ioane (Penn State),Olaivavega Ioane (Penn State),OG1,18,31.0,23.7,5.4,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,25.0,1,{'FantasyPros': 25.0}
-26,26,Brandon Cisse (South Carolina),Brandon Cisse (South Carolina),CB4,14,35.0,25.7,8.7,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,26.0,1,{'FantasyPros': 26.0}
-27,27,C.J. Allen (Georgia),C.J. Allen (Georgia),LB3,23,30.0,26.0,2.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,27.0,1,{'FantasyPros': 27.0}
-28,28,Chris Bell (Louisville),Chris Bell (Louisville),WR6,27,38.0,32.3,4.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,28.0,1,{'FantasyPros': 28.0}
-29,29,LT Overton (Alabama),LT Overton (Alabama),DT3,25,43.0,33.0,7.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,29.0,1,{'FantasyPros': 29.0}
-30,30,R Mason Thomas (Oklahoma),R Mason Thomas (Oklahoma),EDGE3,25,44.0,35.0,7.8,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,30.0,1,{'FantasyPros': 30.0}
-31,31,Anthony Hill Jr. (Texas),Anthony Hill Jr. (Texas),LB4,32,44.0,36.3,5.4,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,31.0,1,{'FantasyPros': 31.0}
-32,32,Dillon Thieneman (Oregon),Dillon Thieneman (Oregon),S2,36,43.0,39.3,2.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,32.0,1,{'FantasyPros': 32.0}
-33,33,Akheem Mesidor (Miami,FL,DT4,30,54.0,41.0,9.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,33.0,1,{'FantasyPros': 33.0}
-34,34,T.J. Parker (Clemson),T.J. Parker (Clemson),EDGE4,17,80.0,41.3,27.6,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,34.0,1,{'FantasyPros': 34.0}
-35,35,Emmanuel Pregnon (Oregon),Emmanuel Pregnon (Oregon),OG2,33,49.0,41.3,6.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,35.0,1,{'FantasyPros': 35.0}
-36,36,D’Angelo Ponds (Indiana),D’Angelo Ponds (Indiana),CB5,39,45.0,43.0,2.8,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,36.0,1,{'FantasyPros': 36.0}
-37,37,Kamari Ramsey,USC,S3,37,54.0,44.0,7.3,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,37.0,1,{'FantasyPros': 37.0}
-38,38,Gabe Jacas (Illinois),Gabe Jacas (Illinois),EDGE5,30,66.0,45.7,15.1,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,38.0,1,{'FantasyPros': 38.0}
-39,39,Isaiah World (Oregon),Isaiah World (Oregon),OT5,37,62.0,45.7,11.6,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,39.0,1,{'FantasyPros': 39.0}
-40,40,Romello Height (Texas Tech),Romello Height (Texas Tech),EDGE6,28,62.0,46.0,13.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,40.0,1,{'FantasyPros': 40.0}
-41,41,Ja’Kobi Lane,USC,WR7,32,60.0,46.3,11.4,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,41.0,1,{'FantasyPros': 41.0}
-42,42,Zion Young (Missouri),Zion Young (Missouri),EDGE7,15,80.0,48.0,26.6,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,42.0,1,{'FantasyPros': 42.0}
-43,43,Germie Bernard (Alabama),Germie Bernard (Alabama),WR8,41,58.0,48.7,7.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,43.0,1,{'FantasyPros': 43.0}
-44,44,Connor Lew (Auburn),Connor Lew (Auburn),OG3,46,55.0,51.3,3.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,44.0,1,{'FantasyPros': 44.0}
-45,45,Dani Dennis-Sutton (),Dani Dennis-Sutton (),EDGE8,29,69.0,52.0,16.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,45.0,1,{'FantasyPros': 45.0}
-46,46,Colton Hood (Tennessee),Colton Hood (Tennessee),CB6,31,34.0,32.5,1.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,46.0,1,{'FantasyPros': 46.0}
-47,47,Gennings Dunker (Iowa),Gennings Dunker (Iowa),OT6,34,42.0,38.0,4.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,47.0,1,{'FantasyPros': 47.0}
-48,48,Harold Perkins Jr.,LSU,LB5,35,89.0,56.3,23.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,48.0,1,{'FantasyPros': 48.0}
-49,49,Jake Slaughter (Florida),Jake Slaughter (Florida),OG4,50,73.0,60.0,9.6,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,49.0,1,{'FantasyPros': 49.0}
-50,50,Deontae Lawson (Alabama),Deontae Lawson (Alabama),LB6,43,81.0,60.3,15.7,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,50.0,1,{'FantasyPros': 50.0}
-51,51,Monroe Freeling (Georgia),Monroe Freeling (Georgia),OT7,29,62.0,45.5,16.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,51.0,1,{'FantasyPros': 51.0}
-52,52,Keith Abney II (Arizona State),Keith Abney II (Arizona State),CB7,40,51.0,45.5,5.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,52.0,1,{'FantasyPros': 52.0}
-53,53,Joshua Josephs (Tennessee),Joshua Josephs (Tennessee),EDGE9,40,56.0,48.0,8.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,53.0,1,{'FantasyPros': 53.0}
-54,54,Chris Johnson (San Diego State),Chris Johnson (San Diego State),CB8,35,63.0,49.0,14.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,54.0,1,{'FantasyPros': 54.0}
-55,55,Jadarian Price (Notre Dame),Jadarian Price (Notre Dame),RB2,33,68.0,50.5,17.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,55.0,1,{'FantasyPros': 55.0}
-56,56,Antonio Williams (Clemson),Antonio Williams (Clemson),WR9,51,71.0,64.3,9.4,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,56.0,1,{'FantasyPros': 56.0}
-57,57,Max Klare (Ohio State),Max Klare (Ohio State),TE2,61,68.0,64.7,2.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,57.0,1,{'FantasyPros': 57.0}
-58,58,Blake Miller (Clemson),Blake Miller (Clemson),OT8,48,55.0,51.5,3.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,58.0,1,{'FantasyPros': 58.0}
-59,59,Elijah Sarratt (Indiana),Elijah Sarratt (Indiana),WR10,52,53.0,52.5,0.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,59.0,1,{'FantasyPros': 59.0}
-60,60,Caleb Tiernan (Northwestern),Caleb Tiernan (Northwestern),OT9,42,64.0,53.0,11.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,60.0,1,{'FantasyPros': 60.0}
-61,61,Eli Stowers (Vanderbilt),Eli Stowers (Vanderbilt),TE3,38,72.0,55.0,17.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,61.0,1,{'FantasyPros': 61.0}
-62,62,Domani Jackson (Alabama),Domani Jackson (Alabama),CB9,54,117.0,75.7,29.2,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,62.0,1,{'FantasyPros': 62.0}
-63,63,Will Lee III (),Will Lee III (),CB10,29,82.0,55.5,26.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,63.0,1,{'FantasyPros': 63.0}
-64,64,Malachi Fields (Notre Dame),Malachi Fields (Notre Dame),WR11,34,80.0,57.0,23.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,64.0,1,{'FantasyPros': 64.0}
-65,65,Chris Brazzell II (Tennessee),Chris Brazzell II (Tennessee),WR12,44,70.0,57.0,13.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,65.0,1,{'FantasyPros': 65.0}
-66,66,Lee Hunter (Texas Tech),Lee Hunter (Texas Tech),DT5,46,83.0,68.7,16.2,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,66.0,1,{'FantasyPros': 66.0}
-67,67,Malik Muhammad (Texas),Malik Muhammad (Texas),CB11,52,63.0,57.5,5.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,67.0,1,{'FantasyPros': 67.0}
-68,68,Emmanuel McNeil-Warren (Toledo),Emmanuel McNeil-Warren (Toledo),S4,37,79.0,58.0,21.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,68.0,1,{'FantasyPros': 68.0}
-69,69,Zachariah Branch (Georgia),Zachariah Branch (Georgia),WR13,51,66.0,58.5,7.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,69.0,1,{'FantasyPros': 69.0}
-70,70,A.J. Haulcy,LSU,S5,47,73.0,60.0,13.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,70.0,1,{'FantasyPros': 70.0}
-71,71,Carson Beck (Miami),Carson Beck (Miami),QB3,60,79.0,71.0,8.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,71.0,1,{'FantasyPros': 71.0}
-72,72,Taurean York (Texas A&M),Taurean York (Texas A&M),LB7,46,76.0,61.0,15.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,72.0,1,{'FantasyPros': 72.0}
-73,73,Jude Bowry (Boston College),Jude Bowry (Boston College),OT10,36,97.0,66.5,30.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,73.0,1,{'FantasyPros': 73.0}
-74,74,Garrett Nussmeier,LSU,QB4,56,104.0,77.3,20.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,74.0,1,{'FantasyPros': 74.0}
-75,75,Derrick Moore (Michigan),Derrick Moore (Michigan),EDGE10,60,86.0,74.0,10.7,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,75.0,1,{'FantasyPros': 75.0}
-76,76,Jonah Coleman (Washington),Jonah Coleman (Washington),RB3,59,74.0,66.5,7.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,76.0,1,{'FantasyPros': 76.0}
-77,77,Austin Barber (Florida),Austin Barber (Florida),OT11,48,87.0,67.5,19.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,77.0,1,{'FantasyPros': 77.0}
-78,78,Davison Igbinosun (Ohio State),Davison Igbinosun (Ohio State),CB12,50,85.0,67.5,17.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,78.0,1,{'FantasyPros': 78.0}
-79,79,Drew Allar (Penn State),Drew Allar (Penn State),QB5,61,107.0,81.3,19.1,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,79.0,1,{'FantasyPros': 79.0}
-80,80,Keionte Scott (),Keionte Scott (),CB13,50,90.0,70.0,20.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,80.0,1,{'FantasyPros': 80.0}
-81,81,Jaylon Guilbeau (Texas),Jaylon Guilbeau (Texas),CB14,49,49.0,49.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,81.0,1,{'FantasyPros': 81.0}
-82,82,Josiah Trotter (Missouri),Josiah Trotter (Missouri),LB8,64,77.0,70.5,6.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,82.0,1,{'FantasyPros': 82.0}
-83,83,Sam Hecht (),Sam Hecht (),IOL1,52,52.0,52.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,83.0,1,{'FantasyPros': 83.0}
-84,84,Drew Shelton (Penn State),Drew Shelton (Penn State),OT12,55,90.0,72.5,17.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,84.0,1,{'FantasyPros': 84.0}
-85,85,Jake Golday (),Jake Golday (),LB9,59,86.0,72.5,13.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,85.0,1,{'FantasyPros': 85.0}
-86,86,Keylan Rutledge (),Keylan Rutledge (),IOL2,53,127.0,90.0,37.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,86.0,1,{'FantasyPros': 86.0}
-87,87,Deion Burks (Oklahoma),Deion Burks (Oklahoma),WR14,71,98.0,81.3,11.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,87.0,1,{'FantasyPros': 87.0}
-88,88,Nicholas Singleton (Penn State),Nicholas Singleton (Penn State),RB4,66,81.0,73.5,7.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,88.0,1,{'FantasyPros': 88.0}
-89,89,Fernando Carmona (),Fernando Carmona (),IOL3,57,57.0,57.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,89.0,1,{'FantasyPros': 89.0}
-90,90,Michael Trigg (Baylor),Michael Trigg (Baylor),TE4,74,75.0,74.5,0.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,90.0,1,{'FantasyPros': 90.0}
-91,91,Trinidad Chambliss (),Trinidad Chambliss (),QB6,58,58.0,58.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,91.0,1,{'FantasyPros': 91.0}
-92,92,Aaron Anderson,LSU,WR15,59,59.0,59.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,92.0,1,{'FantasyPros': 92.0}
-93,93,Keon Sabb (Alabama),Keon Sabb (Alabama),S6,61,61.0,61.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,93.0,1,{'FantasyPros': 93.0}
-94,94,Julian Neal (),Julian Neal (),CB15,70,85.0,77.5,7.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,94.0,1,{'FantasyPros': 94.0}
-95,95,Beau Stephens (),Beau Stephens (),IOL4,63,130.0,96.5,33.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,95.0,1,{'FantasyPros': 95.0}
-96,96,Amare Ferrell (Indiana),Amare Ferrell (Indiana),S7,64,64.0,64.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,96.0,1,{'FantasyPros': 96.0}
-97,97,DeMonte Capehart (Clemson),DeMonte Capehart (Clemson),DT6,69,87.0,78.0,9.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,97.0,1,{'FantasyPros': 97.0}
-98,98,Chase Bisontis (Texas A&M),Chase Bisontis (Texas A&M),OG5,65,65.0,65.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,98.0,1,{'FantasyPros': 98.0}
-99,99,Daylen Everette (Georgia),Daylen Everette (Georgia),CB16,65,105.0,85.0,20.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,99.0,1,{'FantasyPros': 99.0}
-100,100,Omar Cooper Jr. (Indiana),Omar Cooper Jr. (Indiana),WR16,67,67.0,67.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,100.0,1,{'FantasyPros': 100.0}
+consensus_rank,rank,player_name,TEAM,POS,BEST,WORST,AVG.,STD.DEV,source_url,consensus_score,sources_ranked_by,source_ranks,CNG,College,Ht,Wt,CLS,Pick
+1,12,Makai Lemon,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,18.0,2,"{'DraftTek': 12.0, 'FantasyPros': 24.0}",--,USC,"5'11""",192,JR,20
+2,1,Fernando Mendoza,,QB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,51.0,1,"{'DraftTek': 1.0, 'FantasyPros': None}",--,Indiana,"6'5""",236,RJR,1
+3,1,Fernando Mendoza (Indiana),Fernando Mendoza (Indiana),QB1,1,4.0,2.0,1.4,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,51.0,1,"{'DraftTek': None, 'FantasyPros': 1.0}",,,,,,
+4,2,Arvell Reese,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,51.5,1,"{'DraftTek': 2.0, 'FantasyPros': None}",--,Ohio State,"6'4""",241,JR,4
+5,2,Caleb Downs (Ohio State),Caleb Downs (Ohio State),S1,2,4.0,3.0,0.8,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,51.5,1,"{'DraftTek': None, 'FantasyPros': 2.0}",,,,,,
+6,3,Arvell Reese (Ohio State),Arvell Reese (Ohio State),LB1,1,5.0,3.3,1.7,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,52.0,1,"{'DraftTek': None, 'FantasyPros': 3.0}",,,,,,
+7,3,Jeremiyah Love,,RB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,52.0,1,"{'DraftTek': 3.0, 'FantasyPros': None}",--,Notre Dame,"6'0""",212,JR,3
+8,4,David Bailey,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,52.5,1,"{'DraftTek': 4.0, 'FantasyPros': None}",+3,Texas Tech,"6'4""",251,SR,2
+9,4,Jeremiyah Love (Notre Dame),Jeremiyah Love (Notre Dame),RB1,2,10.0,7.0,3.6,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,52.5,1,"{'DraftTek': None, 'FantasyPros': 4.0}",,,,,,
+10,5,Rueben Bain Jr. (Miami),Rueben Bain Jr. (Miami),EDGE1,2,18.0,7.7,7.3,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,53.0,1,"{'DraftTek': None, 'FantasyPros': 5.0}",,,,,,
+11,5,Sonny Styles,,OLB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,53.0,1,"{'DraftTek': 5.0, 'FantasyPros': None}",--,Ohio State,"6'5""",244,SR,7
+12,6,Caleb Downs,,S,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,53.5,1,"{'DraftTek': 6.0, 'FantasyPros': None}",--,Ohio State,"6'0""",206,JR,11
+13,6,Jordyn Tyson (Arizona State),Jordyn Tyson (Arizona State),WR1,7,10.0,8.7,1.3,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,53.5,1,"{'DraftTek': None, 'FantasyPros': 6.0}",,,,,,
+14,7,Francis Mauigoa,,OT,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,54.0,1,"{'DraftTek': 7.0, 'FantasyPros': None}",--,Miami (FL),"6'6""",329,JR,10
+15,7,Francis Mauigoa (Miami),Francis Mauigoa (Miami),OT1,6,13.0,9.0,2.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,54.0,1,"{'DraftTek': None, 'FantasyPros': 7.0}",,,,,,
+16,8,Keldric Faulk (Auburn),Keldric Faulk (Auburn),DE1,7,12.0,9.0,2.2,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,54.5,1,"{'DraftTek': None, 'FantasyPros': 8.0}",,,,,,
+17,8,Mansoor Delane,,CB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,54.5,1,"{'DraftTek': 8.0, 'FantasyPros': None}",--,LSU,"6'0""",187,SR,6
+18,9,Carnell Tate,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,55.0,1,"{'DraftTek': 9.0, 'FantasyPros': None}",--,Ohio State,"6'2""",192,JR,4
+19,9,David Bailey (Texas Tech),David Bailey (Texas Tech),DT1,3,19.0,9.3,6.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,55.0,1,"{'DraftTek': None, 'FantasyPros': 9.0}",,,,,,
+20,10,Jordyn Tyson,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,55.5,1,"{'DraftTek': 10.0, 'FantasyPros': None}",+5,Arizona State,"6'2""",203,RJR,8
+21,10,Spencer Fano (Utah),Spencer Fano (Utah),OT2,7,16.0,10.3,4.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,55.5,1,"{'DraftTek': None, 'FantasyPros': 10.0}",,,,,,
+22,11,Mansoor Delane (Virginia Tech),Mansoor Delane (Virginia Tech),CB1,11,13.0,11.7,0.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,56.0,1,"{'DraftTek': None, 'FantasyPros': 11.0}",,,,,,
+23,11,Spencer Fano,,OT,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,56.0,1,"{'DraftTek': 11.0, 'FantasyPros': None}",--,Utah,"6'6""",311,JR,9
+24,12,Jermod McCoy (Tennessee),Jermod McCoy (Tennessee),CB2,9,16.0,12.0,2.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,56.5,1,"{'DraftTek': None, 'FantasyPros': 12.0}",,,,,,
+25,13,Carnell Tate (Ohio State),Carnell Tate (Ohio State),WR2,5,20.0,12.3,6.1,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,57.0,1,"{'DraftTek': None, 'FantasyPros': 13.0}",,,,,,
+26,13,Rueben Bain Jr.,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,57.0,1,"{'DraftTek': 13.0, 'FantasyPros': None}",--,Miami (FL),"6'2""",263,JR,15
+27,14,Olaivavega Ioane,,OG,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,57.5,1,"{'DraftTek': 14.0, 'FantasyPros': None}",--,Penn State,"6'4""",320,RJR,14
+28,14,Peter Woods (Clemson),Peter Woods (Clemson),DT2,5,24.0,14.3,7.8,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,57.5,1,"{'DraftTek': None, 'FantasyPros': 14.0}",,,,,,
+29,15,Kenyon Sadiq,,TE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,58.0,1,"{'DraftTek': 15.0, 'FantasyPros': None}",--,Oregon,"6'3""",241,JR,16
+30,15,Ty Simpson (Alabama),Ty Simpson (Alabama),QB2,6,26.0,15.3,8.2,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,58.0,1,"{'DraftTek': None, 'FantasyPros': 15.0}",,,,,,
+31,16,Keldric Faulk,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,58.5,1,"{'DraftTek': 16.0, 'FantasyPros': None}",--,Auburn,"6'6""",276,JR,31
+32,16,Kenyon Sadiq (Oregon),Kenyon Sadiq (Oregon),TE1,10,24.0,17.0,5.7,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,58.5,1,"{'DraftTek': None, 'FantasyPros': 16.0}",,,,,,
+33,17,Denzel Boston (Washington),Denzel Boston (Washington),WR3,12,20.0,17.3,3.8,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,59.0,1,"{'DraftTek': None, 'FantasyPros': 17.0}",,,,,,
+34,17,Monroe Freeling,,OT,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,59.0,1,"{'DraftTek': 17.0, 'FantasyPros': None}",--,Georgia,"6'7""",315,JR,19
+35,18,Dillon Thieneman,,S,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,59.5,1,"{'DraftTek': 18.0, 'FantasyPros': None}",--,Oregon,"6'0""",201,JR,25
+36,18,Sonny Styles (Ohio State),Sonny Styles (Ohio State),LB2,13,26.0,20.0,5.3,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,59.5,1,"{'DraftTek': None, 'FantasyPros': 18.0}",,,,,,
+37,19,Jermod McCoy,,CB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,60.0,1,"{'DraftTek': 19.0, 'FantasyPros': None}",--,Tennessee,"6'1""",188,JR,101
+38,19,Kadyn Proctor (Alabama),Kadyn Proctor (Alabama),OT3,17,22.0,20.0,2.2,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,60.0,1,"{'DraftTek': None, 'FantasyPros': 19.0}",,,,,,
+39,20,Avieon Terrell (Clemson),Avieon Terrell (Clemson),CB3,16,26.0,20.3,4.2,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,60.5,1,"{'DraftTek': None, 'FantasyPros': 20.0}",,,,,,
+40,20,Omar Cooper Jr.,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,60.5,1,"{'DraftTek': 20.0, 'FantasyPros': None}",--,Indiana,"6'0""",199,RJR,30
+41,21,Blake Miller,,OT,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,61.0,1,"{'DraftTek': 21.0, 'FantasyPros': None}",+7,Clemson,"6'7""",317,SR,17
+42,21,Cashius Howell (Texas A&M),Cashius Howell (Texas A&M),EDGE2,18,28.0,22.7,4.1,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,61.0,1,"{'DraftTek': None, 'FantasyPros': 21.0}",,,,,,
+43,22,Chris Johnson,,CB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,61.5,1,"{'DraftTek': 22.0, 'FantasyPros': None}",--,San Diego State,"6'0""",193,SR,27
+44,22,K.C. Concepcion (Texas A&M),K.C. Concepcion (Texas A&M),WR4,21,24.0,22.7,1.3,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,61.5,1,"{'DraftTek': None, 'FantasyPros': 22.0}",,,,,,
+45,23,Caleb Lomu (Utah),Caleb Lomu (Utah),OT4,19,27.0,23.0,3.3,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,62.0,1,"{'DraftTek': None, 'FantasyPros': 23.0}",,,,,,
+46,23,T.J. Parker,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,62.0,1,"{'DraftTek': 23.0, 'FantasyPros': None}",--,Clemson,"6'4""",263,JR,35
+47,24,Kadyn Proctor,,OT,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,62.5,1,"{'DraftTek': 24.0, 'FantasyPros': None}",--,Alabama,"6'7""",352,JR,12
+48,25,Colton Hood,,CB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,63.0,1,"{'DraftTek': 25.0, 'FantasyPros': None}",--,Tennessee,"6'0""",193,RSO,37
+49,25,Olaivavega Ioane (Penn State),Olaivavega Ioane (Penn State),OG1,18,31.0,23.7,5.4,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,63.0,1,"{'DraftTek': None, 'FantasyPros': 25.0}",,,,,,
+50,26,Brandon Cisse (South Carolina),Brandon Cisse (South Carolina),CB4,14,35.0,25.7,8.7,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,63.5,1,"{'DraftTek': None, 'FantasyPros': 26.0}",,,,,,
+51,26,Ty Simpson,,QB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,63.5,1,"{'DraftTek': 26.0, 'FantasyPros': None}",-5,Alabama,"6'1""",211,RJR,13
+52,27,C.J. Allen (Georgia),C.J. Allen (Georgia),LB3,23,30.0,26.0,2.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,64.0,1,"{'DraftTek': None, 'FantasyPros': 27.0}",,,,,,
+53,27,KC Concepcion,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,64.0,1,"{'DraftTek': 27.0, 'FantasyPros': None}",--,Texas A&M,"6'0""",196,JR,24
+54,28,Chris Bell (Louisville),Chris Bell (Louisville),WR6,27,38.0,32.3,4.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,64.5,1,"{'DraftTek': None, 'FantasyPros': 28.0}",,,,,,
+55,28,Kayden McDonald,,DL1T,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,64.5,1,"{'DraftTek': 28.0, 'FantasyPros': None}",+5,Ohio State,"6'2""",326,JR,36
+56,29,Emmanuel McNeil-Warren,,S,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,65.0,1,"{'DraftTek': 29.0, 'FantasyPros': None}",--,Toledo,"6'3""",201,SR,58
+57,29,LT Overton (Alabama),LT Overton (Alabama),DT3,25,43.0,33.0,7.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,65.0,1,"{'DraftTek': None, 'FantasyPros': 29.0}",,,,,,
+58,30,Denzel Boston,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,65.5,1,"{'DraftTek': 30.0, 'FantasyPros': None}",--,Washington,"6'4""",212,RJR,39
+59,30,R Mason Thomas (Oklahoma),R Mason Thomas (Oklahoma),EDGE3,25,44.0,35.0,7.8,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,65.5,1,"{'DraftTek': None, 'FantasyPros': 30.0}",,,,,,
+60,31,Anthony Hill Jr. (Texas),Anthony Hill Jr. (Texas),LB4,32,44.0,36.3,5.4,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,66.0,1,"{'DraftTek': None, 'FantasyPros': 31.0}",,,,,,
+61,31,Max Iheanachor,,OT,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,66.0,1,"{'DraftTek': 31.0, 'FantasyPros': None}",--,Arizona State,"6'6""",321,RSR,21
+62,32,Caleb Lomu,,OT,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,66.5,1,"{'DraftTek': 32.0, 'FantasyPros': None}",-5,Utah,"6'6""",313,RSO,28
+63,32,Dillon Thieneman (Oregon),Dillon Thieneman (Oregon),S2,36,43.0,39.3,2.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,66.5,1,"{'DraftTek': None, 'FantasyPros': 32.0}",,,,,,
+64,64,A.J. Haulcy,,S,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,67.0,2,"{'DraftTek': 64.0, 'FantasyPros': 70.0}",--,LSU,"6'0""",215,SR,78
+65,33,Akheem Mesidor (Miami,FL,DT4,30,54.0,41.0,9.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,67.0,1,"{'DraftTek': None, 'FantasyPros': 33.0}",,,,,,
+66,33,Peter Woods,,DL3T,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,67.0,1,"{'DraftTek': 33.0, 'FantasyPros': None}",-7,Clemson,"6'2""",298,JR,29
+67,34,Malachi Lawrence,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,67.5,1,"{'DraftTek': 34.0, 'FantasyPros': None}",+5,UCF,"6'4""",253,RSR,23
+68,34,T.J. Parker (Clemson),T.J. Parker (Clemson),EDGE4,17,80.0,41.3,27.6,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,67.5,1,"{'DraftTek': None, 'FantasyPros': 34.0}",,,,,,
+69,35,Akheem Mesidor,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,68.0,1,"{'DraftTek': 35.0, 'FantasyPros': None}",--,Miami (FL),"6'3""",259,RSR,22
+70,35,Emmanuel Pregnon (Oregon),Emmanuel Pregnon (Oregon),OG2,33,49.0,41.3,6.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,68.0,1,"{'DraftTek': None, 'FantasyPros': 35.0}",,,,,,
+71,36,D’Angelo Ponds (Indiana),D’Angelo Ponds (Indiana),CB5,39,45.0,43.0,2.8,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,68.5,1,"{'DraftTek': None, 'FantasyPros': 36.0}",,,,,,
+72,37,Kamari Ramsey,USC,S3,37,54.0,44.0,7.3,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,68.5,2,"{'DraftTek': 100.0, 'FantasyPros': 37.0}",,,,,,
+73,36,Lee Hunter,,DL1T,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,68.5,1,"{'DraftTek': 36.0, 'FantasyPros': None}",--,Texas Tech,"6'3""",318,RSR,49
+74,37,Brandon Cisse,,CB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,69.0,1,"{'DraftTek': 37.0, 'FantasyPros': None}",--,South Carolina,"6'0""",189,JR,52
+75,38,Cashius Howell,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,69.5,1,"{'DraftTek': 38.0, 'FantasyPros': None}",--,Texas A&M,"6'2""",253,RSR,41
+76,38,Gabe Jacas (Illinois),Gabe Jacas (Illinois),EDGE5,30,66.0,45.7,15.1,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,69.5,1,"{'DraftTek': None, 'FantasyPros': 38.0}",,,,,,
+77,39,C.J. Allen,,OLB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,70.0,1,"{'DraftTek': 39.0, 'FantasyPros': None}",--,Georgia,"6'1""",230,JR,53
+78,39,Isaiah World (Oregon),Isaiah World (Oregon),OT5,37,62.0,45.7,11.6,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,70.0,1,"{'DraftTek': None, 'FantasyPros': 39.0}",,,,,,
+79,40,Christen Miller,,DL1T,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,70.5,1,"{'DraftTek': 40.0, 'FantasyPros': None}",--,Georgia,"6'4""",321,RJR,42
+80,40,Romello Height (Texas Tech),Romello Height (Texas Tech),EDGE6,28,62.0,46.0,13.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,70.5,1,"{'DraftTek': None, 'FantasyPros': 40.0}",,,,,,
+81,41,Chase Bisontis,,OG,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,71.0,1,"{'DraftTek': 41.0, 'FantasyPros': None}",+4,Texas A&M,"6'5""",315,JR,34
+82,41,Ja’Kobi Lane,USC,WR7,32,60.0,46.3,11.4,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,71.0,1,"{'DraftTek': None, 'FantasyPros': 41.0}",,,,,,
+83,42,Gabe Jacas,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,71.5,1,"{'DraftTek': 42.0, 'FantasyPros': None}",--,Illinois,"6'4""",260,SR,55
+84,42,Zion Young (Missouri),Zion Young (Missouri),EDGE7,15,80.0,48.0,26.6,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,71.5,1,"{'DraftTek': None, 'FantasyPros': 42.0}",,,,,,
+85,43,Germie Bernard (Alabama),Germie Bernard (Alabama),WR8,41,58.0,48.7,7.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,72.0,1,"{'DraftTek': None, 'FantasyPros': 43.0}",,,,,,
+86,43,Jacob Rodriguez,,ILB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,72.0,1,"{'DraftTek': 43.0, 'FantasyPros': None}",+10,Texas Tech,"6'1""",231,RSR,43
+87,44,Connor Lew (Auburn),Connor Lew (Auburn),OG3,46,55.0,51.3,3.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,72.5,1,"{'DraftTek': None, 'FantasyPros': 44.0}",,,,,,
+88,44,D'Angelo Ponds,,CBN,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,72.5,1,"{'DraftTek': 44.0, 'FantasyPros': None}",--,Indiana,"5'9""",182,JR,50
+89,45,Dani Dennis-Sutton (),Dani Dennis-Sutton (),EDGE8,29,69.0,52.0,16.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,73.0,1,"{'DraftTek': None, 'FantasyPros': 45.0}",,,,,,
+90,45,R Mason Thomas,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,73.0,1,"{'DraftTek': 45.0, 'FantasyPros': None}",--,Oklahoma,"6'2""",241,SR,40
+91,46,Colton Hood (Tennessee),Colton Hood (Tennessee),CB6,31,34.0,32.5,1.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,73.5,1,"{'DraftTek': None, 'FantasyPros': 46.0}",,,,,,
+92,46,Keionte Scott,,CB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,73.5,1,"{'DraftTek': 46.0, 'FantasyPros': None}",--,Miami (FL),"5'11""",193,RSR,116
+93,47,Emmanuel Pregnon,,OG,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,74.0,1,"{'DraftTek': 47.0, 'FantasyPros': None}",-4,Oregon,"6'4""",314,RSR,88
+94,47,Gennings Dunker (Iowa),Gennings Dunker (Iowa),OT6,34,42.0,38.0,4.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,74.0,1,"{'DraftTek': None, 'FantasyPros': 47.0}",,,,,,
+95,48,Avieon Terrell,,CBN,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,74.5,1,"{'DraftTek': 48.0, 'FantasyPros': None}",--,Clemson,"5'11""",186,JR,48
+96,48,Harold Perkins Jr.,LSU,LB5,35,89.0,56.3,23.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,74.5,1,"{'DraftTek': None, 'FantasyPros': 48.0}",,,,,,
+97,49,Chris Brazzell II,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,75.0,1,"{'DraftTek': 49.0, 'FantasyPros': None}",+10,Tennessee,"6'4""",198,RJR,83
+98,49,Jake Slaughter (Florida),Jake Slaughter (Florida),OG4,50,73.0,60.0,9.6,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,75.0,1,"{'DraftTek': None, 'FantasyPros': 49.0}",,,,,,
+99,50,Caleb Banks,,DL1T,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,75.5,1,"{'DraftTek': 50.0, 'FantasyPros': None}",--,Florida,"6'6""",327,RSR,18
+100,50,Deontae Lawson (Alabama),Deontae Lawson (Alabama),LB6,43,81.0,60.3,15.7,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,75.5,1,"{'DraftTek': None, 'FantasyPros': 50.0}",,,,,,
+101,51,Jadarian Price,,RB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,76.0,1,"{'DraftTek': 51.0, 'FantasyPros': None}",--,Notre Dame,"5'11""",203,RJR,32
+102,51,Monroe Freeling (Georgia),Monroe Freeling (Georgia),OT7,29,62.0,45.5,16.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,76.0,1,"{'DraftTek': None, 'FantasyPros': 51.0}",,,,,,
+103,52,Anthony Hill Jr.,,ILB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,76.5,1,"{'DraftTek': 52.0, 'FantasyPros': None}",-10,Texas,"6'2""",238,JR,60
+104,52,Keith Abney II (Arizona State),Keith Abney II (Arizona State),CB7,40,51.0,45.5,5.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,76.5,1,"{'DraftTek': None, 'FantasyPros': 52.0}",,,,,,
+105,53,Joshua Josephs (Tennessee),Joshua Josephs (Tennessee),EDGE9,40,56.0,48.0,8.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,77.0,1,"{'DraftTek': None, 'FantasyPros': 53.0}",,,,,,
+106,53,Keylan Rutledge,,OG,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,77.0,1,"{'DraftTek': 53.0, 'FantasyPros': None}",+15,Georgia Tech,"6'4""",316,SR,26
+107,54,Chris Johnson (San Diego State),Chris Johnson (San Diego State),CB8,35,63.0,49.0,14.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,77.5,1,"{'DraftTek': None, 'FantasyPros': 54.0}",,,,,,
+108,54,Zion Young,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,77.5,1,"{'DraftTek': 54.0, 'FantasyPros': None}",--,Missouri,"6'6""",262,SR,45
+109,55,Eli Stowers,,TE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,78.0,1,"{'DraftTek': 55.0, 'FantasyPros': None}",-15,Vanderbilt,"6'4""",239,RSR,54
+110,55,Jadarian Price (Notre Dame),Jadarian Price (Notre Dame),RB2,33,68.0,50.5,17.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,78.0,1,"{'DraftTek': None, 'FantasyPros': 55.0}",,,,,,
+111,56,Antonio Williams (Clemson),Antonio Williams (Clemson),WR9,51,71.0,64.3,9.4,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,78.5,1,"{'DraftTek': None, 'FantasyPros': 56.0}",,,,,,
+112,56,Treydan Stukes,,S,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,78.5,1,"{'DraftTek': 56.0, 'FantasyPros': None}",--,Arizona,"6'1""",190,RSR,38
+113,57,Jake Golday,,OLB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,79.0,1,"{'DraftTek': 57.0, 'FantasyPros': None}",--,Cincinnati,"6'4""",239,RSR,51
+114,57,Max Klare (Ohio State),Max Klare (Ohio State),TE2,61,68.0,64.7,2.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,79.0,1,"{'DraftTek': None, 'FantasyPros': 57.0}",,,,,,
+115,58,Blake Miller (Clemson),Blake Miller (Clemson),OT8,48,55.0,51.5,3.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,79.5,1,"{'DraftTek': None, 'FantasyPros': 58.0}",,,,,,
+116,58,Max Klare,,TE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,79.5,1,"{'DraftTek': 58.0, 'FantasyPros': None}",--,Ohio State,"6'5""",246,RJR,61
+117,59,Chris Bell,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,80.0,1,"{'DraftTek': 59.0, 'FantasyPros': None}",--,Louisville,"6'2""",222,SR,94
+118,59,Elijah Sarratt (Indiana),Elijah Sarratt (Indiana),WR10,52,53.0,52.5,0.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,80.0,1,"{'DraftTek': None, 'FantasyPros': 59.0}",,,,,,
+119,60,Caleb Tiernan (Northwestern),Caleb Tiernan (Northwestern),OT9,42,64.0,53.0,11.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,80.5,1,"{'DraftTek': None, 'FantasyPros': 60.0}",,,,,,
+120,60,Germie Bernard,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,80.5,1,"{'DraftTek': 60.0, 'FantasyPros': None}",-10,Alabama,"6'1""",206,SR,47
+121,61,Domonique Orange,,DL1T,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,81.0,1,"{'DraftTek': 61.0, 'FantasyPros': None}",--,Iowa State,"6'2""",322,SR,82
+122,61,Eli Stowers (Vanderbilt),Eli Stowers (Vanderbilt),TE3,38,72.0,55.0,17.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,81.0,1,"{'DraftTek': None, 'FantasyPros': 61.0}",,,,,,
+123,62,Davison Igbinosun,,CB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,81.5,1,"{'DraftTek': 62.0, 'FantasyPros': None}",--,Ohio State,"6'2""",189,SR,62
+124,62,Domani Jackson (Alabama),Domani Jackson (Alabama),CB9,54,117.0,75.7,29.2,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,81.5,1,"{'DraftTek': None, 'FantasyPros': 62.0}",,,,,,
+125,63,Caleb Tiernan,,OT,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,82.0,1,"{'DraftTek': 63.0, 'FantasyPros': None}",--,Northwestern,"6'8""",323,RSR,97
+126,63,Will Lee III (),Will Lee III (),CB10,29,82.0,55.5,26.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,82.0,1,"{'DraftTek': None, 'FantasyPros': 63.0}",,,,,,
+127,64,Malachi Fields (Notre Dame),Malachi Fields (Notre Dame),WR11,34,80.0,57.0,23.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,82.5,1,"{'DraftTek': None, 'FantasyPros': 64.0}",,,,,,
+128,65,Chris Brazzell II (Tennessee),Chris Brazzell II (Tennessee),WR12,44,70.0,57.0,13.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,83.0,1,"{'DraftTek': None, 'FantasyPros': 65.0}",,,,,,
+129,65,Ted Hurst,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,83.0,1,"{'DraftTek': 65.0, 'FantasyPros': None}",--,Georgia State,"6'4""",206,SR,84
+130,66,Derrick Moore,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,83.5,1,"{'DraftTek': 66.0, 'FantasyPros': None}",-10,Michigan,"6'4""",255,SR,44
+131,66,Lee Hunter (Texas Tech),Lee Hunter (Texas Tech),DT5,46,83.0,68.7,16.2,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,83.5,1,"{'DraftTek': None, 'FantasyPros': 66.0}",,,,,,
+132,67,Elijah Sarratt,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,84.0,1,"{'DraftTek': 67.0, 'FantasyPros': None}",--,Indiana,"6'2""",210,SR,115
+133,67,Malik Muhammad (Texas),Malik Muhammad (Texas),CB11,52,63.0,57.5,5.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,84.0,1,"{'DraftTek': None, 'FantasyPros': 67.0}",,,,,,
+134,68,Antonio Williams,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,84.5,1,"{'DraftTek': 68.0, 'FantasyPros': None}",--,Clemson,"5'11""",187,RJR,71
+135,68,Emmanuel McNeil-Warren (Toledo),Emmanuel McNeil-Warren (Toledo),S4,37,79.0,58.0,21.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,84.5,1,"{'DraftTek': None, 'FantasyPros': 68.0}",,,,,,
+136,69,Gennings Dunker,,OG,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,85.0,1,"{'DraftTek': 69.0, 'FantasyPros': None}",-10,Iowa,"6'5""",319,RSR,96
+137,69,Zachariah Branch (Georgia),Zachariah Branch (Georgia),WR13,51,66.0,58.5,7.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,85.0,1,"{'DraftTek': None, 'FantasyPros': 69.0}",,,,,,
+138,70,Keyron Crawford,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,85.5,1,"{'DraftTek': 70.0, 'FantasyPros': None}",+20,Auburn,"6'4""",253,SR,67
+139,71,Carson Beck (Miami),Carson Beck (Miami),QB3,60,79.0,71.0,8.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,86.0,1,"{'DraftTek': None, 'FantasyPros': 71.0}",,,,,,
+140,71,Josiah Trotter,,ILB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,86.0,1,"{'DraftTek': 71.0, 'FantasyPros': None}",--,Missouri,"6'2""",237,RSO,46
+141,72,Malachi Fields,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,86.5,1,"{'DraftTek': 72.0, 'FantasyPros': None}",--,Notre Dame,"6'4""",218,RSR,74
+142,72,Taurean York (Texas A&M),Taurean York (Texas A&M),LB7,46,76.0,61.0,15.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,86.5,1,"{'DraftTek': None, 'FantasyPros': 72.0}",,,,,,
+143,73,Jude Bowry (Boston College),Jude Bowry (Boston College),OT10,36,97.0,66.5,30.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,87.0,1,"{'DraftTek': None, 'FantasyPros': 73.0}",,,,,,
+144,73,Tacario Davis,,CB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,87.0,1,"{'DraftTek': 73.0, 'FantasyPros': None}",--,Washington,"6'4""",194,SR,72
+145,74,Garrett Nussmeier,LSU,QB4,56,104.0,77.3,20.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,87.5,1,"{'DraftTek': None, 'FantasyPros': 74.0}",,,,,,
+146,74,Mike Washington Jr.,,RB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,87.5,1,"{'DraftTek': 74.0, 'FantasyPros': None}",-15,Arkansas,"6'1""",223,RSR,122
+147,75,Darrell Jackson Jr.,,DL3T,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,88.0,1,"{'DraftTek': 75.0, 'FantasyPros': None}",--,Florida State,"6'6""",315,RSR,103
+148,75,Derrick Moore (Michigan),Derrick Moore (Michigan),EDGE10,60,86.0,74.0,10.7,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,88.0,1,"{'DraftTek': None, 'FantasyPros': 75.0}",,,,,,
+149,76,Jonah Coleman (Washington),Jonah Coleman (Washington),RB3,59,74.0,66.5,7.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,88.5,1,"{'DraftTek': None, 'FantasyPros': 76.0}",,,,,,
+150,76,Malik Muhammad,,CB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,88.5,1,"{'DraftTek': 76.0, 'FantasyPros': None}",--,Texas,"6'0""",182,JR,124
+151,77,Austin Barber (Florida),Austin Barber (Florida),OT11,48,87.0,67.5,19.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,89.0,1,"{'DraftTek': None, 'FantasyPros': 77.0}",,,,,,
+152,77,Romello Height,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,89.0,1,"{'DraftTek': 77.0, 'FantasyPros': None}",-10,Texas Tech,"6'3""",239,RSR,70
+153,78,Dani Dennis-Sutton,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,89.5,1,"{'DraftTek': 78.0, 'FantasyPros': None}",--,Penn State,"6'6""",256,SR,120
+154,78,Davison Igbinosun (Ohio State),Davison Igbinosun (Ohio State),CB12,50,85.0,67.5,17.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,89.5,1,"{'DraftTek': None, 'FantasyPros': 78.0}",,,,,,
+155,79,Drew Allar (Penn State),Drew Allar (Penn State),QB5,61,107.0,81.3,19.1,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,90.0,1,"{'DraftTek': None, 'FantasyPros': 79.0}",,,,,,
+156,79,Kyle Louis,,OLB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,90.0,1,"{'DraftTek': 79.0, 'FantasyPros': None}",--,Pittsburgh,"6'0""",220,RJR,138
+157,80,Keionte Scott (),Keionte Scott (),CB13,50,90.0,70.0,20.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,90.5,1,"{'DraftTek': None, 'FantasyPros': 80.0}",,,,,,
+158,80,Keith Abney II,,CBN,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,90.5,1,"{'DraftTek': 80.0, 'FantasyPros': None}",--,Arizona State,"5'10""",187,JR,157
+159,81,De'Zhaun Stribling,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,91.0,1,"{'DraftTek': 81.0, 'FantasyPros': None}",+20,Ole Miss,"6'2""",207,RSR,33
+160,81,Jaylon Guilbeau (Texas),Jaylon Guilbeau (Texas),CB14,49,49.0,49.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,91.0,1,"{'DraftTek': None, 'FantasyPros': 81.0}",,,,,,
+161,82,Gracen Halton,,DL3T,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,91.5,1,"{'DraftTek': 82.0, 'FantasyPros': None}",--,Oklahoma,"6'3""",293,SR,107
+162,82,Josiah Trotter (Missouri),Josiah Trotter (Missouri),LB8,64,77.0,70.5,6.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,91.5,1,"{'DraftTek': None, 'FantasyPros': 82.0}",,,,,,
+163,83,Sam Hecht,,OC,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,92.0,1,"{'DraftTek': 83.0, 'FantasyPros': None}",--,Kansas State,"6'4""",303,RSR,144
+164,83,Sam Hecht (),Sam Hecht (),IOL1,52,52.0,52.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,92.0,1,"{'DraftTek': None, 'FantasyPros': 83.0}",,,,,,
+165,84,Drew Shelton (Penn State),Drew Shelton (Penn State),OT12,55,90.0,72.5,17.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,92.5,1,"{'DraftTek': None, 'FantasyPros': 84.0}",,,,,,
+166,84,Jalon Kilgore,,S,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,92.5,1,"{'DraftTek': 84.0, 'FantasyPros': None}",+25,South Carolina,"6'1""",210,JR,167
+167,85,Connor Lew,,OC,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,93.0,1,"{'DraftTek': 85.0, 'FantasyPros': None}",--,Auburn,"6'4""",310,JR,128
+168,85,Jake Golday (),Jake Golday (),LB9,59,86.0,72.5,13.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,93.0,1,"{'DraftTek': None, 'FantasyPros': 85.0}",,,,,,
+169,86,Jalen Farmer,,OG,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,93.5,1,"{'DraftTek': 86.0, 'FantasyPros': None}",--,Kentucky,"6'5""",312,RJR,113
+170,86,Keylan Rutledge (),Keylan Rutledge (),IOL2,53,127.0,90.0,37.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,93.5,1,"{'DraftTek': None, 'FantasyPros': 86.0}",,,,,,
+171,87,Deion Burks (Oklahoma),Deion Burks (Oklahoma),WR14,71,98.0,81.3,11.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,94.0,1,"{'DraftTek': None, 'FantasyPros': 87.0}",,,,,,
+172,87,Drew Allar,,QB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,94.0,1,"{'DraftTek': 87.0, 'FantasyPros': None}",--,Penn State,"6'5""",228,SR,76
+173,88,Jake Slaughter,,OC,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,94.5,1,"{'DraftTek': 88.0, 'FantasyPros': None}",--,Florida,"6'5""",303,RSR,63
+174,88,Nicholas Singleton (Penn State),Nicholas Singleton (Penn State),RB4,66,81.0,73.5,7.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,94.5,1,"{'DraftTek': None, 'FantasyPros': 88.0}",,,,,,
+175,89,Bryce Lance,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,95.0,1,"{'DraftTek': 89.0, 'FantasyPros': None}",--,North Dakota State,"6'3""",204,RSR,136
+176,89,Fernando Carmona (),Fernando Carmona (),IOL3,57,57.0,57.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,95.0,1,"{'DraftTek': None, 'FantasyPros': 89.0}",,,,,,
+177,90,Michael Trigg (Baylor),Michael Trigg (Baylor),TE4,74,75.0,74.5,0.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,95.5,1,"{'DraftTek': None, 'FantasyPros': 90.0}",,,,,,
+178,90,Oscar Delp,,TE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,95.5,1,"{'DraftTek': 90.0, 'FantasyPros': None}",+20,Georgia,"6'5""",245,SR,73
+179,91,Bud Clark,,S,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,96.0,1,"{'DraftTek': 91.0, 'FantasyPros': None}",--,TCU,6'0,185,RSR,64
+180,91,Trinidad Chambliss (),Trinidad Chambliss (),QB6,58,58.0,58.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,96.0,1,"{'DraftTek': None, 'FantasyPros': 91.0}",,,,,,
+181,92,Aaron Anderson,LSU,WR15,59,59.0,59.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,96.5,1,"{'DraftTek': None, 'FantasyPros': 92.0}",,,,,,
+182,92,Joshua Josephs,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,96.5,1,"{'DraftTek': 92.0, 'FantasyPros': None}",--,Tennessee,"6'3""",242,SR,147
+183,93,Keon Sabb (Alabama),Keon Sabb (Alabama),S6,61,61.0,61.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,97.0,1,"{'DraftTek': None, 'FantasyPros': 93.0}",,,,,,
+184,93,Logan Jones,,OC,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,97.0,1,"{'DraftTek': 93.0, 'FantasyPros': None}",--,Iowa,"6'3""",299,RSR,57
+185,94,Jaishawn Barham,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,97.5,1,"{'DraftTek': 94.0, 'FantasyPros': None}",--,Michigan,"6'4""",240,SR,92
+186,94,Julian Neal (),Julian Neal (),CB15,70,85.0,77.5,7.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,97.5,1,"{'DraftTek': None, 'FantasyPros': 94.0}",,,,,,
+187,95,Beau Stephens (),Beau Stephens (),IOL4,63,130.0,96.5,33.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,98.0,1,"{'DraftTek': None, 'FantasyPros': 95.0}",,,,,,
+188,95,Deion Burks,,WRS,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,98.0,1,"{'DraftTek': 95.0, 'FantasyPros': None}",--,Oklahoma,"5'10""",180,RSR,254
+189,96,Amare Ferrell (Indiana),Amare Ferrell (Indiana),S7,64,64.0,64.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,98.5,1,"{'DraftTek': None, 'FantasyPros': 96.0}",,,,,,
+190,96,Justin Joly,,TE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,98.5,1,"{'DraftTek': 96.0, 'FantasyPros': None}",--,NC State,"6'3""",241,SR,152
+191,97,Daylen Everette,,CB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,99.0,1,"{'DraftTek': 97.0, 'FantasyPros': None}",--,Georgia,"6'1""",196,SR,85
+192,97,DeMonte Capehart (Clemson),DeMonte Capehart (Clemson),DT6,69,87.0,78.0,9.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,99.0,1,"{'DraftTek': None, 'FantasyPros': 97.0}",,,,,,
+193,98,Chase Bisontis (Texas A&M),Chase Bisontis (Texas A&M),OG5,65,65.0,65.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,99.5,1,"{'DraftTek': None, 'FantasyPros': 98.0}",,,,,,
+194,98,Skyler Bell,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,99.5,1,"{'DraftTek': 98.0, 'FantasyPros': None}",--,Connecticut,"6'0""",192,RSR,125
+195,99,Chandler Rivers,,CBN,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,100.0,1,"{'DraftTek': 99.0, 'FantasyPros': None}",--,Duke,"5'10""",185,SR,162
+196,99,Daylen Everette (Georgia),Daylen Everette (Georgia),CB16,65,105.0,85.0,20.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,100.0,1,"{'DraftTek': None, 'FantasyPros': 99.0}",,,,,,
+197,100,Omar Cooper Jr. (Indiana),Omar Cooper Jr. (Indiana),WR16,67,67.0,67.0,0.0,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,100.5,1,"{'DraftTek': None, 'FantasyPros': 100.0}",,,,,,
