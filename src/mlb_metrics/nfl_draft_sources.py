@@ -6,28 +6,33 @@ reachability from the development environment" caveat as
 prospect_sources.py's own module docstring - see that file for the full
 reasoning, not repeated here.
 
-Real, honest 2026-09-13 note: NFL Mock Draft Database's own real
-"Consensus Big Board" is ITSELF already an aggregation of 100+ other real
-big boards/mock drafts - pulling it as one of two sources here means this
-board is a real "consensus of (a consensus + one more independent
-board)," not two fully independent primary sources. That's a real,
-disclosed methodology choice (matching how the user's own original
-request was framed - aggregating already-published rankings, not
-re-deriving every underlying board from scratch ourselves), not a hidden
-one - the board's own `source_ranked_by`/`source_ranks` output columns
-make this visible rather than presenting it as more independent than it
-is. These pages are also real, JS-heavy sites more likely than
-prospect_sources.py's targets to need real fixes once they actually run
-in CI (a static `pd.read_html` may not see content a browser renders
-client-side) - flagged honestly, not assumed to already work.
+**Real result from the first live CI run (2026-09-13)**: NFL Mock Draft
+Database and FantasyPros both actually got a real 200 OK with real HTML
+back (unlike prospect_sources.py's Baseball America, which hit a real
+403). FantasyPros' failure was the same real pandas 3.x `pd.read_html`
+bug prospect_sources.py's own module docstring documents (point 1) - now
+fixed.
 
-**Real result from the first live CI run (2026-09-13)**: BOTH real
-fetches here actually got a real 200 OK with real HTML back (unlike
-prospect_sources.py's Baseball America, which hit a real 403) - the
-static `pd.read_html` concern above did NOT block them. What DID break
-both was the same real pandas 3.x `pd.read_html` bug prospect_sources.py's
-own module docstring documents (point 1: raw bytes/str must be wrapped in
-a real file-like object) - fixed here the same way."""
+**Real result from the SECOND live CI run (2026-09-14), after that
+fix**: NFL Mock Draft Database returned "No tables found" - a real,
+decisive signal this specific page's ranking data is rendered
+client-side by JavaScript (an SPA), not present in the raw HTML at all.
+No amount of `pd.read_html` parsing logic can reach content that was
+never in the response - this needs a real headless browser to render,
+which is real added infrastructure (this project has no browser-driven
+scraping today), not attempted here. Replaced with DraftTek's real
+"NFL Draft Big Board" instead - an old-style, paginated, plain-HTML
+site (`.asp` URLs, no visible JS framework in its own URL/page-naming
+convention), a real, different bet on scrapability than the JS-heavy
+site it replaces - still genuinely unverified until it actually runs,
+same "ship blind, iterate" posture as every other source here.
+
+FantasyPros' own real page ALSO had a second, separate quirk once the
+`pd.read_html` bug was fixed: its one real ranking table has no `<th>`
+header cells, so pandas parsed it with plain positional integer columns
+(0, 1, 2, ...) and the real header text became row 0 of the DATA -
+`_promote_header_row_if_needed` recovers this specific, confirmed real
+case."""
 
 import datetime
 import io
@@ -58,36 +63,85 @@ def _read_html_tables(content: bytes):
     return pd.read_html(io.StringIO(content.decode("utf-8", errors="replace")))
 
 
-def fetch_nfl_mock_draft_database_consensus(season: int = None) -> pd.DataFrame:
-    """NFL Mock Draft Database's real, published "Consensus Big Board" for
-    `season` (this real calendar year if not given) - a year-templated
-    URL. See module docstring for the "this source is itself already an
-    aggregate" disclosure."""
+_HEADER_LOOKALIKES = {"rank", "player", "name", "rk"}
+
+
+def _promote_header_row_if_needed(table: pd.DataFrame) -> pd.DataFrame:
+    """A real, confirmed pd.read_html quirk (FantasyPros' own real page,
+    2026-09-14 live CI run): a table with no real <th> header cells
+    parses with plain positional integer columns (0, 1, 2, ...) and the
+    page's real header text ends up as row 0 of the DATA instead of
+    becoming the columns. If every column here is a real int (the
+    signal this happened) AND row 0 contains at least one recognizable
+    real header word, promote row 0 to be the real header and drop it
+    from the data - a real, targeted parse recovery, not blind
+    guessing (a table that already has real string columns, or whose
+    row 0 doesn't look like a header, passes through unchanged)."""
+    if table.empty or not all(isinstance(c, int) for c in table.columns):
+        return table
+    first_row = table.iloc[0].astype(str).str.strip().str.lower()
+    if not any(v in _HEADER_LOOKALIKES for v in first_row):
+        return table
+    promoted = table.iloc[1:].reset_index(drop=True)
+    promoted.columns = table.iloc[0].astype(str).str.strip().tolist()
+    return promoted
+
+
+def fetch_drafttek_big_board(season: int = None, pages: int = 1, url: str = None) -> pd.DataFrame:
+    """DraftTek's real, published "NFL Draft Big Board" for `season`
+    (this real calendar year if not given) - an old-style, paginated,
+    plain-HTML site (see module docstring for why this replaced NFL Mock
+    Draft Database, which turned out to be JS-rendered). Real, confirmed
+    URL pattern: `.../Top-NFL-Draft-Prospects-{season}-Page-{n}.asp`,
+    `n` starting at 1 - `pages` controls how many real pages to fetch and
+    concatenate (each real page is ~100 more players; default 1 keeps
+    this a real, cheap single request until a deeper board is confirmed
+    worth the extra real fetches). A real failure on ANY requested page
+    degrades this whole source to whatever earlier pages DID succeed
+    (not all-or-nothing) - a partial real board is still real signal, the
+    same "an honest partial source is still a real source" reasoning
+    prospect_sources.fetch_baseball_america_prospects's own docstring
+    already establishes. `url` overrides the FIRST page's URL only (a
+    real, explicit escape hatch if this real URL pattern ever breaks),
+    matching mlb_draft_sources.fetch_d1baseball_college_draft's own
+    `url`-override precedent."""
     season = datetime.date.today().year if season is None else season
-    url = f"https://www.nflmockdraftdatabase.com/big-boards/{season}/consensus-big-board-{season}"
-    try:
-        import requests
+    base_url = url or f"https://www.drafttek.com/{season}-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-{season}-Page-1.asp"
 
-        response = requests.get(url, timeout=30, headers=_REQUEST_HEADERS)
-        response.raise_for_status()
-        tables = _read_html_tables(response.content)
-    except Exception as exc:
-        print(f"[nfl_draft_sources] NFL Mock Draft Database fetch failed: {exc}")
+    frames = []
+    for page in range(1, pages + 1):
+        page_url = base_url if page == 1 else (
+            f"https://www.drafttek.com/{season}-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-{season}-Page-{page}.asp"
+        )
+        try:
+            import requests
+
+            response = requests.get(page_url, timeout=30, headers=_REQUEST_HEADERS)
+            response.raise_for_status()
+            tables = _read_html_tables(response.content)
+        except Exception as exc:
+            print(f"[nfl_draft_sources] DraftTek page {page} fetch failed: {exc}")
+            continue
+
+        table = _first_table_with_columns(tables, {"Rank", "Name"})
+        if table is None:
+            table = _first_table_with_columns(tables, {"Rk", "Name"})
+        if table is None:
+            print(f"[nfl_draft_sources] DraftTek page {page} had no recognizable ranking table - skipping. "
+                  f"Found {len(tables)} tables with columns: {[list(t.columns) for t in tables]}")
+            continue
+
+        rank_col = "Rank" if "Rank" in table.columns else "Rk"
+        page_result = table.rename(columns={rank_col: "rank", "Name": "player_name"}).copy()
+        page_result["source_url"] = page_url
+        frames.append(page_result)
+
+    if not frames:
         return _empty()
 
-    table = _first_table_with_columns(tables, {"Rank", "Name"})
-    if table is None:
-        table = _first_table_with_columns(tables, {"Rk", "Name"})
-    if table is None:
-        print(f"[nfl_draft_sources] NFL Mock Draft Database page had no recognizable ranking table - skipping. "
-              f"Found {len(tables)} tables with columns: {[list(t.columns) for t in tables]}")
-        return _empty()
-
-    rank_col = "Rank" if "Rank" in table.columns else "Rk"
-    result = table.rename(columns={rank_col: "rank", "Name": "player_name"}).copy()
+    result = pd.concat(frames, ignore_index=True)
     result["rank"] = pd.to_numeric(result["rank"], errors="coerce")
     result = result.dropna(subset=["rank", "player_name"])
-    result["source_url"] = url
     return result
 
 
@@ -102,7 +156,7 @@ def fetch_fantasypros_big_board(url: str = None) -> pd.DataFrame:
 
         response = requests.get(url, timeout=30, headers=_REQUEST_HEADERS)
         response.raise_for_status()
-        tables = _read_html_tables(response.content)
+        tables = [_promote_header_row_if_needed(t) for t in _read_html_tables(response.content)]
     except Exception as exc:
         print(f"[nfl_draft_sources] FantasyPros fetch failed: {exc}")
         return _empty()
@@ -124,7 +178,7 @@ def fetch_fantasypros_big_board(url: str = None) -> pd.DataFrame:
 
 
 SOURCE_FETCHERS = {
-    "NFL Mock Draft Database": fetch_nfl_mock_draft_database_consensus,
+    "DraftTek": fetch_drafttek_big_board,
     "FantasyPros": fetch_fantasypros_big_board,
 }
 
