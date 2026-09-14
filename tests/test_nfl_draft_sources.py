@@ -159,6 +159,48 @@ def test_fetch_fantasypros_big_board_returns_empty_when_table_not_found(monkeypa
     assert result.empty
 
 
+def test_fetch_fantasypros_big_board_normalizes_real_confirmed_rk_player_name_columns(monkeypatch):
+    # Real, confirmed live behavior (2026-09-14 CI run, 3rd trigger):
+    # FantasyPros' real header row reads "RK"/"PLAYER NAME" (all-caps, a
+    # space in the name column) - a real, different spelling than the
+    # friendlier-cased guess this module started with.
+    table = pd.DataFrame([
+        {"RK": 1, "PLAYER NAME": "Fernando Mendoza", "TEAM": "IND", "POS": "QB"},
+        {"RK": 2, "PLAYER NAME": "Jeremiyah Love", "TEAM": "ARI", "POS": "RB"},
+    ])
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    result = nfl_draft_sources.fetch_fantasypros_big_board()
+
+    assert list(result["player_name"]) == ["Fernando Mendoza", "Jeremiyah Love"]
+    assert list(result["rank"]) == [1.0, 2.0]
+
+
+def test_fetch_drafttek_big_board_recovers_a_real_missing_header_row(monkeypatch):
+    # Real, confirmed live behavior (2026-09-14 CI run, 3rd trigger):
+    # DraftTek's real page has the same missing-<th> quirk FantasyPros
+    # had - _promote_header_row_if_needed must apply there too.
+    headerless = pd.DataFrame(
+        [["Rank", "Name"], [1, "Fernando Mendoza"], [2, "Jeremiyah Love"]]
+    )
+    seen_urls = []
+
+    def _get(url, timeout, headers):
+        seen_urls.append(url)
+        return _FakeResponse()
+
+    monkeypatch.setitem(sys.modules, "requests", _fake_requests_module(_get))
+    monkeypatch.setattr(pd, "read_html", lambda content: [headerless])
+
+    result = nfl_draft_sources.fetch_drafttek_big_board(season=2026)
+
+    assert list(result["player_name"]) == ["Fernando Mendoza", "Jeremiyah Love"]
+    assert list(result["rank"]) == [1.0, 2.0]
+
+
 def test_fetch_fantasypros_big_board_recovers_a_real_missing_header_row(monkeypatch):
     # Real, confirmed live behavior (2026-09-14 CI run): FantasyPros' one
     # real ranking table has no <th> cells, so pandas parses it with

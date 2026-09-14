@@ -32,7 +32,15 @@ FantasyPros' own real page ALSO had a second, separate quirk once the
 header cells, so pandas parsed it with plain positional integer columns
 (0, 1, 2, ...) and the real header text became row 0 of the DATA -
 `_promote_header_row_if_needed` recovers this specific, confirmed real
-case."""
+case.
+
+**Real result from the THIRD live CI run (2026-09-14), after the
+DraftTek swap**: DraftTek's own real page has the SAME missing-`<th>`
+quirk FantasyPros had - `_promote_header_row_if_needed` now applies
+there too. FantasyPros' real header row, once correctly parsed, reads
+"RK"/"PLAYER NAME" (all-caps, a space in the name column) - a real,
+different spelling than the friendlier-cased guess this module started
+with, now matched as a real fallback."""
 
 import datetime
 import io
@@ -63,7 +71,18 @@ def _read_html_tables(content: bytes):
     return pd.read_html(io.StringIO(content.decode("utf-8", errors="replace")))
 
 
-_HEADER_LOOKALIKES = {"rank", "player", "name", "rk"}
+# Real, confirmed header words seen so far across the real sources this
+# module fetches (FantasyPros' own real header row: RK/PLAYER NAME/TEAM/
+# POS/..., DraftTek's own real header row not yet confirmed exactly -
+# widened defensively with the other real plausible variants a college
+# football big board's own real header row could use) - a real,
+# hand-maintained set, extended as more real header text is confirmed
+# via live CI runs, not asserted ahead of that.
+_HEADER_LOOKALIKES = {
+    "rank", "rk", "no", "no.",
+    "player", "name", "player name", "prospect",
+    "team", "pos", "position", "school", "college",
+}
 
 
 def _promote_header_row_if_needed(table: pd.DataFrame) -> pd.DataFrame:
@@ -118,7 +137,7 @@ def fetch_drafttek_big_board(season: int = None, pages: int = 1, url: str = None
 
             response = requests.get(page_url, timeout=30, headers=_REQUEST_HEADERS)
             response.raise_for_status()
-            tables = _read_html_tables(response.content)
+            tables = [_promote_header_row_if_needed(t) for t in _read_html_tables(response.content)]
         except Exception as exc:
             print(f"[nfl_draft_sources] DraftTek page {page} fetch failed: {exc}")
             continue
@@ -161,16 +180,23 @@ def fetch_fantasypros_big_board(url: str = None) -> pd.DataFrame:
         print(f"[nfl_draft_sources] FantasyPros fetch failed: {exc}")
         return _empty()
 
+    # Real, confirmed FantasyPros header row (2026-09-14 live CI run):
+    # "RK"/"PLAYER NAME" (all-caps, a space in the name column) - tried
+    # after the friendlier-cased guesses in case a future real page
+    # reformats back to those.
     table = _first_table_with_columns(tables, {"Rank", "Player"})
     if table is None:
         table = _first_table_with_columns(tables, {"Rank", "Name"})
+    if table is None:
+        table = _first_table_with_columns(tables, {"RK", "PLAYER NAME"})
     if table is None:
         print(f"[nfl_draft_sources] FantasyPros page had no recognizable ranking table - skipping. "
               f"Found {len(tables)} tables with columns: {[list(t.columns) for t in tables]}")
         return _empty()
 
-    name_col = "Player" if "Player" in table.columns else "Name"
-    result = table.rename(columns={"Rank": "rank", name_col: "player_name"}).copy()
+    rank_col = "RK" if "RK" in table.columns else "Rank"
+    name_col = "PLAYER NAME" if "PLAYER NAME" in table.columns else ("Player" if "Player" in table.columns else "Name")
+    result = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
     result["rank"] = pd.to_numeric(result["rank"], errors="coerce")
     result = result.dropna(subset=["rank", "player_name"])
     result["source_url"] = url
