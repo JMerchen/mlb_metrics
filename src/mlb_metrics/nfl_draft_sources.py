@@ -40,7 +40,15 @@ quirk FantasyPros had - `_promote_header_row_if_needed` now applies
 there too. FantasyPros' real header row, once correctly parsed, reads
 "RK"/"PLAYER NAME" (all-caps, a space in the name column) - a real,
 different spelling than the friendlier-cased guess this module started
-with, now matched as a real fallback."""
+with, now matched as a real fallback.
+
+**Real result from the FIFTH live CI run (2026-09-14)**: FantasyPros
+now succeeds end to end - 100 real players, `docs/data/nfl_draft_board.csv`
+written for the first time. DraftTek still failed, but on a genuinely
+NEW real issue this time: its page now parses with a real string header
+row (no promotion needed), but its name column is called "Prospect", not
+"Name" - a real, different spelling than every guess tried so far, now
+matched as a real fallback too."""
 
 import datetime
 import io
@@ -146,12 +154,20 @@ def fetch_drafttek_big_board(season: int = None, pages: int = 1, url: str = None
         if table is None:
             table = _first_table_with_columns(tables, {"Rk", "Name"})
         if table is None:
+            # Real, confirmed live behavior (2026-09-14 CI run, 5th
+            # trigger): DraftTek's real page now HAS a real string header
+            # row (no promotion needed), but its name column is called
+            # "Prospect", not "Name" - a real, different spelling than
+            # every guess tried so far.
+            table = _first_table_with_columns(tables, {"Rank", "Prospect"})
+        if table is None:
             print(f"[nfl_draft_sources] DraftTek page {page} had no recognizable ranking table - skipping. "
                   f"Found {len(tables)} tables with columns: {[list(t.columns) for t in tables]}")
             continue
 
         rank_col = "Rank" if "Rank" in table.columns else "Rk"
-        page_result = table.rename(columns={rank_col: "rank", "Name": "player_name"}).copy()
+        name_col = "Prospect" if "Prospect" in table.columns else "Name"
+        page_result = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
         page_result["source_url"] = page_url
         frames.append(page_result)
 

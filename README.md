@@ -5003,17 +5003,43 @@ added):
   JS-rendered, returning zero real `<table>` elements to a static
   fetch), FantasyPros.
 
-**Real findings from the first 3 live CI runs (2026-09-13/14)** - exactly
-the "iterate on failures" plan, now with real evidence: `pd.read_html` on
+**Real findings from 5 live CI runs (2026-09-13/14)** - exactly the
+"iterate on failures" plan, now with real evidence: `pd.read_html` on
 this project's pinned pandas (3.0.x) needs a real file-like object, not
 raw bytes/str (a real 3.x behavior change) - hit in 3 of 6 fetchers plus
-pybaseball's own internals. Baseball America (both pages) and D1Baseball
-return a real, durable `403 Forbidden` even with a full browser-style
-header set - real bot-blocking a header change alone can't clear.
-FantasyPros' one real ranking table has no `<th>` header cells (its real
-header text parses as data instead), recovered by
-`_promote_header_row_if_needed`. MLB.com's own real column is `Player`,
-not `Name`. NFL Mock Draft Database is confirmed JS-rendered (see above).
+pybaseball's own internals. FantasyPros' and (later) DraftTek's real
+ranking tables both had no `<th>` header cells (their real header text
+parsed as data instead), recovered by `_promote_header_row_if_needed`.
+Several real column-name guesses turned out wrong once seen live -
+MLB.com's real name column is `Player` not `Name`, FantasyPros' real
+header row is `RK`/`PLAYER NAME` (all-caps, a space), DraftTek's real
+name column is `Prospect` not `Name` - each fixed as a real fallback
+once confirmed, never asserted ahead of it. NFL Mock Draft Database was
+confirmed JS-rendered (zero real `<table>` elements) and replaced with
+DraftTek entirely (see above).
+
+**Real, current per-board status as of run #5 (2026-09-14)**, honestly:
+- **MLB prospects**: working end to end - MLB Pipeline alone returned 96
+  real players; Baseball America remains 403-blocked (below).
+  `docs/data/prospect_rankings.csv` is real, live data (single-source
+  today, not yet a true multi-source consensus).
+- **NFL draft board**: working end to end - FantasyPros alone returned
+  100 real players; DraftTek's real `Prospect` column-name fix (above)
+  targets getting a genuine second source live next run.
+  `docs/data/nfl_draft_board.csv` is real, live data.
+- **MLB draft board**: still fully blocked. BOTH real sources
+  (Baseball America, D1Baseball) have returned a real, durable
+  `403 Forbidden` on every one of 5 straight live runs, unchanged even
+  after widening the request headers to a full browser-style set - this
+  reads as a genuine bot-management block (e.g. Cloudflare-class),
+  not a header/parsing bug this project's current approach can fix.
+  Clearing it for real would need actual browser-driven rendering
+  (headless Chromium or similar) - real, new infrastructure this
+  project doesn't have today, not attempted here. Until then,
+  `docs/data/mlb_draft_board.csv` is not produced
+  (`board_runner.run_board`'s own "write nothing if every source fails"
+  contract, so no stale/empty file is ever committed in its place).
+
 Full, current per-source status lives in each source module's own
 docstring, updated as real CI evidence comes in - not asserted ahead of
 it.

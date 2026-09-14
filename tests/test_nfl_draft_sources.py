@@ -159,6 +159,25 @@ def test_fetch_fantasypros_big_board_returns_empty_when_table_not_found(monkeypa
     assert result.empty
 
 
+def test_fetch_drafttek_big_board_normalizes_real_confirmed_rank_prospect_columns(monkeypatch):
+    # Real, confirmed live behavior (2026-09-14 CI run, 5th trigger):
+    # DraftTek's real page parses with a real string header row (no
+    # promotion needed this time), but its name column is called
+    # "Prospect", not "Name" - a real, different spelling than every
+    # guess tried so far.
+    table = pd.DataFrame([
+        {"Rank": 1, "CNG": "=", "Prospect": "Fernando Mendoza", "College": "Indiana", "POS": "QB"},
+        {"Rank": 2, "CNG": "=", "Prospect": "Jeremiyah Love", "College": "Notre Dame", "POS": "RB"},
+    ])
+    monkeypatch.setitem(sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse()))
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    result = nfl_draft_sources.fetch_drafttek_big_board(season=2026)
+
+    assert list(result["player_name"]) == ["Fernando Mendoza", "Jeremiyah Love"]
+    assert list(result["rank"]) == [1.0, 2.0]
+
+
 def test_fetch_fantasypros_big_board_normalizes_real_confirmed_rk_player_name_columns(monkeypatch):
     # Real, confirmed live behavior (2026-09-14 CI run, 3rd trigger):
     # FantasyPros' real header row reads "RK"/"PLAYER NAME" (all-caps, a
