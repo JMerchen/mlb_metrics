@@ -20,8 +20,10 @@ class _FakeResponse:
 
 
 def test_fetch_mlb_pipeline_prospects_normalizes_real_shape(monkeypatch):
-    batters = pd.DataFrame([{"Rk": "1", "Name": "Roman Anthony", "Pos": "OF"}])
-    pitchers = pd.DataFrame([{"Rk": "1", "Name": "Andrew Painter", "Pos": "RHP"}])
+    # Real, confirmed column name (2026-09-14 CI run): MLB.com's own real
+    # page uses "Player", not "Name".
+    batters = pd.DataFrame([{"Rk": "1", "Player": "Roman Anthony", "Pos": "OF"}])
+    pitchers = pd.DataFrame([{"Rk": "1", "Player": "Andrew Painter", "Pos": "RHP"}])
     monkeypatch.setitem(
         sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
     )

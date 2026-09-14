@@ -115,13 +115,13 @@ def fetch_mlb_pipeline_prospects() -> pd.DataFrame:
         return _empty()
 
     raw = pd.concat(tables[:2], ignore_index=True)
-    if "Rk" not in raw.columns or "Name" not in raw.columns:
+    if "Rk" not in raw.columns or "Player" not in raw.columns:
         print(f"[prospect_sources] MLB Pipeline returned an unexpected shape - skipping this source. "
               f"Columns found: {list(raw.columns)}")
         return _empty()
     raw = raw.sort_values(by="Rk")
 
-    result = raw.rename(columns={"Rk": "rank", "Name": "player_name"}).copy()
+    result = raw.rename(columns={"Rk": "rank", "Player": "player_name"}).copy()
     result["rank"] = pd.to_numeric(result["rank"], errors="coerce")
     result = result.dropna(subset=["rank", "player_name"])
     result["source_url"] = url

@@ -4987,17 +4987,36 @@ each source first.
 Sources per board today (2 each - a real, live "multiple models talking
 to one another," not a single-source list, even before any more are
 added):
-- MLB prospects: MLB Pipeline (via `pybaseball.top_prospects()`, the
-  lowest-risk fetcher here since pybaseball's own maintainers keep it
-  working against MLB.com), Baseball America.
+- MLB prospects: MLB.com's own "Top Prospects" page (fetched and parsed
+  directly, NOT via pybaseball's `top_prospects()` - that call turned
+  out to hit the same real pandas 3.x `pd.read_html` bug this project's
+  own fetchers had to fix, an external library bug that can't be
+  patched from here), Baseball America.
 - MLB draft board: Baseball America, D1Baseball (whose real URL has
   already shown a numeric revision suffix within one draft class - a
   confirmed fragility, `fetch_d1baseball_college_draft`'s own `url`
   parameter exists specifically so a broken default can be overridden
   without a code change).
-- NFL draft board: NFL Mock Draft Database's own "Consensus Big Board"
-  (itself already an aggregate of 100+ other real big boards/mock
-  drafts - a disclosed, not hidden, methodology choice), FantasyPros.
+- NFL draft board: DraftTek's "NFL Draft Big Board" (an old-style,
+  plain-HTML, paginated site - replaced NFL Mock Draft Database's own
+  "Consensus Big Board" after a live CI run confirmed that page is
+  JS-rendered, returning zero real `<table>` elements to a static
+  fetch), FantasyPros.
+
+**Real findings from the first 3 live CI runs (2026-09-13/14)** - exactly
+the "iterate on failures" plan, now with real evidence: `pd.read_html` on
+this project's pinned pandas (3.0.x) needs a real file-like object, not
+raw bytes/str (a real 3.x behavior change) - hit in 3 of 6 fetchers plus
+pybaseball's own internals. Baseball America (both pages) and D1Baseball
+return a real, durable `403 Forbidden` even with a full browser-style
+header set - real bot-blocking a header change alone can't clear.
+FantasyPros' one real ranking table has no `<th>` header cells (its real
+header text parses as data instead), recovered by
+`_promote_header_row_if_needed`. MLB.com's own real column is `Player`,
+not `Name`. NFL Mock Draft Database is confirmed JS-rendered (see above).
+Full, current per-source status lives in each source module's own
+docstring, updated as real CI evidence comes in - not asserted ahead of
+it.
 
 Runs weekly (`.github/workflows/consensus_rankings_update.yml`) - draft
 boards and organizational prospect rankings move on the order of days-to-
