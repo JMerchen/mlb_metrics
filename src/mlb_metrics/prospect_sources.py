@@ -93,7 +93,24 @@ candidate, `fetch_just_baseball_prospects`, added the same day (a real,
 confirmed, evergreen non-dated URL) for the same reason - more real
 candidate sources raise the odds of ending up with an actual
 multi-source consensus, the same reasoning that already worked for the
-NFL draft board (DraftTek + FantasyPros)."""
+NFL draft board (DraftTek + FantasyPros).
+
+**Real live run result with the corrected URLs (2026-09-15, 2nd
+trigger)**: FanGraphs and Just Baseball BOTH actually reached their
+real ranking tables this time (227 and 101 real embedded tables
+respectively, most of them small per-player scouting-grade widgets, not
+the ranking table itself) - real progress, needing only real parsing
+fixes, not another wrong URL: FanGraphs' real header row is `Rk`/`Name`
+(fixed via a real `{"Rk", "Name"}` fallback); Just Baseball's real `<th>`
+cells carry a visible `"Sort by <field>"` accessibility suffix (e.g.
+real `"Rank Sort by rank"`), recovered via the new
+`_strip_sortable_header_suffix` helper. CBS Sports and Prospects Live
+BOTH still returned "No tables found" even with their real,
+WebSearch-confirmed URLs - a real, more informative signal now that a
+wrong-URL explanation is ruled out: this reads as genuine client-side
+rendering or access-gating on those two specific real pages, not
+pursued further this round (same "an honest partial source set is
+still real signal" posture as every other real gap in this project)."""
 
 import datetime
 import io
@@ -131,6 +148,31 @@ def _first_table_with_columns(tables, required_columns: set) -> pd.DataFrame | N
         if required_columns.issubset(set(table.columns)):
             return table
     return None
+
+
+def _strip_sortable_header_suffix(table: pd.DataFrame) -> pd.DataFrame:
+    """A real, confirmed quirk on Just Baseball's own real ranking table
+    (2026-09-15 live CI run): its real `<th>` cells carry a visible
+    accessibility label appended to the header text, e.g. real
+    `"Rank Sort by rank"` / `"Player Sort by player"` instead of a plain
+    `"Rank"` / `"Player"` - `pd.read_html` parses that whole real string
+    as the column name, so an exact-match column-name check like every
+    other source in this module uses never matches. Strips everything
+    from " Sort by" onward (case-insensitive) on every real column,
+    leaving a table with no such real header text (or one with only
+    integer positional columns) unchanged."""
+    if table.empty:
+        return table
+    new_columns = []
+    for col in table.columns:
+        if isinstance(col, str):
+            idx = col.lower().find(" sort by")
+            new_columns.append(col[:idx] if idx != -1 else col)
+        else:
+            new_columns.append(col)
+    renamed = table.copy()
+    renamed.columns = new_columns
+    return renamed
 
 
 def fetch_mlb_pipeline_prospects() -> pd.DataFrame:
@@ -226,7 +268,12 @@ def fetch_fangraphs_prospects(season: int = None, url: str = None) -> pd.DataFra
     `blogs.fangraphs.com`, not `www.fangraphs.com` - the FIRST real
     guess landed on the wrong subdomain entirely (confirmed via a live
     CI run returning 6 tiny 3-column tables, real nav/footer content,
-    not the actual article)."""
+    not the actual article). Real, confirmed header row (2026-09-15,
+    2nd live CI run with the corrected URL): `Rk`/`Name` - the real
+    article page also embeds ~220 small per-player scouting-grade
+    tables (Hit/Power/Run/Fielding/Throw, pitch-type grades) alongside
+    the one real ranking table, `_first_table_with_columns` picking the
+    first real match out of all of them."""
     season = datetime.date.today().year if season is None else season
     url = url or f"https://blogs.fangraphs.com/{season}-top-100-prospects/"
     try:
@@ -245,11 +292,13 @@ def fetch_fangraphs_prospects(season: int = None, url: str = None) -> pd.DataFra
     if table is None:
         table = _first_table_with_columns(tables, {"#", "Name"})
     if table is None:
+        table = _first_table_with_columns(tables, {"Rk", "Name"})
+    if table is None:
         print(f"[prospect_sources] FanGraphs page had no recognizable ranking table - skipping. "
               f"Found {len(tables)} tables with columns: {[list(t.columns) for t in tables]}")
         return _empty()
 
-    rank_col = "Rank" if "Rank" in table.columns else "#"
+    rank_col = "Rank" if "Rank" in table.columns else ("Rk" if "Rk" in table.columns else "#")
     name_col = "Name" if "Name" in table.columns else "Player"
     result = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
     result["rank"] = pd.to_numeric(result["rank"], errors="coerce")
@@ -351,14 +400,22 @@ def fetch_just_baseball_prospects(url: str = None) -> pd.DataFrame:
     caveat), a real, independent, newer outlet - the same
     "an independent real source is still a real source" reasoning
     `fetch_baseball_america_prospects`'s own docstring already
-    establishes."""
+    establishes. Real, confirmed quirk (2026-09-15 live CI run): this
+    page's real ranking table's real headers carry a
+    "<field> Sort by <field>" accessibility suffix (its real header
+    cells read `"Rank Sort by rank"`, `"Player Sort by player"`, ...) -
+    `_strip_sortable_header_suffix` recovers the real plain field name
+    before matching. The real page also embeds ~100 small per-player
+    scouting-grade widgets alongside the one real ranking table, same
+    "pick the first real match out of many" shape as FanGraphs'
+    own docstring documents above."""
     url = url or "https://www.justbaseball.com/prospects/top-100-mlb-prospects/"
     try:
         import requests
 
         response = requests.get(url, timeout=30, headers=_REQUEST_HEADERS)
         response.raise_for_status()
-        tables = _read_html_tables(response.content)
+        tables = [_strip_sortable_header_suffix(t) for t in _read_html_tables(response.content)]
     except Exception as exc:
         print(f"[prospect_sources] Just Baseball fetch failed: {exc}")
         return _empty()

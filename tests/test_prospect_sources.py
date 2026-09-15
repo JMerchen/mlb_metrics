@@ -187,6 +187,64 @@ def test_fetch_fangraphs_prospects_returns_empty_on_request_failure(monkeypatch)
     assert result.empty
 
 
+def test_fetch_fangraphs_prospects_normalizes_real_confirmed_rk_name_columns(monkeypatch):
+    # Real, confirmed live behavior (2026-09-15 CI run, 2nd trigger
+    # with the corrected blogs.fangraphs.com URL): the real ranking
+    # table's real header row is "Rk"/"Name", not the friendlier-cased
+    # "Rank" guessed first.
+    table = pd.DataFrame([
+        {"Rk": 1, "Name": "Jesus Made", "Team": "MIL"},
+        {"Rk": 2, "Name": "Franklin Arias", "Team": "SEA"},
+    ])
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    result = prospect_sources.fetch_fangraphs_prospects(season=2026)
+
+    assert list(result["player_name"]) == ["Jesus Made", "Franklin Arias"]
+    assert list(result["rank"]) == [1.0, 2.0]
+
+
+def test_strip_sortable_header_suffix_recovers_real_just_baseball_headers():
+    # Real, confirmed live behavior (2026-09-15 CI run): Just Baseball's
+    # real ranking table's real <th> cells carry a visible
+    # "Sort by <field>" accessibility label appended, so pd.read_html
+    # parses the whole real string as the column name.
+    table = pd.DataFrame([
+        {
+            "Rank Sort by rank": 1,
+            "Player Sort by player": "Jesus Made",
+            "Team Sort by team": "MIL",
+            "Level": "AA",
+        }
+    ])
+
+    result = prospect_sources._strip_sortable_header_suffix(table)
+
+    assert list(result.columns) == ["Rank", "Player", "Team", "Level"]
+
+
+def test_fetch_just_baseball_prospects_recovers_real_sort_by_header_suffix(monkeypatch):
+    # Real, confirmed live behavior (2026-09-15 CI run): same real
+    # "Sort by <field>" header quirk, exercised end to end through the
+    # real fetcher.
+    table = pd.DataFrame([
+        {"Rank Sort by rank": 1, "Player Sort by player": "Jesus Made"},
+        {"Rank Sort by rank": 2, "Player Sort by player": "Franklin Arias"},
+    ])
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    result = prospect_sources.fetch_just_baseball_prospects()
+
+    assert list(result["player_name"]) == ["Jesus Made", "Franklin Arias"]
+    assert list(result["rank"]) == [1.0, 2.0]
+
+
 def test_fetch_cbs_sports_prospects_normalizes_rank_player_shape(monkeypatch):
     table = pd.DataFrame([
         {"Rank": 1, "Player": "Roman Anthony"},

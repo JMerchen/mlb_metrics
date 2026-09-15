@@ -5038,19 +5038,24 @@ DraftTek entirely (see above).
   ("multiple models talking to one another"), not a single-source
   passthrough. `docs/data/nfl_draft_board.csv` is real, live,
   multi-source data.
-- **MLB prospects**: as of run #7, still single-source - MLB Pipeline
-  alone returned 96 real players; Baseball America remains
-  403-blocked, same durable-block reasoning as the MLB draft board's
-  own two sources. Real user feedback (2026-09-15) correctly called
-  this out as not a real consensus - 3 more real candidate sources
-  (FanGraphs, CBS Sports, Prospects Live) added the same day, but ALL 3
-  failed on run #7 because every guessed default URL was simply wrong
-  (confirmed via `WebSearch`, not a parsing bug or a bot-block - see
+- **MLB prospects**: as of run #8, still single-source in production,
+  but real progress underneath - MLB Pipeline alone returned 96 real
+  players; Baseball America remains 403-blocked. Real user feedback
+  (2026-09-15) correctly called the single-source state out as not a
+  real consensus - after correcting 3 wrong default URLs (confirmed via
+  `WebSearch`) and adding a 4th candidate (Just Baseball), run #8 showed
+  real progress: FanGraphs and Just Baseball both actually REACHED
+  their real ranking tables this time, failing only on real,
+  now-fixed parsing quirks (FanGraphs' real `Rk`/`Name` header, Just
+  Baseball's real `"Sort by <field>"` header-suffix quirk - see
   `prospect_sources.py`'s own module docstring for the full real
-  finding). All 3 URLs corrected with real, `WebSearch`-confirmed
-  values, plus a 4th new candidate (Just Baseball); whether any of
-  these actually clear live is reported here once the next run confirms
-  it, not asserted ahead of that.
+  finding). CBS Sports and Prospects Live still returned zero real
+  tables even with confirmed-correct URLs - reads as genuine
+  client-side rendering or access-gating on those two specific pages,
+  not pursued further this round. Whether FanGraphs/Just Baseball's
+  real parsing fixes actually turn this into a multi-source board is
+  reported here once the next run confirms it, not asserted ahead of
+  that.
 - **MLB draft board**: still fully blocked. BOTH real sources
   (Baseball America, D1Baseball) have returned a real, durable
   `403 Forbidden` on every one of 5 straight live runs, unchanged even
