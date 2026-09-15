@@ -160,7 +160,22 @@ def _strip_sortable_header_suffix(table: pd.DataFrame) -> pd.DataFrame:
     other source in this module uses never matches. Strips everything
     from " Sort by" onward (case-insensitive) on every real column,
     leaving a table with no such real header text (or one with only
-    integer positional columns) unchanged."""
+    integer positional columns) unchanged.
+
+    Real, confirmed bug this ALSO had to fix (2026-09-15, same live CI
+    run, a real crash, not a hypothetical): the real page's own table
+    had TWO real "Rank"-prefixed columns, already made distinct by
+    pandas' own `.1` dedup suffix (`"Rank Sort by rank"` and
+    `"Rank Sort by rank.1"`) - stripping at " Sort by" collapses BOTH
+    to the identical plain `"Rank"`, silently producing a real
+    DUPLICATE-named column. `table.rename(columns={...})` then renames
+    BOTH to `"rank"`, so `result["rank"]` returns a real DataFrame
+    instead of a Series and `pd.to_numeric` raises `TypeError: arg must
+    be a list, tuple, 1-d array, or Series` - this crashed the entire
+    real script (see `board_runner.run_board`'s own now-added per-source
+    isolation for why one fetcher's bug should never do that again
+    regardless). Re-deduplicating the stripped names here, the same way
+    pandas itself would, keeps the real distinctness intact."""
     if table.empty:
         return table
     new_columns = []
@@ -170,8 +185,17 @@ def _strip_sortable_header_suffix(table: pd.DataFrame) -> pd.DataFrame:
             new_columns.append(col[:idx] if idx != -1 else col)
         else:
             new_columns.append(col)
+    seen = {}
+    deduped_columns = []
+    for name in new_columns:
+        if name not in seen:
+            seen[name] = 0
+            deduped_columns.append(name)
+        else:
+            seen[name] += 1
+            deduped_columns.append(f"{name}.{seen[name]}")
     renamed = table.copy()
-    renamed.columns = new_columns
+    renamed.columns = deduped_columns
     return renamed
 
 

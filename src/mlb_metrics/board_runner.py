@@ -31,11 +31,26 @@ def run_board(source_fetchers: dict, output_path: str, board_name: str, top_n: i
     yesterday's real board rather than overwrite it with an empty file)
     rather than destroying good historical data for one bad run, same
     "don't let one bad day erase real history" posture this project
-    already applies to persisted raw data elsewhere."""
+    already applies to persisted raw data elsewhere.
+
+    Each real fetcher call is individually isolated (a real, confirmed
+    necessary fix, 2026-09-15: a bug INSIDE one fetcher's own
+    post-parsing DataFrame code - not its network/parsing try/except,
+    which already existed - once crashed this entire function with an
+    uncaught exception, taking every OTHER real source down with it for
+    that run; see `prospect_sources.fetch_just_baseball_prospects`'s own
+    docstring for the specific real bug). This mirrors
+    `prospect_sources.fetch_all_sources`'s own already-established
+    per-source isolation contract - one real source's bug, known or
+    not-yet-discovered, should never take the others down."""
     print(f"Fetching real sources for {board_name}...")
     source_rankings = {}
     for name, fetcher in source_fetchers.items():
-        df = fetcher()
+        try:
+            df = fetcher()
+        except Exception as exc:
+            print(f"  {name}: raised unexpectedly ({exc}) - treating as a real failure, not crashing the run")
+            df = pd.DataFrame()
         source_rankings[name] = df
         status = f"{len(df)} real players" if len(df) else "FAILED (see fetch log above)"
         print(f"  {name}: {status}")

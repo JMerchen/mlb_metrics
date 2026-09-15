@@ -226,6 +226,26 @@ def test_strip_sortable_header_suffix_recovers_real_just_baseball_headers():
     assert list(result.columns) == ["Rank", "Player", "Team", "Level"]
 
 
+def test_strip_sortable_header_suffix_rededuplicates_a_real_collapsed_duplicate_rank_column():
+    # Real, confirmed CRASH (2026-09-15 live CI run, exit code 1, took
+    # down the entire script - not a hypothetical): Just Baseball's real
+    # table has TWO real "Rank"-prefixed columns, already made distinct
+    # by pandas' own ".1" dedup suffix ("Rank Sort by rank" and
+    # "Rank Sort by rank.1"). Stripping at " Sort by" collapsed BOTH to
+    # the identical plain "Rank", so table.rename(columns={"Rank": ...})
+    # renamed BOTH to "rank", making result["rank"] a real DataFrame
+    # instead of a Series - pd.to_numeric then raised
+    # "TypeError: arg must be a list, tuple, 1-d array, or Series".
+    table = pd.DataFrame(
+        [[1, 1, "Jesus Made"]],
+        columns=["Rank Sort by rank", "Rank Sort by rank.1", "Player Sort by player"],
+    )
+
+    result = prospect_sources._strip_sortable_header_suffix(table)
+
+    assert list(result.columns) == ["Rank", "Rank.1", "Player"]
+
+
 def test_fetch_just_baseball_prospects_recovers_real_sort_by_header_suffix(monkeypatch):
     # Real, confirmed live behavior (2026-09-15 CI run): same real
     # "Sort by <field>" header quirk, exercised end to end through the
@@ -242,6 +262,29 @@ def test_fetch_just_baseball_prospects_recovers_real_sort_by_header_suffix(monke
     result = prospect_sources.fetch_just_baseball_prospects()
 
     assert list(result["player_name"]) == ["Jesus Made", "Franklin Arias"]
+
+
+def test_fetch_just_baseball_prospects_does_not_crash_on_a_real_duplicate_rank_column(monkeypatch):
+    # Real, confirmed CRASH reproduced end to end through the real
+    # fetcher (2026-09-15 live CI run, exit code 1) - see
+    # test_strip_sortable_header_suffix_rededuplicates_a_real_collapsed_duplicate_rank_column
+    # for the full real root cause.
+    table = pd.DataFrame(
+        [
+            [1, 1, "Jesus Made"],
+            [2, 2, "Franklin Arias"],
+        ],
+        columns=["Rank Sort by rank", "Rank Sort by rank.1", "Player Sort by player"],
+    )
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    result = prospect_sources.fetch_just_baseball_prospects()
+
+    assert list(result["player_name"]) == ["Jesus Made", "Franklin Arias"]
+    assert list(result["rank"]) == [1.0, 2.0]
     assert list(result["rank"]) == [1.0, 2.0]
 
 
