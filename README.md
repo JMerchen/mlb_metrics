@@ -4986,17 +4986,24 @@ each source first.
 
 Sources per board today - a real, live "multiple models talking to one
 another," not a single-source list, even before any more are added:
-- MLB prospects (5 candidate sources): MLB.com's own "Top Prospects"
+- MLB prospects (6 candidate sources): MLB.com's own "Top Prospects"
   page (fetched and parsed directly, NOT via pybaseball's
   `top_prospects()` - that call turned out to hit the same real pandas
   3.x `pd.read_html` bug this project's own fetchers had to fix, an
   external library bug that can't be patched from here), Baseball
-  America, FanGraphs, CBS Sports, Prospects Live. Real, honest note
-  (2026-09-15): after 6 live runs, only MLB Pipeline had actually
-  cleared - a real single-source result the user correctly flagged as
-  not a real consensus. FanGraphs/CBS Sports/Prospects Live added as 3
-  more real candidates specifically to fix that (see the per-board
-  status below for what a live run actually confirms).
+  America, FanGraphs, CBS Sports, Prospects Live, Just Baseball. Real,
+  honest note (2026-09-15): after 6 live runs, only MLB Pipeline had
+  actually cleared - a real single-source result the user correctly
+  flagged as not a real consensus. FanGraphs/CBS Sports/Prospects Live
+  added as 3 more real candidates to fix that, but ALL 3 failed on the
+  very next live run - real, confirmed proof (via `WebSearch`, a tool
+  that reaches the open web through a different path than this
+  project's own blocked `requests`/`WebFetch`) that every one of the 3
+  guessed default URLs was simply wrong, not a parsing bug or a real
+  bot-block. All 3 URLs corrected using real, `WebSearch`-confirmed
+  values, plus a 4th new candidate (Just Baseball) added the same round
+  - see the per-board status below for what the next live run actually
+  confirms.
 - MLB draft board: Baseball America, D1Baseball (whose real URL has
   already shown a numeric revision suffix within one draft class - a
   confirmed fragility, `fetch_d1baseball_college_draft`'s own `url`
@@ -5031,13 +5038,18 @@ DraftTek entirely (see above).
   ("multiple models talking to one another"), not a single-source
   passthrough. `docs/data/nfl_draft_board.csv` is real, live,
   multi-source data.
-- **MLB prospects**: as of run #6, still single-source - MLB Pipeline
+- **MLB prospects**: as of run #7, still single-source - MLB Pipeline
   alone returned 96 real players; Baseball America remains
   403-blocked, same durable-block reasoning as the MLB draft board's
   own two sources. Real user feedback (2026-09-15) correctly called
   this out as not a real consensus - 3 more real candidate sources
-  (FanGraphs, CBS Sports, Prospects Live) added the same day; whether
-  any actually clear live is reported here once the next run confirms
+  (FanGraphs, CBS Sports, Prospects Live) added the same day, but ALL 3
+  failed on run #7 because every guessed default URL was simply wrong
+  (confirmed via `WebSearch`, not a parsing bug or a bot-block - see
+  `prospect_sources.py`'s own module docstring for the full real
+  finding). All 3 URLs corrected with real, `WebSearch`-confirmed
+  values, plus a 4th new candidate (Just Baseball); whether any of
+  these actually clear live is reported here once the next run confirms
   it, not asserted ahead of that.
 - **MLB draft board**: still fully blocked. BOTH real sources
   (Baseball America, D1Baseball) have returned a real, durable

@@ -69,7 +69,31 @@ considered and rejected for that reason - the same real lesson
 Draft Database) - not a guarantee against real 403s or an unexpected
 page shape, but a real, honest bet on plain HTML being reachable at
 all. Real per-source outcome reported here once a live run confirms it,
-not asserted ahead of that."""
+not asserted ahead of that.
+
+**Real live run result (2026-09-15)**: all 3 new candidates FAILED,
+each in a real, different, informative way - FanGraphs found 6 tables
+with only integer columns (landed on the wrong page entirely, not a
+parsing bug), CBS Sports and Prospects Live returned "No tables found"
+(also a wrong-URL symptom, not confirmed JS-rendering like NFL Mock
+Draft Database - a real, important distinction). Root cause confirmed
+via `WebSearch` (a tool that reaches the open web through a different
+path than this project's own `requests` calls or `WebFetch` - BOTH of
+which remain confirmed `EGRESS_BLOCKED` from this dev sandbox, same as
+every prior real attempt - see module docstring's original network
+caveat): every one of the 3 guessed default URLs was simply wrong.
+FanGraphs' real article lives on `blogs.fangraphs.com`, not
+`www.fangraphs.com/prospects/...`; Prospects Live's real content is at
+the site root (`www.prospectslive.com`), not `/rankings`; CBS Sports'
+real page is a dated news-article slug
+(`fantasy-baseball-top-100-prospects-for-{season}`), not an evergreen
+`/rankings/prospects/` path that was guessed. All 3 default URLs
+corrected below using the real, `WebSearch`-confirmed ones. A 4th real
+candidate, `fetch_just_baseball_prospects`, added the same day (a real,
+confirmed, evergreen non-dated URL) for the same reason - more real
+candidate sources raise the odds of ending up with an actual
+multi-source consensus, the same reasoning that already worked for the
+NFL draft board (DraftTek + FantasyPros)."""
 
 import datetime
 import io
@@ -197,14 +221,14 @@ def fetch_fangraphs_prospects(season: int = None, url: str = None) -> pd.DataFra
     documents for NFL Mock Draft Database - `pd.read_html` could never
     reach that page's real data), betting instead on the separate,
     real, old-style written article FanGraphs publishes alongside it
-    each offseason. Real, honest uncertainty: the exact real URL slug
-    for this article has NOT been confirmed live (this project's own
-    dev sandbox has no network access to verify it - see module
-    docstring), so `url` exists as a real, explicit override from the
-    start, not added only after a live failure like
-    `fetch_baseball_america_prospects`'s own precedent."""
+    each offseason. Real, confirmed URL (2026-09-15, via WebSearch,
+    NOT direct fetch - see module docstring's real network caveat):
+    `blogs.fangraphs.com`, not `www.fangraphs.com` - the FIRST real
+    guess landed on the wrong subdomain entirely (confirmed via a live
+    CI run returning 6 tiny 3-column tables, real nav/footer content,
+    not the actual article)."""
     season = datetime.date.today().year if season is None else season
-    url = url or f"https://www.fangraphs.com/prospects/{season}-top-100-prospects/"
+    url = url or f"https://blogs.fangraphs.com/{season}-top-100-prospects/"
     try:
         import requests
 
@@ -234,14 +258,17 @@ def fetch_fangraphs_prospects(season: int = None, url: str = None) -> pd.DataFra
     return result
 
 
-def fetch_cbs_sports_prospects(url: str = None) -> pd.DataFrame:
-    """CBS Sports' real, published fantasy baseball prospect rankings -
-    a stable, non-year-suffixed URL as of this writing (matching
-    `nfl_draft_sources.fetch_fantasypros_big_board`'s own precedent for
-    a similarly-shaped fantasy-content page), exposed as a real override
-    in case that changes. Same real, unverified-from-this-sandbox
-    caveat as `fetch_fangraphs_prospects` above."""
-    url = url or "https://www.cbssports.com/fantasy/baseball/rankings/prospects/"
+def fetch_cbs_sports_prospects(season: int = None, url: str = None) -> pd.DataFrame:
+    """CBS Sports' real, published "Fantasy Baseball: Top 100 prospects
+    for {season}" article - real, confirmed URL (2026-09-15, via
+    WebSearch, NOT direct fetch - see module docstring's real network
+    caveat), a real, honest fragility: this is a dated news-article
+    slug (not a stable evergreen rankings hub), so it WILL need a fresh
+    real URL confirmed most years - `url` exists specifically as that
+    escape hatch, same as `fetch_d1baseball_college_draft`'s own
+    precedent for the same kind of real URL fragility."""
+    season = datetime.date.today().year if season is None else season
+    url = url or f"https://www.cbssports.com/fantasy/baseball/news/fantasy-baseball-top-100-prospects-for-{season}/"
     try:
         import requests
 
@@ -278,9 +305,16 @@ def fetch_prospects_live_rankings(url: str = None) -> pd.DataFrame:
     likely bot-protected) outlets already in this module - the same
     "an independent real source is still a real source" reasoning
     `fetch_baseball_america_prospects`'s own docstring already
-    establishes. Same real, unverified-from-this-sandbox caveat as the
-    other new sources above."""
-    url = url or "https://prospectslive.com/rankings"
+    establishes. Real, confirmed real site root (2026-09-15, via
+    WebSearch, NOT direct fetch - see module docstring's real network
+    caveat): `www.prospectslive.com` - the first real guess (bare
+    `prospectslive.com/rankings`) returned zero real `<table>`
+    elements. Real, honest risk flagged: this outlet's own real
+    write-ups are reportedly member-gated, so this may only ever return
+    a real PARTIAL list rather than the full 100 - same "an honest
+    partial source is still a real source" reasoning as Baseball
+    America's own docstring, not a reason to drop it."""
+    url = url or "https://www.prospectslive.com/"
     try:
         import requests
 
@@ -310,9 +344,48 @@ def fetch_prospects_live_rankings(url: str = None) -> pd.DataFrame:
     return result
 
 
+def fetch_just_baseball_prospects(url: str = None) -> pd.DataFrame:
+    """Just Baseball's real, published "Top 100 MLB Prospects" page - a
+    real, confirmed, evergreen (non-dated) URL (2026-09-15, via
+    WebSearch, NOT direct fetch - see module docstring's real network
+    caveat), a real, independent, newer outlet - the same
+    "an independent real source is still a real source" reasoning
+    `fetch_baseball_america_prospects`'s own docstring already
+    establishes."""
+    url = url or "https://www.justbaseball.com/prospects/top-100-mlb-prospects/"
+    try:
+        import requests
+
+        response = requests.get(url, timeout=30, headers=_REQUEST_HEADERS)
+        response.raise_for_status()
+        tables = _read_html_tables(response.content)
+    except Exception as exc:
+        print(f"[prospect_sources] Just Baseball fetch failed: {exc}")
+        return _empty()
+
+    table = _first_table_with_columns(tables, {"Rank", "Name"})
+    if table is None:
+        table = _first_table_with_columns(tables, {"Rank", "Player"})
+    if table is None:
+        table = _first_table_with_columns(tables, {"#", "Name"})
+    if table is None:
+        print(f"[prospect_sources] Just Baseball page had no recognizable ranking table - skipping. "
+              f"Found {len(tables)} tables with columns: {[list(t.columns) for t in tables]}")
+        return _empty()
+
+    rank_col = "Rank" if "Rank" in table.columns else "#"
+    name_col = "Name" if "Name" in table.columns else "Player"
+    result = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
+    result["rank"] = pd.to_numeric(result["rank"], errors="coerce")
+    result = result.dropna(subset=["rank", "player_name"])
+    result["source_url"] = url
+    return result
+
+
 SOURCE_FETCHERS = {
     "MLB Pipeline": fetch_mlb_pipeline_prospects,
     "Baseball America": fetch_baseball_america_prospects,
+    "Just Baseball": fetch_just_baseball_prospects,
     "FanGraphs": fetch_fangraphs_prospects,
     "CBS Sports": fetch_cbs_sports_prospects,
     "Prospects Live": fetch_prospects_live_rankings,

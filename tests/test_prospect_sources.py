@@ -144,7 +144,7 @@ def test_fetch_fangraphs_prospects_normalizes_rank_name_shape(monkeypatch):
 
     assert list(result["player_name"]) == ["Roman Anthony", "Andrew Painter"]
     assert list(result["rank"]) == [1.0, 2.0]
-    assert (result["source_url"] == "https://www.fangraphs.com/prospects/2026-top-100-prospects/").all()
+    assert (result["source_url"] == "https://blogs.fangraphs.com/2026-top-100-prospects/").all()
 
 
 def test_fetch_fangraphs_prospects_accepts_url_override(monkeypatch):
@@ -197,10 +197,14 @@ def test_fetch_cbs_sports_prospects_normalizes_rank_player_shape(monkeypatch):
     )
     monkeypatch.setattr(pd, "read_html", lambda content: [table])
 
-    result = prospect_sources.fetch_cbs_sports_prospects()
+    result = prospect_sources.fetch_cbs_sports_prospects(season=2026)
 
     assert list(result["player_name"]) == ["Roman Anthony", "Andrew Painter"]
     assert list(result["rank"]) == [1.0, 2.0]
+    assert (
+        result["source_url"]
+        == "https://www.cbssports.com/fantasy/baseball/news/fantasy-baseball-top-100-prospects-for-2026/"
+    ).all()
 
 
 def test_fetch_cbs_sports_prospects_accepts_url_override(monkeypatch):
@@ -257,7 +261,7 @@ def test_fetch_prospects_live_rankings_normalizes_rank_name_shape(monkeypatch):
 
     assert list(result["player_name"]) == ["Roman Anthony", "Andrew Painter"]
     assert list(result["rank"]) == [1.0, 2.0]
-    assert (result["source_url"] == "https://prospectslive.com/rankings").all()
+    assert (result["source_url"] == "https://www.prospectslive.com/").all()
 
 
 def test_fetch_prospects_live_rankings_accepts_url_override(monkeypatch):
@@ -296,6 +300,65 @@ def test_fetch_prospects_live_rankings_returns_empty_on_request_failure(monkeypa
     monkeypatch.setitem(sys.modules, "requests", _fake_requests_module(_raise))
 
     result = prospect_sources.fetch_prospects_live_rankings()
+
+    assert result.empty
+
+
+def test_fetch_just_baseball_prospects_normalizes_rank_name_shape(monkeypatch):
+    table = pd.DataFrame([
+        {"Rank": 1, "Name": "Roman Anthony"},
+        {"Rank": 2, "Name": "Andrew Painter"},
+    ])
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    result = prospect_sources.fetch_just_baseball_prospects()
+
+    assert list(result["player_name"]) == ["Roman Anthony", "Andrew Painter"]
+    assert list(result["rank"]) == [1.0, 2.0]
+    assert (
+        result["source_url"] == "https://www.justbaseball.com/prospects/top-100-mlb-prospects/"
+    ).all()
+
+
+def test_fetch_just_baseball_prospects_accepts_url_override(monkeypatch):
+    table = pd.DataFrame([{"Rank": 1, "Name": "Roman Anthony"}])
+    seen_urls = []
+
+    def _get(url, timeout, headers):
+        seen_urls.append(url)
+        return _FakeResponse()
+
+    monkeypatch.setitem(sys.modules, "requests", _fake_requests_module(_get))
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    override_url = "https://www.justbaseball.com/some-other-real-path/"
+    result = prospect_sources.fetch_just_baseball_prospects(url=override_url)
+
+    assert seen_urls == [override_url]
+    assert (result["source_url"] == override_url).all()
+
+
+def test_fetch_just_baseball_prospects_returns_empty_when_table_not_found(monkeypatch):
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [pd.DataFrame([{"Unrelated": 1}])])
+
+    result = prospect_sources.fetch_just_baseball_prospects()
+
+    assert result.empty
+
+
+def test_fetch_just_baseball_prospects_returns_empty_on_request_failure(monkeypatch):
+    def _raise(url, timeout, headers):
+        raise ConnectionError("real network failure")
+
+    monkeypatch.setitem(sys.modules, "requests", _fake_requests_module(_raise))
+
+    result = prospect_sources.fetch_just_baseball_prospects()
 
     assert result.empty
 
