@@ -130,6 +130,176 @@ def test_fetch_baseball_america_prospects_returns_empty_on_http_error(monkeypatc
     assert result.empty
 
 
+def test_fetch_fangraphs_prospects_normalizes_rank_name_shape(monkeypatch):
+    table = pd.DataFrame([
+        {"Rank": 1, "Name": "Roman Anthony"},
+        {"Rank": 2, "Name": "Andrew Painter"},
+    ])
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    result = prospect_sources.fetch_fangraphs_prospects(season=2026)
+
+    assert list(result["player_name"]) == ["Roman Anthony", "Andrew Painter"]
+    assert list(result["rank"]) == [1.0, 2.0]
+    assert (result["source_url"] == "https://www.fangraphs.com/prospects/2026-top-100-prospects/").all()
+
+
+def test_fetch_fangraphs_prospects_accepts_url_override(monkeypatch):
+    table = pd.DataFrame([{"Rank": 1, "Name": "Roman Anthony"}])
+    seen_urls = []
+
+    def _get(url, timeout, headers):
+        seen_urls.append(url)
+        return _FakeResponse()
+
+    monkeypatch.setitem(sys.modules, "requests", _fake_requests_module(_get))
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    override_url = "https://www.fangraphs.com/some-other-real-path/"
+    result = prospect_sources.fetch_fangraphs_prospects(url=override_url)
+
+    assert seen_urls == [override_url]
+    assert (result["source_url"] == override_url).all()
+
+
+def test_fetch_fangraphs_prospects_returns_empty_when_table_not_found(monkeypatch):
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [pd.DataFrame([{"Unrelated": 1}])])
+
+    result = prospect_sources.fetch_fangraphs_prospects(season=2026)
+
+    assert result.empty
+
+
+def test_fetch_fangraphs_prospects_returns_empty_on_request_failure(monkeypatch):
+    def _raise(url, timeout, headers):
+        raise ConnectionError("real network failure")
+
+    monkeypatch.setitem(sys.modules, "requests", _fake_requests_module(_raise))
+
+    result = prospect_sources.fetch_fangraphs_prospects(season=2026)
+
+    assert result.empty
+
+
+def test_fetch_cbs_sports_prospects_normalizes_rank_player_shape(monkeypatch):
+    table = pd.DataFrame([
+        {"Rank": 1, "Player": "Roman Anthony"},
+        {"Rank": 2, "Player": "Andrew Painter"},
+    ])
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    result = prospect_sources.fetch_cbs_sports_prospects()
+
+    assert list(result["player_name"]) == ["Roman Anthony", "Andrew Painter"]
+    assert list(result["rank"]) == [1.0, 2.0]
+
+
+def test_fetch_cbs_sports_prospects_accepts_url_override(monkeypatch):
+    table = pd.DataFrame([{"Rank": 1, "Player": "Roman Anthony"}])
+    seen_urls = []
+
+    def _get(url, timeout, headers):
+        seen_urls.append(url)
+        return _FakeResponse()
+
+    monkeypatch.setitem(sys.modules, "requests", _fake_requests_module(_get))
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    override_url = "https://www.cbssports.com/some-other-real-path/"
+    result = prospect_sources.fetch_cbs_sports_prospects(url=override_url)
+
+    assert seen_urls == [override_url]
+    assert (result["source_url"] == override_url).all()
+
+
+def test_fetch_cbs_sports_prospects_returns_empty_when_table_not_found(monkeypatch):
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [pd.DataFrame([{"Unrelated": 1}])])
+
+    result = prospect_sources.fetch_cbs_sports_prospects()
+
+    assert result.empty
+
+
+def test_fetch_cbs_sports_prospects_returns_empty_on_request_failure(monkeypatch):
+    def _raise(url, timeout, headers):
+        raise ConnectionError("real network failure")
+
+    monkeypatch.setitem(sys.modules, "requests", _fake_requests_module(_raise))
+
+    result = prospect_sources.fetch_cbs_sports_prospects()
+
+    assert result.empty
+
+
+def test_fetch_prospects_live_rankings_normalizes_rank_name_shape(monkeypatch):
+    table = pd.DataFrame([
+        {"Rank": 1, "Name": "Roman Anthony"},
+        {"Rank": 2, "Name": "Andrew Painter"},
+    ])
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    result = prospect_sources.fetch_prospects_live_rankings()
+
+    assert list(result["player_name"]) == ["Roman Anthony", "Andrew Painter"]
+    assert list(result["rank"]) == [1.0, 2.0]
+    assert (result["source_url"] == "https://prospectslive.com/rankings").all()
+
+
+def test_fetch_prospects_live_rankings_accepts_url_override(monkeypatch):
+    table = pd.DataFrame([{"Rank": 1, "Name": "Roman Anthony"}])
+    seen_urls = []
+
+    def _get(url, timeout, headers):
+        seen_urls.append(url)
+        return _FakeResponse()
+
+    monkeypatch.setitem(sys.modules, "requests", _fake_requests_module(_get))
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    override_url = "https://prospectslive.com/some-other-real-path"
+    result = prospect_sources.fetch_prospects_live_rankings(url=override_url)
+
+    assert seen_urls == [override_url]
+    assert (result["source_url"] == override_url).all()
+
+
+def test_fetch_prospects_live_rankings_returns_empty_when_table_not_found(monkeypatch):
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [pd.DataFrame([{"Unrelated": 1}])])
+
+    result = prospect_sources.fetch_prospects_live_rankings()
+
+    assert result.empty
+
+
+def test_fetch_prospects_live_rankings_returns_empty_on_request_failure(monkeypatch):
+    def _raise(url, timeout, headers):
+        raise ConnectionError("real network failure")
+
+    monkeypatch.setitem(sys.modules, "requests", _fake_requests_module(_raise))
+
+    result = prospect_sources.fetch_prospects_live_rankings()
+
+    assert result.empty
+
+
 def test_read_html_tables_handles_a_real_raw_html_bytes_response():
     # Real, confirmed bug (2026-09-13 CI run): pd.read_html on this
     # project's pinned pandas raises FileNotFoundError when given raw
