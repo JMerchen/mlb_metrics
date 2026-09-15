@@ -48,7 +48,28 @@ hypothesis:
    `fetch_mlb_pipeline_prospects` now fetches and parses MLB.com's same
    real page itself (same URL, same real "both batters and pitchers,
    sorted by rank" shape pybaseball's own source documents), with the
-   StringIO fix applied."""
+   StringIO fix applied.
+
+**Real user feedback (2026-09-15), after 6 live CI runs**: with Baseball
+America durably 403-blocked, this board had settled at ONE working
+source (MLB Pipeline) - a real single-source passthrough, not an actual
+consensus, which the user correctly called out as "not worth it" for a
+feature whose whole point is blending multiple real outlets. Three more
+real candidates added below (`fetch_fangraphs_prospects`,
+`fetch_cbs_sports_prospects`, `fetch_prospects_live_rankings`) - same
+"ship blind, iterate on failures" posture as every source in this
+project so far, each with a `url` override for when a guessed real URL
+pattern turns out wrong (the same escape hatch
+`fetch_baseball_america_prospects`/`nfl_draft_sources.fetch_drafttek_big_board`
+already use). Picked deliberately as real, separate old-style
+server-rendered article/table pages rather than JS-heavy interactive
+tools (FanGraphs' own "The Board" is a known React SPA and was
+considered and rejected for that reason - the same real lesson
+`nfl_draft_sources.py`'s own docstring already documents for NFL Mock
+Draft Database) - not a guarantee against real 403s or an unexpected
+page shape, but a real, honest bet on plain HTML being reachable at
+all. Real per-source outcome reported here once a live run confirms it,
+not asserted ahead of that."""
 
 import datetime
 import io
@@ -168,9 +189,133 @@ def fetch_baseball_america_prospects(season: int = None) -> pd.DataFrame:
     return result
 
 
+def fetch_fangraphs_prospects(season: int = None, url: str = None) -> pd.DataFrame:
+    """FanGraphs' real, published written "Top 100 Prospects" article for
+    `season` (this real calendar year if not given) - deliberately NOT
+    FanGraphs' own "The Board" tool (a known React SPA, the same
+    JS-rendered-content problem `nfl_draft_sources.py`'s own docstring
+    documents for NFL Mock Draft Database - `pd.read_html` could never
+    reach that page's real data), betting instead on the separate,
+    real, old-style written article FanGraphs publishes alongside it
+    each offseason. Real, honest uncertainty: the exact real URL slug
+    for this article has NOT been confirmed live (this project's own
+    dev sandbox has no network access to verify it - see module
+    docstring), so `url` exists as a real, explicit override from the
+    start, not added only after a live failure like
+    `fetch_baseball_america_prospects`'s own precedent."""
+    season = datetime.date.today().year if season is None else season
+    url = url or f"https://www.fangraphs.com/prospects/{season}-top-100-prospects/"
+    try:
+        import requests
+
+        response = requests.get(url, timeout=30, headers=_REQUEST_HEADERS)
+        response.raise_for_status()
+        tables = _read_html_tables(response.content)
+    except Exception as exc:
+        print(f"[prospect_sources] FanGraphs fetch failed: {exc}")
+        return _empty()
+
+    table = _first_table_with_columns(tables, {"Rank", "Name"})
+    if table is None:
+        table = _first_table_with_columns(tables, {"Rank", "Player"})
+    if table is None:
+        table = _first_table_with_columns(tables, {"#", "Name"})
+    if table is None:
+        print(f"[prospect_sources] FanGraphs page had no recognizable ranking table - skipping. "
+              f"Found {len(tables)} tables with columns: {[list(t.columns) for t in tables]}")
+        return _empty()
+
+    rank_col = "Rank" if "Rank" in table.columns else "#"
+    name_col = "Name" if "Name" in table.columns else "Player"
+    result = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
+    result["rank"] = pd.to_numeric(result["rank"], errors="coerce")
+    result = result.dropna(subset=["rank", "player_name"])
+    result["source_url"] = url
+    return result
+
+
+def fetch_cbs_sports_prospects(url: str = None) -> pd.DataFrame:
+    """CBS Sports' real, published fantasy baseball prospect rankings -
+    a stable, non-year-suffixed URL as of this writing (matching
+    `nfl_draft_sources.fetch_fantasypros_big_board`'s own precedent for
+    a similarly-shaped fantasy-content page), exposed as a real override
+    in case that changes. Same real, unverified-from-this-sandbox
+    caveat as `fetch_fangraphs_prospects` above."""
+    url = url or "https://www.cbssports.com/fantasy/baseball/rankings/prospects/"
+    try:
+        import requests
+
+        response = requests.get(url, timeout=30, headers=_REQUEST_HEADERS)
+        response.raise_for_status()
+        tables = _read_html_tables(response.content)
+    except Exception as exc:
+        print(f"[prospect_sources] CBS Sports fetch failed: {exc}")
+        return _empty()
+
+    table = _first_table_with_columns(tables, {"Rank", "Player"})
+    if table is None:
+        table = _first_table_with_columns(tables, {"Rank", "Name"})
+    if table is None:
+        table = _first_table_with_columns(tables, {"RK", "Player"})
+    if table is None:
+        print(f"[prospect_sources] CBS Sports page had no recognizable ranking table - skipping. "
+              f"Found {len(tables)} tables with columns: {[list(t.columns) for t in tables]}")
+        return _empty()
+
+    rank_col = "RK" if "RK" in table.columns else "Rank"
+    name_col = "Player" if "Player" in table.columns else "Name"
+    result = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
+    result["rank"] = pd.to_numeric(result["rank"], errors="coerce")
+    result = result.dropna(subset=["rank", "player_name"])
+    result["source_url"] = url
+    return result
+
+
+def fetch_prospects_live_rankings(url: str = None) -> pd.DataFrame:
+    """Prospects Live's real, published Top 100 rankings - a smaller,
+    dedicated prospect-coverage outlet, deliberately picked as a real,
+    separate voice from the bigger, more heavily-trafficked (and more
+    likely bot-protected) outlets already in this module - the same
+    "an independent real source is still a real source" reasoning
+    `fetch_baseball_america_prospects`'s own docstring already
+    establishes. Same real, unverified-from-this-sandbox caveat as the
+    other new sources above."""
+    url = url or "https://prospectslive.com/rankings"
+    try:
+        import requests
+
+        response = requests.get(url, timeout=30, headers=_REQUEST_HEADERS)
+        response.raise_for_status()
+        tables = _read_html_tables(response.content)
+    except Exception as exc:
+        print(f"[prospect_sources] Prospects Live fetch failed: {exc}")
+        return _empty()
+
+    table = _first_table_with_columns(tables, {"Rank", "Name"})
+    if table is None:
+        table = _first_table_with_columns(tables, {"Rank", "Player"})
+    if table is None:
+        table = _first_table_with_columns(tables, {"#", "Name"})
+    if table is None:
+        print(f"[prospect_sources] Prospects Live page had no recognizable ranking table - skipping. "
+              f"Found {len(tables)} tables with columns: {[list(t.columns) for t in tables]}")
+        return _empty()
+
+    rank_col = "Rank" if "Rank" in table.columns else "#"
+    name_col = "Name" if "Name" in table.columns else "Player"
+    result = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
+    result["rank"] = pd.to_numeric(result["rank"], errors="coerce")
+    result = result.dropna(subset=["rank", "player_name"])
+    result["source_url"] = url
+    return result
+
+
 SOURCE_FETCHERS = {
     "MLB Pipeline": fetch_mlb_pipeline_prospects,
     "Baseball America": fetch_baseball_america_prospects,
+    "FanGraphs": fetch_fangraphs_prospects,
+    "CBS Sports": fetch_cbs_sports_prospects,
+    "Prospects Live": fetch_prospects_live_rankings,
 }
 
 
