@@ -5038,35 +5038,30 @@ DraftTek entirely (see above).
   ("multiple models talking to one another"), not a single-source
   passthrough. `docs/data/nfl_draft_board.csv` is real, live,
   multi-source data.
-- **MLB prospects**: as of run #8, still single-source in production,
-  but real progress underneath - MLB Pipeline alone returned 96 real
-  players; Baseball America remains 403-blocked. Real user feedback
-  (2026-09-15) correctly called the single-source state out as not a
-  real consensus - after correcting 3 wrong default URLs (confirmed via
-  `WebSearch`) and adding a 4th candidate (Just Baseball), run #8 showed
-  real progress: FanGraphs and Just Baseball both actually REACHED
-  their real ranking tables this time, failing only on real,
-  now-fixed parsing quirks (FanGraphs' real `Rk`/`Name` header, Just
-  Baseball's real `"Sort by <field>"` header-suffix quirk - see
-  `prospect_sources.py`'s own module docstring for the full real
-  finding). CBS Sports and Prospects Live still returned zero real
-  tables even with confirmed-correct URLs - reads as genuine
-  client-side rendering or access-gating on those two specific pages,
-  not pursued further this round. Real result on run #9 (with those
-  parsing fixes live): a real regression, not progress - a bug INSIDE
-  `_strip_sortable_header_suffix` (stripping collapsed pandas' own real
-  `.1` dedup suffix, producing a real duplicate-named "Rank" column)
-  crashed `fetch_just_baseball_prospects` with an uncaught
-  `TypeError`, and because `board_runner.run_board` called each
-  fetcher with no per-source try/except of its own, that ONE bug took
-  down the ENTIRE MLB Prospect Rankings run - `prospect_rankings.csv`
-  was not updated at all that day, worse than the prior single-source
-  state. Both the real root cause (the dedup bug) and the real
-  structural gap that let it cascade (`run_board` now isolates every
-  fetcher call the same way `prospect_sources.fetch_all_sources`
-  already did) are fixed; whether FanGraphs/Just Baseball actually turn
-  this into a multi-source board is reported here once the next run
-  confirms it, not asserted ahead of that.
+- **MLB prospects**: as of run #10 (2026-09-15), a genuine, real
+  multi-source consensus - **173 real players ranked by 3 of 6 real
+  sources** (MLB Pipeline: 96 players, Just Baseball: 100, FanGraphs:
+  110). This directly answers real, direct user feedback the same day
+  that a single-source board ("only MLB Pipeline") wasn't a real
+  consensus and "we need many more" real sources - it took 3 more live
+  CI round-trips to get there: run #7 found all 3 originally-guessed
+  URLs (FanGraphs, CBS Sports, Prospects Live) were simply wrong (fixed
+  via real `WebSearch`-confirmed URLs, plus a 4th candidate, Just
+  Baseball, added the same round); run #8 found FanGraphs and Just
+  Baseball both reached their real pages but failed on real header-
+  parsing quirks (fixed); run #9's fix for one of those quirks
+  introduced a real regression - a duplicate-column bug that crashed
+  the ENTIRE script, not just that one source, exposing a real,
+  separate structural gap (`board_runner.run_board` had no per-source
+  isolation, unlike `prospect_sources.fetch_all_sources`) - both fixed
+  together. Baseball America remains 403-blocked; CBS Sports and
+  Prospects Live both consistently return zero real `<table>` elements
+  even with confirmed-correct URLs - reads as genuine client-side
+  rendering or access-gating on those two specific pages, not pursued
+  further (would need real browser-driven rendering, new
+  infrastructure this project doesn't have). Full real history of every
+  round's findings lives in `prospect_sources.py`'s own module
+  docstring.
 - **MLB draft board**: still fully blocked. BOTH real sources
   (Baseball America, D1Baseball) have returned a real, durable
   `403 Forbidden` on every one of 5 straight live runs, unchanged even
