@@ -5052,10 +5052,21 @@ DraftTek entirely (see above).
   finding). CBS Sports and Prospects Live still returned zero real
   tables even with confirmed-correct URLs - reads as genuine
   client-side rendering or access-gating on those two specific pages,
-  not pursued further this round. Whether FanGraphs/Just Baseball's
-  real parsing fixes actually turn this into a multi-source board is
-  reported here once the next run confirms it, not asserted ahead of
-  that.
+  not pursued further this round. Real result on run #9 (with those
+  parsing fixes live): a real regression, not progress - a bug INSIDE
+  `_strip_sortable_header_suffix` (stripping collapsed pandas' own real
+  `.1` dedup suffix, producing a real duplicate-named "Rank" column)
+  crashed `fetch_just_baseball_prospects` with an uncaught
+  `TypeError`, and because `board_runner.run_board` called each
+  fetcher with no per-source try/except of its own, that ONE bug took
+  down the ENTIRE MLB Prospect Rankings run - `prospect_rankings.csv`
+  was not updated at all that day, worse than the prior single-source
+  state. Both the real root cause (the dedup bug) and the real
+  structural gap that let it cascade (`run_board` now isolates every
+  fetcher call the same way `prospect_sources.fetch_all_sources`
+  already did) are fixed; whether FanGraphs/Just Baseball actually turn
+  this into a multi-source board is reported here once the next run
+  confirms it, not asserted ahead of that.
 - **MLB draft board**: still fully blocked. BOTH real sources
   (Baseball America, D1Baseball) have returned a real, durable
   `403 Forbidden` on every one of 5 straight live runs, unchanged even

@@ -48,3 +48,22 @@ def test_run_board_writes_nothing_when_every_source_fails(tmp_path):
     # The prior real file is left untouched - a real, honest degrade, not
     # an empty file overwriting good history.
     assert output_path.read_text() == "stale,previous,data\n1,2,3\n"
+
+
+def test_run_board_isolates_one_fetchers_unexpected_exception_from_the_others(tmp_path):
+    # Real, confirmed necessary fix (2026-09-15 live CI run): a bug
+    # INSIDE one fetcher's own post-parsing code (not its own
+    # network/parsing try/except) once crashed this entire function,
+    # taking every other real source down with it for that run.
+    def _broken():
+        raise TypeError("arg must be a list, tuple, 1-d array, or Series")
+
+    fetchers = {
+        "Working": lambda: pd.DataFrame([{"rank": 1, "player_name": "Alice"}]),
+        "Broken": _broken,
+    }
+    output_path = str(tmp_path / "board.csv")
+
+    result = board_runner.run_board(fetchers, output_path, "Test Board")
+
+    assert list(result["player_name"]) == ["Alice"]
