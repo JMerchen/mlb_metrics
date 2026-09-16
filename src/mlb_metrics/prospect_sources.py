@@ -620,6 +620,30 @@ def fetch_tjstats_prospects(url: str = None) -> pd.DataFrame:
     return result
 
 
+def filter_undebuted(df: pd.DataFrame) -> pd.DataFrame:
+    """Drops any real row whose `highest_level` reads "MLB" - a real,
+    necessary fix (2026-09-16 user report: "MLB prospects are meant to
+    be those undebuted, but some have already reached the majors").
+
+    This board's own real, stated scope, since its very first commit
+    (see this module's own docstring and `scripts/run_prospect_rankings.py`'s
+    own docstring): minor leaguers already in an MLB org who have NOT
+    yet debuted. Several real sources' own `highest_level`/`Level` field
+    (MLB Pipeline's own season stat line in particular, which reflects
+    wherever a player has actually played that season) shows "MLB" for a
+    player who got a real midseason call-up before that source's own
+    list caught up and removed them - confirmed live (2026-09-16, this
+    project's own committed `docs/data/prospect_rankings.csv`): 31 of
+    173 real rows had `highest_level == "MLB"`. A row with no real
+    `highest_level` value at all (a source that doesn't publish one) is
+    KEPT - an unknown level is not evidence of having debuted, and
+    dropping it would be a false positive, not a real fix."""
+    if "highest_level" not in df.columns:
+        return df
+    already_debuted = df["highest_level"].astype(str).str.strip().str.upper() == "MLB"
+    return df[~already_debuted].copy()
+
+
 SOURCE_FETCHERS = {
     "MLB Pipeline": fetch_mlb_pipeline_prospects,
     "Baseball America": fetch_baseball_america_prospects,

@@ -23,10 +23,24 @@ import pandas as pd
 from mlb_metrics import board_runner, prospect_sources
 
 
+def _undebuted_only(fetcher):
+    """Wraps a real source fetcher so its own output is filtered to this
+    board's own real, stated scope (not-yet-debuted minor leaguers) -
+    see prospect_sources.filter_undebuted's own docstring for why this
+    lives here rather than inside each fetcher: it's this SCRIPT's own
+    real business rule (the MLB draft/NFL draft boards, which reuse the
+    exact same fetcher/board_runner shape, have no such rule), not a
+    property of how any one source's own page is scraped/normalized."""
+    def wrapped():
+        return prospect_sources.filter_undebuted(fetcher())
+    return wrapped
+
+
 def main():
     output_path = os.path.join(os.path.dirname(__file__), "..", "docs", "data", "prospect_rankings.csv")
+    fetchers = {name: _undebuted_only(fetcher) for name, fetcher in prospect_sources.SOURCE_FETCHERS.items()}
     consensus = board_runner.run_board(
-        prospect_sources.SOURCE_FETCHERS, output_path, "MLB Prospect Rankings", top_n=100
+        fetchers, output_path, "MLB Prospect Rankings", top_n=100
     )
     if not consensus.empty:
         pd.set_option("display.width", 200)
