@@ -72,6 +72,7 @@ btn.classList.toggle("active", btn.dataset.nflTab === tab)
 document.getElementById("preseasonSection").style.display = tab === "preseason" ? "" : "none"
 document.getElementById("gamePicksSection").style.display = tab === "gamepicks" ? "" : "none"
 document.getElementById("draftBoardSection").style.display = tab === "draftboard" ? "" : "none"
+document.getElementById("playerPropsSection").style.display = tab === "playerprops" ? "" : "none"
 }
 
 function selectBestballPosition(position){
@@ -664,8 +665,27 @@ buildConsensusTable([], "nflDraftBoardTable")
 }
 }
 
+// Real, matchup-based player prop rankings - rendering logic
+// (formatPlayerPropsValue/buildPlayerPropsTable) lives in
+// docs/player_props.js (loaded via its own script tag before this
+// file - see that file's own comment for why), a different real shape
+// from a consensus board's own "multiple sources agree on one rank"
+// output, so it isn't forced through consensus_board.js's
+// buildConsensusTable.
+async function loadNflPlayerProps(){
+try{
+const props = await loadCSV("./data/nfl_player_props.csv")
+buildPlayerPropsTable(props, "nflPlayerPropsTable")
+}catch(e){
+console.log("no nfl_player_props.csv yet", e)
+buildPlayerPropsTable([], "nflPlayerPropsTable")
+}
+}
+
 loadAll()
 
 loadNflGamePicks()
 
 loadNflDraftBoard()
+
+loadNflPlayerProps()

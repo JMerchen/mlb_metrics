@@ -211,8 +211,10 @@ PAGE_JS_PATCHERS = {
 # loadNflDraftBoard() call runs - each file gets its own <script> tag
 # (see page_scripts below), so script EXECUTION order follows list
 # order even though each file's own top-level `function` declarations
-# stay scoped to that file's own tag.
-VERBATIM_JS = ["dfs_solver.js", "nfl_draft_assistant.js", "consensus_board.js"]
+# stay scoped to that file's own tag. player_props.js is the same real
+# shape for nfl.js's own Player Props tab (formatPlayerPropsValue/
+# buildPlayerPropsTable) - real, direct user request (2026-09-16).
+VERBATIM_JS = ["dfs_solver.js", "nfl_draft_assistant.js", "consensus_board.js", "player_props.js"]
 
 
 REAL_SITE_ONLY_NAV_MARKERS = (

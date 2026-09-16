@@ -37,11 +37,15 @@ _RATIO_CATEGORIES = {
 
 
 def compute_opponent_adjustment_ratio(
-    opponent_rate: pd.Series, league_rate: float | pd.Series, weight: float
+    opponent_rate: pd.Series, league_rate: float | pd.Series, weight: float, clip: tuple = None
 ) -> pd.Series:
     """Ratio of an opponent defense's real allowed-rate to the league
     average, blended toward a neutral 1.0 by `weight` (0 = fully off, 1 =
-    the full unblended ratio), clipped to config.NFL_MATCHUP_OFFENSE_CLIP.
+    the full unblended ratio), clipped to `clip` (config.NFL_MATCHUP_OFFENSE_CLIP
+    if not given - this function's own original, still-default real use
+    case; nfl_player_props.py passes its own, deliberately wider
+    config.NFL_PROP_MATCHUP_CLIP instead - see that constant's own
+    docstring for why the two real use cases need different clips).
     weight=0.0 returns EXACTLY 1.0 for every row regardless of
     `opponent_rate` - the built-in null hypothesis that reproduces
     today's unadjusted projection, not just an approximation of it.
@@ -49,13 +53,14 @@ def compute_opponent_adjustment_ratio(
     passes a per-row Series, since each backtest date has its OWN
     no-lookahead league average, not one shared across the whole sample
     (same convention as pitcher_matchup.compute_opponent_offense_ratio)."""
+    clip = config.NFL_MATCHUP_OFFENSE_CLIP if clip is None else clip
     raw_ratio = opponent_rate / league_rate
     blended = 1 + weight * (raw_ratio - 1)
-    lo, hi = config.NFL_MATCHUP_OFFENSE_CLIP
+    lo, hi = clip
     return blended.clip(lo, hi)
 
 
-def _team_opponents(current_week_schedule_df: pd.DataFrame) -> pd.DataFrame:
+def team_opponents(current_week_schedule_df: pd.DataFrame) -> pd.DataFrame:
     """One row per team playing in `current_week_schedule_df`: [team,
     opponent]. Both home and away sides are exploded so every playing
     team gets its real upcoming opponent - the ONLY source of "opponent"
@@ -82,7 +87,7 @@ def attach_matchup_adjustment(
     or a stale/partial rates table) falls back to the league average
     rate - a neutral ratio, not a dropped row, same fallback philosophy
     as pitcher_matchup.attach_opponent_offense."""
-    opponents = _team_opponents(current_week_schedule_df)
+    opponents = team_opponents(current_week_schedule_df)
     merged = players_df.merge(opponents, on="team", how="left")
 
     defense_by_opponent = defense_rates_df.rename(columns={"team": "opponent"})

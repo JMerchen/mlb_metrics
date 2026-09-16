@@ -5084,6 +5084,91 @@ boards and organizational prospect rankings move on the order of days-to-
 weeks, not hours, so a daily rerun would spend real, shared Actions
 minutes for no real new signal most days.
 
+## NFL Player Props (`nfl_player_props.py`)
+
+Real, direct user request (2026-09-16): "Puka Nacua was targeted in
+almost half of his routes run in week 1, so if he goes against a
+defense that's weak against the pass, he'd be a good target to choose
+the over on receptions... I'd like a list of the top ten bets based on
+matchup." User-confirmed scope (via AskUserQuestion): rank real player
+props by matchup quality alone - no real sportsbook prop line to
+compare against, so these are real "good spots to look," not a priced
++EV pick.
+
+**5 real categories**: Receptions, Receiving Yards, Rushing Yards,
+Passing Yards, Sacks. For each, a player's own real recent per-game
+rate (`nfl_rush_rec.compute_skill_rolling_stats`/
+`nfl_passing.compute_qb_rolling_stats`, reused directly - no
+duplicated rolling-stat logic) is compared against their real upcoming
+opponent's real allowed-rate at that same stat
+(`nfl_teams.compute_defense_rolling_rates`) relative to the real league
+average, via `nfl_matchup.compute_opponent_adjustment_ratio` (the same
+real ratio machinery `nfl_matchup.py` already built for DFS - see that
+module's own docstring - reused here for a genuinely different real use
+case, with its own separate, wider `config.NFL_PROP_MATCHUP_CLIP`/
+`NFL_PROP_MATCHUP_WEIGHT`, not the DFS-tuned
+`NFL_MATCHUP_OFFENSE_CLIP`/`NFL_MATCHUP_WEIGHT`, since a narrow DK-
+projection-damping clip would flatten every real matchup into a
+near-identical ratio here). Sacks is a genuinely new real category this
+feature adds (a pass-RUSHER prop, not a skill-player one) -
+`compute_pass_rush_rolling_stats`/`compute_sacks_allowed_rolling_rates`,
+sourced from real, confirmed nflreadpy weekly-stats columns (`def_sacks`
+for an individual defender's own real sacks, `sacks_suffered` for a
+team's own real sacks-allowed-while-on-offense).
+
+**Real backtest validation** (`scripts/backtest_nfl_player_props.py`,
+all 10 real cached seasons 2016-2025): does a more favorable real
+matchup ratio actually correlate with a player REAL-ly beating their
+own trailing average that week? Confirmed yes, for all 5 real
+categories, both by a real rank-based check (the top real matchup-
+tercile beat its own baseline more often than the bottom tercile:
+Receptions +1.2pp, Receiving Yards +2.2pp, Rushing Yards +1.0pp,
+Passing Yards +9.3pp - the real strongest signal, Sacks +3.2pp) and by
+a real, scale-sensitive correlation check used to pick the shipped
+`NFL_PROP_MATCHUP_WEIGHT`/`NFL_PROP_MATCHUP_CLIP` (1.0 and (0.8, 1.2) -
+see `config.py`'s own comment block for the full real numbers and the
+real trade-off that choice makes for Rushing Yards, the weakest of the
+5 signals). Rushing Yards' comparatively weak real signal makes sense -
+real rush production leans more on scheme/workload than defense-
+specific variance the way passing does.
+
+**Top 10 ranking is a real, within-category percentile rank, not raw
+`abs(ratio - 1)`** - a real, confirmed necessary fix: Sacks' own real
+allowed-rate is a far noisier per-game counting stat than receiving/
+rushing/passing yardage, so its raw ratio swings much further from 1.0
+for an equally "unusual" real matchup, letting Sacks alone crowd out
+every other real category's top matchups under a naive raw-magnitude
+ranking (confirmed live on a real 2025 week-10 slate). Percentile rank
+within each category (`pandas.Series.rank(pct=True)`) is bounded [0, 1]
+regardless of a category's own real distribution shape, so "how far
+into today's real slate's own tail does this matchup fall, for players
+in this category" is genuinely comparable across categories.
+`config.NFL_PROP_MIN_GAMES`/`NFL_PROP_MIN_USAGE` gate out real
+low-sample/low-usage cameos before ranking (a real one-catch-a-game
+player can never crowd out a real starter just because a tiny sample
+let a stray ratio run hot).
+
+Real, honest scope limits: this ranks by matchup quality only, with no
+real sportsbook line to weigh it against - a favorable real matchup is
+not automatically a positive-expected-value bet at any real price.
+`Sacks`/passing-yards props are TEAM-level defense signals (an
+individual pass rusher's own real recent sack rate, an individual QB's
+own real recent yardage rate), not accounting for real game-script
+factors (a blowout, injury, a real key opposing-line absence) a human
+bettor would also weigh.
+
+Writes `docs/data/nfl_player_props.csv` (the real top 10) as part of
+the existing weekly `nfl_pipeline.run()` (`.github/workflows/nfl_weekly_update.yml`)
+- reuses that same run's already-fetched real no-lookahead weekly
+history and this-week schedule rather than a separate real fetch (this
+project has already learned that shared GitHub Actions minutes are a
+real, finite budget). If no real player qualifies this week (a real
+bye-heavy week, or every real player fails the games/usage floor),
+nothing is written and the prior week's real CSV is left in place, same
+"don't let one quiet week erase real history" posture
+`board_runner.run_board` already establishes for the 3 consensus
+boards. Shown on `docs/nfl.html`'s "Player Props" tab.
+
 ## Running
 
 ```

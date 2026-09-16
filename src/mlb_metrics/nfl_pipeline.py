@@ -41,7 +41,7 @@ import os
 
 import pandas as pd
 
-from mlb_metrics import config, market_odds, nfl_data, nfl_game_evaluation, nfl_game_picks, nfl_game_predictions, nfl_team_strength
+from mlb_metrics import config, market_odds, nfl_data, nfl_game_evaluation, nfl_game_picks, nfl_game_predictions, nfl_player_props, nfl_team_strength
 
 NFL_GAME_PREDICTIONS_LOG_PATH = "data/predictions/nfl_game_predictions.csv"
 
@@ -217,6 +217,17 @@ def run(
                 (schedules["season"] == season) & (schedules["game_type"] == "REG") & (schedules["week"] == week)
             ][["game_id", "season", "week", "home_team", "away_team", "home_qb_id", "away_qb_id",
                "gameday", "home_moneyline", "away_moneyline"]]
+
+            # Real, direct user request (2026-09-16): matchup-based
+            # player prop rankings - reuses this SAME real no-lookahead
+            # weekly history and this-week schedule already assembled
+            # above for the win-probability model, no separate real
+            # fetch (this project has already learned that shared GitHub
+            # Actions minutes are a real, finite budget - see module
+            # docstring). Independent of whether the win-probability
+            # model below succeeds.
+            props_edges = nfl_player_props.build_prop_edges(history["weekly"], this_week_games)
+            nfl_player_props.write_prop_bets_csv(props_edges, os.path.join(output_dir, "nfl_player_props.csv"))
 
             probs = nfl_game_picks.compute_game_win_probabilities(
                 master, qb_continuity, history["weekly"], this_week_games

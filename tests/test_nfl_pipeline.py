@@ -112,12 +112,15 @@ def test_run_end_to_end_with_synthetic_fetchers(tmp_path, monkeypatch):
             "def_interceptions": forced, "fumble_recovery_opp": 0,
         }
 
-    def _weekly_row(team, season, week):
+    def _weekly_row(team, opp, season, week):
         return {
-            "player_id": f"{team}_qb", "position": "QB", "season": season, "week": week, "season_type": "REG",
+            "player_id": f"{team}_qb", "player_display_name": f"{team} QB", "team": team, "opponent_team": opp,
+            "position": "QB", "season": season, "week": week, "season_type": "REG",
             "game_id": f"{season}_{week:02d}_{team}",
             "attempts": 30, "completions": 20, "passing_yards": 200, "passing_tds": 1,
             "passing_interceptions": 0, "carries": 2, "rushing_yards": 5, "rushing_tds": 0, "passing_epa": 1.0,
+            "targets": 0, "receptions": 0, "receiving_yards": 0, "receiving_tds": 0,
+            "rushing_fumbles_lost": 0, "receiving_fumbles_lost": 0, "def_sacks": 0.0, "sacks_suffered": 1.0,
         }
 
     def _snap_row(team, season, week, gid):
@@ -147,7 +150,7 @@ def test_run_end_to_end_with_synthetic_fetchers(tmp_path, monkeypatch):
             sched_2025.append(_game(gid, 2025, week, home, away, 24, 17))
             for team, opp in [(home, away), (away, home)]:
                 ts_2025.append(_team_stats_row(team, opp, 2025, week, gid))
-                weekly_2025.append(_weekly_row(team, 2025, week))
+                weekly_2025.append(_weekly_row(team, opp, 2025, week))
                 snaps_2025.append(_snap_row(team, 2025, week, gid))
                 pbp_2025.extend(_pbp_rows(team, 2025, week, gid))
 
@@ -184,6 +187,14 @@ def test_run_end_to_end_with_synthetic_fetchers(tmp_path, monkeypatch):
     log = pd.read_csv(predictions_log)
     assert list(log["game_id"]) == ["2026_01_A_B"]
     assert (output_dir / "nfl_game_picks_picks.csv").exists()
+    # Real, direct user request (2026-09-16): matchup-based player prop
+    # rankings write alongside the game picks - each real QB in this
+    # fixture has 3 real prior games (>= NFL_PROP_MIN_GAMES) at a real
+    # 200 passing_yards/game (>= NFL_PROP_MIN_USAGE's real 150 floor),
+    # so this qualifies and writes.
+    assert (output_dir / "nfl_player_props.csv").exists()
+    props = pd.read_csv(output_dir / "nfl_player_props.csv")
+    assert set(props["category"]) <= {"Passing Yards"}
 
 
 def test_run_no_predictable_week_still_writes_export(tmp_path, monkeypatch):

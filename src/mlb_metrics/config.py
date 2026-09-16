@@ -1760,6 +1760,85 @@ NFL_MATCHUP_WEIGHT_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
 # (Phase 7) reports a real, non-noise margin over weight=0.0.
 NFL_MATCHUP_WEIGHT = 0.0
 
+# --- NFL Player Props (nfl_player_props.py) ---
+#
+# Real, direct user request (2026-09-16): rank player prop bets (over/
+# under on receptions, yards, sacks) by real matchup quality - a
+# player's own recent per-game rate against the specific opponent's real
+# allowed-rate weakness at that stat, the same real mechanism the user's
+# own worked example describes (Puka Nacua's real target share against a
+# real pass-funnel defense). User-confirmed scope (via AskUserQuestion):
+# rank by real matchup quality alone, no real sportsbook prop line to
+# compare against - "good spots," not a priced +EV pick.
+#
+# A DELIBERATELY SEPARATE clip/weight from NFL_MATCHUP_OFFENSE_CLIP/
+# NFL_MATCHUP_WEIGHT above - those were tuned (and never validated) for
+# a different real use case (damping an opponent adjustment blended INTO
+# a DK fantasy-point projection, where a wide swing is unwanted because
+# total fantasy points are TD-variance-dominated). Here the ratio IS the
+# entire signal being ranked, not one ingredient blended into another -
+# a narrow (0.85, 1.15) clip would flatten every real matchup into a
+# near-identical, undifferentiated ratio, defeating the actual point of
+# a "top 10 best matchups" list.
+#
+# REAL BACKTEST RESULT (2026-09-16, scripts/backtest_nfl_player_props.py,
+# all 10 real cached seasons 2016-2025): the core mechanism validates -
+# EVERY ONE of the 5 real categories showed a real, positive correlation
+# between a more-favorable real matchup ratio and REAL-ly beating that
+# player's own trailing average that week (Receptions +0.012,
+# Receiving Yards +0.019, Rushing Yards +0.004 - the real weakest
+# signal, unsurprising since real rush production leans more on scheme/
+# workload than defense-specific variance, Passing Yards +0.059 - the
+# real strongest, Sacks +0.040). A separate, RANK-based check (does the
+# top real matchup-tercile beat its own baseline more often than the
+# bottom real tercile) confirmed the same real positive direction for
+# all 5 (spreads +0.010 to +0.093) but is mathematically unable to pick
+# a weight/clip itself (invariant to any positive monotonic transform of
+# the ratio - see that script's own evaluate_weight docstring). Each
+# category's own real best (weight, clip) by correlation differed
+# slightly (e.g. Rushing Yards favored a wider (0.6, 1.4)); (1.0, (0.8,
+# 1.2)) is the real shared choice that comes closest to every
+# category's own real best simultaneously (an exact tie for 2 of 5, near
+# a tie for 2 more) rather than a per-category constant - Rushing Yards
+# alone gives up real correlation (0.004 vs its own real best 0.006) for
+# that simplicity, an accepted real trade-off given how weak that one
+# category's signal already is either way.
+NFL_PROP_MATCHUP_CLIP = (0.8, 1.2)
+NFL_PROP_MATCHUP_WEIGHT_GRID = [0.5, 0.75, 1.0]
+NFL_PROP_MATCHUP_WEIGHT = 1.0
+
+# Games-back windows for nfl_player_props.compute_pass_rush_rolling_stats/
+# compute_sacks_allowed_rolling_rates - same "games-back, not day-count"
+# shape as NFL_SKILL_WINDOWS/NFL_DEFENSE_WINDOWS (a bye week is an
+# absent row, not a zero week). Individual real sacks are an even
+# noisier per-game counting stat than receiving yards (many real
+# starting pass rushers post a real 0-sack game more often than not),
+# so this leans slightly more on full-history than NFL_SKILL_WINDOWS
+# does, as a real, reasonable starting point.
+NFL_PASS_RUSH_WINDOWS = [
+    (None, 0.30),
+    (8, 0.30),
+    (4, 0.40),
+]
+
+# Real, minimum "this player has an actual meaningful role" qualifiers -
+# same purpose as NFL_SKILL_MIN_GAMES/NFL_QB_MIN_GAMES (a 1-2-game real
+# small sample is close to pure noise), but per-CATEGORY here rather
+# than a single min-games gate alone - real, hand-picked starting
+# thresholds (a real WR2 catching 2+ balls/game, a real starting EDGE
+# posting 0.25+ sacks/game i.e. roughly 4+ real sacks over a full real
+# season), revisited only if `scripts/backtest_nfl_player_props.py`'s
+# own real results suggest otherwise. `min_games` mirrors
+# NFL_SKILL_MIN_GAMES/NFL_QB_MIN_GAMES's own real value (3).
+NFL_PROP_MIN_GAMES = 3
+NFL_PROP_MIN_USAGE = {
+    "Receptions": 2.0,
+    "Receiving Yards": 25.0,
+    "Rushing Yards": 25.0,
+    "Passing Yards": 150.0,
+    "Sacks": 0.25,
+}
+
 # --- NFL DFS: DK Scoring (nfl_dfs.py) ---
 #
 # DraftKings NFL Classic scoring, confirmed live via web search against
