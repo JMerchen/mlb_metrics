@@ -33,7 +33,9 @@ data/raw/statcast_2026.parquet was migrated to the new per-month layout
 and removed in the same change that added this split.
 """
 
+import datetime
 import os
+import time
 
 import pandas as pd
 
@@ -44,12 +46,125 @@ from mlb_metrics import config
 PITCH_KEY_COLUMNS = ["game_pk", "at_bat_number", "pitch_number"]
 
 
-def fetch_statcast_range(start_dt, end_dt) -> pd.DataFrame:
-    """Pull pitch-by-pitch Statcast data for [start_dt, end_dt] and normalize game_date to datetime."""
+def _fetch_statcast_window(start_dt, end_dt) -> pd.DataFrame:
+    """One real pybaseball call for [start_dt, end_dt]. Imported lazily
+    (unchanged from the original) so importing this module never pulls
+    pybaseball in."""
     from pybaseball import statcast
 
-    df = statcast(start_dt=str(start_dt), end_dt=str(end_dt))
-    df["game_date"] = pd.to_datetime(df["game_date"])
+    return statcast(start_dt=str(start_dt), end_dt=str(end_dt))
+
+
+def _fetch_window_with_retries(start_dt, end_dt, attempts: int, retry_seconds: float) -> pd.DataFrame:
+    """`_fetch_statcast_window` with real, linear-backoff retries. Raises
+    the last real exception if every attempt fails - a caller decides
+    whether that's fatal or salvageable, this doesn't."""
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return _fetch_statcast_window(start_dt, end_dt)
+        except Exception as exc:
+            last_error = exc
+            print(
+                f"WARNING: real Statcast fetch for {start_dt}..{end_dt} failed "
+                f"(attempt {attempt} of {attempts}): {exc}"
+            )
+            if attempt < attempts:
+                time.sleep(retry_seconds * attempt)
+    raise last_error
+
+
+def _fetch_chunked(start_dt, end_dt, attempts: int, retry_seconds: float, chunk_days: int) -> pd.DataFrame:
+    """Real per-chunk-isolated fallback: walks [start_dt, end_dt] in
+    `chunk_days`-day windows, each with its own real retries and its own
+    try/except, and returns whatever actually came back. A chunk that
+    fails every attempt is reported honestly and SKIPPED rather than
+    taking the whole real season's fetch down with it - the same
+    per-source isolation posture board_runner.run_board and
+    prospect_sources.fetch_all_sources already use.
+
+    Raises only if EVERY real chunk failed: a total outage is a real
+    failure that must surface loudly, not be silently degraded into an
+    empty frame that would hand the rest of the pipeline stale persisted
+    data dressed up as a fresh pull."""
+    start = pd.Timestamp(start_dt).date()
+    end = pd.Timestamp(end_dt).date()
+
+    frames = []
+    failed_windows = []
+    window_start = start
+    while window_start <= end:
+        window_end = min(window_start + datetime.timedelta(days=chunk_days - 1), end)
+        try:
+            frames.append(_fetch_window_with_retries(window_start, window_end, attempts, retry_seconds))
+        except Exception as exc:
+            failed_windows.append((window_start, window_end, exc))
+        window_start = window_end + datetime.timedelta(days=1)
+
+    if not frames:
+        raise RuntimeError(
+            f"Every real Statcast chunk between {start} and {end} failed - refusing to continue with no real "
+            f"fresh data at all. Last real error: {failed_windows[-1][2] if failed_windows else 'unknown'}"
+        )
+    if failed_windows:
+        print(
+            f"WARNING: {len(failed_windows)} real Statcast chunk(s) could not be fetched and were SKIPPED: "
+            + ", ".join(f"{s}..{e}" for s, e, _ in failed_windows)
+            + ". Continuing with the real chunks that did succeed - this run's own fresh pull is genuinely "
+            "INCOMPLETE for those dates. Because this pipeline re-fetches the whole real season every run and "
+            "persist_raw_statcast MERGES into the persisted store (never replaces it), any date already "
+            "persisted by a prior real run is still present, and the next run will attempt these dates again."
+        )
+    return pd.concat(frames, ignore_index=True)
+
+
+def fetch_statcast_range(start_dt, end_dt, attempts: int = None, retry_seconds: float = None, chunk_days: int = None) -> pd.DataFrame:
+    """Pull pitch-by-pitch Statcast data for [start_dt, end_dt] and
+    normalize game_date to datetime.
+
+    Hardened 2026-09-16 after a real, confirmed production failure: the
+    whole daily pipeline died with
+    `pandas.errors.ParserError: Error tokenizing data` raised from inside
+    pybaseball's own CSV parse, after 173 of 175 real day-chunks had
+    already downloaded fine - one chunk came back as something that
+    wasn't CSV at all (an error/rate-limit page, on a second same-day
+    pull). One flaky chunk out of 175 took down every real output this
+    project produces, which is exactly the fragility class already fixed
+    elsewhere in this project (board_runner.run_board's per-source
+    isolation).
+
+    Two real layers, in order:
+    1. FAST PATH, unchanged in the normal case: one real whole-range
+       call (pybaseball parallelizes day-chunks internally), retried up
+       to `attempts` times with real linear backoff. A transient failure
+       like the one above is expected to clear here, at no cost to a
+       healthy run.
+    2. FALLBACK, only after every whole-range attempt failed: re-fetch in
+       `chunk_days`-day windows with real per-chunk isolation, keeping
+       whatever succeeds (see `_fetch_chunked`). This trades speed for
+       salvage precisely when the fast path has already proven the range
+       can't be fetched in one piece.
+
+    Defaults come from config.STATCAST_FETCH_* ; the parameters exist so
+    tests can drive this without real sleeps."""
+    attempts = config.STATCAST_FETCH_ATTEMPTS if attempts is None else attempts
+    retry_seconds = config.STATCAST_FETCH_RETRY_SECONDS if retry_seconds is None else retry_seconds
+    chunk_days = config.STATCAST_FETCH_FALLBACK_CHUNK_DAYS if chunk_days is None else chunk_days
+
+    try:
+        df = _fetch_window_with_retries(start_dt, end_dt, attempts, retry_seconds)
+    except Exception as exc:
+        print(
+            f"WARNING: every real whole-range Statcast attempt for {start_dt}..{end_dt} failed ({exc}); "
+            f"falling back to real {chunk_days}-day chunks with per-chunk isolation to salvage what's reachable."
+        )
+        df = _fetch_chunked(start_dt, end_dt, attempts, retry_seconds, chunk_days)
+
+    # A genuinely empty real result (e.g. a window with no real games)
+    # has no columns to convert - guarded rather than raising a real
+    # KeyError on an honest "nothing happened in this range" answer.
+    if "game_date" in df.columns:
+        df["game_date"] = pd.to_datetime(df["game_date"])
     return df
 
 

@@ -18,6 +18,30 @@ from datetime import date
 SEASON_START = date(2026, 3, 25)
 SEASON_END = date(2026, 10, 10)
 
+# Resilience for data.fetch_statcast_range, added 2026-09-16 after a
+# real, confirmed production failure: the entire daily pipeline died on
+# `pandas.errors.ParserError: Error tokenizing data` raised inside
+# pybaseball's own CSV parse, after 173 of 175 real day-chunks had
+# already downloaded fine - one chunk returned something that wasn't CSV
+# (an error/rate-limit page, on a second same-day pull). Baseball
+# Savant is a real third-party service this project does not control, so
+# an occasional bad response is a real operating condition, not an
+# exceptional one.
+#
+# 3 attempts with 5s linear backoff: the observed real failure was
+# transient, so the whole-range retry is expected to clear it outright at
+# zero cost to a healthy run (a successful first attempt never sleeps).
+# The 7-day fallback chunk size is a deliberate middle ground, only ever
+# reached after every whole-range attempt has already failed: pybaseball
+# chunks by DAY internally, so a smaller window would salvage more of a
+# persistently-bad range, but ~175 sequential real calls is far slower
+# than the ~25 a weekly window needs. Neither number is backtested -
+# there is no real outcome to tune them against, only real operating
+# experience, and they are cheap to revisit if a real run argues for it.
+STATCAST_FETCH_ATTEMPTS = 3
+STATCAST_FETCH_RETRY_SECONDS = 5
+STATCAST_FETCH_FALLBACK_CHUNK_DAYS = 7
+
 # WAVE (hitter batting-average-based hit probability): full/81d/30d/10d.
 WAVE_WINDOWS = [
     (None, 0.150),
