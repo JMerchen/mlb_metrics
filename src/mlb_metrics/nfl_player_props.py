@@ -153,18 +153,66 @@ def compute_sacks_allowed_rolling_rates(weekly_df: pd.DataFrame) -> pd.DataFrame
     return result[["team", "games", "sacks_allowed_per_game"]]
 
 
+def compute_position_defense_rolling_rates(weekly_df: pd.DataFrame, stat_col: str) -> pd.DataFrame:
+    """One row per (defending team, position) among `nfl_rush_rec.SKILL_POSITIONS`
+    (RB/WR/TE): per-game rate of `stat_col` allowed to opposing players AT
+    THAT POSITION, blended across config.NFL_DEFENSE_WINDOWS - the same
+    real windowed-blend machinery nfl_teams.compute_defense_rolling_rates
+    already uses for its own team-wide (every position summed together)
+    version, but split by the opposing player's own real position.
+
+    Real, necessary fix (2026-09-16 user report): the team-wide version
+    is dominated by whichever position gets the most real volume
+    league-wide (WR), so "this defense allows 14.1 receptions/game" said
+    nothing about how that SAME defense performs specifically against a
+    TE or RB - real different positions face real different real
+    matchups (a run-funnel defense might be generous to RBs but stingy
+    to WRs) that a team-wide blend erases. Splitting by position, the
+    same real windowed-blend shape every other defense rate in this
+    project already uses, keeps a TE prop compared against real
+    TE-allowed history, not a blanket team number that happens to be
+    dominated by WR volume."""
+    scoped = weekly_df[weekly_df["position"].isin(nfl_rush_rec.SKILL_POSITIONS)]
+    team_week = scoped.groupby(["opponent_team", "position", "season", "week"], as_index=False).agg(
+        allowed=(stat_col, "sum")
+    ).rename(columns={"opponent_team": "team"})
+
+    ordered = team_week.sort_values(["season", "week"], ascending=False)
+    ranked = ordered.assign(_recency_rank=ordered.groupby(["team", "position"]).cumcount())
+
+    blended = None
+    full_games = None
+
+    for games_back, weight in config.NFL_DEFENSE_WINDOWS:
+        window_df = ranked if games_back is None else ranked[ranked["_recency_rank"] < games_back]
+        agg = window_df.groupby(["team", "position"], as_index=False).agg(
+            games=("_recency_rank", "size"), allowed=("allowed", "sum")
+        )
+        rate = (agg["allowed"] / agg["games"]).where(agg["games"] > 0, 0)
+        contribution = agg[["team", "position"]].assign(rate=rate.values).set_index(["team", "position"])["rate"] * weight
+        blended = contribution if blended is None else blended.add(contribution, fill_value=0)
+        if games_back is None:
+            full_games = agg[["team", "position", "games"]]
+
+    result = blended.rename("allowed_per_game").reset_index()
+    result = result.merge(full_games, on=["team", "position"], how="left")
+    return result[["team", "position", "games", "allowed_per_game"]]
+
+
 def _skill_category_edges(
     weekly_df: pd.DataFrame, current_week_schedule_df: pd.DataFrame, weight: float
 ) -> pd.DataFrame:
-    """Receptions/Receiving Yards/Rushing Yards - all three come from
-    ONE real call to nfl_rush_rec.compute_skill_rolling_stats (it
-    already returns all three per-game rates for RB/WR/TE together) and
-    ONE real call to nfl_teams.compute_defense_rolling_rates (it already
-    returns pass_yards_allowed/rush_yards_allowed/receptions_allowed
-    together) - not three separate real fetches."""
+    """Receptions/Receiving Yards/Rushing Yards - all three come from ONE
+    real call to nfl_rush_rec.compute_skill_rolling_stats (it already
+    returns all three per-game rates for RB/WR/TE together). Each
+    category's own opponent-allowed rate is looked up POSITION-SPECIFIC
+    via `compute_position_defense_rolling_rates` (real, necessary fix,
+    see that function's own docstring) - a WR's prop is compared against
+    what that defense allows to opposing WRs, a TE's against opposing
+    TEs, never one blanket team-wide number dominated by whichever
+    position gets the most real volume league-wide."""
     skill_rolling = nfl_rush_rec.compute_skill_rolling_stats(weekly_df)
     names = _latest_player_names(weekly_df)
-    defense_rates = nfl_teams.compute_defense_rolling_rates(weekly_df)
     opponents = nfl_matchup.team_opponents(current_week_schedule_df)
 
     # Real, latest team per player - nfl_rush_rec's own output has no
@@ -179,24 +227,28 @@ def _skill_category_edges(
     players = players.merge(opponents, on="team", how="left")
 
     category_specs = [
-        ("Receptions", "receptions_per_game", "receptions_allowed_per_game"),
-        ("Receiving Yards", "receiving_yards_per_game", "pass_yards_allowed_per_game"),
-        ("Rushing Yards", "rushing_yards_per_game", "rush_yards_allowed_per_game"),
+        ("Receptions", "receptions_per_game", "receptions"),
+        ("Receiving Yards", "receiving_yards_per_game", "receiving_yards"),
+        ("Rushing Yards", "rushing_yards_per_game", "rushing_yards"),
     ]
 
     frames = []
-    for category, player_col, allowed_col in category_specs:
+    for category, player_col, stat_col in category_specs:
         rows = players.rename(columns={player_col: "player_rate"}).copy()
         rows["category"] = category
 
-        defense_by_opponent = defense_rates.rename(columns={"team": "opponent", allowed_col: "opponent_allowed_rate"})
-        rows = rows.merge(defense_by_opponent[["opponent", "opponent_allowed_rate"]], on="opponent", how="left")
+        position_rates = compute_position_defense_rolling_rates(weekly_df, stat_col)
+        defense_by_opponent = position_rates.rename(columns={"team": "opponent", "allowed_per_game": "opponent_allowed_rate"})
+        rows = rows.merge(
+            defense_by_opponent[["opponent", "position", "opponent_allowed_rate"]],
+            on=["opponent", "position"], how="left",
+        )
 
-        league_rate = defense_rates[allowed_col].mean()
-        rows["opponent_allowed_rate"] = rows["opponent_allowed_rate"].fillna(league_rate)
-        rows["league_rate"] = league_rate
+        league_rate_by_position = position_rates.groupby("position")["allowed_per_game"].mean()
+        rows["league_rate"] = rows["position"].map(league_rate_by_position)
+        rows["opponent_allowed_rate"] = rows["opponent_allowed_rate"].fillna(rows["league_rate"])
         rows["ratio"] = nfl_matchup.compute_opponent_adjustment_ratio(
-            rows["opponent_allowed_rate"], league_rate, weight, clip=config.NFL_PROP_MATCHUP_CLIP
+            rows["opponent_allowed_rate"], rows["league_rate"], weight, clip=config.NFL_PROP_MATCHUP_CLIP
         )
 
         frames.append(rows[[
@@ -345,18 +397,35 @@ def top_prop_bets(edges_df: pd.DataFrame, n: int = 10, min_games: int = None) ->
     above, with a real secondary tiebreak on `usage_percentile` (each
     player's own `player_rate`, ranked as a percentile WITHIN their
     category for the same cross-category-comparability reason as
-    `edge_percentile`). This secondary key is real, necessary signal, not
-    cosmetic: `opponent_allowed_rate` is a real TEAM-level stat, so every
-    player on the same team in the same category shares the exact same
-    real ratio and thus the exact same `edge_percentile` - a real,
-    confirmed problem (2026-09-16 user report: "the sort seems to be by
-    team") where, without a real tiebreak, a stable sort's own incidental
-    original row order (grouped by team from how `edges_df` is built)
-    silently decided the order of an entire team's tied receivers/backs
-    instead of anything real about certainty. Preferring the higher-
-    usage player within a genuine tie is itself a real certainty signal
-    (a bigger real per-game workload is a more stable, less boom/bust
-    estimate of what a player will do), not an arbitrary tiebreaker."""
+    `edge_percentile`), and a real tertiary tiebreak on
+    `raw_edge_magnitude` (the UNCLIPPED `|opponent_allowed_rate /
+    league_rate - 1|`, ignoring `config.NFL_PROP_MATCHUP_CLIP` entirely).
+    This secondary key is real, necessary signal, not cosmetic:
+    `opponent_allowed_rate` is a real TEAM-level (or, since the 2026-09-16
+    position-split fix, team+position-level) stat, so every player who
+    shares that bucket shares the exact same real ratio and thus the
+    exact same `edge_percentile` - a real, confirmed problem (2026-09-16
+    user report: "the sort seems to be by team") where, without a real
+    tiebreak, a stable sort's own incidental original row order (grouped
+    by category from how `edges_df` is built) silently decided the order
+    instead of anything real about certainty. Preferring the higher-usage
+    player within a genuine tie is itself a real certainty signal (a
+    bigger real per-game workload is a more stable, less boom/bust
+    estimate of what a player will do), not an arbitrary tiebreaker.
+
+    The tertiary key exists for a real, SEPARATE reason (also confirmed
+    live, 2026-09-16, against this project's own cached real NFL data):
+    on a real slate where several teams' matchup ratios all saturate the
+    SAME clip boundary (a real, common occurrence, not an edge case),
+    percentile rank alone can't distinguish "just barely hit the clip"
+    from "would have been 3x more extreme without it" - both get the
+    exact same edge_percentile, and usage_percentile doesn't help either
+    since it's normalized WITHIN each row's own category, not across
+    categories. The unclipped raw magnitude breaks that residual tie with
+    a real, if noisier, signal - safe to use only here, as a last resort
+    after two better-behaved keys are already exhausted, unlike using it
+    as the PRIMARY key (which is exactly the "Sacks crowds out everything
+    else" bug this function's own percentile-rank design already fixed)."""
     min_games = config.NFL_PROP_MIN_GAMES if min_games is None else min_games
 
     qualified = edges_df[edges_df["games"] >= min_games].copy()
@@ -368,11 +437,14 @@ def top_prop_bets(edges_df: pd.DataFrame, n: int = 10, min_games: int = None) ->
     percentile = qualified.groupby("category")["ratio"].rank(pct=True)
     qualified["edge_percentile"] = (percentile - 0.5).abs()
     qualified["usage_percentile"] = qualified.groupby("category")["player_rate"].rank(pct=True)
+    qualified["raw_edge_magnitude"] = (qualified["opponent_allowed_rate"] / qualified["league_rate"] - 1).abs()
 
     ranked = qualified.sort_values(
-        ["edge_percentile", "usage_percentile"], ascending=[False, False]
+        ["edge_percentile", "usage_percentile", "raw_edge_magnitude"], ascending=[False, False, False]
     ).head(n)
-    return ranked.drop(columns=["min_usage", "edge_percentile", "usage_percentile"]).reset_index(drop=True)
+    return ranked.drop(
+        columns=["min_usage", "edge_percentile", "usage_percentile", "raw_edge_magnitude"]
+    ).reset_index(drop=True)
 
 
 def write_prop_bets_csv(edges_df: pd.DataFrame, output_path: str, top_n: int = 10) -> pd.DataFrame:

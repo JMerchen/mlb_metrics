@@ -5151,9 +5151,8 @@ Passing Yards, Sacks. For each, a player's own real recent per-game
 rate (`nfl_rush_rec.compute_skill_rolling_stats`/
 `nfl_passing.compute_qb_rolling_stats`, reused directly - no
 duplicated rolling-stat logic) is compared against their real upcoming
-opponent's real allowed-rate at that same stat
-(`nfl_teams.compute_defense_rolling_rates`) relative to the real league
-average, via `nfl_matchup.compute_opponent_adjustment_ratio` (the same
+opponent's real allowed-rate at that same stat relative to the real
+league average, via `nfl_matchup.compute_opponent_adjustment_ratio` (the same
 real ratio machinery `nfl_matchup.py` already built for DFS - see that
 module's own docstring - reused here for a genuinely different real use
 case, with its own separate, wider `config.NFL_PROP_MATCHUP_CLIP`/
@@ -5198,6 +5197,45 @@ in this category" is genuinely comparable across categories.
 low-sample/low-usage cameos before ranking (a real one-catch-a-game
 player can never crowd out a real starter just because a tiny sample
 let a stray ratio run hot).
+
+**Real fixes from live user feedback (2026-09-16)**: two real, separate
+problems, both traced to the same original design choice -
+`opponent_allowed_rate` for Receptions/Receiving Yards/Rushing Yards
+originally came from `nfl_teams.compute_defense_rolling_rates`, a real
+TEAM-wide stat (every opposing WR/TE/RB summed together, and Receiving
+Yards was even further mismatched, reusing team-wide `pass_yards_allowed`
+as a proxy). Two real, confirmed user complaints followed directly:
+1. "op allows... neither seems accurate, nor at a player level, and is
+   not separated by position" - a defense's real receptions-allowed
+   number is dominated by whichever position gets the most real
+   league-wide volume (WR), saying nothing about how that same defense
+   performs specifically against a TE or RB. Fixed via
+   `compute_position_defense_rolling_rates`, splitting the same real
+   windowed-blend by the opposing player's own real position
+   (RB/WR/TE) - a TE prop is now compared against real TE-allowed
+   history, not a blanket team number. Receiving Yards also now uses
+   the real `receiving_yards` stat directly instead of the team-wide
+   `pass_yards_allowed` proxy.
+2. "the sort seems to be by team" - since every player at the same
+   position on the same team shares the identical real opponent-allowed
+   number (and, before the position split, the whole TEAM did), ties in
+   the primary `edge_percentile` key were common, and a stable sort's
+   own incidental original row order (grouped by team/category from how
+   `edges_df` is assembled) silently decided the rest. `top_prop_bets`
+   now breaks ties in three real, layered steps: `edge_percentile`
+   (primary, per-category), then `usage_percentile` (each player's own
+   real per-game rate, ranked within their category - a bigger real
+   workload is a more stable, less boom/bust estimate), then, for the
+   real remaining residual ties (common on a slate where several teams'
+   ratios all saturate `config.NFL_PROP_MATCHUP_CLIP`'s own boundary at
+   once), the UNCLIPPED raw ratio magnitude - safe to use only as a
+   last-resort tiebreak, unlike as the primary key (which is exactly the
+   "Sacks crowds out everything" bug the percentile-rank design above
+   already fixed). Confirmed live against this project's own cached real
+   NFL data: the fix genuinely diversifies the top-ranked bets across
+   teams; the categories represented can still legitimately concentrate
+   on a real slate where one category's matchups are simply more extreme
+   than the others that week - real signal, not a sort bug.
 
 Real, honest scope limits: this ranks by matchup quality only, with no
 real sportsbook line to weigh it against - a favorable real matchup is
