@@ -4986,12 +4986,13 @@ each source first.
 
 Sources per board today - a real, live "multiple models talking to one
 another," not a single-source list, even before any more are added:
-- MLB prospects (6 candidate sources): MLB.com's own "Top Prospects"
+- MLB prospects (7 candidate sources): MLB.com's own "Top Prospects"
   page (fetched and parsed directly, NOT via pybaseball's
   `top_prospects()` - that call turned out to hit the same real pandas
   3.x `pd.read_html` bug this project's own fetchers had to fix, an
   external library bug that can't be patched from here), Baseball
-  America, FanGraphs, CBS Sports, Prospects Live, Just Baseball. Real,
+  America, FanGraphs, CBS Sports, Prospects Live, Just Baseball, TJStats
+  (added 2026-09-16, see below). Real,
   honest note (2026-09-15): after 6 live runs, only MLB Pipeline had
   actually cleared - a real single-source result the user correctly
   flagged as not a real consensus. FanGraphs/CBS Sports/Prospects Live
@@ -5059,7 +5060,40 @@ DraftTek entirely (see above).
   even with confirmed-correct URLs - reads as genuine client-side
   rendering or access-gating on those two specific pages, not pursued
   further (would need real browser-driven rendering, new
-  infrastructure this project doesn't have). Full real history of every
+  infrastructure this project doesn't have).
+
+**Real fixes from a 2nd round of user feedback (2026-09-16)**: "why do
+some prospects have no data under team, highest level, eta, etc? And why
+are there multiple rank columns?" - both traced to the same real root
+cause: `build_consensus_ranking` used to carry through a player's row
+from ONE canonical source only (whichever ranked them best), and every
+fetcher above used to keep every raw column its source's table happened
+to have. MLB Pipeline's page is a full stats table with no
+`Team`/`ETA`/`FV` columns at all, so any player whose best-ranked source
+was MLB Pipeline showed those fields blank even when another real source
+that also ranked them had the data; Just Baseball's real page has a
+genuinely duplicate `Rank`-labeled column that leaked straight through
+as visible noise. Fixed two ways: every fetcher now extracts only a
+fixed, curated field set (`team`/`position`/`highest_level`/`age`/`eta`/
+`fv`, aliased per source's own real column names) and drops everything
+else; `build_consensus_ranking` now merges each of those fields across
+EVERY real source that ranked a player (best-ranked source's value wins,
+falling back to the next-best real source that has one) instead of
+taking one row wholesale. Also, in response to "I'd like to be more in
+the 25 range" - a real, honest finding from researching real candidates
+via `WebSearch` rather than guessing: 25 genuinely independent,
+non-paywalled, plain-HTML-table Top 100 Prospects sources do not appear
+to exist (ESPN's is real Insider/subscription content; Bleacher Report
+publishes its list as an image slideshow, not a real `<table>` -
+confirmed dead ends, not just unverified). TJStats was added as a
+genuine 7th real candidate, and Prospects Live's own default URL was
+corrected to a real, WebSearch-confirmed dated article path (the
+bare-site-root guess used before was confirmed wrong). All of this
+still needs a real live CI run to confirm the actual per-source/per-
+column outcome, per this project's own "report real outcome once
+confirmed" discipline - not asserted ahead of it.
+
+Full real history of every
   round's findings lives in `prospect_sources.py`'s own module
   docstring.
 - **MLB draft board**: still fully blocked. BOTH real sources

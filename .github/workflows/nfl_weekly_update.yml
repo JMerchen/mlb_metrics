@@ -67,7 +67,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add docs/data/nfl_game_picks_picks.csv docs/data/nfl_game_picks_summary.csv docs/data/nfl_game_picks_summary_by_version.csv data/raw/nfl/ data/predictions/nfl_game_predictions.csv
+          git add docs/data/nfl_game_picks_picks.csv docs/data/nfl_game_picks_summary.csv docs/data/nfl_game_picks_summary_by_version.csv docs/data/nfl_player_props.csv data/raw/nfl/ data/predictions/nfl_game_predictions.csv
 
           git commit -m "NFL weekly update" || echo "No changes"
 

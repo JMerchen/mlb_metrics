@@ -97,10 +97,18 @@ def build_consensus_ranking(
       None means that source didn't list them (imputed, not a fabricated
       rank) - the literal "show the underlying models" transparency this
       board is meant to provide, not just a black-box output number.
-    - every other real column from whichever source's row was used as the
-      canonical display row for that player (the source where they were
-      ranked BEST, i.e. most information/most likely to have current
-      team/position - a real, deterministic tie-break, not arbitrary).
+    - every other real column, MERGED across every real source that
+      ranked this player: for each such column, the value comes from the
+      BEST-ranked source that has a real (non-null) value for it, falling
+      back to the next-best-ranked source that does, and so on - a real,
+      deterministic tie-break (not arbitrary), but no longer an
+      all-or-nothing "one canonical row" - a player whose best source
+      doesn't carry a given field (e.g. a stats-only source with no
+      `team`/`ETA` columns at all) still gets that field filled in from
+      whichever other real source that ranked them actually has it,
+      rather than left blank just because the best source didn't happen
+      to publish it. Real, honest limit: a field stays blank only when
+      NO real source that ranked this player had a value for it.
     A player appearing in zero real sources never appears in the output -
     there is no real ranking to aggregate for them."""
     penalty = config.CONSENSUS_UNRANKED_PENALTY_ROWS if unranked_penalty_rows is None else unranked_penalty_rows
@@ -124,7 +132,7 @@ def build_consensus_ranking(
     for norm_name in all_norm_names:
         source_ranks = {}
         effective_ranks = []
-        best_source, best_rank, best_row = None, None, None
+        matches_by_rank = []
         for source_name, df in prepared.items():
             source_len = len(df)
             match = df[df["_norm_name"] == norm_name]
@@ -135,12 +143,24 @@ def build_consensus_ranking(
             real_rank = float(match.iloc[0][rank_col])
             source_ranks[source_name] = real_rank
             effective_ranks.append(real_rank)
-            if best_rank is None or real_rank < best_rank:
-                best_rank, best_source, best_row = real_rank, source_name, match.iloc[0]
+            matches_by_rank.append((real_rank, match.iloc[0]))
 
+        matches_by_rank.sort(key=lambda pair: pair[0])
         sources_ranked_by = sum(1 for v in source_ranks.values() if v is not None)
-        row = best_row.drop(labels=["_norm_name"]).to_dict()
-        row[name_col] = best_row[name_col]
+
+        # Merge every real column across ALL sources that ranked this
+        # player (best-ranked source's value wins per column, falling
+        # back to the next-best real source that has one) rather than
+        # taking one canonical row wholesale - see this function's own
+        # docstring for why.
+        row = {}
+        for _, candidate_row in matches_by_rank:
+            for col, value in candidate_row.items():
+                if col == "_norm_name":
+                    continue
+                if col not in row or pd.isna(row[col]):
+                    row[col] = value
+        row[name_col] = matches_by_rank[0][1][name_col]
         row["consensus_score"] = sum(effective_ranks) / len(effective_ranks)
         row["sources_ranked_by"] = sources_ranked_by
         row["source_ranks"] = source_ranks
