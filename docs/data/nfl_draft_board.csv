@@ -1,5 +1,5 @@
 consensus_rank,rank,player_name,TEAM,POS,BEST,WORST,AVG.,STD.DEV,source_url,consensus_score,sources_ranked_by,source_ranks,CNG,College,Ht,Wt,CLS,Pick
-1,12,Makai Lemon,,WR,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,18.0,2,"{'DraftTek': 12.0, 'FantasyPros': 24.0}",--,USC,"5'11""",192,JR,20
+1,12,Makai Lemon,USC,WR,15,40.0,23.3,11.8,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,18.0,2,"{'DraftTek': 12.0, 'FantasyPros': 24.0}",--,USC,"5'11""",192,JR,20
 2,1,Fernando Mendoza,,QB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,51.0,1,"{'DraftTek': 1.0, 'FantasyPros': None}",--,Indiana,"6'5""",236,RJR,1
 3,1,Fernando Mendoza (Indiana),Fernando Mendoza (Indiana),QB1,1,4.0,2.0,1.4,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,51.0,1,"{'DraftTek': None, 'FantasyPros': 1.0}",,,,,,
 4,2,Arvell Reese,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,51.5,1,"{'DraftTek': 2.0, 'FantasyPros': None}",--,Ohio State,"6'4""",241,JR,4
@@ -62,7 +62,7 @@ consensus_rank,rank,player_name,TEAM,POS,BEST,WORST,AVG.,STD.DEV,source_url,cons
 61,31,Max Iheanachor,,OT,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,66.0,1,"{'DraftTek': 31.0, 'FantasyPros': None}",--,Arizona State,"6'6""",321,RSR,21
 62,32,Caleb Lomu,,OT,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,66.5,1,"{'DraftTek': 32.0, 'FantasyPros': None}",-5,Utah,"6'6""",313,RSO,28
 63,32,Dillon Thieneman (Oregon),Dillon Thieneman (Oregon),S2,36,43.0,39.3,2.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,66.5,1,"{'DraftTek': None, 'FantasyPros': 32.0}",,,,,,
-64,64,A.J. Haulcy,,S,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,67.0,2,"{'DraftTek': 64.0, 'FantasyPros': 70.0}",--,LSU,"6'0""",215,SR,78
+64,64,A.J. Haulcy,LSU,S,47,73.0,60.0,13.0,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,67.0,2,"{'DraftTek': 64.0, 'FantasyPros': 70.0}",--,LSU,"6'0""",215,SR,78
 65,33,Akheem Mesidor (Miami,FL,DT4,30,54.0,41.0,9.9,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,67.0,1,"{'DraftTek': None, 'FantasyPros': 33.0}",,,,,,
 66,33,Peter Woods,,DL3T,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,67.0,1,"{'DraftTek': 33.0, 'FantasyPros': None}",-7,Clemson,"6'2""",298,JR,29
 67,34,Malachi Lawrence,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,67.5,1,"{'DraftTek': 34.0, 'FantasyPros': None}",+5,UCF,"6'4""",253,RSR,23
@@ -70,7 +70,7 @@ consensus_rank,rank,player_name,TEAM,POS,BEST,WORST,AVG.,STD.DEV,source_url,cons
 69,35,Akheem Mesidor,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,68.0,1,"{'DraftTek': 35.0, 'FantasyPros': None}",--,Miami (FL),"6'3""",259,RSR,22
 70,35,Emmanuel Pregnon (Oregon),Emmanuel Pregnon (Oregon),OG2,33,49.0,41.3,6.5,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,68.0,1,"{'DraftTek': None, 'FantasyPros': 35.0}",,,,,,
 71,36,D’Angelo Ponds (Indiana),D’Angelo Ponds (Indiana),CB5,39,45.0,43.0,2.8,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,68.5,1,"{'DraftTek': None, 'FantasyPros': 36.0}",,,,,,
-72,37,Kamari Ramsey,USC,S3,37,54.0,44.0,7.3,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,68.5,2,"{'DraftTek': 100.0, 'FantasyPros': 37.0}",,,,,,
+72,37,Kamari Ramsey,USC,S3,37,54.0,44.0,7.3,https://www.fantasypros.com/nfl-draft-big-board-prospect-rankings/,68.5,2,"{'DraftTek': 100.0, 'FantasyPros': 37.0}",--,USC,"6'0""",202,RJR,141
 73,36,Lee Hunter,,DL1T,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,68.5,1,"{'DraftTek': 36.0, 'FantasyPros': None}",--,Texas Tech,"6'3""",318,RSR,49
 74,37,Brandon Cisse,,CB,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,69.0,1,"{'DraftTek': 37.0, 'FantasyPros': None}",--,South Carolina,"6'0""",189,JR,52
 75,38,Cashius Howell,,EDGE,,,,,https://www.drafttek.com/2026-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2026-Page-1.asp,69.5,1,"{'DraftTek': 38.0, 'FantasyPros': None}",--,Texas A&M,"6'2""",253,RSR,41

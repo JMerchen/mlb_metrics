@@ -110,7 +110,59 @@ WebSearch-confirmed URLs - a real, more informative signal now that a
 wrong-URL explanation is ruled out: this reads as genuine client-side
 rendering or access-gating on those two specific real pages, not
 pursued further this round (same "an honest partial source set is
-still real signal" posture as every other real gap in this project)."""
+still real signal" posture as every other real gap in this project).
+
+**Real user feedback (2026-09-16)**: "why is there only 1 source" led to
+the above 3-of-6 real state; the next ask was "I'd like to be more in the
+25 range if possible." Real, honest finding from researching that via
+WebSearch rather than guessing: 25 genuinely independent, scrapable,
+non-paywalled national outlets publishing a real Top 100 Prospects list
+as plain HTML do not appear to exist. Two well-known outlets were found
+and deliberately NOT added because they are confirmed dead ends for this
+project's `pd.read_html`-based approach, not just unverified: ESPN's own
+real Top 100 (Kiley McDaniel's) is real Insider/subscription content;
+Bleacher Report publishes its real list as an image slideshow, not a
+real `<table>`. `fetch_tjstats_prospects` (a real, smaller independent
+analytics site) was added as a genuine 7th candidate found this way, and
+Prospects Live's own default `url` was corrected to a real,
+WebSearch-confirmed dated article path (`/{season}-top-100-prospects/`)
+- the bare site-root guess used before was confirmed wrong (a real "No
+tables found" result) once a wrong-URL explanation could actually be
+ruled back in. A real, honest ceiling around 8-10 genuine sources - not
+25 - is the realistic target for this specific niche.
+
+**Real, separately confirmed fix (2026-09-16)**: every fetcher above
+used to carry through EVERY real column its source's own table happened
+to have (a full batting/pitching stat line on MLB Pipeline's page, a
+genuinely duplicate "Rank"-labeled column on Just Baseball's) straight
+into the committed board - harmless per source alone, but once
+`consensus_rankings.build_consensus_ranking` merged several sources'
+very different raw column sets together, real users saw a huge, sparse,
+confusing column list (blank `Team`/`ETA`/etc. whenever a player's
+best-ranked source didn't happen to publish those fields; visible
+`Rank.1`-style duplicate noise columns). Fixed via `_extract_enrichment_columns`
+below - every fetcher now returns only a fixed, curated field set
+(`team`/`position`/`highest_level`/`age`/`eta`/`fv`), and
+`build_consensus_ranking` itself now merges those fields across every
+real source that ranked a player rather than taking one canonical row
+wholesale - see that function's own docstring.
+
+**Real live run result (2026-09-16)**: 3 of 7 sources succeeded (MLB
+Pipeline: 96, Just Baseball: 100, FanGraphs: 110 - same 3 as before),
+173 real players. Baseball America remains 403-blocked; CBS Sports and
+Prospects Live (even with the corrected dated URL) both still return
+"No tables found" - confirmed genuine access-gating/client-side
+rendering, not a URL problem. `fetch_tjstats_prospects` found real
+tables, but a real, more fundamental mismatch, not a parsing bug: its
+real page is a "what changed since last update" page (`Graduated From
+Top 100`/`New To Top 100`/`Top 100 Risers`/`Top 100 Fallers`/`Dropped
+Out Of Top 100` sections, each its own small multi-level-header table),
+never a real full Top 100 list in one table - this outlet's own real
+content just doesn't fit this feature's shape, not something a header
+fix can solve. Left in `SOURCE_FETCHERS` anyway (same "an honest,
+harmless failure is not a reason to remove a candidate" posture as CBS
+Sports/Prospects Live) in case a future full-list page appears there,
+but not expected to ever succeed as currently written."""
 
 import datetime
 import io
@@ -141,6 +193,45 @@ def _read_html_tables(content: bytes):
 
 def _empty() -> pd.DataFrame:
     return pd.DataFrame(columns=["rank", "player_name"])
+
+
+# Real, curated scouting/roster fields worth showing on the board, mapped
+# to whichever real column name each outlet happens to spell them with
+# (Just Baseball's "Team" vs MLB Pipeline's "Tm", "Level" vs "Highest
+# Level", etc. - real, confirmed spelling differences between these
+# outlets' own live pages, not hypothetical ones).
+_ENRICHMENT_ALIASES = {
+    "team": ["Team", "Org", "Tm", "Organization"],
+    "position": ["Position", "Pos", "POS"],
+    "highest_level": ["Highest Level", "Level", "Highest Lvl", "Lvl"],
+    "age": ["Age"],
+    "eta": ["ETA"],
+    "fv": ["FV", "Future Value"],
+}
+
+
+def _extract_enrichment_columns(table: pd.DataFrame) -> pd.DataFrame:
+    """Pulls just the fixed, curated fields in `_ENRICHMENT_ALIASES` out of
+    a source's raw table and drops everything else - a real, deliberate
+    fix (2026-09-16) for a real, confirmed problem: a source's own raw
+    stat columns (a full batting/pitching stat line on MLB Pipeline's
+    page, a genuine duplicate "Rank"-labeled column on Just Baseball's,
+    unlabeled spacer columns) carried straight through to the committed
+    CSV once this module's fetchers simply renamed rank/name and kept
+    every other real column as-is - harmless for any ONE source alone,
+    but once consensus_rankings.build_consensus_ranking merges several
+    sources' very different raw column sets together, the result was a
+    huge, sparse, confusing column list (a player's row blank under
+    `Team`/`ETA`/etc. whenever their best-ranked source happened to be a
+    stats-only page, `Rank.1`/`L.1`-style duplicate noise columns visible
+    in the final board). A field a given source doesn't publish at all is
+    left a real NaN here, to be filled in from another real source that
+    does (see that function's own cross-source column merge)."""
+    result = pd.DataFrame(index=table.index)
+    for canonical, candidates in _ENRICHMENT_ALIASES.items():
+        column = next((c for c in candidates if c in table.columns), None)
+        result[canonical] = table[column] if column is not None else pd.NA
+    return result
 
 
 def _first_table_with_columns(tables, required_columns: set) -> pd.DataFrame | None:
@@ -232,9 +323,11 @@ def fetch_mlb_pipeline_prospects() -> pd.DataFrame:
         return _empty()
     raw = raw.sort_values(by="Rk")
 
-    result = raw.rename(columns={"Rk": "rank", "Player": "player_name"}).copy()
-    result["rank"] = pd.to_numeric(result["rank"], errors="coerce")
-    result = result.dropna(subset=["rank", "player_name"])
+    renamed = raw.rename(columns={"Rk": "rank", "Player": "player_name"}).copy()
+    renamed["rank"] = pd.to_numeric(renamed["rank"], errors="coerce")
+    renamed = renamed.dropna(subset=["rank", "player_name"])
+    enrichment = _extract_enrichment_columns(raw).loc[renamed.index]
+    result = pd.concat([renamed[["rank", "player_name"]], enrichment], axis=1)
     result["source_url"] = url
     return result
 
@@ -272,9 +365,11 @@ def fetch_baseball_america_prospects(season: int = None) -> pd.DataFrame:
         return _empty()
 
     rank_col = "Rank" if "Rank" in table.columns else "Rk"
-    result = table.rename(columns={rank_col: "rank", "Name": "player_name"}).copy()
-    result["rank"] = pd.to_numeric(result["rank"], errors="coerce")
-    result = result.dropna(subset=["rank", "player_name"])
+    renamed = table.rename(columns={rank_col: "rank", "Name": "player_name"}).copy()
+    renamed["rank"] = pd.to_numeric(renamed["rank"], errors="coerce")
+    renamed = renamed.dropna(subset=["rank", "player_name"])
+    enrichment = _extract_enrichment_columns(table).loc[renamed.index]
+    result = pd.concat([renamed[["rank", "player_name"]], enrichment], axis=1)
     result["source_url"] = url
     return result
 
@@ -324,9 +419,11 @@ def fetch_fangraphs_prospects(season: int = None, url: str = None) -> pd.DataFra
 
     rank_col = "Rank" if "Rank" in table.columns else ("Rk" if "Rk" in table.columns else "#")
     name_col = "Name" if "Name" in table.columns else "Player"
-    result = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
-    result["rank"] = pd.to_numeric(result["rank"], errors="coerce")
-    result = result.dropna(subset=["rank", "player_name"])
+    renamed = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
+    renamed["rank"] = pd.to_numeric(renamed["rank"], errors="coerce")
+    renamed = renamed.dropna(subset=["rank", "player_name"])
+    enrichment = _extract_enrichment_columns(table).loc[renamed.index]
+    result = pd.concat([renamed[["rank", "player_name"]], enrichment], axis=1)
     result["source_url"] = url
     return result
 
@@ -364,30 +461,36 @@ def fetch_cbs_sports_prospects(season: int = None, url: str = None) -> pd.DataFr
 
     rank_col = "RK" if "RK" in table.columns else "Rank"
     name_col = "Player" if "Player" in table.columns else "Name"
-    result = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
-    result["rank"] = pd.to_numeric(result["rank"], errors="coerce")
-    result = result.dropna(subset=["rank", "player_name"])
+    renamed = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
+    renamed["rank"] = pd.to_numeric(renamed["rank"], errors="coerce")
+    renamed = renamed.dropna(subset=["rank", "player_name"])
+    enrichment = _extract_enrichment_columns(table).loc[renamed.index]
+    result = pd.concat([renamed[["rank", "player_name"]], enrichment], axis=1)
     result["source_url"] = url
     return result
 
 
-def fetch_prospects_live_rankings(url: str = None) -> pd.DataFrame:
+def fetch_prospects_live_rankings(season: int = None, url: str = None) -> pd.DataFrame:
     """Prospects Live's real, published Top 100 rankings - a smaller,
     dedicated prospect-coverage outlet, deliberately picked as a real,
     separate voice from the bigger, more heavily-trafficked (and more
     likely bot-protected) outlets already in this module - the same
     "an independent real source is still a real source" reasoning
     `fetch_baseball_america_prospects`'s own docstring already
-    establishes. Real, confirmed real site root (2026-09-15, via
-    WebSearch, NOT direct fetch - see module docstring's real network
-    caveat): `www.prospectslive.com` - the first real guess (bare
-    `prospectslive.com/rankings`) returned zero real `<table>`
-    elements. Real, honest risk flagged: this outlet's own real
+    establishes. Real, confirmed URL (2026-09-16, via WebSearch, NOT
+    direct fetch - see module docstring's real network caveat):
+    `www.prospectslive.com/{season}-top-100-prospects/` - the site
+    ROOT URL this fetcher used before (a prior, also WebSearch-based
+    guess) was confirmed WRONG by a live CI run returning "No tables
+    found" even with that corrected root - a real, year-templated
+    article path, not an evergreen rankings hub, was the actual real
+    shape all along. Real, honest risk flagged: this outlet's own real
     write-ups are reportedly member-gated, so this may only ever return
     a real PARTIAL list rather than the full 100 - same "an honest
     partial source is still a real source" reasoning as Baseball
     America's own docstring, not a reason to drop it."""
-    url = url or "https://www.prospectslive.com/"
+    season = datetime.date.today().year if season is None else season
+    url = url or f"https://www.prospectslive.com/{season}-top-100-prospects/"
     try:
         import requests
 
@@ -410,9 +513,11 @@ def fetch_prospects_live_rankings(url: str = None) -> pd.DataFrame:
 
     rank_col = "Rank" if "Rank" in table.columns else "#"
     name_col = "Name" if "Name" in table.columns else "Player"
-    result = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
-    result["rank"] = pd.to_numeric(result["rank"], errors="coerce")
-    result = result.dropna(subset=["rank", "player_name"])
+    renamed = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
+    renamed["rank"] = pd.to_numeric(renamed["rank"], errors="coerce")
+    renamed = renamed.dropna(subset=["rank", "player_name"])
+    enrichment = _extract_enrichment_columns(table).loc[renamed.index]
+    result = pd.concat([renamed[["rank", "player_name"]], enrichment], axis=1)
     result["source_url"] = url
     return result
 
@@ -456,9 +561,61 @@ def fetch_just_baseball_prospects(url: str = None) -> pd.DataFrame:
 
     rank_col = "Rank" if "Rank" in table.columns else "#"
     name_col = "Name" if "Name" in table.columns else "Player"
-    result = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
-    result["rank"] = pd.to_numeric(result["rank"], errors="coerce")
-    result = result.dropna(subset=["rank", "player_name"])
+    renamed = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
+    renamed["rank"] = pd.to_numeric(renamed["rank"], errors="coerce")
+    renamed = renamed.dropna(subset=["rank", "player_name"])
+    enrichment = _extract_enrichment_columns(table).loc[renamed.index]
+    result = pd.concat([renamed[["rank", "player_name"]], enrichment], axis=1)
+    result["source_url"] = url
+    return result
+
+
+def fetch_tjstats_prospects(url: str = None) -> pd.DataFrame:
+    """TJStats' real, published Top 100 MLB Prospects write-up - a 7th
+    real candidate source added 2026-09-16 in response to real user
+    feedback ("I'd like to be more in the 25 range if possible"). Real,
+    honest ceiling on that request, found via WebSearch while looking for
+    real candidates: most other outlets that publish a "Top 100
+    Prospects" list either (a) paywall it behind a subscription/Insider
+    tier (ESPN's own Kiley McDaniel rankings), (b) publish it as an image
+    slideshow rather than a real HTML `<table>` `pd.read_html` can parse
+    (Bleacher Report's own format), or (c) are the same handful of
+    outlets already in this module under a different URL. TJStats is a
+    real, smaller independent analytics site confirmed (via WebSearch) to
+    publish a real written Top 100 article - a genuine 7th voice, not a
+    duplicate. Real, honest fragility flagged upfront: this real URL is a
+    DATED blog post (path includes the real publish date, e.g.
+    `/2026/08/01/...`), not a stable evergreen rankings hub - `url` exists
+    as the real escape hatch for a future season's inevitably different
+    real path, same as `fetch_cbs_sports_prospects`'s own precedent."""
+    url = url or "https://tjstats.ca/2026/08/01/top-100-mlb-prospects-post-draft-update/"
+    try:
+        import requests
+
+        response = requests.get(url, timeout=30, headers=_REQUEST_HEADERS)
+        response.raise_for_status()
+        tables = _read_html_tables(response.content)
+    except Exception as exc:
+        print(f"[prospect_sources] TJStats fetch failed: {exc}")
+        return _empty()
+
+    table = _first_table_with_columns(tables, {"Rank", "Name"})
+    if table is None:
+        table = _first_table_with_columns(tables, {"Rank", "Player"})
+    if table is None:
+        table = _first_table_with_columns(tables, {"#", "Name"})
+    if table is None:
+        print(f"[prospect_sources] TJStats page had no recognizable ranking table - skipping. "
+              f"Found {len(tables)} tables with columns: {[list(t.columns) for t in tables]}")
+        return _empty()
+
+    rank_col = "Rank" if "Rank" in table.columns else "#"
+    name_col = "Name" if "Name" in table.columns else "Player"
+    renamed = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
+    renamed["rank"] = pd.to_numeric(renamed["rank"], errors="coerce")
+    renamed = renamed.dropna(subset=["rank", "player_name"])
+    enrichment = _extract_enrichment_columns(table).loc[renamed.index]
+    result = pd.concat([renamed[["rank", "player_name"]], enrichment], axis=1)
     result["source_url"] = url
     return result
 
@@ -470,6 +627,7 @@ SOURCE_FETCHERS = {
     "FanGraphs": fetch_fangraphs_prospects,
     "CBS Sports": fetch_cbs_sports_prospects,
     "Prospects Live": fetch_prospects_live_rankings,
+    "TJStats": fetch_tjstats_prospects,
 }
 
 

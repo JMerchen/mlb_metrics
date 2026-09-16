@@ -36,6 +36,31 @@ def test_fetch_mlb_pipeline_prospects_normalizes_real_shape(monkeypatch):
     assert (result["source_url"] == "https://www.mlb.com/prospects/stats/top-prospects").all()
 
 
+def test_fetch_mlb_pipeline_prospects_extracts_team_and_level_and_drops_raw_stat_columns(monkeypatch):
+    # Real, confirmed bug (2026-09-16 user report): MLB Pipeline's real
+    # page is a full stats table (PA/AB/HR/ERA/WHIP/...), and it used to
+    # carry ALL of those raw columns straight through - once merged with
+    # other sources by consensus_rankings.build_consensus_ranking, this
+    # produced a huge, sparse, confusing column list. Only a fixed,
+    # curated set of real scouting/roster fields should survive.
+    batters = pd.DataFrame([
+        {"Rk": "1", "Player": "Roman Anthony", "Tm": "BOS", "Level": "AAA", "PA": 500, "HR": 20},
+    ])
+    pitchers = pd.DataFrame([{"Rk": "2", "Player": "Andrew Painter", "Tm": "PHI", "Level": "AA", "ERA": 2.5, "L": 3}])
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [batters, pitchers])
+
+    result = prospect_sources.fetch_mlb_pipeline_prospects()
+
+    assert set(result.columns) == {"rank", "player_name", "team", "position", "highest_level", "age", "eta", "fv", "source_url"}
+    by_name = result.set_index("player_name")
+    assert by_name.loc["Roman Anthony", "team"] == "BOS"
+    assert by_name.loc["Roman Anthony", "highest_level"] == "AAA"
+    assert by_name.loc["Andrew Painter", "team"] == "PHI"
+
+
 def test_fetch_mlb_pipeline_prospects_returns_empty_on_request_failure(monkeypatch):
     def _raise(url, timeout, headers):
         raise ConnectionError("real network failure")
@@ -358,11 +383,11 @@ def test_fetch_prospects_live_rankings_normalizes_rank_name_shape(monkeypatch):
     )
     monkeypatch.setattr(pd, "read_html", lambda content: [table])
 
-    result = prospect_sources.fetch_prospects_live_rankings()
+    result = prospect_sources.fetch_prospects_live_rankings(season=2026)
 
     assert list(result["player_name"]) == ["Roman Anthony", "Andrew Painter"]
     assert list(result["rank"]) == [1.0, 2.0]
-    assert (result["source_url"] == "https://www.prospectslive.com/").all()
+    assert (result["source_url"] == "https://www.prospectslive.com/2026-top-100-prospects/").all()
 
 
 def test_fetch_prospects_live_rankings_accepts_url_override(monkeypatch):
@@ -442,6 +467,36 @@ def test_fetch_just_baseball_prospects_accepts_url_override(monkeypatch):
     assert (result["source_url"] == override_url).all()
 
 
+def test_fetch_just_baseball_prospects_extracts_enrichment_fields_and_drops_the_duplicate_rank_column(monkeypatch):
+    # Real, confirmed bug (2026-09-16 user report): Just Baseball's real
+    # page shape is `['Rank', 'Rank.1', 'Player', 'Team', 'Age', 'Level',
+    # 'Position', 'ETA', 'FV']` (see _strip_sortable_header_suffix's own
+    # docstring for the real duplicate-Rank-column root cause) - the
+    # genuinely redundant `Rank.1` column used to leak straight into the
+    # committed board as a second, confusing rank-looking column.
+    table = pd.DataFrame([
+        {
+            "Rank": 1, "Rank.1": 1, "Player": "Jesus Made", "Team": "Milwaukee Brewers",
+            "Age": 19, "Level": "AA", "Position": "SS", "ETA": 2026, "FV": "70",
+        }
+    ])
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    result = prospect_sources.fetch_just_baseball_prospects()
+
+    assert "Rank.1" not in result.columns
+    row = result.iloc[0]
+    assert row["team"] == "Milwaukee Brewers"
+    assert row["age"] == 19
+    assert row["highest_level"] == "AA"
+    assert row["position"] == "SS"
+    assert row["eta"] == 2026
+    assert row["fv"] == "70"
+
+
 def test_fetch_just_baseball_prospects_returns_empty_when_table_not_found(monkeypatch):
     monkeypatch.setitem(
         sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
@@ -460,6 +515,62 @@ def test_fetch_just_baseball_prospects_returns_empty_on_request_failure(monkeypa
     monkeypatch.setitem(sys.modules, "requests", _fake_requests_module(_raise))
 
     result = prospect_sources.fetch_just_baseball_prospects()
+
+    assert result.empty
+
+
+def test_fetch_tjstats_prospects_normalizes_rank_name_shape(monkeypatch):
+    table = pd.DataFrame([
+        {"Rank": 1, "Name": "Roman Anthony"},
+        {"Rank": 2, "Name": "Andrew Painter"},
+    ])
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    result = prospect_sources.fetch_tjstats_prospects()
+
+    assert list(result["player_name"]) == ["Roman Anthony", "Andrew Painter"]
+    assert list(result["rank"]) == [1.0, 2.0]
+
+
+def test_fetch_tjstats_prospects_accepts_url_override(monkeypatch):
+    table = pd.DataFrame([{"Rank": 1, "Name": "Roman Anthony"}])
+    seen_urls = []
+
+    def _get(url, timeout, headers):
+        seen_urls.append(url)
+        return _FakeResponse()
+
+    monkeypatch.setitem(sys.modules, "requests", _fake_requests_module(_get))
+    monkeypatch.setattr(pd, "read_html", lambda content: [table])
+
+    override_url = "https://tjstats.ca/some-other-real-path/"
+    result = prospect_sources.fetch_tjstats_prospects(url=override_url)
+
+    assert seen_urls == [override_url]
+    assert (result["source_url"] == override_url).all()
+
+
+def test_fetch_tjstats_prospects_returns_empty_when_table_not_found(monkeypatch):
+    monkeypatch.setitem(
+        sys.modules, "requests", _fake_requests_module(lambda url, timeout, headers: _FakeResponse())
+    )
+    monkeypatch.setattr(pd, "read_html", lambda content: [pd.DataFrame([{"Unrelated": 1}])])
+
+    result = prospect_sources.fetch_tjstats_prospects()
+
+    assert result.empty
+
+
+def test_fetch_tjstats_prospects_returns_empty_on_request_failure(monkeypatch):
+    def _raise(url, timeout, headers):
+        raise ConnectionError("real network failure")
+
+    monkeypatch.setitem(sys.modules, "requests", _fake_requests_module(_raise))
+
+    result = prospect_sources.fetch_tjstats_prospects()
 
     assert result.empty
 

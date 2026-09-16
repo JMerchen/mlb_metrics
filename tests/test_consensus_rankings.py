@@ -75,6 +75,31 @@ def test_build_consensus_ranking_picks_canonical_row_from_players_best_source():
     assert result.loc[0, "team"] == "CURRENT"
 
 
+def test_build_consensus_ranking_fills_a_column_missing_from_the_best_source_from_another_real_source():
+    # Real, confirmed bug (2026-09-16 user report): a player's canonical
+    # row used to come from ONE source only - if that source (even the
+    # best-ranked one) didn't publish a given field at all (e.g. a
+    # stats-only board with no `team` column), the field went blank even
+    # though another real source that also ranked this player DID have
+    # it. Every real column should now be merged across all sources that
+    # ranked the player, not just the best-ranked one.
+    source_a = pd.DataFrame([{"player_name": "Bob", "rank": 1}])  # no `team` column at all
+    source_b = pd.DataFrame([{"player_name": "Bob", "rank": 5, "team": "REAL"}])
+
+    result = cr.build_consensus_ranking({"A": source_a, "B": source_b})
+
+    assert result.loc[0, "team"] == "REAL"
+
+
+def test_build_consensus_ranking_prefers_best_sources_value_over_a_worse_sources_when_both_have_one():
+    source_a = pd.DataFrame([{"player_name": "Bob", "rank": 1, "team": "BEST"}])
+    source_b = pd.DataFrame([{"player_name": "Bob", "rank": 5, "team": "WORSE"}])
+
+    result = cr.build_consensus_ranking({"A": source_a, "B": source_b})
+
+    assert result.loc[0, "team"] == "BEST"
+
+
 def test_build_consensus_ranking_ignores_empty_source():
     # A source that returned zero real rows (a real fetch failure) must
     # contribute nothing - neither ranking a player nor imputing a penalty
