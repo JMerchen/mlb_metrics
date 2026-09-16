@@ -5088,10 +5088,27 @@ publishes its list as an image slideshow, not a real `<table>` -
 confirmed dead ends, not just unverified). TJStats was added as a
 genuine 7th real candidate, and Prospects Live's own default URL was
 corrected to a real, WebSearch-confirmed dated article path (the
-bare-site-root guess used before was confirmed wrong). All of this
-still needs a real live CI run to confirm the actual per-source/per-
-column outcome, per this project's own "report real outcome once
-confirmed" discipline - not asserted ahead of it.
+bare-site-root guess used before was confirmed wrong).
+
+**Real live run result confirming all of the above (2026-09-16, on this
+branch before merge)**: the column-merge/noise fix works as intended -
+`docs/data/prospect_rankings.csv` now has a clean, fixed 13-column
+header (no more `Rank.1`/`L.1`/raw stat-line noise), and only 10 of 173
+players still have blank `team`/`position`/`highest_level`/`eta`/`fv`
+(down from far more before) - those 10 are players who appeared in MLB
+Pipeline ALONE, which is the one real source with none of those fields
+at all, so there's genuinely no other source to merge them from. Source
+count, honestly, did NOT improve this round: still 3 of 7 (MLB Pipeline,
+Just Baseball, FanGraphs - 173 players). Prospects Live's corrected URL
+still returned "No tables found" (confirmed access-gating/client-side
+rendering, not a URL problem after all). TJStats found real tables, but
+a real, more fundamental mismatch: its real page is a "what changed
+since last update" page (Graduated/New/Risers/Fallers/Dropped sections),
+never a real full Top 100 list in one table - not fixable with a header
+tweak, a genuine dead end for this feature's needs. `fetch_all_sources`
+went from 6 to 7 real declared candidates but the working count is still
+3 - the honest 8-10 ceiling estimated above has NOT been reached yet and
+may require sources beyond what a plain `pd.read_html` scrape can reach.
 
 Full real history of every
   round's findings lives in `prospect_sources.py`'s own module

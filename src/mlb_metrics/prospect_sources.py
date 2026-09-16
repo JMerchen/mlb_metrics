@@ -145,7 +145,24 @@ below - every fetcher now returns only a fixed, curated field set
 (`team`/`position`/`highest_level`/`age`/`eta`/`fv`), and
 `build_consensus_ranking` itself now merges those fields across every
 real source that ranked a player rather than taking one canonical row
-wholesale - see that function's own docstring."""
+wholesale - see that function's own docstring.
+
+**Real live run result (2026-09-16)**: 3 of 7 sources succeeded (MLB
+Pipeline: 96, Just Baseball: 100, FanGraphs: 110 - same 3 as before),
+173 real players. Baseball America remains 403-blocked; CBS Sports and
+Prospects Live (even with the corrected dated URL) both still return
+"No tables found" - confirmed genuine access-gating/client-side
+rendering, not a URL problem. `fetch_tjstats_prospects` found real
+tables, but a real, more fundamental mismatch, not a parsing bug: its
+real page is a "what changed since last update" page (`Graduated From
+Top 100`/`New To Top 100`/`Top 100 Risers`/`Top 100 Fallers`/`Dropped
+Out Of Top 100` sections, each its own small multi-level-header table),
+never a real full Top 100 list in one table - this outlet's own real
+content just doesn't fit this feature's shape, not something a header
+fix can solve. Left in `SOURCE_FETCHERS` anyway (same "an honest,
+harmless failure is not a reason to remove a candidate" posture as CBS
+Sports/Prospects Live) in case a future full-list page appears there,
+but not expected to ever succeed as currently written."""
 
 import datetime
 import io
