@@ -266,7 +266,48 @@ def test_top_prop_bets_percentile_ranking_does_not_let_one_category_dominate():
     # raw magnitude before trusting the ranking assertion below.
     assert (receiving_yards["ratio"] - 1).abs().max() < (sacks["ratio"] - 1).abs().max()
 
-    top = nfl_player_props.top_prop_bets(edges, n=2)
+    # This fixture's own Passing Yards rows also happen to reach the
+    # exact same top real edge_percentile as Receiving Yards/Sacks (a
+    # real 3-way tie at the top, not just 2) - n=3 (not 2) so the
+    # secondary usage-based tiebreak added for real ties (see
+    # top_prop_bets' own docstring) doesn't arbitrarily bump one of the
+    # three out of an artificially small top-n window; the real point
+    # of this test - that Sacks' own huge raw ratio magnitude doesn't
+    # buy it anything over a category with a far smaller raw gap - still
+    # holds regardless of which of the tied three the tiebreak orders
+    # first.
+    top = nfl_player_props.top_prop_bets(edges, n=3)
 
-    assert set(top["category"]) == {"Receiving Yards", "Sacks"}
+    assert set(top["category"]) == {"Receiving Yards", "Sacks", "Passing Yards"}
     assert set(top["direction"]) == {"Over"}
+
+
+def test_top_prop_bets_breaks_ties_by_usage_not_incidental_team_order():
+    # Real, confirmed user report (2026-09-16): "the sort seems to be by
+    # team." Root cause: opponent_allowed_rate is a real TEAM-level stat,
+    # so every player on the same team in the same category shares the
+    # exact same real ratio/edge_percentile - without a real tiebreak,
+    # a stable sort's own incidental row order (grouped by team from how
+    # build_prop_edges assembles rows) silently decided the order.
+    # These three SF receivers all face the same real SEA defense in the
+    # same real category, so their real ratios tie exactly - only their
+    # own real usage (receptions/game) should decide the order among
+    # them, highest usage first.
+    rows = []
+    rows += _multi_week_skill_rows("wr_low", "WR Low", "SF", "SEA", "WR", range(1, 6), receptions=3, receiving_yards=40)
+    rows += _multi_week_skill_rows("wr_high", "WR High", "SF", "SEA", "WR", range(1, 6), receptions=9, receiving_yards=40)
+    rows += _multi_week_skill_rows("wr_mid", "WR Mid", "SF", "SEA", "WR", range(1, 6), receptions=6, receiving_yards=40)
+    rows += _multi_week_skill_rows("sea_qb", "SEA QB", "SEA", "SF", "QB", range(1, 6), sacks_suffered=2.0, passing_yards=200)
+    weekly_df = pd.DataFrame(rows)
+    current_week_schedule = pd.DataFrame([{"home_team": "SF", "away_team": "SEA"}])
+
+    edges = nfl_player_props.build_prop_edges(weekly_df, current_week_schedule)
+    receptions_only = edges[edges["category"] == "Receptions"]
+    # Confirm the fixture actually produces the intended real tie before
+    # trusting the ordering assertion below.
+    assert receptions_only["ratio"].nunique() == 1
+
+    top = nfl_player_props.top_prop_bets(edges, n=10)
+    ordered_ids = list(top[top["category"] == "Receptions"]["player_id"])
+
+    assert ordered_ids == ["wr_high", "wr_mid", "wr_low"]

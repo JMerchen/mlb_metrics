@@ -340,7 +340,23 @@ def top_prop_bets(edges_df: pd.DataFrame, n: int = 10, min_games: int = None) ->
     across this project's own 2025 week 10 real slate, unlike either
     prior approach. Returns the top `n` real rows with a `direction`
     column ("Over" when the real ratio > 1 - the opponent allows more
-    than league average at this real category - "Under" when ratio < 1)."""
+    than league average at this real category - "Under" when ratio < 1),
+    sorted by certainty: primarily the real matchup `edge_percentile`
+    above, with a real secondary tiebreak on `usage_percentile` (each
+    player's own `player_rate`, ranked as a percentile WITHIN their
+    category for the same cross-category-comparability reason as
+    `edge_percentile`). This secondary key is real, necessary signal, not
+    cosmetic: `opponent_allowed_rate` is a real TEAM-level stat, so every
+    player on the same team in the same category shares the exact same
+    real ratio and thus the exact same `edge_percentile` - a real,
+    confirmed problem (2026-09-16 user report: "the sort seems to be by
+    team") where, without a real tiebreak, a stable sort's own incidental
+    original row order (grouped by team from how `edges_df` is built)
+    silently decided the order of an entire team's tied receivers/backs
+    instead of anything real about certainty. Preferring the higher-
+    usage player within a genuine tie is itself a real certainty signal
+    (a bigger real per-game workload is a more stable, less boom/bust
+    estimate of what a player will do), not an arbitrary tiebreaker."""
     min_games = config.NFL_PROP_MIN_GAMES if min_games is None else min_games
 
     qualified = edges_df[edges_df["games"] >= min_games].copy()
@@ -351,9 +367,12 @@ def top_prop_bets(edges_df: pd.DataFrame, n: int = 10, min_games: int = None) ->
     qualified["direction"] = qualified["ratio"].apply(lambda r: "Over" if r > 1 else "Under")
     percentile = qualified.groupby("category")["ratio"].rank(pct=True)
     qualified["edge_percentile"] = (percentile - 0.5).abs()
+    qualified["usage_percentile"] = qualified.groupby("category")["player_rate"].rank(pct=True)
 
-    ranked = qualified.sort_values("edge_percentile", ascending=False).head(n)
-    return ranked.drop(columns=["min_usage", "edge_percentile"]).reset_index(drop=True)
+    ranked = qualified.sort_values(
+        ["edge_percentile", "usage_percentile"], ascending=[False, False]
+    ).head(n)
+    return ranked.drop(columns=["min_usage", "edge_percentile", "usage_percentile"]).reset_index(drop=True)
 
 
 def write_prop_bets_csv(edges_df: pd.DataFrame, output_path: str, top_n: int = 10) -> pd.DataFrame:
