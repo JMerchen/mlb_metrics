@@ -363,3 +363,82 @@ def test_apply_kelly_uncertainty_preserves_nan_home_win_probability():
 
     assert pd.isna(result.loc[0, "home_win_probability_pessimistic"])
     assert pd.isna(result.loc[0, "away_win_probability_pessimistic"])
+
+
+def _tiebreak_win_probs(rows):
+    return pd.DataFrame(rows)
+
+
+def test_apply_market_tiebreak_no_op_below_the_threshold():
+    win_probabilities = _tiebreak_win_probs([
+        {"game_pk": 1, "home_team": "NYY", "away_team": "BOS", "home_win_probability": 0.56},
+    ])
+    market = pd.DataFrame([{"home_team": "NYY", "away_team": "BOS", "market_home_win_probability": 0.52}])
+
+    result = game_picks.apply_market_tiebreak(win_probabilities, market, disagreement_threshold=0.10)
+
+    assert result.iloc[0]["home_win_probability"] == pytest.approx(0.56)  # 0.04 disagreement - below threshold
+
+
+def test_apply_market_tiebreak_defers_to_market_above_the_threshold():
+    # The real, logged failure mode this exists to stop (2026-09-16): a
+    # real 2026-08-25 bet on LAD at -153 where this model said 0.67 and
+    # the real market said 0.406 - a 0.26 disagreement that lost the
+    # single largest real stake in the whole log.
+    win_probabilities = _tiebreak_win_probs([
+        {"game_pk": 1, "home_team": "LAD", "away_team": "SD", "home_win_probability": 0.67},
+    ])
+    market = pd.DataFrame([{"home_team": "LAD", "away_team": "SD", "market_home_win_probability": 0.406}])
+
+    result = game_picks.apply_market_tiebreak(win_probabilities, market, disagreement_threshold=0.10)
+
+    assert result.iloc[0]["home_win_probability"] == pytest.approx(0.406)
+
+
+def test_apply_market_tiebreak_is_a_noop_with_no_market_data_for_a_game():
+    win_probabilities = _tiebreak_win_probs([
+        {"game_pk": 1, "home_team": "NYY", "away_team": "BOS", "home_win_probability": 0.90},
+    ])
+    market = pd.DataFrame([{"home_team": "SF", "away_team": "LAD", "market_home_win_probability": 0.10}])
+
+    result = game_picks.apply_market_tiebreak(win_probabilities, market, disagreement_threshold=0.10)
+
+    assert result.iloc[0]["home_win_probability"] == pytest.approx(0.90)
+
+
+def test_apply_market_tiebreak_is_a_noop_with_no_market_frame_at_all():
+    # A real ESPN fetch failure (pipeline.run's own try/except sets this
+    # to None) must never suppress or alter real game-pick logging.
+    win_probabilities = _tiebreak_win_probs([
+        {"game_pk": 1, "home_team": "NYY", "away_team": "BOS", "home_win_probability": 0.90},
+    ])
+
+    assert game_picks.apply_market_tiebreak(win_probabilities, None).iloc[0]["home_win_probability"] == 0.90
+    empty = pd.DataFrame(columns=["home_team", "away_team", "market_home_win_probability"])
+    assert game_picks.apply_market_tiebreak(win_probabilities, empty).iloc[0]["home_win_probability"] == 0.90
+
+
+def test_apply_market_tiebreak_preserves_a_real_nan_model_probability():
+    # A real NaN probability (a team missing from today's confidence
+    # snapshot - see apply_calibration's own docstring) can't be compared
+    # against the market, so it must be left honestly NaN.
+    win_probabilities = _tiebreak_win_probs([
+        {"game_pk": 1, "home_team": "NYY", "away_team": "BOS", "home_win_probability": float("nan")},
+    ])
+    market = pd.DataFrame([{"home_team": "NYY", "away_team": "BOS", "market_home_win_probability": 0.52}])
+
+    result = game_picks.apply_market_tiebreak(win_probabilities, market, disagreement_threshold=0.10)
+
+    assert pd.isna(result.iloc[0]["home_win_probability"])
+
+
+def test_apply_market_tiebreak_default_threshold_matches_config():
+    win_probabilities = _tiebreak_win_probs([
+        {"game_pk": 1, "home_team": "NYY", "away_team": "BOS", "home_win_probability": 0.65},
+    ])
+    market = pd.DataFrame([{"home_team": "NYY", "away_team": "BOS", "market_home_win_probability": 0.50}])
+
+    result = game_picks.apply_market_tiebreak(win_probabilities, market)  # no override - real config default
+
+    # 0.15 disagreement clears config.GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD (0.10).
+    assert result.iloc[0]["home_win_probability"] == pytest.approx(0.50)

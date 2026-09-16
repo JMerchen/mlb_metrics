@@ -41,9 +41,13 @@ import os
 
 import pandas as pd
 
-from mlb_metrics import config, market_odds, nfl_data, nfl_game_evaluation, nfl_game_picks, nfl_game_predictions, nfl_player_props, nfl_team_strength
+from mlb_metrics import (
+    config, market_odds, nfl_data, nfl_game_evaluation, nfl_game_picks, nfl_game_predictions,
+    nfl_player_props, nfl_prop_predictions, nfl_team_strength,
+)
 
 NFL_GAME_PREDICTIONS_LOG_PATH = "data/predictions/nfl_game_predictions.csv"
+NFL_PROP_PREDICTIONS_LOG_PATH = "data/predictions/nfl_prop_predictions.csv"
 
 # (table name, fetch function) - table names match scripts/fetch_nfl_historical.py's
 # own TABLES list/persist_table's file-naming convention; fetch function
@@ -111,6 +115,7 @@ def run(
     raw_dir: str = config.NFL_RAW_DATA_DIR,
     output_dir: str = "docs/data",
     predictions_log_path: str = NFL_GAME_PREDICTIONS_LOG_PATH,
+    prop_predictions_log_path: str = NFL_PROP_PREDICTIONS_LOG_PATH,
 ) -> None:
     season = season or config.NFL_SEASON
 
@@ -149,6 +154,16 @@ def run(
     # docstring).
     if os.path.exists(predictions_log_path):
         nfl_game_predictions.resolve_game_predictions(predictions_log_path, schedules)
+
+    # Same bulk-resolve idea for real prop picks, against this season's
+    # freshly fetched real weekly stats. Real, disclosed scope limit: this
+    # frame only covers `season`, so a still-pending pick from a PRIOR
+    # season simply stays pending rather than resolving - acceptable while
+    # this log is days old and entirely within one real season, and
+    # visible rather than hidden (nfl_prop_predictions.summarize_prop_results
+    # reports n_pending alongside every real hit rate).
+    if os.path.exists(prop_predictions_log_path):
+        nfl_prop_predictions.resolve_prop_predictions(prop_predictions_log_path, fresh.get("weekly"))
 
     week = determine_predictable_week(schedules, season)
     if week is None:
@@ -227,7 +242,19 @@ def run(
             # docstring). Independent of whether the win-probability
             # model below succeeds.
             props_edges = nfl_player_props.build_prop_edges(history["weekly"], this_week_games)
-            nfl_player_props.write_prop_bets_csv(props_edges, os.path.join(output_dir, "nfl_player_props.csv"))
+            top_props = nfl_player_props.write_prop_bets_csv(
+                props_edges, os.path.join(output_dir, "nfl_player_props.csv")
+            )
+            # Real, structural fix (2026-09-16): that CSV is OVERWRITTEN
+            # every week, so without this log nothing ever recorded
+            # whether a real prop pick came in - the feature's own real
+            # hit rate was unknowable, and therefore unimprovable (see
+            # nfl_prop_predictions.py's own module docstring). Logged
+            # BEFORE the games are played, resolved on a later real run
+            # once real weekly stats exist for that week - the same
+            # log -> resolve loop every other pick in this project uses.
+            prop_picks = nfl_prop_predictions.select_prop_picks(top_props, season, week)
+            nfl_prop_predictions.append_prop_predictions(prop_picks, prop_predictions_log_path)
 
             probs = nfl_game_picks.compute_game_win_probabilities(
                 master, qb_continuity, history["weekly"], this_week_games
@@ -260,6 +287,15 @@ def run(
             nfl_game_predictions.append_game_predictions(picks, predictions_log_path)
 
     write_nfl_game_picks_export(predictions_log_path, output_dir)
+
+    # Real, honest scoreboard for the props feature itself - written every
+    # run so a real hit rate (or a real "not enough resolved picks yet")
+    # is always visible rather than requiring someone to re-aggregate the
+    # raw log by hand.
+    prop_summary = nfl_prop_predictions.summarize_prop_results(prop_predictions_log_path)
+    if not prop_summary.empty:
+        os.makedirs(output_dir, exist_ok=True)
+        prop_summary.to_csv(os.path.join(output_dir, "nfl_player_props_results.csv"), index=False)
 
 
 def main():

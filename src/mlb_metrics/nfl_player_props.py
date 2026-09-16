@@ -45,6 +45,24 @@ import pandas as pd
 from mlb_metrics import config, nfl_matchup, nfl_passing, nfl_rush_rec, nfl_teams
 
 
+# The real weekly-stats column each real prop category is ultimately
+# settled against - the single real place this mapping lives, so
+# nfl_prop_predictions.resolve_prop_predictions can score a real logged
+# pick against what the player ACTUALLY did that week without
+# re-deriving (and drifting from) the category names the builders below
+# emit. Deliberately keyed by the exact real category strings
+# `build_prop_edges` itself produces, so a renamed or newly-added
+# category surfaces as a real, visible KeyError-shaped gap at resolution
+# time rather than silently scoring nothing.
+PROP_CATEGORY_STAT_COLUMNS = {
+    "Receptions": "receptions",
+    "Receiving Yards": "receiving_yards",
+    "Rushing Yards": "rushing_yards",
+    "Passing Yards": "passing_yards",
+    "Sacks": "def_sacks",
+}
+
+
 def _latest_player_names(weekly_df: pd.DataFrame) -> pd.DataFrame:
     """[player_id, player_name]: each player's most recent real
     `player_display_name` - a player's own display name is stable

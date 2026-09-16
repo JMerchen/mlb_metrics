@@ -253,6 +253,73 @@ def apply_calibration(win_probabilities: pd.DataFrame) -> pd.DataFrame:
     return calibrated
 
 
+def apply_market_tiebreak(
+    win_probabilities: pd.DataFrame,
+    market_probabilities: pd.DataFrame,
+    disagreement_threshold: float = None,
+) -> pd.DataFrame:
+    """Defers to the real market's own (devigged) probability when this
+    model disagrees with it by a lot - the MLB port of
+    nfl_game_picks.apply_market_tiebreak (2026-09-16), see
+    config.GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD's own comment block
+    for the full real evidence from this project's own logged MLB
+    results (373 real resolved games, 99 real resolved bets).
+
+    The short version of why MLB needed this even more than NFL did: on
+    real logged data this model is BEHIND its own market everywhere
+    (56.3% vs 58.4% accuracy, 0.2479 vs 0.2351 Brier), and its own
+    probability spread is roughly a third of the market's (std 0.042 vs
+    0.130). A probability that is honestly calibrated but compressed
+    toward 0.5 will, mechanically, always look like it has "edge" on
+    whichever side the market prices as unlikely - which is exactly what
+    the real log shows (96% of all real advised bets were underdogs,
+    median +157). Deferring in the proven-bad zone suppresses precisely
+    those bets.
+
+    `market_probabilities` needs real [home_team, away_team,
+    market_home_win_probability] - the same shape
+    market_odds.fetch_market_home_win_probabilities already returns.
+    Matched on (home_team, away_team), the same doubleheader
+    simplification market_odds.py's own module docstring already
+    discloses for itself.
+
+    A real, useful side effect rather than something needing special
+    handling elsewhere (identical to the NFL version's):
+    `market_home_win_probability` is DEVIGGED, always <= the RAW vigged
+    implied probability game_predictions.advise_bets compares against for
+    the same side, so a deferred game's real edge is <= 0 by
+    construction - bet advice is naturally suppressed on exactly the
+    bucket this is protecting against, with no change to advise_bets.
+
+    Graceful degradation, matching every other optional real-data step in
+    this pipeline: a game with no real market probability (absent from
+    `market_probabilities`, or present with a null) keeps its original
+    probability completely unchanged - disagreement can't be measured, so
+    no defer decision is made. A NaN model probability (a real case - see
+    apply_calibration's own docstring on a team missing from today's
+    confidence snapshot) is likewise left alone rather than compared."""
+    threshold = (
+        config.GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD if disagreement_threshold is None else disagreement_threshold
+    )
+    if market_probabilities is None or market_probabilities.empty:
+        return win_probabilities
+    if "market_home_win_probability" not in market_probabilities.columns:
+        return win_probabilities
+
+    merged = win_probabilities.merge(
+        market_probabilities[["home_team", "away_team", "market_home_win_probability"]],
+        on=["home_team", "away_team"], how="left",
+    )
+    disagreement = (merged["home_win_probability"] - merged["market_home_win_probability"]).abs()
+    should_defer = (disagreement >= threshold).fillna(False).to_numpy()
+
+    result = win_probabilities.copy()
+    result.loc[should_defer, "home_win_probability"] = merged.loc[
+        should_defer, "market_home_win_probability"
+    ].to_numpy()
+    return result
+
+
 def apply_kelly_uncertainty(win_probabilities: pd.DataFrame, confidence: pd.DataFrame) -> pd.DataFrame:
     """Adds home_win_probability_pessimistic/away_win_probability_pessimistic
     to `win_probabilities` - real bet-sizing follow-up (2026-08-25 -

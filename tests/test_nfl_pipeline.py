@@ -180,7 +180,8 @@ def test_run_end_to_end_with_synthetic_fetchers(tmp_path, monkeypatch):
     output_dir = tmp_path / "docs_data"
 
     nfl_pipeline.run(
-        season=2026, raw_dir=str(raw_dir), output_dir=str(output_dir), predictions_log_path=str(predictions_log)
+        season=2026, raw_dir=str(raw_dir), output_dir=str(output_dir), predictions_log_path=str(predictions_log),
+        prop_predictions_log_path=str(tmp_path / "nfl_prop_predictions.csv"),
     )
 
     assert predictions_log.exists()
@@ -218,7 +219,8 @@ def test_run_no_predictable_week_still_writes_export(tmp_path, monkeypatch):
     output_dir = tmp_path / "docs_data"
 
     nfl_pipeline.run(
-        season=2026, raw_dir=str(raw_dir), output_dir=str(output_dir), predictions_log_path=str(predictions_log)
+        season=2026, raw_dir=str(raw_dir), output_dir=str(output_dir), predictions_log_path=str(predictions_log),
+        prop_predictions_log_path=str(tmp_path / "nfl_prop_predictions.csv"),
     )
 
     assert not predictions_log.exists()  # nothing was ever logged
@@ -248,7 +250,8 @@ def test_run_resilient_to_a_failed_table_fetch(tmp_path, monkeypatch, capsys):
     # No prior-season history persisted at all - real "brand-new" case,
     # must not crash.
     nfl_pipeline.run(
-        season=2026, raw_dir=str(raw_dir), output_dir=str(output_dir), predictions_log_path=str(predictions_log)
+        season=2026, raw_dir=str(raw_dir), output_dir=str(output_dir), predictions_log_path=str(predictions_log),
+        prop_predictions_log_path=str(tmp_path / "nfl_prop_predictions.csv"),
     )
 
     assert "falling back to the last persisted copy" in capsys.readouterr().out

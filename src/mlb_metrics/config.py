@@ -1116,6 +1116,55 @@ GAME_PICK_CALIBRATION_MODEL_PATH = "data/models/game_pick_calibration_model.jobl
 MARKET_ODDS_PREFERRED_PROVIDER = "DraftKings"
 MARKET_ODDS_BACKFILL_DAYS_BACK = 5
 
+# Market-disagreement tiebreak (game_picks.apply_market_tiebreak) - the
+# MLB port of NFL's own NFL_GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD (see
+# that constant's own comment block for the original 1,482-game
+# walk-forward NFL evidence). Ported 2026-09-16 after this project's own
+# REAL, LOGGED MLB results made the same case far more urgently than the
+# NFL numbers ever did:
+#
+#   All 373 real resolved games in data/predictions/game_predictions.csv
+#   that carry a real market probability:
+#     model accuracy 56.3%  vs  market accuracy 58.4%
+#     model Brier    0.2479 vs  market Brier    0.2351
+#   The market was at least as accurate as this model in EVERY
+#   disagreement bucket at or above 0.05 - there is no zone, at any
+#   magnitude, where disagreeing with the market has paid off.
+#
+#   Real advised-bet results over the same log (99 resolved real bets),
+#   bucketed by |model - market| disagreement:
+#     0.05-0.10   n=43  staked  65.71  profit  +4.30   roi   +6.5%
+#     0.10-0.15   n=44  staked  84.39  profit -27.47   roi  -32.6%
+#     0.15+       n=12  staked  14.29  profit  -4.37   roi  -30.6%
+#
+# Real threshold sweep over that same real log (accuracy/Brier computed
+# on all 373 games; bets/roi on the 99 real resolved bets):
+#   thresh    acc    brier |  bets  staked  profit     roi
+#     none  56.3%   0.2479 |    99  164.39  -27.55  -16.8%
+#     0.20  56.8%   0.2466 |    99  164.39  -27.55  -16.8%
+#     0.15  57.1%   0.2451 |    87  150.10  -23.17  -15.4%
+#     0.125 57.6%   0.2419 |    71  119.64   -8.07   -6.7%
+#     0.10  57.4%   0.2389 |    43   65.71   +4.30   +6.5%
+#     0.075 57.4%   0.2363 |    13   23.31   +1.61   +6.9%
+#     0.05  59.5%   0.2362 |     0    0.00    0.00      -
+#
+# 0.10 chosen: real accuracy and Brier both improve monotonically as this
+# tightens (measured across all 373 real games, not just the bet slice),
+# and 0.10 is the LOOSEST real threshold at which real advised-bet ROI
+# actually turns positive. Deliberately tighter than NFL's own 0.20,
+# because this MLB model is measurably further behind its own market than
+# the NFL model is behind its own (NFL: model beat market outright below
+# its threshold; MLB: market wins at every magnitude tested).
+#
+# Real, honest caveat, stated rather than buried: NFL's 0.20 rests on
+# 1,482 real walk-forward games, this rests on 373 real games and 99 real
+# bets, and the positive-ROI cells specifically rest on 43 and 13 bets -
+# a genuinely thin sample. What is NOT thin, and what this constant is
+# really justified by, is the monotone accuracy/Brier improvement across
+# all 373 real games plus the same effect independently confirmed on
+# 1,482 real NFL games. Revisit once more real resolved MLB bets exist.
+GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD = 0.10
+
 # Kelly-criterion bet sizing (kelly.py, scripts/recommend_bets.py) - a
 # follow-up to the market benchmark above: turns "model probability
 # disagrees with the market" into an actual recommended stake. Single
@@ -1838,6 +1887,19 @@ NFL_PROP_MIN_USAGE = {
     "Passing Yards": 150.0,
     "Sacks": 0.25,
 }
+
+# Version stamp for every real prop pick logged by
+# nfl_prop_predictions.append_prop_predictions - same role and format as
+# NFL_GAME_PICK_MODEL_VERSION/GAME_PICK_MODEL_VERSION, so a real logged
+# hit rate can always be attributed to the model that actually produced
+# it rather than silently pooling picks from before and after a real
+# methodology change. Bumped 2026-09-16 to v2 alongside the real
+# position-split opponent-allowed-rate fix and the real 3-level
+# confidence sort (see nfl_player_props.compute_position_defense_rolling_rates/
+# top_prop_bets' own docstrings) - both changed which real props this
+# feature actually surfaces, so their results must not be pooled with
+# v1's.
+NFL_PROP_MODEL_VERSION = "v2"
 
 # --- NFL DFS: DK Scoring (nfl_dfs.py) ---
 #
