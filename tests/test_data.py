@@ -292,3 +292,97 @@ def test_assign_batting_order_ranks_by_first_at_bat_and_flags_late_entries():
     assert order.loc[("B", 999), "batting_order"] == 10  # substitute, not part of the starting 9
     assert order.loc[("A", 801), "batting_order"] == 1
     assert order.loc[("A", 809), "batting_order"] == 9
+
+
+def _statcast_rows(dates):
+    return pd.DataFrame({
+        "game_date": list(dates),
+        "game_pk": range(len(list(dates))),
+        "at_bat_number": [1] * len(list(dates)),
+        "pitch_number": [1] * len(list(dates)),
+    })
+
+
+def test_fetch_statcast_range_retries_a_transient_failure_and_succeeds(monkeypatch):
+    # The real, confirmed production failure (2026-09-16): pybaseball's
+    # own CSV parse raised after 173 of 175 real day-chunks had already
+    # downloaded fine, killing the entire daily pipeline. That failure
+    # was transient, so a real retry is expected to clear it outright.
+    calls = {"n": 0}
+
+    def _flaky(start_dt, end_dt):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ValueError("Error tokenizing data. C error: Expected 1 fields in line 12, saw 2")
+        return _statcast_rows(["2026-04-01", "2026-04-02"])
+
+    monkeypatch.setattr(data, "_fetch_statcast_window", _flaky)
+
+    result = data.fetch_statcast_range("2026-04-01", "2026-04-02", retry_seconds=0)
+
+    assert calls["n"] == 2  # failed once, then really succeeded
+    assert len(result) == 2
+    assert str(result["game_date"].dtype).startswith("datetime64")
+
+
+def test_fetch_statcast_range_never_sleeps_on_a_healthy_first_attempt(monkeypatch):
+    # A real healthy run must pay nothing for this hardening.
+    monkeypatch.setattr(data, "_fetch_statcast_window", lambda s, e: _statcast_rows(["2026-04-01"]))
+
+    def _no_sleep(seconds):
+        raise AssertionError(f"a real healthy fetch must never sleep (got {seconds}s)")
+
+    monkeypatch.setattr(data.time, "sleep", _no_sleep)
+
+    assert len(data.fetch_statcast_range("2026-04-01", "2026-04-01")) == 1
+
+
+def test_fetch_statcast_range_falls_back_to_chunks_and_skips_only_the_bad_one(monkeypatch):
+    # After every real whole-range attempt fails, the real fallback
+    # salvages the chunks that DO work rather than losing the season.
+    # Here the real window containing 2026-04-10 is persistently bad;
+    # every other real chunk is fine.
+    def _fetcher(start_dt, end_dt):
+        start = pd.Timestamp(start_dt).date()
+        end = pd.Timestamp(end_dt).date()
+        if (end - start).days > 6:
+            raise ValueError("whole-range fetch really failed")
+        if start <= pd.Timestamp("2026-04-10").date() <= end:
+            raise ValueError("this real chunk is genuinely broken")
+        return _statcast_rows([str(start)])
+
+    monkeypatch.setattr(data, "_fetch_statcast_window", _fetcher)
+
+    result = data.fetch_statcast_range(
+        "2026-04-01", "2026-04-21", attempts=2, retry_seconds=0, chunk_days=7
+    )
+
+    # 3 real weekly chunks span the range; the middle one (containing
+    # 04-10) really failed, so 2 real chunks' worth of data survives.
+    assert len(result) == 2
+    assert pd.Timestamp("2026-04-08") not in set(result["game_date"])
+
+
+def test_fetch_statcast_range_raises_when_every_real_chunk_fails(monkeypatch):
+    # A total real outage must surface loudly - silently returning an
+    # empty frame would hand the rest of the pipeline stale persisted
+    # data dressed up as a fresh real pull.
+    def _always_fails(start_dt, end_dt):
+        raise ValueError("Savant is really down")
+
+    monkeypatch.setattr(data, "_fetch_statcast_window", _always_fails)
+
+    try:
+        data.fetch_statcast_range("2026-04-01", "2026-04-14", attempts=1, retry_seconds=0, chunk_days=7)
+    except RuntimeError as exc:
+        assert "Every real Statcast chunk" in str(exc)
+    else:
+        raise AssertionError("a real total outage must raise, not degrade silently")
+
+
+def test_fetch_statcast_range_tolerates_a_real_empty_result(monkeypatch):
+    # A real range with no games (offseason edge) has no columns to
+    # convert - it must not raise a real KeyError on game_date.
+    monkeypatch.setattr(data, "_fetch_statcast_window", lambda s, e: pd.DataFrame())
+
+    assert data.fetch_statcast_range("2026-01-01", "2026-01-02").empty
