@@ -51,12 +51,14 @@ CATEGORY_SPECS = [
 ]
 
 
-def _expanding_prior(df: pd.DataFrame, group_col: str, value_col: str) -> pd.Series:
+def _expanding_prior(df: pd.DataFrame, group_col, value_col: str) -> pd.Series:
     """Real, no-lookahead expanding mean of `value_col` over `group_col`'s
     own STRICTLY PRIOR rows (this row's own real value excluded) - `df`
     must already be sorted by (season, week) ascending. A group's first
     real row gets NaN (no real prior history yet), not a fabricated
-    zero."""
+    zero. `group_col` may be a single real column name or a list of them
+    (a real (team, position) key, for the position-split allowed rates
+    below)."""
     ordered = df.sort_values(["season", "week"])
     grouped = ordered.groupby(group_col)[value_col]
     return grouped.transform(lambda s: s.shift(1).expanding().mean())
@@ -71,10 +73,35 @@ def load_multi_season_weekly() -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def build_skill_category_rows(weekly_df: pd.DataFrame, label: str, stat_col: str, positions: tuple) -> pd.DataFrame:
+def build_skill_category_rows(
+    weekly_df: pd.DataFrame, label: str, stat_col: str, positions: tuple, position_split: bool = True
+) -> pd.DataFrame:
     """One real row per (player, season, week) for this category's real
     qualifying position group: [player_id, team, opponent, season, week,
-    actual, prior_rate, opponent_prior_allowed, league_prior_rate]."""
+    actual, prior_rate, opponent_prior_allowed, league_prior_rate].
+
+    `position_split` (default True) controls how a real defense's own
+    "allowed" rate is built, and exists specifically so the two real
+    methods can be measured head to head rather than argued about:
+
+    - True  - allowed rates are split by the OPPOSING PLAYER'S OWN real
+              position (RB/WR/TE separately), and the real league average
+              is the cross-sectional mean WITHIN that same position. This
+              is what nfl_player_props.compute_position_defense_rolling_rates
+              actually ships as of 2026-09-16.
+    - False - every real position pooled into one team-wide number, which
+              is what this backtest measured BEFORE that change, and what
+              config.NFL_PROP_MATCHUP_CLIP/NFL_PROP_MATCHUP_WEIGHT were
+              originally tuned against.
+
+    Why this parameter exists at all, stated honestly: the position split
+    was shipped on first-principles reasoning (a real TE prop should not
+    be graded against a number dominated by real WR volume) and was never
+    actually VALIDATED against real outcomes - it is entirely possible
+    that splitting helps correctness while HURTING the real signal, since
+    each real (team, position) bucket is sampled far more thinly than one
+    pooled team bucket. Keeping both real methods runnable is what makes
+    that a measurable question instead of an assumption."""
     pool = weekly_df[
         (weekly_df["position"].isin(positions)) & (weekly_df["season_type"] == "REG")
     ].copy()
@@ -82,19 +109,28 @@ def build_skill_category_rows(weekly_df: pd.DataFrame, label: str, stat_col: str
     pool["prior_rate"] = _expanding_prior(pool, "player_id", stat_col)
     pool["actual"] = pool[stat_col]
 
-    team_week = pool.groupby(["opponent_team", "season", "week"], as_index=False).agg(allowed=(stat_col, "sum"))
+    # The real key a defense's allowed-rate is accumulated over, and the
+    # real key its league average is taken within - both shift together,
+    # because a position-split rate compared against a pooled league mean
+    # would be a real apples-to-oranges ratio.
+    allowed_keys = ["opponent_team", "position"] if position_split else ["opponent_team"]
+    team_keys = ["team", "position"] if position_split else ["team"]
+    league_keys = ["season", "week", "position"] if position_split else ["season", "week"]
+    merge_keys = ["opponent_team", "position", "season", "week"] if position_split else ["opponent_team", "season", "week"]
+
+    team_week = pool.groupby(allowed_keys + ["season", "week"], as_index=False).agg(allowed=(stat_col, "sum"))
     team_week = team_week.rename(columns={"opponent_team": "team"})
     team_week = team_week.sort_values(["season", "week"])
-    team_week["opponent_prior_allowed"] = _expanding_prior(team_week, "team", "allowed")
+    team_week["opponent_prior_allowed"] = _expanding_prior(team_week, team_keys, "allowed")
 
-    league_prior = team_week.groupby(["season", "week"])["opponent_prior_allowed"].mean().rename("league_prior_rate")
-    team_week = team_week.merge(league_prior, on=["season", "week"], how="left")
+    league_prior = team_week.groupby(league_keys)["opponent_prior_allowed"].mean().rename("league_prior_rate")
+    team_week = team_week.merge(league_prior, on=league_keys, how="left")
 
     merged = pool.merge(
-        team_week[["team", "season", "week", "opponent_prior_allowed", "league_prior_rate"]].rename(
+        team_week[team_keys + ["season", "week", "opponent_prior_allowed", "league_prior_rate"]].rename(
             columns={"team": "opponent_team"}
         ),
-        on=["opponent_team", "season", "week"],
+        on=merge_keys,
         how="left",
     )
     merged["category"] = label
@@ -182,6 +218,19 @@ def evaluate_weight(rows: pd.DataFrame, weight: float, clip: tuple, min_games_se
     top_rate = top_group["beat_own_baseline"].mean()
     bottom_rate = bottom_group["beat_own_baseline"].mean()
     correlation = df["ratio"].corr(df["relative_performance"])
+    # Real, directly-actionable diagnostic added 2026-09-16 after a real
+    # user report that the live board looked "sorted by team and then
+    # category": a real row pinned exactly to a clip boundary carries NO
+    # remaining information about HOW favorable its matchup is, so a
+    # heavily-saturated category collapses into one giant tie at the top
+    # of the real board and its ordering falls through to the tiebreaks
+    # instead of to matchup quality. Measured live on the real shipped
+    # week-2 slate at the time: 35.6% of all qualified rows pinned, and
+    # 63% for Sacks (only 16 distinct real ratio values across 135 rows).
+    # Correlation alone cannot see this - a clip can score well on
+    # correlation while still destroying the board's own real ordering.
+    lo, hi = clip
+    saturated = df["ratio"].round(6).isin([round(lo, 6), round(hi, 6)])
     return {
         "n": len(df),
         "top_n": len(top_group),
@@ -190,7 +239,43 @@ def evaluate_weight(rows: pd.DataFrame, weight: float, clip: tuple, min_games_se
         "bottom_beat_rate": bottom_rate,
         "spread": top_rate - bottom_rate,
         "correlation": correlation,
+        "saturated_fraction": saturated.mean(),
+        "distinct_ratios": int(df["ratio"].nunique()),
     }
+
+
+# Deliberately wider than the original [(0.7,1.3), (0.8,1.2), (0.6,1.4)]
+# grid. The original sweep's own widest candidate was (0.6, 1.4), so a
+# real optimum beyond that could never have been found by it - and the
+# real live board turned out to be heavily clip-saturated at the shipped
+# (0.8, 1.2), which is exactly the symptom of a clip that is too tight
+# for the signal actually being ranked. Extending the grid is what makes
+# "is 0.8/1.2 actually right" a real question this can answer either way.
+CLIPS = [(0.8, 1.2), (0.7, 1.3), (0.6, 1.4), (0.5, 1.5), (0.4, 1.6), (0.25, 1.75)]
+
+
+def _sweep(rows: pd.DataFrame, label: str, verbose: bool = True) -> dict:
+    """Real full (weight, clip) sweep for one real category's rows.
+    Returns the real best candidate by correlation."""
+    best = None
+    for weight in config.NFL_PROP_MATCHUP_WEIGHT_GRID:
+        for clip in CLIPS:
+            result = evaluate_weight(rows, weight, clip)
+            if result["spread"] is None:
+                if verbose:
+                    print(f"  weight={weight}, clip={clip}: n too small ({result['n']})")
+                continue
+            if verbose:
+                print(
+                    f"  weight={weight}, clip={clip}: n={result['n']} "
+                    f"spread={result['spread']:+.4f} "
+                    f"correlation={result['correlation']:+.4f} "
+                    f"saturated={result['saturated_fraction']*100:5.1f}% "
+                    f"distinct_ratios={result['distinct_ratios']}"
+                )
+            if best is None or result["correlation"] > best["correlation"]:
+                best = {"weight": weight, "clip": clip, **result}
+    return best
 
 
 def main():
@@ -198,53 +283,90 @@ def main():
     weekly_df = load_multi_season_weekly()
     print(f"{len(weekly_df)} real weekly rows loaded.\n")
 
-    rows_by_category = {}
+    # Both real methods, built side by side - see
+    # build_skill_category_rows' own `position_split` docstring for why
+    # the pooled team-wide version is still built at all. Sacks is
+    # genuinely team-level in the live module too
+    # (compute_sacks_allowed_rolling_rates), so it has no split variant
+    # and is shared unchanged between the two - its numbers below are
+    # identical by construction, not a coincidence to read into.
+    sacks_rows = build_sacks_rows(weekly_df)
+    rows_by_method = {"position-split (live)": {}, "team-wide (pre-2026-09-16)": {}}
     for label, stat_col, positions, _, _ in CATEGORY_SPECS:
-        print(f"Building real {label} rows...")
-        rows_by_category[label] = build_skill_category_rows(weekly_df, label, stat_col, positions)
+        print(f"Building real {label} rows (both methods)...")
+        rows_by_method["position-split (live)"][label] = build_skill_category_rows(
+            weekly_df, label, stat_col, positions, position_split=True
+        )
+        rows_by_method["team-wide (pre-2026-09-16)"][label] = build_skill_category_rows(
+            weekly_df, label, stat_col, positions, position_split=False
+        )
     print("Building real Sacks rows...")
-    rows_by_category["Sacks"] = build_sacks_rows(weekly_df)
+    for method in rows_by_method:
+        rows_by_method[method]["Sacks"] = sacks_rows
 
-    clips = [(0.7, 1.3), (0.8, 1.2), (0.6, 1.4)]
-    print("\n=== Real per-category, per-(weight, clip) validation ===")
+    print("\n=== Real head-to-head: does splitting allowed-rates by position actually help? ===")
+    print("(best real correlation per category, over the full real (weight, clip) grid)\n")
+    print(f'{"category":<18}{"position-split":>16}{"team-wide":>14}{"delta":>10}')
+    best_by_method = {}
+    for method, rows_by_category in rows_by_method.items():
+        best_by_method[method] = {
+            label: _sweep(rows, label, verbose=False) for label, rows in rows_by_category.items()
+        }
+    for label in rows_by_method["position-split (live)"]:
+        split = best_by_method["position-split (live)"][label]["correlation"]
+        pooled = best_by_method["team-wide (pre-2026-09-16)"][label]["correlation"]
+        print(f"{label:<18}{split:>+16.4f}{pooled:>+14.4f}{split - pooled:>+10.4f}")
+
+    print("\n\n=== Real per-category, per-(weight, clip) validation - POSITION-SPLIT (what actually ships) ===")
     print(
         "(spread = top-tercile beat-own-baseline rate MINUS bottom-tercile rate, positive = real signal, "
         "but RANK-invariant to weight/clip - see evaluate_weight's own docstring; correlation is the real "
-        "scale-sensitive tiebreaker used to pick weight/clip)\n"
+        "scale-sensitive tiebreaker used to pick weight/clip; saturated = real share of rows pinned to a "
+        "clip boundary, which carry no remaining real information about HOW favorable the matchup is)\n"
     )
 
     best_by_category = {}
-    for label in list(rows_by_category.keys()):
+    for label, rows in rows_by_method["position-split (live)"].items():
         print(f"--- {label} ---")
-        rows = rows_by_category[label]
-        best = None
-        for weight in config.NFL_PROP_MATCHUP_WEIGHT_GRID:
-            for clip in clips:
-                result = evaluate_weight(rows, weight, clip)
-                if result["spread"] is None:
-                    print(f"  weight={weight}, clip={clip}: n too small ({result['n']})")
-                    continue
-                print(
-                    f"  weight={weight}, clip={clip}: n={result['n']} "
-                    f"top_beat_rate={result['top_beat_rate']:.4f} "
-                    f"bottom_beat_rate={result['bottom_beat_rate']:.4f} "
-                    f"spread={result['spread']:+.4f} "
-                    f"correlation={result['correlation']:+.4f}"
-                )
-                if best is None or result["correlation"] > best["correlation"]:
-                    best = {"weight": weight, "clip": clip, **result}
+        best = _sweep(rows, label)
         best_by_category[label] = best
         print(
             f"  BEST (by correlation): weight={best['weight']}, clip={best['clip']}, "
-            f"correlation={best['correlation']:+.4f}, spread={best['spread']:+.4f}\n"
+            f"correlation={best['correlation']:+.4f}, spread={best['spread']:+.4f}, "
+            f"saturated={best['saturated_fraction']*100:.1f}%\n"
         )
 
-    print("=== Summary: best real (weight, clip) per category ===")
+    print("=== Summary: best real (weight, clip) per category (position-split) ===")
     for label, best in best_by_category.items():
         print(
             f"{label}: weight={best['weight']} clip={best['clip']} "
-            f"correlation={best['correlation']:+.4f} spread={best['spread']:+.4f} (n={best['n']})"
+            f"correlation={best['correlation']:+.4f} spread={best['spread']:+.4f} "
+            f"saturated={best['saturated_fraction']*100:.1f}% (n={best['n']})"
         )
+
+    print("\n=== Real shared-candidate comparison (one clip for every category, as shipped) ===")
+    print("(total = sum of real per-category correlations at that shared candidate)\n")
+    shared = []
+    for weight in config.NFL_PROP_MATCHUP_WEIGHT_GRID:
+        for clip in CLIPS:
+            per_category = {
+                label: evaluate_weight(rows, weight, clip)
+                for label, rows in rows_by_method["position-split (live)"].items()
+            }
+            if any(r["correlation"] is None for r in per_category.values()):
+                continue
+            total = sum(r["correlation"] for r in per_category.values())
+            worst_saturation = max(r["saturated_fraction"] for r in per_category.values())
+            shared.append((total, weight, clip, worst_saturation))
+            print(
+                f"  weight={weight}, clip={clip}: total_correlation={total:+.4f} "
+                f"worst_category_saturation={worst_saturation*100:5.1f}%"
+            )
+    best_shared = max(shared, key=lambda t: t[0])
+    print(
+        f"\n  BEST SHARED: weight={best_shared[1]}, clip={best_shared[2]}, "
+        f"total_correlation={best_shared[0]:+.4f}, worst_category_saturation={best_shared[3]*100:.1f}%"
+    )
 
 
 if __name__ == "__main__":

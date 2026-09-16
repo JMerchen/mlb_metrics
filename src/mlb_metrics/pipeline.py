@@ -390,6 +390,24 @@ def run(
                     f"logging today's game picks without a market comparison."
                 )
                 market_probabilities = None
+            # Real, evidence-backed guard (2026-09-16): defer to the real
+            # market's own devigged probability on games where this model
+            # disagrees with it by a lot - see
+            # config.GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD's own comment
+            # block for the full real numbers from this project's own
+            # logged results. Deliberately applied AFTER apply_calibration
+            # above, not before: the deferred value must remain the REAL,
+            # untouched devigged market probability, since that is exactly
+            # what makes a deferred game's real edge <= 0 by construction
+            # (see apply_market_tiebreak's own docstring). Running it
+            # before calibration would push the market's own probability
+            # through this model's own recalibration - which, on real
+            # data, compresses toward 0.5 - and hand back a fabricated
+            # edge on precisely the games this guard exists to suppress.
+            if market_probabilities is not None:
+                win_probabilities = game_picks.apply_market_tiebreak(
+                    win_probabilities, market_probabilities
+                )
             todays_game_picks = game_predictions.select_game_picks(
                 win_probabilities,
                 as_of_date,

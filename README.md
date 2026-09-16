@@ -2599,6 +2599,45 @@ place rather than crashing or overwriting with nothing) and are wired into
 
 ## Automated Game Picks (dashboard)
 
+> **Real, measured status (2026-09-16), stated up front rather than
+> buried:** across all **373 real resolved games** in
+> `data/predictions/game_predictions.csv` that carry a real market
+> probability, this model is **behind its own market** - 56.3% vs 58.4%
+> accuracy, 0.2479 vs 0.2351 Brier - and the real market was at least as
+> accurate in **every** disagreement bucket at or above 0.05. The real
+> advised-bet record over that same log was **99 bets, 33.3% win rate,
+> −27.55 units, −16.8% ROI**, with a real closing-line-beat rate of
+> 42.9% (i.e. below a coin flip - the single most diagnostic real number
+> in sports betting). **96% of all real advised bets were underdogs**
+> (median +157), which is the mechanical signature of the real
+> underlying problem: this model's probability spread is roughly a third
+> of the market's (std 0.042 vs 0.130), so a probability compressed
+> toward 0.5 will always appear to have "edge" on whichever side the
+> market prices as unlikely. The market-disagreement guard described
+> below is the first real fix for this; the compressed spread itself is
+> a known, still-open real issue. **These picks have no demonstrated
+> real edge over the market and should not be treated as if they do.**
+
+**Market-disagreement guard** (`game_picks.apply_market_tiebreak`, added
+2026-09-16): when this model's probability disagrees with the real
+devigged market probability by at least
+`config.GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD` (0.10), the real market's
+own probability is used instead - the MLB port of the NFL guard that was
+already validated on 1,482 real walk-forward NFL games. Because the
+market probability it defers to is DEVIGGED (always <= the raw vigged
+implied price `advise_bets` compares against), a deferred game's real
+edge is <= 0 by construction, so bet advice is suppressed on exactly the
+bucket that lost real money - no change to `advise_bets` needed. Real
+replay over the same real log: advised bets 99 -> 43, real profit
+−27.55 -> **+4.30 units**, and real accuracy/Brier across all 373 games
+improve monotonically as the threshold tightens (see that constant's own
+comment block in `config.py` for the full real sweep, and for the honest
+caveat that the positive-ROI cells rest on a thin 43-bet sample).
+Deliberately applied AFTER `apply_calibration` in `pipeline.run()`, since
+running it before would push the real market probability through this
+model's own recalibration - which, on real data, compresses toward 0.5 -
+and hand back a fabricated edge on precisely the games it exists to stop.
+
 A second, independent dashboard section predicts a winner for each of
 today's games (not hitters) from six team-level signals: each team's
 Pythagorean strength (`pyth_Strength`), Pythagorean confidence
@@ -5217,6 +5256,46 @@ low-sample/low-usage cameos before ranking (a real one-catch-a-game
 player can never crowd out a real starter just because a tiny sample
 let a stray ratio run hot).
 
+**Real re-validation after the position-split fix (2026-09-16)**: that
+fix replaced the team-wide pooled allowed-rates that
+`NFL_PROP_MATCHUP_CLIP`/`NFL_PROP_MATCHUP_WEIGHT` had originally been
+tuned against - which meant the constants were, strictly, no longer
+backed by anything. `scripts/backtest_nfl_player_props.py` was updated to
+build allowed-rates the same position-split way the live module now does
+(keeping the old pooled method runnable alongside, so the two are
+measurable head to head rather than argued about) and re-run over all 10
+real cached seasons. Three real findings:
+
+1. **The position split is genuinely better, not just more principled**
+   - best real correlation per category, split vs pooled: Receptions
+   +0.0215 vs +0.0117 (**+85%**), Rushing Yards +0.0239 vs +0.0064
+   (**+272%**), Receiving Yards +0.0225 vs +0.0186 (+21%); Passing Yards
+   and Sacks unchanged (QB-only and team-level by design). That fix had
+   shipped on reasoning alone and is now actually validated.
+2. **The shipped (weight, clip) survives the re-tune unchanged** -
+   against a deliberately wider clip grid than the original sweep ever
+   tried (it topped out at (0.6, 1.4), so it structurally could not have
+   found a wider optimum), `weight=1.0, clip=(0.8, 1.2)` is still the
+   real summed-correlation best (+0.1635, next best +0.1630). Reported as
+   the confirmatory finding it is, not dressed up as an improvement.
+3. **But the clip must not be applied before RANKING** - and that was a
+   real live bug. The same backtest's rank-based tercile spread is
+   IDENTICAL for every (weight, clip) candidate in the grid (+0.0268
+   Receptions, +0.0321 Sacks, ...), which is direct proof a clip cannot
+   improve a rank; all it can do is destroy one, by collapsing everything
+   past the boundary into a single value. On the real shipped week-2
+   board that meant 35.6% of qualified rows pinned to a boundary (63% for
+   Sacks - just 16 distinct ratio values across 135 rows) and a single
+   **49-row tie at the top**, which then fell through to the usage
+   tiebreak and ordered the board by volume instead of matchup quality -
+   exactly what was reported. `top_prop_bets` now ranks on the UNCLIPPED
+   ratio while still reporting the clipped one as the signal: largest
+   real tie group **49 -> 10**, and the real board went from 10-of-10
+   "Under" in one saturated category to a real **7/3 Over-Under split
+   across 3 categories and 6 teams**, surfacing spots like a real RB
+   against a run defense allowing 40% above league average that the
+   saturated ranking had made invisible.
+
 **Real fixes from live user feedback (2026-09-16)**: two real, separate
 problems, both traced to the same original design choice -
 `opponent_allowed_rate` for Receptions/Receiving Yards/Rushing Yards
@@ -5264,6 +5343,36 @@ individual pass rusher's own real recent sack rate, an individual QB's
 own real recent yardage rate), not accounting for real game-script
 factors (a blowout, injury, a real key opposing-line absence) a human
 bettor would also weigh.
+
+**Real results tracking** (`nfl_prop_predictions.py`, added 2026-09-16):
+a real, structural gap found while reviewing this feature against its own
+goal - `docs/data/nfl_player_props.csv` is OVERWRITTEN every week, and
+nothing anywhere recorded whether the prior week's real 10 picks actually
+came in. Every other pick this project makes (MLB game picks, NFL game
+picks) has a real log -> resolve -> evaluate loop; props had none, so
+this feature's real hit rate was unknowable and therefore unimprovable by
+construction - no tuning could be validated and a real regression could
+never be detected. Now every week's real picks are appended to
+`data/predictions/nfl_prop_predictions.csv` BEFORE the games are played,
+and resolved on a later real run once real weekly stats exist.
+
+What "resolved" honestly means here, given this feature's own
+user-confirmed scope (matchup quality only, NO real sportsbook line to
+settle against): a real pick claims a favorable/unfavorable real matchup
+pushes a player ABOVE/BELOW their OWN recent per-game baseline, which is
+logged alongside the pick as `baseline_rate` precisely so it is checkable
+later. An "Over" is a real hit when the player's real stat that week beat
+that baseline, an "Under" when it came in below - deliberately the SAME
+real quantity `scripts/backtest_nfl_player_props.py` already validates
+offline, so the real live hit rate is directly comparable to the real
+backtested claim rather than measuring a subtly different thing. A real
+exact tie is recorded as a real PUSH, and a real DNP (inactive/injured/
+benched - genuinely common) stays PENDING rather than being scored as a
+loss, since this feature never claimed the player would play. Written out
+each run as `docs/data/nfl_player_props_results.csv`, which reports
+`n_pending` alongside every real hit rate - this log is days old, so the
+honest answer will be "not enough real resolved picks yet" for a while,
+and that is reported rather than hidden.
 
 Writes `docs/data/nfl_player_props.csv` (the real top 10) as part of
 the existing weekly `nfl_pipeline.run()` (`.github/workflows/nfl_weekly_update.yml`)

@@ -588,6 +588,22 @@ def test_run_resolves_game_picks_across_two_runs(monkeypatch, tmp_path):
     # dedicated tests and doesn't need to also hold here.
     monkeypatch.setattr(pipeline.game_picks, "apply_calibration", lambda win_probabilities: win_probabilities)
 
+    # Same reasoning for the real market-disagreement guard added
+    # 2026-09-16 (game_picks.apply_market_tiebreak): this fixture is
+    # deliberately built so the model favors NYY substantially while the
+    # real market prices NYY as a +130 underdog - which is, by design,
+    # EXACTLY the shape that guard now defers on (see
+    # config.GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD's own real evidence:
+    # this is the pattern behind every losing real bet in the logged
+    # results). This test is about the day-1/day-2 resolve wiring, not
+    # about the guard, which has its own dedicated tests in
+    # tests/test_game_picks.py - so bypass it here rather than weaken the
+    # real guard or rebuild the fixture around it.
+    monkeypatch.setattr(
+        pipeline.game_picks, "apply_market_tiebreak",
+        lambda win_probabilities, market_probabilities: win_probabilities,
+    )
+
     schedule_games_day1 = pd.DataFrame([{
         "game_pk": 100, "date": pd.Timestamp("2026-06-19"), "home_team": "NYY", "away_team": "BOS",
         "home_probable_pitcher_key_mlbam": 501, "away_probable_pitcher_key_mlbam": 502,

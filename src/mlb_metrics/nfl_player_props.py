@@ -45,6 +45,24 @@ import pandas as pd
 from mlb_metrics import config, nfl_matchup, nfl_passing, nfl_rush_rec, nfl_teams
 
 
+# The real weekly-stats column each real prop category is ultimately
+# settled against - the single real place this mapping lives, so
+# nfl_prop_predictions.resolve_prop_predictions can score a real logged
+# pick against what the player ACTUALLY did that week without
+# re-deriving (and drifting from) the category names the builders below
+# emit. Deliberately keyed by the exact real category strings
+# `build_prop_edges` itself produces, so a renamed or newly-added
+# category surfaces as a real, visible KeyError-shaped gap at resolution
+# time rather than silently scoring nothing.
+PROP_CATEGORY_STAT_COLUMNS = {
+    "Receptions": "receptions",
+    "Receiving Yards": "receiving_yards",
+    "Rushing Yards": "rushing_yards",
+    "Passing Yards": "passing_yards",
+    "Sacks": "def_sacks",
+}
+
+
 def _latest_player_names(weekly_df: pd.DataFrame) -> pd.DataFrame:
     """[player_id, player_name]: each player's most recent real
     `player_display_name` - a player's own display name is stable
@@ -434,7 +452,33 @@ def top_prop_bets(edges_df: pd.DataFrame, n: int = 10, min_games: int = None) ->
     qualified = qualified.dropna(subset=["opponent"])
 
     qualified["direction"] = qualified["ratio"].apply(lambda r: "Over" if r > 1 else "Under")
-    percentile = qualified.groupby("category")["ratio"].rank(pct=True)
+    # Ranked on the UNCLIPPED ratio, deliberately, even though `ratio`
+    # (clipped to config.NFL_PROP_MATCHUP_CLIP) remains the real reported
+    # signal - a real, measured fix (2026-09-16), not a preference:
+    #
+    # The clip earns its keep on MAGNITUDE (a real re-run of
+    # scripts/backtest_nfl_player_props.py over all 10 real seasons, on
+    # the corrected position-split rates, confirmed (0.8, 1.2) is still
+    # the real correlation optimum - a tighter clip genuinely suppresses
+    # noisy extremes). But this key is a RANK, and that same real
+    # backtest proves clipping cannot help a rank: its own tercile spread
+    # came out IDENTICAL for every single (weight, clip) candidate tested
+    # (+0.0268 for Receptions, +0.0321 for Sacks, across the entire real
+    # grid), because rank is invariant to any positive monotonic
+    # transform. Clipping before ranking therefore adds nothing and
+    # actively destroys real ordering: every row past the boundary
+    # collapses to one identical value. Measured live on the real shipped
+    # week-2 slate: 35.6% of qualified rows pinned to a boundary, 63% for
+    # Sacks (just 16 distinct real ratio values across 135 rows) - so the
+    # top of the real board became one giant tie, ordered by the usage
+    # tiebreak (volume) rather than by matchup quality, which is exactly
+    # what a real user reported seeing.
+    #
+    # `weight` is a positive constant, so rank(1 + w*(raw - 1)) == rank(raw)
+    # - ranking the plain unclipped ratio here is the same real ordering
+    # the weighted-but-unclipped value would give, without re-deriving it.
+    unclipped_ratio = qualified["opponent_allowed_rate"] / qualified["league_rate"]
+    percentile = unclipped_ratio.groupby(qualified["category"]).rank(pct=True)
     qualified["edge_percentile"] = (percentile - 0.5).abs()
     qualified["usage_percentile"] = qualified.groupby("category")["player_rate"].rank(pct=True)
     qualified["raw_edge_magnitude"] = (qualified["opponent_allowed_rate"] / qualified["league_rate"] - 1).abs()

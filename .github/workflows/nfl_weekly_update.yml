@@ -67,7 +67,22 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
+          # NOTE: every real output path this pipeline writes must be
+          # listed here. A real, confirmed bug (2026-09-16):
+          # docs/data/nfl_player_props.csv was written every week for
+          # weeks and silently dropped before every commit because it was
+          # missing from this list. nfl_player_props_results.csv and
+          # nfl_prop_predictions.csv are the same class of file - add new
+          # outputs here at the same time they're wired into the pipeline.
           git add docs/data/nfl_game_picks_picks.csv docs/data/nfl_game_picks_summary.csv docs/data/nfl_game_picks_summary_by_version.csv docs/data/nfl_player_props.csv data/raw/nfl/ data/predictions/nfl_game_predictions.csv
+          # These two are only written once there's real data for them
+          # (a real first prop-logging run, and a real first resolved
+          # pick) - `git add` on a path that doesn't exist yet fails the
+          # whole step under `bash -e`, so guard each one, the same way
+          # consensus_rankings_update.yml's own commit step already does.
+          for f in data/predictions/nfl_prop_predictions.csv docs/data/nfl_player_props_results.csv; do
+            [ -f "$f" ] && git add "$f"
+          done
 
           git commit -m "NFL weekly update" || echo "No changes"
 
