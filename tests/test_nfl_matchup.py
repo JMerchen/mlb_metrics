@@ -24,6 +24,25 @@ def test_compute_opponent_adjustment_ratio_clips_extreme_outliers():
     assert result.iloc[0] == pytest.approx(hi)
 
 
+def test_compute_opponent_adjustment_ratio_accepts_an_explicit_clip_override():
+    # Real, necessary fix (2026-09-16, nfl_player_props.py): a caller
+    # with a different real use case (ranking matchups, not damping a
+    # DK-projection blend) needs a real, wider clip than this function's
+    # own default config.NFL_MATCHUP_OFFENSE_CLIP (0.85, 1.15) - without
+    # an explicit override, passing a wider clip elsewhere would silently
+    # be clamped right back down to the default range here.
+    result = nfl_matchup.compute_opponent_adjustment_ratio(
+        pd.Series([400.0]), league_rate=200.0, weight=1.0, clip=(0.5, 1.5)
+    )
+    assert result.iloc[0] == pytest.approx(1.5)
+
+
+def test_compute_opponent_adjustment_ratio_default_clip_unchanged_when_not_given():
+    lo, hi = config.NFL_MATCHUP_OFFENSE_CLIP
+    result = nfl_matchup.compute_opponent_adjustment_ratio(pd.Series([2000.0]), league_rate=200.0, weight=1.0)
+    assert result.iloc[0] == pytest.approx(hi)
+
+
 def test_attach_matchup_adjustment_uses_schedule_opponent_not_defense_rates_order():
     # Two teams (SF, KC) each play a DIFFERENT real opponent this week
     # (SEA, DEN respectively) per current_week_schedule_df. defense_rates_df

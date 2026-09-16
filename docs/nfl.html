@@ -69,6 +69,7 @@ this block isn't in the shared stylesheet. */
 <button class="tabButton active" data-nfl-tab="preseason" onclick="selectNflTab('preseason')">Preseason</button>
 <button class="tabButton" data-nfl-tab="gamepicks" onclick="selectNflTab('gamepicks')">Game Picks</button>
 <button class="tabButton" data-nfl-tab="draftboard" onclick="selectNflTab('draftboard')">Draft Board</button>
+<button class="tabButton" data-nfl-tab="playerprops" onclick="selectNflTab('playerprops')">Player Props</button>
 </div>
 
 <div id="gamePicksSection" style="display:none">
@@ -243,6 +244,29 @@ Loading...
 
 </div>
 
+<div id="playerPropsSection" style="display:none">
+
+<h3>
+Player Prop Bets - Top Matchups
+</h3>
+
+<p style="opacity:.75; max-width:700px;">
+Real player prop rankings by matchup quality alone - a player's own
+recent per-game rate against their real upcoming opponent's real
+allowed-rate weakness at that stat (receptions, receiving yards,
+rushing yards, passing yards, sacks). NOT priced against any real
+sportsbook line (see the
+<a href="https://github.com/JMerchen/mlb_metrics#nfl-player-props-nfl_player_propspy" style="color:inherit">README</a>
+for the full methodology and real backtest validation) - these are real
+"good spots to look," not a priced +EV pick. Updates weekly.
+</p>
+
+<div class="scrollbox" id="nflPlayerPropsTable">
+Loading...
+</div>
+
+</div>
+
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -250,6 +274,8 @@ Loading...
 <script src="./nfl_draft_assistant.js"></script>
 
 <script src="./consensus_board.js"></script>
+
+<script src="./player_props.js"></script>
 
 <script src="./nfl.js"></script>
 
