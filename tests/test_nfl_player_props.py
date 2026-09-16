@@ -392,3 +392,52 @@ def test_top_prop_bets_breaks_a_cross_category_tie_by_unclipped_raw_magnitude():
     top = nfl_player_props.top_prop_bets(edges, n=2)
 
     assert list(top["player_id"]) == ["rb_fav", "wr_fav"]
+
+
+def test_top_prop_bets_ranks_on_the_unclipped_ratio_not_the_clipped_one():
+    # Real, measured bug (2026-09-16): ranking on the CLIPPED ratio
+    # collapsed every matchup past the clip boundary into one identical
+    # value - 35.6% of real qualified rows on the real shipped week-2
+    # board, a single 49-row tie at the top, which then fell through to
+    # the usage tiebreak and ordered the board by volume instead of by
+    # matchup quality. scripts/backtest_nfl_player_props.py proves a clip
+    # cannot help a rank anyway (its rank-based tercile spread is
+    # IDENTICAL for every clip candidate tested) - so ranking uses the
+    # unclipped ratio while `ratio` still reports the clipped signal.
+    #
+    # Both WRs below face defenses well past the clip ceiling, so both
+    # report the SAME clipped ratio - only the unclipped matchup tells
+    # them apart, and the genuinely more extreme one must rank first
+    # even though it is the LOWER-usage player (so usage can't be what
+    # produced the ordering).
+    rows = []
+    rows += _multi_week_skill_rows("wr_extreme", "WR Extreme", "SF", "SEA", "WR", range(1, 6), receiving_yards=40)
+    rows += _multi_week_skill_rows("wr_mild", "WR Mild", "KC", "NE", "WR", range(1, 6), receiving_yards=45)
+    # SEA allows a huge amount to WRs (240/wk); NE allows less but is
+    # still above average (150/wk) - BOTH clip to the same ceiling.
+    rows += _multi_week_skill_rows("sea_feeder", "SEA Feeder", "ARI", "SEA", "WR", range(1, 6), receiving_yards=200)
+    rows += _multi_week_skill_rows("ne_feeder", "NE Feeder", "BUF", "NE", "WR", range(1, 6), receiving_yards=105)
+    # Two real stingy defenses, purely to pull the real league average
+    # down far enough that both subject matchups land ABOVE it (rather
+    # than straddling it and clipping in opposite directions).
+    rows += _multi_week_skill_rows("low_one", "Low One", "DAL", "DEN", "WR", range(1, 6), receiving_yards=30)
+    rows += _multi_week_skill_rows("low_two", "Low Two", "NYG", "MIA", "WR", range(1, 6), receiving_yards=30)
+    weekly_df = pd.DataFrame(rows)
+    current_week_schedule = pd.DataFrame([
+        {"home_team": "SF", "away_team": "SEA"},
+        {"home_team": "KC", "away_team": "NE"},
+    ])
+
+    edges = nfl_player_props.build_prop_edges(weekly_df, current_week_schedule)
+    subject = edges[edges["player_id"].isin(["wr_extreme", "wr_mild"])]
+    rec_yards = subject[subject["category"] == "Receiving Yards"].set_index("player_id")
+    # Confirm the fixture really does saturate both to the same clipped
+    # ratio before trusting the ordering assertion below.
+    assert rec_yards.loc["wr_extreme", "ratio"] == pytest.approx(rec_yards.loc["wr_mild", "ratio"])
+    unclipped = rec_yards["opponent_allowed_rate"] / rec_yards["league_rate"]
+    assert unclipped.loc["wr_extreme"] > unclipped.loc["wr_mild"]
+
+    top = nfl_player_props.top_prop_bets(edges, n=10)
+    ordered = [p for p in top["player_id"] if p in ("wr_extreme", "wr_mild")]
+
+    assert ordered[0] == "wr_extreme"

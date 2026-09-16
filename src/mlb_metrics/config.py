@@ -1852,6 +1852,61 @@ NFL_MATCHUP_WEIGHT = 0.0
 # alone gives up real correlation (0.004 vs its own real best 0.006) for
 # that simplicity, an accepted real trade-off given how weak that one
 # category's signal already is either way.
+# RE-VALIDATED 2026-09-16, after the real position-split fix
+# (nfl_player_props.compute_position_defense_rolling_rates) replaced the
+# team-wide pooled allowed-rates these constants were ORIGINALLY tuned
+# against - i.e. the original sweep had been invalidated by that change
+# and had to be re-run before either constant could still be trusted.
+# scripts/backtest_nfl_player_props.py was updated to build allowed-rates
+# the same position-split way the live module now does (and to keep the
+# old pooled method runnable alongside it, so the two are measurable
+# head to head rather than argued about), then re-run over all 10 real
+# cached seasons.
+#
+# REAL RESULT 1 - the position split is genuinely BETTER, not just more
+# principled. Best real correlation per category, position-split vs the
+# old team-wide pooling:
+#     Receptions       +0.0215  vs  +0.0117   (+85%)
+#     Receiving Yards  +0.0225  vs  +0.0186   (+21%)
+#     Rushing Yards    +0.0239  vs  +0.0064   (+272%)
+#     Passing Yards    +0.0586  vs  +0.0586   (QB-only - no split exists)
+#     Sacks            +0.0396  vs  +0.0396   (team-level by design)
+# That fix had shipped on first-principles reasoning alone (a real TE
+# prop should not be graded against a number dominated by real WR
+# volume) and was never actually validated until this re-run. It is.
+#
+# REAL RESULT 2 - the shipped (weight, clip) survives the re-tune
+# UNCHANGED. Over the corrected position-split data and a deliberately
+# WIDER clip grid than the original sweep ever tried (which topped out at
+# (0.6, 1.4), so it structurally could not have found a wider optimum),
+# summed real correlation across all 5 categories:
+#     weight=1.0,  clip=(0.8, 1.2): +0.1635   <- still the real best
+#     weight=0.75, clip=(0.8, 1.2): +0.1630
+#     weight=1.0,  clip=(0.7, 1.3): +0.1627
+#     weight=1.0,  clip=(0.6, 1.4): +0.1619
+#     weight=1.0,  clip=(0.5, 1.5): +0.1613
+#     weight=1.0,  clip=(0.25, 1.75): +0.1591
+# A real confirmatory finding, reported as such rather than dressed up as
+# an improvement: the tight clip genuinely does suppress noisy extremes,
+# and widening it costs real correlation at every step.
+#
+# REAL RESULT 3 - but the clip must NOT be applied before RANKING, and
+# that was a real live bug this re-run exposed. The same backtest's own
+# rank-based tercile spread came out IDENTICAL for every single (weight,
+# clip) candidate in the entire grid (+0.0268 Receptions, +0.0321 Sacks,
+# ...), which is direct proof that clipping cannot improve a rank - rank
+# is invariant to any positive monotonic transform. All a clip can do to
+# a ranking is destroy it, by collapsing everything past the boundary
+# into one identical value. Measured on the real shipped week-2 board:
+# 35.6% of qualified rows pinned to a boundary (63% for Sacks, only 16
+# distinct real ratio values across 135 rows), producing a single 49-row
+# tie at the top that was then ordered by the USAGE tiebreak - i.e. by
+# volume, not matchup quality - which is exactly what a real user
+# reported seeing. nfl_player_props.top_prop_bets now ranks on the
+# UNCLIPPED ratio while still reporting the clipped one as the real
+# signal: largest real tie group 49 -> 10, and the real board went from
+# 10-of-10 "Under" in one saturated category to a real 7/3 Over-Under
+# split across 3 real categories and 6 real teams.
 NFL_PROP_MATCHUP_CLIP = (0.8, 1.2)
 NFL_PROP_MATCHUP_WEIGHT_GRID = [0.5, 0.75, 1.0]
 NFL_PROP_MATCHUP_WEIGHT = 1.0

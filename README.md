@@ -5256,6 +5256,46 @@ low-sample/low-usage cameos before ranking (a real one-catch-a-game
 player can never crowd out a real starter just because a tiny sample
 let a stray ratio run hot).
 
+**Real re-validation after the position-split fix (2026-09-16)**: that
+fix replaced the team-wide pooled allowed-rates that
+`NFL_PROP_MATCHUP_CLIP`/`NFL_PROP_MATCHUP_WEIGHT` had originally been
+tuned against - which meant the constants were, strictly, no longer
+backed by anything. `scripts/backtest_nfl_player_props.py` was updated to
+build allowed-rates the same position-split way the live module now does
+(keeping the old pooled method runnable alongside, so the two are
+measurable head to head rather than argued about) and re-run over all 10
+real cached seasons. Three real findings:
+
+1. **The position split is genuinely better, not just more principled**
+   - best real correlation per category, split vs pooled: Receptions
+   +0.0215 vs +0.0117 (**+85%**), Rushing Yards +0.0239 vs +0.0064
+   (**+272%**), Receiving Yards +0.0225 vs +0.0186 (+21%); Passing Yards
+   and Sacks unchanged (QB-only and team-level by design). That fix had
+   shipped on reasoning alone and is now actually validated.
+2. **The shipped (weight, clip) survives the re-tune unchanged** -
+   against a deliberately wider clip grid than the original sweep ever
+   tried (it topped out at (0.6, 1.4), so it structurally could not have
+   found a wider optimum), `weight=1.0, clip=(0.8, 1.2)` is still the
+   real summed-correlation best (+0.1635, next best +0.1630). Reported as
+   the confirmatory finding it is, not dressed up as an improvement.
+3. **But the clip must not be applied before RANKING** - and that was a
+   real live bug. The same backtest's rank-based tercile spread is
+   IDENTICAL for every (weight, clip) candidate in the grid (+0.0268
+   Receptions, +0.0321 Sacks, ...), which is direct proof a clip cannot
+   improve a rank; all it can do is destroy one, by collapsing everything
+   past the boundary into a single value. On the real shipped week-2
+   board that meant 35.6% of qualified rows pinned to a boundary (63% for
+   Sacks - just 16 distinct ratio values across 135 rows) and a single
+   **49-row tie at the top**, which then fell through to the usage
+   tiebreak and ordered the board by volume instead of matchup quality -
+   exactly what was reported. `top_prop_bets` now ranks on the UNCLIPPED
+   ratio while still reporting the clipped one as the signal: largest
+   real tie group **49 -> 10**, and the real board went from 10-of-10
+   "Under" in one saturated category to a real **7/3 Over-Under split
+   across 3 categories and 6 teams**, surfacing spots like a real RB
+   against a run defense allowing 40% above league average that the
+   saturated ranking had made invisible.
+
 **Real fixes from live user feedback (2026-09-16)**: two real, separate
 problems, both traced to the same original design choice -
 `opponent_allowed_rate` for Receptions/Receiving Yards/Rushing Yards
