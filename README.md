@@ -5110,6 +5110,25 @@ went from 6 to 7 real declared candidates but the working count is still
 3 - the honest 8-10 ceiling estimated above has NOT been reached yet and
 may require sources beyond what a plain `pd.read_html` scrape can reach.
 
+**Real fix for a real scope violation (2026-09-16)**: "MLB prospects are
+meant to be those undebuted, but some have already reached the majors" -
+confirmed live: 31 of 173 real rows in the committed
+`docs/data/prospect_rankings.csv` had `highest_level == "MLB"`. This
+board's own real, stated scope, since its very first commit, is minor
+leaguers who have NOT yet debuted - several real sources' own
+`highest_level`/`Level` field (MLB Pipeline's own real season stat line
+in particular, which reflects wherever a player actually played that
+season) can show "MLB" for a player who got a real midseason call-up
+before that source's own list caught up and removed them.
+`prospect_sources.filter_undebuted` drops any real row whose
+`highest_level` reads "MLB" (case-insensitive; a row with no real
+`highest_level` value at all is KEPT - unknown is not evidence of having
+debuted), applied per-source in `scripts/run_prospect_rankings.py`
+BEFORE consensus aggregation (not inside `consensus_rankings.py` itself,
+which stays domain-agnostic and shared by all 3 boards) so an
+already-debuted player never enters the pool at all, rather than being
+aggregated first and dropped after.
+
 Full real history of every
   round's findings lives in `prospect_sources.py`'s own module
   docstring.

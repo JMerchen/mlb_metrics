@@ -575,6 +575,43 @@ def test_fetch_tjstats_prospects_returns_empty_on_request_failure(monkeypatch):
     assert result.empty
 
 
+def test_filter_undebuted_drops_rows_with_mlb_highest_level():
+    # Real, confirmed user report (2026-09-16): "MLB prospects are meant
+    # to be those undebuted, but some have already reached the majors" -
+    # confirmed live via docs/data/prospect_rankings.csv (31 of 173 real
+    # rows had highest_level == "MLB").
+    df = pd.DataFrame([
+        {"player_name": "Still Minors", "rank": 1, "highest_level": "AAA"},
+        {"player_name": "Called Up", "rank": 2, "highest_level": "MLB"},
+        {"player_name": "Called Up Lowercase", "rank": 3, "highest_level": "mlb"},
+    ])
+
+    result = prospect_sources.filter_undebuted(df)
+
+    assert list(result["player_name"]) == ["Still Minors"]
+
+
+def test_filter_undebuted_keeps_rows_with_unknown_level():
+    # A source that doesn't publish highest_level at all (e.g. MLB
+    # Pipeline's own real shape for some players) is real, honest
+    # "unknown" - not evidence of having debuted, so it must be kept.
+    df = pd.DataFrame([
+        {"player_name": "Unknown Level", "rank": 1, "highest_level": None},
+    ])
+
+    result = prospect_sources.filter_undebuted(df)
+
+    assert list(result["player_name"]) == ["Unknown Level"]
+
+
+def test_filter_undebuted_is_a_noop_when_the_column_is_missing_entirely():
+    df = pd.DataFrame([{"player_name": "No Level Column", "rank": 1}])
+
+    result = prospect_sources.filter_undebuted(df)
+
+    assert list(result["player_name"]) == ["No Level Column"]
+
+
 def test_read_html_tables_handles_a_real_raw_html_bytes_response():
     # Real, confirmed bug (2026-09-13 CI run): pd.read_html on this
     # project's pinned pandas raises FileNotFoundError when given raw
