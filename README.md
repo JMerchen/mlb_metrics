@@ -5449,11 +5449,61 @@ It exists because unclipping Sacks immediately put three Chicago rushers
 ten - one opinion about one offensive line sold as three bets, the same
 defect a user reported when four Arizona running backs filled the board.
 
-**Known limitation, not hidden:** team volume is the team's own
-recency-weighted rate and is NOT adjusted for the upcoming game's
-script. A heavy favourite throws less than its season rate and a heavy
-underdog more, and `spread_line`/`total_line` are on the schedule to
-model it. Left out deliberately as an untested effect.
+### Game script: built, measured, shipped off
+
+`spread_line` and `total_line` are wired in through
+`compute_game_script_multipliers`, and fitting them over 10 seasons
+(5,093 team-games) corrected the folklore this was meant to encode.
+
+**"Favourites run, underdogs pass" is only half true.** Underdogs do
+throw at a higher RATE, but they run far fewer total plays, and the two
+effects very nearly cancel:
+
+| | pass rate | total plays | targets | carries |
+| --- | --- | --- | --- | --- |
+| dog 7+ | 0.601 | 52.6 | 31.6 | 21.0 |
+| fav 7+ | 0.570 | 57.0 | 32.6 | **24.4** |
+
+A dog's absolute target count barely moves. What game script genuinely
+moves is CARRIES. And for passing volume the TOTAL line carries more
+information than the spread: 10 points of total is worth ~4% of targets
+and pass attempts, where 14 points of spread is worth 0.6% of targets.
+
+**It is nonetheless disabled** (`NFL_PROP_GAME_SCRIPT_ENABLED = False`),
+because replaying it across two seasons does not support switching it
+on. Paired MAE difference, player-clustered bootstrap, negative = game
+script reduces error:
+
+| Category | 2025 | 2024 |
+| --- | --- | --- |
+| Passing Yards | **-0.354** [-0.62, -0.12] | **+0.098** [-0.18, +0.40] |
+| Receiving Yards | -0.024 [-0.048, +0.000] | -0.012 [-0.034, +0.008] |
+| Receptions | -0.0008 [-0.003, +0.001] | -0.0021 [-0.004, -0.000] |
+| Rushing Yards | +0.004 [-0.078, +0.072] | -0.044 [-0.111, +0.022] |
+
+The single convincing result - Passing Yards in 2025, an interval well
+clear of zero - **flips sign in 2024**. That is noise, and it is exactly
+what would have been reported as a win had only one season been
+replayed. Receiving Yards and Receptions are consistently negative
+across both seasons, which is weak real evidence, but the magnitude is
+0.02 yards against an 18.3 baseline: about 0.1%. Rushing Yards - the
+category the volume fit predicted would benefit most - is inconsistent.
+
+The effect on team volume is real. It just does not survive the trip
+through a player's usage share into a projected stat line, because the
+team's own trailing average has already absorbed nearly all of it. The
+machinery stays, tested, behind the flag.
+
+**Backtest harness fix found while measuring this:** `_shipped_edges`
+fabricated a schedule by renaming the both-directions `opponents` frame
+straight to home/away columns, so every game was created twice and each
+downstream merge on team duplicated its rows. The Passing Yards row
+count read 976 against a true 488. Metric VALUES were unaffected -
+duplicating rows identically moves neither a mean nor a rate, and the
+bootstrap clusters on players, of which there were always 70 - so the
+hit rates and intervals quoted above for Passing Yards stand; only the
+reported `n` was inflated. Production never hit this, because a real
+schedule has one row per game.
 
 **Real backtest validation** (`scripts/backtest_nfl_player_props.py`,
 all 10 real cached seasons 2016-2025): does a more favorable real
