@@ -2618,6 +2618,66 @@ place rather than crashing or overwriting with nothing) and are wired into
 > a known, still-open real issue. **These picks have no demonstrated
 > real edge over the market and should not be treated as if they do.**
 
+**Why the narrow probability spread is NOT a bug to fix** (investigated
+2026-09-17, `scripts/backtest_game_pick_discrimination.py`): the obvious
+reading of the spread problem above is "stretch the probabilities out."
+A real no-lookahead replay of **4,615 real games across the 2025 and 2026
+seasons** (metrics recomputed as-of each date from persisted Statcast,
+graded against real final scores) says that would be the wrong fix, and
+would actively make the betting worse.
+
+Splitting the real Brier score the standard way
+(`Brier = Reliability - Resolution + Uncertainty`, where resolution is
+real discrimination and reliability is real calibration):
+
+| | AUC (95% CI) | resolution | reliability |
+|---|---|---|---|
+| live heuristic | 0.5443 [0.528, 0.561] | 0.0023 | 0.0027 |
+| real market (on the 373 logged games) | 0.6343 [0.577, 0.688] | 0.0177 | 0.0055 |
+
+The live model explains about **0.9% of the real outcome variance it
+could** (resolution 0.0023 against uncertainty 0.2488). Its
+discrimination is real but very weak, and it is BETTER calibrated than
+the market (lower reliability) precisely BECAUSE it hugs the base rate.
+That is the "well-calibrated but uninformative" regime: a probability
+spread is only honest up to the resolution behind it, so widening this
+one without first raising that number would convert the model's one real
+strength into overconfidence - and manufacture exactly the false-edge
+underdog bets the guard below exists to suppress.
+
+Two candidate fixes were tested properly and BOTH are reported here as
+the real negative findings they are, rather than shipped:
+
+1. **An explicit home-field-advantage term** (MLB has never had one,
+   unlike `config.NFL_HOME_FIELD_ADVANTAGE_WEIGHT`). The raw model really
+   is home-biased: it predicts a mean 0.4982 against a real 0.5350 home
+   win rate, a real -3.7pp gap, and real away bets lost -25% ROI against
+   home bets' -6.7%. An additive 0.15 term is the real log-loss optimum,
+   essentially zeroes that bias (-0.0368 -> -0.0012), and even holds up
+   across seasons (fit on either season, 0.15 beats that season's own
+   fitted optimum on the other). **But it was NOT shipped**: the existing
+   calibrator already absorbs almost all of that bias via its own
+   intercept (-0.0368 -> -0.0085), and once the calibrator is refit
+   walk-forward against the change, adding the term is very slightly
+   WORSE (log-loss +0.00067). It is redundant with a component already in
+   the pipeline, so shipping it would be churn plus a real transition
+   risk (a stale calibrator would double-correct into a new +1pp home
+   bias in the opposite direction).
+2. **A walk-forward logistic fit on the same features** - the approach
+   that DID work for NFL. It does not work here: AUC 0.5376 vs the
+   heuristic's 0.5456 on the same games (difference -0.0083, 95% CI
+   [-0.024, +0.008]). It fixes the mean bias via its intercept but buys
+   no real discrimination.
+
+**The honest conclusion**: the feature set is the ceiling, not the
+formula or its scaling. No rescaling, recalibration, or refit of these
+same inputs improves discrimination, so the spread stays narrow because
+it should be. Materially better MLB picks require genuinely new
+information these features don't carry (park factors, confirmed lineups,
+rest/travel, bullpen fatigue, weather), not another pass at the blend -
+and until that exists, **these picks have no demonstrated edge over the
+market and should not be treated as if they do.**
+
 **Market-disagreement guard** (`game_picks.apply_market_tiebreak`, added
 2026-09-16): when this model's probability disagrees with the real
 devigged market probability by at least
