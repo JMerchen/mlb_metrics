@@ -1,5 +1,8 @@
 model_version,category,n_resolved,n_hits,hit_rate,n_pushes,n_pending
-v2,all,0,0,,0,10
-v2,Receiving Yards,0,0,,0,3
-v2,Receptions,0,0,,0,6
-v2,Rushing Yards,0,0,,0,1
+v2,all,0,0,,0,5
+v2,Receptions,0,0,,0,5
+v3,all,0,0,,0,10
+v3,Passing Yards,0,0,,0,1
+v3,Receiving Yards,0,0,,0,3
+v3,Receptions,0,0,,0,5
+v3,Rushing Yards,0,0,,0,1
