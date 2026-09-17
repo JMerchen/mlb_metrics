@@ -63,6 +63,81 @@ PROP_CATEGORY_STAT_COLUMNS = {
 }
 
 
+def compute_current_season_snap_share(
+    snap_counts_df: pd.DataFrame, rosters_df: pd.DataFrame, season: int
+) -> pd.DataFrame:
+    """[player_id, snap_share] - each player's real total snaps THIS
+    season as a share of their team's own real season snap total.
+
+    Real, confirmed bug this exists to fix (2026-09-17 user report:
+    "we need a snap share filter for the current season... there's four
+    different running backs just from AZ"): this module builds a player's
+    own per-game rate from `history["weekly"]`, which spans the PRIOR
+    season plus the current one, so a player who put up real rates all of
+    last season still carries a rate, still resolves to a real
+    `latest_team`, and still gets matched to that team's real upcoming
+    opponent - even if they have not taken a single real snap this year.
+    Confirmed live on the real shipped week-2 board: all four of the real
+    Arizona running backs it surfaced (Trey Benson, James Conner, Michael
+    Carter, Bam Knight) had ZERO real 2026 appearances; Arizona's actual
+    current backs were Tyler Allgeier and Jeremiyah Love. The existing
+    `config.NFL_PROP_MIN_GAMES` floor cannot catch this, because those
+    games are real - they just happened last season.
+
+    Deliberately measured for BOTH sides of the ball, unlike
+    `nfl_bestball.compute_player_snap_share` (offense only, which is all
+    that ranking needs): this module's own Sacks category is about real
+    pass RUSHERS, who take no real offensive snaps at all, so an
+    offense-only share would silently filter every real defender off the
+    board. Each player's real share is taken as the larger of their real
+    offensive and defensive shares, which needs no position list and
+    handles a real two-way or special-teams-only player without a special
+    case.
+
+    Denominator convention is `nfl_bestball.compute_player_snap_share`'s
+    own, reused deliberately rather than reinvented: a team's real snap
+    total for one game is the max real snap count among its players that
+    game (in practice the real total - some lineman plays every snap),
+    summed across every real game that team played this season, NOT just
+    the games this player appeared in. So a real one-game cameo at a high
+    per-game rate correctly reads as a LOW season share rather than
+    looking like an every-week starter.
+
+    `snap_counts_df` is keyed by `pfr_player_id`, a different real id
+    space than `weekly_df`'s own gsis `player_id` - crossed over via
+    `rosters_df`'s real `gsis_id`/`pfr_id`, the same real crosswalk
+    `nfl_bestball.compute_player_snap_share`/
+    `nfl_team_strength.compute_qb_continuity_adjustment` already use. A
+    player absent from the result has no real snaps this season at all,
+    which `build_prop_edges` treats as exactly what it is - not playing -
+    rather than as a real 0.0 it would then have to compare."""
+    season_snaps = snap_counts_df[
+        (snap_counts_df["season"] == season) & (snap_counts_df["game_type"] == "REG")
+    ]
+    if season_snaps.empty:
+        return pd.DataFrame(columns=["player_id", "snap_share"])
+
+    shares = {}
+    for column in ("offense_snaps", "defense_snaps"):
+        team_game_totals = season_snaps.groupby(["team", "game_id"])[column].max()
+        team_season_totals = team_game_totals.groupby("team").sum().rename("team_season_snaps")
+
+        player_team = season_snaps.groupby(["pfr_player_id", "team"])[column].sum().rename("player_snaps")
+        player_team = player_team.reset_index().merge(team_season_totals, on="team", how="left")
+
+        totals = player_team.groupby("pfr_player_id")[["player_snaps", "team_season_snaps"]].sum()
+        shares[column] = (totals["player_snaps"] / totals["team_season_snaps"]).rename(column)
+
+    combined = pd.concat(shares.values(), axis=1)
+    combined["snap_share"] = combined.max(axis=1)
+
+    season_rosters = rosters_df[rosters_df["season"] == season]
+    crosswalk = season_rosters.dropna(subset=["pfr_id"]).drop_duplicates("gsis_id")[["gsis_id", "pfr_id"]]
+
+    result = combined.reset_index().merge(crosswalk, left_on="pfr_player_id", right_on="pfr_id", how="inner")
+    return result.rename(columns={"gsis_id": "player_id"})[["player_id", "snap_share"]]
+
+
 def _latest_player_names(weekly_df: pd.DataFrame) -> pd.DataFrame:
     """[player_id, player_name]: each player's most recent real
     `player_display_name` - a player's own display name is stable
@@ -356,7 +431,11 @@ def _sacks_category_edges(
 
 
 def build_prop_edges(
-    weekly_df: pd.DataFrame, current_week_schedule_df: pd.DataFrame, weight: float = None
+    weekly_df: pd.DataFrame,
+    current_week_schedule_df: pd.DataFrame,
+    weight: float = None,
+    snap_share: pd.DataFrame = None,
+    min_snap_share: float = None,
 ) -> pd.DataFrame:
     """One real row per (player, category) across all 5 real categories
     (Receptions, Receiving Yards, Rushing Yards, Passing Yards, Sacks):
@@ -370,10 +449,28 @@ def build_prop_edges(
     `weight` defaults to config.NFL_PROP_MATCHUP_WEIGHT (real,
     backtested - see that constant's own docstring) when not given -
     same "explicit override for backtesting, config default for live
-    use" pattern every other NFL matchup weight in this project uses."""
-    weight = config.NFL_PROP_MATCHUP_WEIGHT if weight is None else weight
+    use" pattern every other NFL matchup weight in this project uses.
 
-    return pd.concat(
+    `snap_share` (compute_current_season_snap_share's own output, see
+    that function for the real bug this fixes) restricts the pool to
+    players actually playing THIS season: a player below
+    `min_snap_share` (config.NFL_PROP_MIN_SNAP_SHARE when not given), or
+    absent from `snap_share` entirely (no real snaps this season at all),
+    is dropped. Applied HERE rather than in `top_prop_bets` alongside the
+    other qualifiers, deliberately: `top_prop_bets` ranks on a
+    WITHIN-CATEGORY percentile, so leaving players who aren't playing in
+    the pool would shift every remaining real player's own percentile -
+    they have to be gone before anything is ranked, not filtered out
+    afterwards.
+
+    Omitting `snap_share` (the default) skips this filter entirely, and
+    so does passing a real EMPTY frame - which is the honest behavior at
+    real week 1, when no current-season snaps exist yet for anyone and
+    filtering on them would empty the whole board rather than narrow it."""
+    weight = config.NFL_PROP_MATCHUP_WEIGHT if weight is None else weight
+    min_snap_share = config.NFL_PROP_MIN_SNAP_SHARE if min_snap_share is None else min_snap_share
+
+    edges = pd.concat(
         [
             _skill_category_edges(weekly_df, current_week_schedule_df, weight),
             _passing_category_edges(weekly_df, current_week_schedule_df, weight),
@@ -381,6 +478,17 @@ def build_prop_edges(
         ],
         ignore_index=True,
     )
+
+    if snap_share is None or snap_share.empty:
+        if snap_share is not None:
+            print(
+                "[nfl_player_props] No real current-season snap data yet - skipping the snap-share filter "
+                "for this run (expected at real week 1, a real problem to look at otherwise)."
+            )
+        return edges
+
+    qualified = snap_share[snap_share["snap_share"] >= min_snap_share]["player_id"]
+    return edges[edges["player_id"].isin(set(qualified))].reset_index(drop=True)
 
 
 def top_prop_bets(edges_df: pd.DataFrame, n: int = 10, min_games: int = None) -> pd.DataFrame:

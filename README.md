@@ -2618,6 +2618,66 @@ place rather than crashing or overwriting with nothing) and are wired into
 > a known, still-open real issue. **These picks have no demonstrated
 > real edge over the market and should not be treated as if they do.**
 
+**Why the narrow probability spread is NOT a bug to fix** (investigated
+2026-09-17, `scripts/backtest_game_pick_discrimination.py`): the obvious
+reading of the spread problem above is "stretch the probabilities out."
+A real no-lookahead replay of **4,615 real games across the 2025 and 2026
+seasons** (metrics recomputed as-of each date from persisted Statcast,
+graded against real final scores) says that would be the wrong fix, and
+would actively make the betting worse.
+
+Splitting the real Brier score the standard way
+(`Brier = Reliability - Resolution + Uncertainty`, where resolution is
+real discrimination and reliability is real calibration):
+
+| | AUC (95% CI) | resolution | reliability |
+|---|---|---|---|
+| live heuristic | 0.5443 [0.528, 0.561] | 0.0023 | 0.0027 |
+| real market (on the 373 logged games) | 0.6343 [0.577, 0.688] | 0.0177 | 0.0055 |
+
+The live model explains about **0.9% of the real outcome variance it
+could** (resolution 0.0023 against uncertainty 0.2488). Its
+discrimination is real but very weak, and it is BETTER calibrated than
+the market (lower reliability) precisely BECAUSE it hugs the base rate.
+That is the "well-calibrated but uninformative" regime: a probability
+spread is only honest up to the resolution behind it, so widening this
+one without first raising that number would convert the model's one real
+strength into overconfidence - and manufacture exactly the false-edge
+underdog bets the guard below exists to suppress.
+
+Two candidate fixes were tested properly and BOTH are reported here as
+the real negative findings they are, rather than shipped:
+
+1. **An explicit home-field-advantage term** (MLB has never had one,
+   unlike `config.NFL_HOME_FIELD_ADVANTAGE_WEIGHT`). The raw model really
+   is home-biased: it predicts a mean 0.4982 against a real 0.5350 home
+   win rate, a real -3.7pp gap, and real away bets lost -25% ROI against
+   home bets' -6.7%. An additive 0.15 term is the real log-loss optimum,
+   essentially zeroes that bias (-0.0368 -> -0.0012), and even holds up
+   across seasons (fit on either season, 0.15 beats that season's own
+   fitted optimum on the other). **But it was NOT shipped**: the existing
+   calibrator already absorbs almost all of that bias via its own
+   intercept (-0.0368 -> -0.0085), and once the calibrator is refit
+   walk-forward against the change, adding the term is very slightly
+   WORSE (log-loss +0.00067). It is redundant with a component already in
+   the pipeline, so shipping it would be churn plus a real transition
+   risk (a stale calibrator would double-correct into a new +1pp home
+   bias in the opposite direction).
+2. **A walk-forward logistic fit on the same features** - the approach
+   that DID work for NFL. It does not work here: AUC 0.5376 vs the
+   heuristic's 0.5456 on the same games (difference -0.0083, 95% CI
+   [-0.024, +0.008]). It fixes the mean bias via its intercept but buys
+   no real discrimination.
+
+**The honest conclusion**: the feature set is the ceiling, not the
+formula or its scaling. No rescaling, recalibration, or refit of these
+same inputs improves discrimination, so the spread stays narrow because
+it should be. Materially better MLB picks require genuinely new
+information these features don't carry (park factors, confirmed lineups,
+rest/travel, bullpen fatigue, weather), not another pass at the blend -
+and until that exists, **these picks have no demonstrated edge over the
+market and should not be treated as if they do.**
+
 **Market-disagreement guard** (`game_picks.apply_market_tiebreak`, added
 2026-09-16): when this model's probability disagrees with the real
 devigged market probability by at least
@@ -5343,6 +5403,45 @@ individual pass rusher's own real recent sack rate, an individual QB's
 own real recent yardage rate), not accounting for real game-script
 factors (a blowout, injury, a real key opposing-line absence) a human
 bettor would also weigh.
+
+**Current-season snap-share filter** (`compute_current_season_snap_share`,
+added 2026-09-17): a real user report - "we need a snap share filter for
+the current season... there's four different running backs just from AZ"
+- turned out to understate the problem. All four of those real Arizona
+backs on the real shipped week-2 board (Trey Benson, James Conner,
+Michael Carter, Bam Knight) had **zero real 2026 appearances**; Arizona's
+actual current backs were Tyler Allgeier and Jeremiyah Love.
+
+Root cause: a player's own per-game rate is built from `history["weekly"]`,
+which spans the PRIOR season plus the current one. A player who produced
+real rates all last season therefore still carries a rate, still resolves
+to a real `latest_team`, and still gets matched to that team's real
+upcoming opponent - even having never taken a snap this year.
+`config.NFL_PROP_MIN_GAMES` cannot catch this, because those games are
+real; they just happened last season.
+
+The filter measures each player's real snaps this season as a share of
+their own team's real season snap total (the same denominator convention
+`nfl_bestball.compute_player_snap_share` established - a one-game cameo
+correctly reads LOW against the team's full season, rather than high
+against only the game the player appeared in), crosswalked from
+`pfr_player_id` to the gsis `player_id` via `rosters_weekly`. Measured
+for BOTH sides of the ball, unlike the bestball version: the Sacks
+category is about real pass RUSHERS, and an offense-only share would
+silently filter every real defender off the board.
+
+Applied in `build_prop_edges` rather than alongside the other qualifiers
+in `top_prop_bets`, deliberately - ranking is a WITHIN-CATEGORY
+percentile, so players who aren't playing have to be gone *before*
+anything is ranked, or they shift every remaining real player's own
+percentile. Real measured effect on the real week-2 board: the candidate
+pool dropped from 2,280 to 1,070 rows (**53% of it was players not in the
+current season at all**), all four phantom Arizona backs disappeared, and
+the top 10 went from 6 teams with 4 from one team to **7 teams with at
+most 3** - the replacements being real current contributors (Carson
+Wentz, Travis Etienne, Tucker Kraft, Jonnu Smith, Gunnar Helm). At real
+week 1 no current-season snaps exist yet for anyone, so the filter
+honestly skips itself rather than emptying the board.
 
 **Real results tracking** (`nfl_prop_predictions.py`, added 2026-09-16):
 a real, structural gap found while reviewing this feature against its own
