@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -151,8 +152,14 @@ def test_build_prop_edges_covers_all_five_categories():
     assert set(edges["category"]) == {"Receptions", "Receiving Yards", "Rushing Yards", "Passing Yards", "Sacks"}
     assert set(edges.columns) == {
         "player_id", "player_name", "team", "position", "opponent", "games",
-        "category", "player_rate", "opponent_allowed_rate", "league_rate", "ratio",
+        "category", "player_rate", "projection", "projected_targets", "projected_carries",
+        "opponent_allowed_rate", "league_rate", "rate_basis", "ratio",
     }
+    # Passing Yards and Sacks have no projection (see their own edge
+    # functions) - they must still carry the column, as NaN, so every
+    # category shares one schema.
+    projections = edges.set_index("category")["projection"]
+    assert projections.loc[["Passing Yards", "Sacks"]].isna().all()
 
 
 def test_build_prop_edges_favorable_matchup_produces_a_ratio_above_one():
@@ -168,9 +175,16 @@ def test_build_prop_edges_favorable_matchup_produces_a_ratio_above_one():
     # real differentiating signal must be each WR's own real receiving
     # yards - passing_yards (a team-wide, position-blind stat) no longer
     # feeds the Receiving Yards category at all.
+    # Both subjects are deliberately LEAGUE-AVERAGE per target (6.5), so
+    # nothing about the players themselves separates them and the ratio
+    # can only come from the defense. Their team-mates set each defense's
+    # allowed rate: SEA gives up 9.0 yards per target, NE 4.0, against a
+    # 6.5 league rate.
     rows = []
-    rows += _multi_week_skill_rows("wr_vs_weak", "WR Vs Weak", "SF", "SEA", "WR", range(1, 6), receiving_yards=100, receptions=5)
-    rows += _multi_week_skill_rows("wr_vs_strong", "WR Vs Strong", "KC", "NE", "WR", range(1, 6), receiving_yards=20, receptions=5)
+    rows += _multi_week_skill_rows("wr_vs_weak", "WR Vs Weak", "SF", "SEA", "WR", range(1, 6), targets=10, receiving_yards=65, receptions=5)
+    rows += _multi_week_skill_rows("sf_filler", "SF Filler", "SF", "SEA", "WR", range(1, 6), targets=10, receiving_yards=115, receptions=5)
+    rows += _multi_week_skill_rows("wr_vs_strong", "WR Vs Strong", "KC", "NE", "WR", range(1, 6), targets=10, receiving_yards=65, receptions=5)
+    rows += _multi_week_skill_rows("kc_filler", "KC Filler", "KC", "NE", "WR", range(1, 6), targets=10, receiving_yards=15, receptions=5)
     weekly_df = pd.DataFrame(rows)
 
     current_week_schedule = pd.DataFrame([{"home_team": "SF", "away_team": "SEA"}, {"home_team": "KC", "away_team": "NE"}])
@@ -180,6 +194,12 @@ def test_build_prop_edges_favorable_matchup_produces_a_ratio_above_one():
 
     assert rec_yards.loc["wr_vs_weak", "ratio"] > 1.0
     assert rec_yards.loc["wr_vs_strong", "ratio"] < 1.0
+    # The rate on the board is now PER TARGET, not per game - the whole
+    # point of the projection model (see nfl_prop_projections' module
+    # docstring). 9.0 and 4.0 shrunk toward the 6.5 league rate.
+    assert rec_yards.loc["wr_vs_weak", "rate_basis"] == "per target"
+    assert rec_yards.loc["wr_vs_weak", "opponent_allowed_rate"] == pytest.approx(8.0)
+    assert rec_yards.loc["wr_vs_strong", "opponent_allowed_rate"] == pytest.approx(5.0)
 
 
 def test_build_prop_edges_drops_no_opponent_for_a_bye_team():
@@ -224,16 +244,27 @@ def test_top_prop_bets_labels_over_and_under_correctly():
     # POSITION-specific (see compute_position_defense_rolling_rates's
     # own docstring), so the differentiating signal must be each WR's
     # own real receiving yards, not a team-wide QB passing_yards stat.
+    # Same fixture shape as the ratio test above: both subjects sit at
+    # exactly the 6.5 league yards per target, so shrinkage is a no-op on
+    # them and the direction is decided purely by the defense. Each
+    # projects 10 targets (a 0.5 share of his team's 20), so the
+    # projections come out at exactly 10 * 6.5 * 1.2308 = 80.0 against a
+    # 65.0 baseline (Over) and 10 * 6.5 * 0.7692 = 50.0 against the same
+    # 65.0 baseline (Under).
     rows = []
-    rows += _multi_week_skill_rows("wr_vs_weak", "WR Vs Weak", "SF", "SEA", "WR", range(1, 6), receiving_yards=100, receptions=5)
-    rows += _multi_week_skill_rows("wr_vs_strong", "WR Vs Strong", "KC", "NE", "WR", range(1, 6), receiving_yards=30, receptions=5)
+    rows += _multi_week_skill_rows("wr_vs_weak", "WR Vs Weak", "SF", "SEA", "WR", range(1, 6), targets=10, receiving_yards=65, receptions=5)
+    rows += _multi_week_skill_rows("sf_filler", "SF Filler", "SF", "SEA", "WR", range(1, 6), targets=10, receiving_yards=115, receptions=5)
+    rows += _multi_week_skill_rows("wr_vs_strong", "WR Vs Strong", "KC", "NE", "WR", range(1, 6), targets=10, receiving_yards=65, receptions=5)
+    rows += _multi_week_skill_rows("kc_filler", "KC Filler", "KC", "NE", "WR", range(1, 6), targets=10, receiving_yards=15, receptions=5)
     weekly_df = pd.DataFrame(rows)
     current_week_schedule = pd.DataFrame([{"home_team": "SF", "away_team": "SEA"}, {"home_team": "KC", "away_team": "NE"}])
 
     edges = nfl_player_props.build_prop_edges(weekly_df, current_week_schedule)
-    top = nfl_player_props.top_prop_bets(edges, n=10).set_index("player_id")
+    top = nfl_player_props.top_prop_bets(edges, n=20).set_index("player_id")
 
     rec_yards_rows = top[top["category"] == "Receiving Yards"]
+    assert rec_yards_rows.loc["wr_vs_weak", "projection"] == pytest.approx(80.0)
+    assert rec_yards_rows.loc["wr_vs_strong", "projection"] == pytest.approx(50.0)
     assert rec_yards_rows.loc["wr_vs_weak", "direction"] == "Over"
     assert rec_yards_rows.loc["wr_vs_strong", "direction"] == "Under"
 
@@ -271,8 +302,13 @@ def test_top_prop_bets_percentile_ranking_does_not_let_one_category_dominate():
     # category's real league average toward zero, an unwanted
     # cross-category artifact of this fixture, not a real property of
     # either category).
-    rows += _multi_week_skill_rows("wr_fav", "WR Favorable", "SF", "SEA", "WR", range(1, 6), receiving_yards=66, receptions=5)
-    rows += _multi_week_skill_rows("wr_unfav", "WR Unfavorable", "KC", "NE", "WR", range(1, 6), receiving_yards=54, receptions=5)
+    # Per target these come out at 7.8 and 4.2 against a 6.0 league rate,
+    # which after shrinkage is a matchup swing of +/-0.13 - comfortably
+    # smaller than the clipped +/-0.20 Sacks reaches below, which is the
+    # gap this test's own precondition asserts before trusting the
+    # ranking.
+    rows += _multi_week_skill_rows("wr_fav", "WR Favorable", "SF", "SEA", "WR", range(1, 6), targets=10, receiving_yards=78, receptions=5)
+    rows += _multi_week_skill_rows("wr_unfav", "WR Unfavorable", "KC", "NE", "WR", range(1, 6), targets=10, receiving_yards=42, receptions=5)
     rows += _multi_week_skill_rows("sf_qb", "SF QB", "SF", "SEA", "QB", range(1, 6), passing_yards=230, sacks_suffered=2.0)
     rows += _multi_week_skill_rows("kc_qb", "KC QB", "KC", "NE", "QB", range(1, 6), passing_yards=180, sacks_suffered=2.0)
     # Sacks: a real, fully clip-saturated (much larger raw) ratio swing.
@@ -352,95 +388,83 @@ def test_top_prop_bets_breaks_ties_by_usage_not_incidental_team_order():
     assert ordered_ids == ["wr_high", "wr_mid", "wr_low"]
 
 
-def test_top_prop_bets_breaks_a_cross_category_tie_by_unclipped_raw_magnitude():
-    # Real, confirmed live finding (2026-09-16, against this project's
-    # own cached real NFL data): on a real slate where several teams'
-    # ratios all saturate the same clip boundary, BOTH edge_percentile
-    # (each category's own top row reaches the exact same 0.5) AND
-    # usage_percentile (each row here is also the higher-usage one in
-    # its own 2-row category, so it also reaches the exact same 1.0) can
-    # legitimately tie across categories - the tertiary raw_edge_magnitude
-    # key exists specifically for this residual case.
-    #
-    # Receptions: a real, modest raw ratio swing (1.3x) that still clips
-    # to the same 1.2 as Rushing Yards below.
+def test_opponent_allowed_rate_is_per_play_not_per_game():
+    """Regression test for the 2026-09-17 user report: a board showing
+    `opponent_allowed_rate` 202.4 next to a 31.7 yards-per-game receiver.
+
+    That number was the opponent's total receiving yards allowed to ALL
+    opposing WRs per GAME, which is not a quantity any single receiver
+    could ever reach - but the real defect was that it was BIASED, not
+    just mis-scaled, because yards-allowed-per-game rises with how many
+    targets a defense faces even when it defends each one exactly as
+    well as everyone else.
+
+    Both defenses here allow an identical 7.0 yards per target. SEA
+    simply FACES twice the volume (20 targets a game to NE's 10), so
+    per game it concedes 140 yards to NE's 70 - a 2x "matchup" that is
+    pure pace and nothing to do with coverage. The per-play rate the
+    board now reports must see through that and call both defenses
+    average.
+    """
     rows = []
-    rows += _multi_week_skill_rows("wr_fav", "WR Favorable", "SF", "SEA", "WR", range(1, 6), receptions=6.5)
-    rows += _multi_week_skill_rows("wr_unfav", "WR Unfavorable", "KC", "NE", "WR", range(1, 6), receptions=3.5)
-    # Rushing Yards: a real, much LARGER raw ratio swing (1.54x) - same
-    # clipped ratio (1.2) as Receptions above, but a real, bigger true
-    # edge underneath the clip.
-    rows += _multi_week_skill_rows("rb_fav", "RB Favorable", "GB", "CHI", "RB", range(1, 6), rushing_yards=100)
-    rows += _multi_week_skill_rows("rb_unfav", "RB Unfavorable", "LAR", "ARI", "RB", range(1, 6), rushing_yards=30)
+    rows += _multi_week_skill_rows("sf_wr1", "SF WR One", "SF", "SEA", "WR", range(1, 6), targets=10, receiving_yards=70, receptions=5)
+    rows += _multi_week_skill_rows("sf_wr2", "SF WR Two", "SF", "SEA", "WR", range(1, 6), targets=10, receiving_yards=70, receptions=5)
+    rows += _multi_week_skill_rows("kc_wr1", "KC WR One", "KC", "NE", "WR", range(1, 6), targets=10, receiving_yards=70, receptions=5)
     weekly_df = pd.DataFrame(rows)
-    current_week_schedule = pd.DataFrame(
-        [
-            {"home_team": "SF", "away_team": "SEA"},
-            {"home_team": "KC", "away_team": "NE"},
-            {"home_team": "GB", "away_team": "CHI"},
-            {"home_team": "LAR", "away_team": "ARI"},
-        ]
-    )
+    current_week_schedule = pd.DataFrame([{"home_team": "SF", "away_team": "SEA"}, {"home_team": "KC", "away_team": "NE"}])
 
     edges = nfl_player_props.build_prop_edges(weekly_df, current_week_schedule)
-    rec = edges[(edges["category"] == "Receptions") & (edges["player_id"] == "wr_fav")].iloc[0]
-    rush = edges[(edges["category"] == "Rushing Yards") & (edges["player_id"] == "rb_fav")].iloc[0]
-    # Confirm the fixture actually produces the intended real clipped tie
-    # before trusting the ordering assertion below.
-    assert rec["ratio"] == pytest.approx(rush["ratio"]) == pytest.approx(1.2)
+    rec_yards = edges[edges["category"] == "Receiving Yards"].set_index("player_id")
 
-    top = nfl_player_props.top_prop_bets(edges, n=2)
+    # The per-GAME view that used to drive this board would have made SEA
+    # look twice as generous as NE. Confirm the fixture really does carry
+    # that 2x volume gap, so the assertion below is meaningful.
+    per_game = nfl_player_props.compute_position_defense_rolling_rates(weekly_df, "receiving_yards")
+    per_game = per_game.set_index(["team", "position"])["allowed_per_game"]
+    assert per_game.loc[("SEA", "WR")] == pytest.approx(2 * per_game.loc[("NE", "WR")])
 
-    assert list(top["player_id"]) == ["rb_fav", "wr_fav"]
+    # Per play, both defenses are identical and both are exactly league
+    # average, so neither player gets a matchup edge in either direction.
+    assert rec_yards.loc["sf_wr1", "opponent_allowed_rate"] == pytest.approx(7.0)
+    assert rec_yards.loc["kc_wr1", "opponent_allowed_rate"] == pytest.approx(7.0)
+    assert rec_yards.loc["sf_wr1", "ratio"] == pytest.approx(1.0)
+    assert rec_yards.loc["kc_wr1", "ratio"] == pytest.approx(1.0)
 
 
-def test_top_prop_bets_ranks_on_the_unclipped_ratio_not_the_clipped_one():
-    # Real, measured bug (2026-09-16): ranking on the CLIPPED ratio
-    # collapsed every matchup past the clip boundary into one identical
-    # value - 35.6% of real qualified rows on the real shipped week-2
-    # board, a single 49-row tie at the top, which then fell through to
-    # the usage tiebreak and ordered the board by volume instead of by
-    # matchup quality. scripts/backtest_nfl_player_props.py proves a clip
-    # cannot help a rank anyway (its rank-based tercile spread is
-    # IDENTICAL for every clip candidate tested) - so ranking uses the
-    # unclipped ratio while `ratio` still reports the clipped signal.
-    #
-    # Both WRs below face defenses well past the clip ceiling, so both
-    # report the SAME clipped ratio - only the unclipped matchup tells
-    # them apart, and the genuinely more extreme one must rank first
-    # even though it is the LOWER-usage player (so usage can't be what
-    # produced the ordering).
+def test_top_prop_bets_ranks_skill_categories_on_the_projection_gap():
+    """The board ranks skill categories on how far the PROJECTION departs
+    from the player's own per-game baseline, not on the opponent ratio.
+
+    Both receivers below face the exact same defense, so the ratio is
+    identical for the two of them and could not order them at all. What
+    separates them is usage: `wr_rising` takes 80% of his team's targets
+    while `wr_steady` takes 20% of his, so the projection moves
+    `wr_rising` much further off his trailing average. The old
+    ratio-based ranking was blind to this - it is exactly why two
+    Minnesota receivers with target shares of 0.314 and 0.162 came back
+    with an identical 1.2 ratio and an identical Over on the live board.
+    """
     rows = []
-    rows += _multi_week_skill_rows("wr_extreme", "WR Extreme", "SF", "SEA", "WR", range(1, 6), receiving_yards=40)
-    rows += _multi_week_skill_rows("wr_mild", "WR Mild", "KC", "NE", "WR", range(1, 6), receiving_yards=45)
-    # SEA allows a huge amount to WRs (240/wk); NE allows less but is
-    # still above average (150/wk) - BOTH clip to the same ceiling.
-    rows += _multi_week_skill_rows("sea_feeder", "SEA Feeder", "ARI", "SEA", "WR", range(1, 6), receiving_yards=200)
-    rows += _multi_week_skill_rows("ne_feeder", "NE Feeder", "BUF", "NE", "WR", range(1, 6), receiving_yards=105)
-    # Two real stingy defenses, purely to pull the real league average
-    # down far enough that both subject matchups land ABOVE it (rather
-    # than straddling it and clipping in opposite directions).
-    rows += _multi_week_skill_rows("low_one", "Low One", "DAL", "DEN", "WR", range(1, 6), receiving_yards=30)
-    rows += _multi_week_skill_rows("low_two", "Low Two", "NYG", "MIA", "WR", range(1, 6), receiving_yards=30)
+    # SF faces SEA. wr_rising dominates his team's targets; his low-volume
+    # team-mate barely features.
+    rows += _multi_week_skill_rows("wr_rising", "WR Rising", "SF", "SEA", "WR", range(1, 6), targets=16, receiving_yards=112, receptions=8)
+    rows += _multi_week_skill_rows("sf_minor", "SF Minor", "SF", "SEA", "WR", range(1, 6), targets=4, receiving_yards=28, receptions=2)
+    # KC also faces SEA this week, so both subjects share one defense and
+    # one identical matchup ratio.
+    rows += _multi_week_skill_rows("wr_steady", "WR Steady", "KC", "SEA", "WR", range(1, 6), targets=4, receiving_yards=28, receptions=2)
+    rows += _multi_week_skill_rows("kc_major", "KC Major", "KC", "SEA", "WR", range(1, 6), targets=16, receiving_yards=112, receptions=8)
     weekly_df = pd.DataFrame(rows)
-    current_week_schedule = pd.DataFrame([
-        {"home_team": "SF", "away_team": "SEA"},
-        {"home_team": "KC", "away_team": "NE"},
-    ])
+    current_week_schedule = pd.DataFrame([{"home_team": "SF", "away_team": "SEA"}, {"home_team": "KC", "away_team": "SEA"}])
 
     edges = nfl_player_props.build_prop_edges(weekly_df, current_week_schedule)
-    subject = edges[edges["player_id"].isin(["wr_extreme", "wr_mild"])]
-    rec_yards = subject[subject["category"] == "Receiving Yards"].set_index("player_id")
-    # Confirm the fixture really does saturate both to the same clipped
-    # ratio before trusting the ordering assertion below.
-    assert rec_yards.loc["wr_extreme", "ratio"] == pytest.approx(rec_yards.loc["wr_mild", "ratio"])
-    unclipped = rec_yards["opponent_allowed_rate"] / rec_yards["league_rate"]
-    assert unclipped.loc["wr_extreme"] > unclipped.loc["wr_mild"]
+    rec_yards = edges[edges["category"] == "Receiving Yards"].set_index("player_id")
 
-    top = nfl_player_props.top_prop_bets(edges, n=10)
-    ordered = [p for p in top["player_id"] if p in ("wr_extreme", "wr_mild")]
-
-    assert ordered[0] == "wr_extreme"
+    # Confirm the ratio genuinely cannot separate them before asserting
+    # that something else did.
+    assert rec_yards.loc["wr_rising", "ratio"] == pytest.approx(rec_yards.loc["wr_steady", "ratio"])
+    # But their projections differ, because their target shares do.
+    assert rec_yards.loc["wr_rising", "projected_targets"] > rec_yards.loc["wr_steady", "projected_targets"]
+    assert rec_yards.loc["wr_rising", "projection"] > rec_yards.loc["wr_steady", "projection"]
 
 
 def _snap_row(pfr_id, team, week, offense=0.0, defense=0.0, season=2026, game_type="REG"):
@@ -554,3 +578,34 @@ def test_build_prop_edges_skips_the_filter_entirely_at_week_one():
     unfiltered = nfl_player_props.build_prop_edges(weekly_df, schedule)
 
     assert set(empty["player_id"]) == set(unfiltered["player_id"]) == {"plays_now", "departed"}
+
+
+def test_top_prop_bets_ranks_halving_and_doubling_as_equal_departures():
+    """The confidence gap is symmetric in log space, so a projection at
+    half the baseline is ranked exactly as confidently as one at double.
+
+    A plain percentage gap is not symmetric - doubling scores 1.0 while
+    halving scores only 0.5 - and because a projection is a product of
+    three ratios its distribution is right-skewed, so that asymmetry fed
+    the board an almost entirely "Over" top 10 (see top_prop_bets' own
+    comment for the measured figures).
+    """
+    edges = pd.DataFrame([
+        # Same category, same baseline. One projects at 2x, one at 0.5x.
+        {"player_id": "doubler", "player_name": "Doubler", "team": "SF", "position": "WR",
+         "opponent": "SEA", "games": 5, "category": "Receiving Yards", "player_rate": 50.0,
+         "projection": 100.0, "projected_targets": 8.0, "projected_carries": 0.0,
+         "opponent_allowed_rate": 8.0, "league_rate": 8.0, "rate_basis": "per target", "ratio": 1.0},
+        {"player_id": "halver", "player_name": "Halver", "team": "KC", "position": "WR",
+         "opponent": "NE", "games": 5, "category": "Receiving Yards", "player_rate": 50.0,
+         "projection": 25.0, "projected_targets": 4.0, "projected_carries": 0.0,
+         "opponent_allowed_rate": 8.0, "league_rate": 8.0, "rate_basis": "per target", "ratio": 1.0},
+    ])
+
+    top = nfl_player_props.top_prop_bets(edges, n=2).set_index("player_id")
+
+    assert top.loc["doubler", "direction"] == "Over"
+    assert top.loc["halver", "direction"] == "Under"
+    # Equal and opposite in log space, so neither outranks the other.
+    assert top.loc["doubler", "confidence_signal"] == pytest.approx(np.log(2.0))
+    assert top.loc["halver", "confidence_signal"] == pytest.approx(np.log(2.0))

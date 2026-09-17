@@ -1978,7 +1978,17 @@ NFL_PROP_MIN_USAGE = {
 # top_prop_bets' own docstrings) - both changed which real props this
 # feature actually surfaces, so their results must not be pooled with
 # v1's.
-NFL_PROP_MODEL_VERSION = "v3"
+#
+# Bumped 2026-09-17 to v4 for the projection model
+# (nfl_prop_projections.py): the three skill categories now come from a
+# per-player projected stat line (usage share x team volume x shrunk
+# per-play efficiency x a per-PLAY opponent multiplier) and are ranked on
+# how far that projection departs from the player's own baseline, rather
+# than on a per-GAME opponent ratio. Measured against the v3 rows already
+# in the log, v3's directional hit rate on the receiving categories was
+# 0.5067 and 0.5028 - a coin flip - so pooling v3 and v4 results would
+# actively hide the change rather than merely blur it.
+NFL_PROP_MODEL_VERSION = "v4"
 
 # Minimum share of their own team's real season snaps a player must have
 # taken THIS season to appear on the props board at all
@@ -2007,6 +2017,53 @@ NFL_PROP_MODEL_VERSION = "v3"
 # nfl_prop_predictions.py has accumulated enough real resolved picks to
 # measure a real hit rate on either side of it.
 NFL_PROP_MIN_SNAP_SHARE = 0.25
+
+# --- NFL props: projection model (nfl_prop_projections.py) ---
+#
+# Empirical-Bayes prior strength, in attempts, for a PLAYER's own
+# per-play efficiency (yards per target, catch rate, yards per carry).
+# `_shrink_rate` averages the observed rate with the position's league
+# rate, giving the league prior the weight of this many synthetic
+# attempts, so a player needs roughly this many targets before his own
+# rate carries more weight than the prior.
+#
+# The value matters most exactly when the board is thinnest: with one
+# week of 2026 played, a receiver can carry 3 targets and one long
+# catch, and an unshrunk rate would project him at 18 yards per target
+# indefinitely. It is a real tuning parameter, backtested over the 2025
+# season in scripts/backtest_nfl_prop_projections.py rather than
+# guessed - see that script's output for the sweep this value came from.
+NFL_PROP_EFFICIENCY_PRIOR_TARGETS = 20
+
+# Same shrinkage, applied to a DEFENSE's per-play allowed rates. Set
+# independently of the player prior because the two have different
+# sample sizes: a defense accumulates targets-faced far faster than any
+# single receiver accumulates targets, so it needs less help, but its
+# rate is also a pooled average over many opposing players and so
+# regresses harder toward league average in truth. Also backtested.
+NFL_PROP_DEFENSE_PRIOR_TARGETS = 60
+
+# How much of the opponent multiplier's ORDERING comes from defensive
+# EPA allowed per play rather than yards allowed per play. EPA is
+# situation-aware and settles faster than a raw yards rate, which can be
+# dragged around by a couple of broken tackles, but it is not in yards
+# units and cannot itself scale a projection - so `_blend_multiplier`
+# blends the two as z-scores and maps the result back onto the yards
+# multiplier's own mean and spread. 0.0 is pure yards, 1.0 is pure EPA
+# ordering. Backtested alongside the priors above.
+NFL_PROP_DEFENSE_EPA_BLEND = 0.0
+
+# Clip on the projection model's opponent multipliers. This serves a
+# different purpose from NFL_PROP_MATCHUP_CLIP's 0.8-1.2: that one had
+# to be tight because it was applied to a per-GAME allowed rate that
+# confounded defensive quality with pace (see nfl_prop_projections'
+# module docstring), so its inputs were routinely overstated and the
+# clip was doing real work hiding that. A per-PLAY rate is already
+# scale-free and its observed league spread is far narrower, so this
+# clip only has to catch genuine outliers - it should bind rarely, and
+# if it binds often that is a signal the shrinkage priors are too weak
+# rather than that the clip is too wide.
+NFL_PROP_PROJECTION_MULTIPLIER_CLIP = (0.70, 1.30)
 
 # --- NFL DFS: DK Scoring (nfl_dfs.py) ---
 #
