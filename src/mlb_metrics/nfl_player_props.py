@@ -320,7 +320,9 @@ def _skill_category_edges(
     players = skill_rolling.merge(names, on="player_id", how="left").merge(latest_team, on="player_id", how="left")
     players = players.merge(opponents, on="team", how="left")
 
-    projections = nfl_prop_projections.project_player_stats(weekly_df, opponents, latest_team)
+    projections = nfl_prop_projections.project_player_stats(
+        weekly_df, opponents, latest_team, schedule_df=current_week_schedule_df
+    )
     defense_rates = nfl_prop_projections.compute_opponent_multipliers(
         nfl_prop_projections.compute_position_defense_per_play_rates(weekly_df),
         nfl_prop_projections.league_efficiency_rates(weekly_df),
@@ -432,7 +434,8 @@ def _passing_category_edges(
     rows["rate_basis"] = "per attempt"
 
     projections = nfl_prop_projections.project_qb_stats(
-        weekly_df, opponents, latest_info[["player_id", "team"]]
+        weekly_df, opponents, latest_info[["player_id", "team"]],
+        schedule_df=current_week_schedule_df,
     )
     rows = rows.merge(
         projections[["player_id", "projected_passing_yards", "projected_attempts"]],

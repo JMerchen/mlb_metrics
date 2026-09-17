@@ -2104,6 +2104,90 @@ NFL_PROP_SACK_PRIOR_GAMES = 6
 # running backs filled the board.
 NFL_PROP_MAX_PER_TEAM_CATEGORY = 1
 
+# --- NFL props: game script (nfl_prop_projections.py) ---
+#
+# How a game's betting market moves a team's expected VOLUME away from
+# its own trailing average. Fitted by least squares over 10 real cached
+# seasons (2016-2025, 5,093 team-games) on the multiplicative form
+#
+#   actual_volume / trailing_volume
+#       = 1 + b_spread * team_spread + b_total * (total_line - 45.2)
+#
+# where `team_spread` is positive when THAT team is favored (confirmed
+# empirically rather than assumed: schedules' own `spread_line` is
+# positive when the HOME team is favored, correlating +0.446 with the
+# real home margin, so the away row's value is negated).
+#
+# WHAT THE FIT ACTUALLY SAYS, which is not the folklore. "Favorites run,
+# underdogs pass" is only half right. Underdogs do pass at a higher
+# RATE - 0.601 for 7-point dogs against 0.570 for 7-point favorites -
+# but they also run far fewer total plays (52.6 against 57.0), because
+# trailing teams do not sustain drives. The two effects very nearly
+# cancel, so a dog's absolute target count barely moves (31.6 against
+# 32.6). What game script genuinely moves is CARRIES: 21.0 for a heavy
+# dog against 24.4 for a heavy favorite.
+#
+# And the spread is not even the more useful of the two lines for
+# passing volume - the TOTAL is. A game 10 points higher on the total
+# adds ~4% to targets and pass attempts while removing ~6% from carries,
+# where a 14-point swing in the spread moves targets by 0.6%.
+#
+# These are small: R-squared on the residual is 0.005 for targets and
+# 0.012 for carries, so game script explains around 1% of the variation
+# left after a team's own trailing average. Shipped because the direction
+# is mechanically sound and measured on a large sample, and because it
+# costs one multiply - NOT because it is a large effect. See
+# NFL_PROP_GAME_SCRIPT_ENABLED for the end-to-end prop-accuracy result.
+NFL_PROP_GAME_SCRIPT_TOTAL_BASELINE = 45.2
+NFL_PROP_GAME_SCRIPT_COEFFICIENTS = {
+    "targets": {"spread": 0.00046, "total": 0.00396},
+    "carries": {"spread": 0.00353, "total": -0.00597},
+    "attempts": {"spread": 0.00027, "total": 0.00378},
+}
+
+# Bound on the game-script volume multiplier. The fit is linear and
+# nothing stops an extreme line from producing an absurd multiplier - a
+# 20-point spread in a game totalled at 60 would push carries well past
+# anything observed - so the adjustment is held inside the range the fit
+# was actually estimated over.
+NFL_PROP_GAME_SCRIPT_CLIP = (0.85, 1.15)
+
+# Master switch for the game-script volume adjustment, so the backtest
+# can score the model with and without it on identical history rather
+# than inferring the difference.
+#
+# SHIPPED OFF, because the measurement does not support switching it on.
+#
+# Replayed with `--game-script` over TWO seasons, scoring the paired MAE
+# difference (negative = game script reduces projection error) with a
+# player-clustered bootstrap:
+#
+#   category          2025 MAE delta              2024 MAE delta
+#   Passing Yards     -0.3543 [-0.624, -0.118]    +0.0978 [-0.184, +0.398]
+#   Receiving Yards   -0.0235 [-0.048, +0.000]    -0.0119 [-0.034, +0.008]
+#   Receptions        -0.0008 [-0.003, +0.001]    -0.0021 [-0.004, -0.000]
+#   Rushing Yards     +0.0044 [-0.078, +0.072]    -0.0436 [-0.111, +0.022]
+#
+# The single result that looked convincing - Passing Yards in 2025, a
+# clear -0.354 with an interval well clear of zero - FLIPS SIGN in 2024.
+# That is the signature of noise rather than signal, and it is exactly
+# the result that would have been quoted as a win had only one season
+# been replayed. Receiving Yards and Receptions are consistently negative
+# across both seasons, which is weak real evidence, but the magnitude is
+# 0.02 yards against an 18.3 baseline - roughly 0.1%. Rushing Yards, the
+# category the volume fit predicted would benefit MOST (carries move
+# ~4.9% between a heavy favorite and a heavy dog), is inconsistent.
+#
+# So the adjustment is left available and fully tested but disabled: it
+# is a real, mechanically sound effect on team VOLUME that turns out not
+# to survive the trip through a player's usage share into a projected
+# stat line, because a team's own trailing average has already absorbed
+# almost all of it. Enabling it would add a schedule dependency and
+# another code path for no measured gain. Set it True to re-measure if
+# more seasons of resolved picks ever make the small consistent receiving
+# effect worth chasing.
+NFL_PROP_GAME_SCRIPT_ENABLED = False
+
 # --- NFL DFS: DK Scoring (nfl_dfs.py) ---
 #
 # DraftKings NFL Classic scoring, confirmed live via web search against

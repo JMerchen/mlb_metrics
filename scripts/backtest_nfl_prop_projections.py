@@ -57,10 +57,13 @@ CATEGORIES = [
     ("Receiving Yards", "receiving_yards", "projected_receiving_yards", "targets"),
     ("Rushing Yards", "rushing_yards", "projected_rushing_yards", "carries"),
     ("Passing Yards", "passing_yards", "projected_passing_yards", "attempts"),
-    # A pass rusher who played and recorded nothing is a real 0, not an
-    # absence, so Sacks has no attempt column to qualify on - every row
-    # present that week counts. `None` is the sentinel for that.
-    ("Sacks", "def_sacks", "projected_sacks", None),
+    # Sacks is absent deliberately. It is the one category with no
+    # projection to compare, because a projected-sacks model WAS built
+    # and replayed here and came out materially worse than the ratio it
+    # would have replaced - hit rate 0.3845 against 0.5490, a clustered
+    # difference of -0.1645 [-0.1883, -0.1413], and a worse MAE - so it
+    # was deleted rather than shipped. See
+    # nfl_prop_projections.compute_sacks_allowed_per_game.
 ]
 
 V3_STAT_COLUMNS = {
@@ -68,6 +71,22 @@ V3_STAT_COLUMNS = {
     "Receiving Yards": ("receiving_yards", "receiving_yards_per_game"),
     "Rushing Yards": ("rushing_yards", "rushing_yards_per_game"),
 }
+
+
+def load_schedules(seasons):
+    """Real schedules carrying `spread_line`/`total_line`, so the replay
+    feeds the game-script adjustment the same market inputs a live run
+    gets. A game's lines are set before kickoff, so using them for the
+    week being predicted is not lookahead."""
+    frames = []
+    for season in seasons:
+        path = os.path.join(RAW_DIR, f"schedules_{season}.parquet")
+        if os.path.exists(path):
+            frames.append(pd.read_parquet(path))
+    if not frames:
+        return pd.DataFrame()
+    schedules = pd.concat(frames, ignore_index=True)
+    return schedules[schedules["game_type"] == "REG"]
 
 
 def load_weekly(seasons):
@@ -118,7 +137,18 @@ def _shipped_edges(history, opponents, category, builder):
     """`naive` and `v3_ratio` for a category whose shipped edge function
     already produces both - called through the production code so the
     comparison indicts what actually runs."""
-    schedule = opponents.rename(columns={"team": "home_team", "opponent": "away_team"})
+    # `opponents` carries BOTH directions of every matchup (team -> opponent
+    # for all 32 teams), so renaming it straight to home/away columns
+    # fabricates each game twice and every downstream merge on team
+    # duplicates its rows. Confirmed live: it doubled the Passing Yards
+    # row count from 976 to 1,952. Production never hits this - a real
+    # schedule has one row per game - so collapse to unique unordered
+    # pairs here to match that shape.
+    pairs = opponents.copy()
+    pairs["_a"] = pairs[["team", "opponent"]].min(axis=1)
+    pairs["_b"] = pairs[["team", "opponent"]].max(axis=1)
+    pairs = pairs.drop_duplicates(["_a", "_b"])
+    schedule = pairs.rename(columns={"_a": "home_team", "_b": "away_team"})[["home_team", "away_team"]]
     rows = builder(history, schedule, config.NFL_PROP_MATCHUP_WEIGHT)
     if rows.empty:
         return pd.DataFrame()
@@ -137,7 +167,9 @@ def _sacks_baseline(history, opponents):
     return _shipped_edges(history, opponents, "Sacks", nfl_player_props._sacks_category_edges)
 
 
-def replay_week(weekly: pd.DataFrame, season: int, week: int, min_games: int) -> pd.DataFrame:
+def replay_week(
+    weekly: pd.DataFrame, season: int, week: int, min_games: int, schedules: pd.DataFrame = None
+) -> pd.DataFrame:
     """One row per (player, category) scored for this week, carrying all
     three methods' projections and the actual result."""
     is_before = (weekly["season"] < season) | ((weekly["season"] == season) & (weekly["week"] < week))
@@ -153,16 +185,20 @@ def replay_week(weekly: pd.DataFrame, season: int, week: int, min_games: int) ->
         columns={"opponent_team": "opponent"}
     )
 
-    skill = nfl_prop_projections.project_player_stats(history, opponents)
-    passing = nfl_prop_projections.project_qb_stats(history, opponents)
-    sacks = nfl_prop_projections.project_sack_stats(history, opponents)
+    week_schedule = (
+        schedules[(schedules["season"] == season) & (schedules["week"] == week)]
+        if schedules is not None and not schedules.empty
+        else pd.DataFrame()
+    )
+    skill = nfl_prop_projections.project_player_stats(history, opponents, schedule_df=week_schedule)
+    passing = nfl_prop_projections.project_qb_stats(history, opponents, schedule_df=week_schedule)
     if skill.empty:
         return pd.DataFrame()
     baselines = baseline_projections(history, opponents)
 
     projections_by_category = {}
     for category, _, projection_col, _ in CATEGORIES:
-        source = {"Passing Yards": passing, "Sacks": sacks}.get(category, skill)
+        source = {"Passing Yards": passing}.get(category, skill)
         if not source.empty and projection_col in source.columns:
             projections_by_category[category] = source[["player_id", projection_col]]
 
@@ -281,7 +317,8 @@ def paired_bootstrap(results: pd.DataFrame, challenger: str, incumbent: str, dra
 
 def run(seasons, target_season, weeks, min_games):
     weekly = load_weekly(seasons)
-    frames = [replay_week(weekly, target_season, week, min_games) for week in weeks]
+    schedules = load_schedules(seasons)
+    frames = [replay_week(weekly, target_season, week, min_games, schedules) for week in weeks]
     frames = [f for f in frames if not f.empty]
     if not frames:
         raise SystemExit("no weeks replayed - check the seasons/weeks requested")
@@ -296,9 +333,23 @@ def main():
     parser.add_argument("--last-week", type=int, default=18)
     parser.add_argument("--min-games", type=int, default=config.NFL_PROP_MIN_GAMES)
     parser.add_argument("--sweep", action="store_true", help="grid-search the shrinkage priors and EPA blend")
+    parser.add_argument(
+        "--game-script", action="store_true",
+        help="score the model with and without the game-script volume adjustment on identical history",
+    )
     args = parser.parse_args()
 
     weeks = list(range(args.first_week, args.last_week + 1))
+
+    if args.game_script:
+        for enabled in (False, True):
+            config.NFL_PROP_GAME_SCRIPT_ENABLED = enabled
+            summary = score(run(args.seasons, args.target_season, weeks, args.min_games))
+            label = "WITH game script" if enabled else "WITHOUT game script"
+            projection_only = summary[summary["method"] == "projection"]
+            print(f"\n{label}:")
+            print(projection_only[["category", "n", "mae", "rmse", "hit_rate"]].round(4).to_string(index=False))
+        return
 
     if not args.sweep:
         results = run(args.seasons, args.target_season, weeks, args.min_games)

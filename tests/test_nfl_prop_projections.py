@@ -336,3 +336,85 @@ def test_no_sack_projection_is_offered():
     guards against it being reintroduced without a fresh measurement."""
     assert not hasattr(nfl_prop_projections, "project_sack_stats")
     assert "Sacks" not in nfl_prop_projections.PROP_CATEGORY_PROJECTION_COLUMNS
+
+
+def _schedule(home, away, spread_line=0.0, total_line=45.2):
+    return pd.DataFrame([{
+        "home_team": home, "away_team": away,
+        "spread_line": spread_line, "total_line": total_line,
+    }])
+
+
+def test_game_script_spread_sign_favors_the_right_team():
+    """`spread_line` is positive when the HOME team is favored - verified
+    empirically against 2016-2025 (it correlates +0.446 with the real
+    home margin), so the away row must be negated. Getting this backwards
+    would invert every adjustment."""
+    script = nfl_prop_projections.compute_game_script_multipliers(
+        _schedule("SF", "SEA", spread_line=7.0)
+    ).set_index("team")
+
+    # SF is the 7-point home favorite, so it should carry MORE carries
+    # than the underdog it is playing.
+    assert script.loc["SF", "carry_volume_multiplier"] > 1.0
+    assert script.loc["SEA", "carry_volume_multiplier"] < 1.0
+
+
+def test_game_script_total_drives_passing_volume_more_than_spread():
+    """The fit's actual finding, against the folklore: 10 points of total
+    is worth ~4% of targets, where 14 points of spread is worth 0.6%."""
+    by_total = nfl_prop_projections.compute_game_script_multipliers(
+        _schedule("SF", "SEA", spread_line=0.0, total_line=55.2)
+    ).set_index("team")
+    by_spread = nfl_prop_projections.compute_game_script_multipliers(
+        _schedule("SF", "SEA", spread_line=7.0, total_line=45.2)
+    ).set_index("team")
+
+    total_effect = abs(by_total.loc["SF", "target_volume_multiplier"] - 1.0)
+    spread_effect = abs(by_spread.loc["SF", "target_volume_multiplier"] - 1.0)
+    assert total_effect > spread_effect
+    # A high total lifts passing volume and suppresses carries.
+    assert by_total.loc["SF", "target_volume_multiplier"] > 1.0
+    assert by_total.loc["SF", "carry_volume_multiplier"] < 1.0
+
+
+def test_game_script_is_neutral_for_a_missing_line():
+    """A game before the market posts must come back neutral, not treated
+    as a pick'em in a zero-total game."""
+    schedule = _schedule("SF", "SEA")
+    schedule["spread_line"] = np.nan
+    schedule["total_line"] = np.nan
+
+    script = nfl_prop_projections.compute_game_script_multipliers(schedule).set_index("team")
+    for column in ("target_volume_multiplier", "carry_volume_multiplier", "attempt_volume_multiplier"):
+        assert script.loc["SF", column] == pytest.approx(1.0)
+
+
+def test_game_script_multipliers_are_clipped():
+    low, high = config.NFL_PROP_GAME_SCRIPT_CLIP
+    extreme = nfl_prop_projections.compute_game_script_multipliers(
+        _schedule("SF", "SEA", spread_line=25.0, total_line=70.0)
+    )
+    for column in ("target_volume_multiplier", "carry_volume_multiplier", "attempt_volume_multiplier"):
+        assert extreme[column].between(low, high).all()
+
+
+def test_game_script_is_disabled_by_default_and_is_a_no_op():
+    """Shipped OFF: replayed over two seasons the effect did not survive -
+    the one category that looked significant in 2025 flipped sign in 2024.
+    With the flag off the projection must be bit-identical to one built
+    with no schedule at all."""
+    assert config.NFL_PROP_GAME_SCRIPT_ENABLED is False
+
+    rows = _weeks("wr1", "SF", "SEA", "WR", range(1, 6), targets=10, receiving_yards=70, receptions=6)
+    weekly = pd.DataFrame(rows)
+    opponents = pd.DataFrame([{"team": "SF", "opponent": "SEA"}])
+
+    without = nfl_prop_projections.project_player_stats(weekly, opponents)
+    with_extreme = nfl_prop_projections.project_player_stats(
+        weekly, opponents, schedule_df=_schedule("SF", "SEA", spread_line=14.0, total_line=60.0)
+    )
+    assert with_extreme["projected_targets"].iloc[0] == pytest.approx(
+        without["projected_targets"].iloc[0]
+    )
+    assert with_extreme["target_volume_multiplier"].iloc[0] == pytest.approx(1.0)

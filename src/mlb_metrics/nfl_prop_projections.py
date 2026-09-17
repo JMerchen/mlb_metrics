@@ -86,13 +86,33 @@ weekly-derived ones), but weekly is self-consistent with the
 `target_share` column whose denominator the volume layer depends on,
 and it avoids making the props path carry a second large table.
 
-KNOWN LIMITATION, stated rather than hidden: team volume is the
-team's own recency-weighted rate and is NOT adjusted for the upcoming
-game's script. A heavy favourite throws less than its season rate and
-a heavy underdog throws more, and `spread_line`/`total_line` are
-available on the schedule to model that. It is left out of this
-version deliberately - it is a real effect but an untested one, and
-this module is already replacing the board's central calculation.
+GAME SCRIPT. Team volume is additionally scaled by what the game's
+betting lines imply, via `compute_game_script_multipliers`. Fitting it
+over 10 seasons corrected the folklore this was expected to encode:
+"favourites run, underdogs pass" is only half true. Underdogs do throw
+at a higher RATE (0.601 for 7-point dogs against 0.570 for 7-point
+favourites) but run far fewer total plays (52.6 against 57.0), and the
+two effects so nearly cancel that a dog's absolute target count barely
+moves at all (31.6 against 32.6). What game script really moves is
+CARRIES, 21.0 against 24.4. And for passing volume the TOTAL line
+carries more information than the spread does: 10 points of total is
+worth ~4% of targets and pass attempts, where 14 points of spread is
+worth 0.6% of targets.
+
+The adjustment applies to VOLUME only, never efficiency - the market's
+view of a game speaks to how many plays a team runs and how it splits
+them, not to how many yards a given receiver gains per target.
+
+IT IS SHIPPED DISABLED (`config.NFL_PROP_GAME_SCRIPT_ENABLED`), and the
+reason is recorded in full beside that flag. Replayed across two
+seasons, the effect does not survive: the one category that looked like
+a clear win in 2025 (Passing Yards, MAE -0.354 with an interval well
+clear of zero) flips sign in 2024, and the two categories that are
+consistent across both seasons improve MAE by around 0.1%. A team's own
+trailing average has already absorbed nearly all of the game-script
+signal, so by the time it passes through a player's usage share there is
+essentially nothing left. The machinery stays, tested, for re-measuring
+later.
 """
 
 import numpy as np
@@ -114,6 +134,7 @@ PROJECTION_OUTPUT_COLUMNS = [
     "target_share", "carry_share", "team_targets_per_game", "team_carries_per_game",
     "yards_per_target", "catch_rate", "yards_per_carry",
     "ypt_multiplier", "catch_multiplier", "ypc_multiplier",
+    "target_volume_multiplier", "carry_volume_multiplier",
     "projected_targets", "projected_carries",
     "projected_receptions", "projected_receiving_yards", "projected_rushing_yards",
 ]
@@ -213,6 +234,63 @@ def _skill_rows(weekly_df: pd.DataFrame) -> pd.DataFrame:
     if "season_type" in scoped.columns:
         scoped = scoped[scoped["season_type"] == "REG"]
     return scoped
+
+
+def compute_game_script_multipliers(schedule_df: pd.DataFrame) -> pd.DataFrame:
+    """One row per team playing this week: the volume multipliers this
+    game's betting lines imply, from `config.NFL_PROP_GAME_SCRIPT_COEFFICIENTS`.
+
+    `schedule_df` is the current week's schedule, needing `home_team`,
+    `away_team`, `spread_line` and `total_line`. A schedule missing the
+    line columns - or carrying them as nulls, which happens for a game
+    before the market posts - yields a neutral 1.0 for that team rather
+    than dropping it, so a board can always be built.
+
+    Sign convention, confirmed empirically rather than assumed:
+    `spread_line` is positive when the HOME team is favored (it
+    correlates +0.446 with the real home margin across 2016-2025), so
+    the away team's own spread is its negation. `team_spread` is
+    therefore positive whenever that team is favored.
+
+    See the config block for what the fit says and how small it is -
+    roughly 1% of the variance left after a team's trailing average, and
+    concentrated in carries rather than in the passing volume the
+    "underdogs throw more" story would predict.
+    """
+    columns = ["team", "target_volume_multiplier", "carry_volume_multiplier", "attempt_volume_multiplier"]
+    required = {"home_team", "away_team"}
+    if schedule_df is None or schedule_df.empty or not required.issubset(schedule_df.columns):
+        return pd.DataFrame(columns=columns)
+
+    scoped = schedule_df.copy()
+    for column in ("spread_line", "total_line"):
+        if column not in scoped.columns:
+            scoped[column] = np.nan
+
+    home = scoped[["home_team", "spread_line", "total_line"]].rename(columns={"home_team": "team"})
+    away = scoped[["away_team", "spread_line", "total_line"]].rename(columns={"away_team": "team"})
+    away["spread_line"] = -away["spread_line"]
+    teams = pd.concat([home, away], ignore_index=True).rename(columns={"spread_line": "team_spread"})
+
+    # A missing line is no information, which is a neutral game script,
+    # not a zero spread in a zero-total game.
+    teams["team_spread"] = teams["team_spread"].fillna(0.0)
+    teams["total_line"] = teams["total_line"].fillna(config.NFL_PROP_GAME_SCRIPT_TOTAL_BASELINE)
+    total_delta = teams["total_line"] - config.NFL_PROP_GAME_SCRIPT_TOTAL_BASELINE
+
+    low, high = config.NFL_PROP_GAME_SCRIPT_CLIP
+    for stat, output in (
+        ("targets", "target_volume_multiplier"),
+        ("carries", "carry_volume_multiplier"),
+        ("attempts", "attempt_volume_multiplier"),
+    ):
+        coefficients = config.NFL_PROP_GAME_SCRIPT_COEFFICIENTS[stat]
+        multiplier = (
+            1.0 + coefficients["spread"] * teams["team_spread"] + coefficients["total"] * total_delta
+        )
+        teams[output] = multiplier.clip(low, high)
+
+    return teams.drop_duplicates("team")[columns]
 
 
 def compute_team_volume(weekly_df: pd.DataFrame) -> pd.DataFrame:
@@ -493,8 +571,33 @@ def compute_opponent_multipliers(defense_rates: pd.DataFrame, league_rates: pd.D
     return rates
 
 
+def _apply_game_script(players: pd.DataFrame, schedule_df: pd.DataFrame, columns) -> pd.DataFrame:
+    """Attach the game-script volume multipliers and return `players`
+    with them merged in, defaulting to a neutral 1.0 wherever the market
+    has nothing to say. `columns` maps a multiplier column onto itself so
+    callers can request only the ones they use."""
+    if not config.NFL_PROP_GAME_SCRIPT_ENABLED:
+        for column in columns:
+            players[column] = 1.0
+        return players
+
+    script = compute_game_script_multipliers(schedule_df)
+    if script.empty:
+        for column in columns:
+            players[column] = 1.0
+        return players
+
+    players = players.merge(script[["team"] + list(columns)], on="team", how="left")
+    for column in columns:
+        players[column] = players[column].fillna(1.0)
+    return players
+
+
 def project_player_stats(
-    weekly_df: pd.DataFrame, opponents_df: pd.DataFrame, latest_team_df: pd.DataFrame = None
+    weekly_df: pd.DataFrame,
+    opponents_df: pd.DataFrame,
+    latest_team_df: pd.DataFrame = None,
+    schedule_df: pd.DataFrame = None,
 ) -> pd.DataFrame:
     """Projected receptions, receiving yards, and rushing yards for every
     skill player with an upcoming opponent.
@@ -547,8 +650,19 @@ def project_player_stats(
     for column in ("ypt_multiplier", "catch_multiplier", "ypc_multiplier"):
         players[column] = players[column].fillna(1.0)
 
-    players["projected_targets"] = players["target_share"] * players["team_targets_per_game"]
-    players["projected_carries"] = players["carry_share"] * players["team_carries_per_game"]
+    # Game script adjusts VOLUME only, never efficiency - the market's
+    # view of a game says something about how many plays a team runs and
+    # how it splits them, not about how many yards this receiver gets per
+    # target.
+    players = _apply_game_script(
+        players, schedule_df, ("target_volume_multiplier", "carry_volume_multiplier")
+    )
+    players["projected_targets"] = (
+        players["target_share"] * players["team_targets_per_game"] * players["target_volume_multiplier"]
+    )
+    players["projected_carries"] = (
+        players["carry_share"] * players["team_carries_per_game"] * players["carry_volume_multiplier"]
+    )
     players["projected_receptions"] = (
         players["projected_targets"] * players["catch_rate"] * players["catch_multiplier"]
     )
@@ -647,7 +761,10 @@ def compute_pass_defense_per_play_rates(weekly_df: pd.DataFrame) -> pd.DataFrame
 
 
 def project_qb_stats(
-    weekly_df: pd.DataFrame, opponents_df: pd.DataFrame, latest_team_df: pd.DataFrame = None
+    weekly_df: pd.DataFrame,
+    opponents_df: pd.DataFrame,
+    latest_team_df: pd.DataFrame = None,
+    schedule_df: pd.DataFrame = None,
 ) -> pd.DataFrame:
     """Projected passing yards per QB: attempt share x team attempts x
     shrunk yards per attempt x the opponent's per-attempt multiplier.
@@ -661,8 +778,8 @@ def project_qb_stats(
     """
     columns = [
         "player_id", "team", "opponent", "games", "attempt_share",
-        "team_attempts_per_game", "projected_attempts", "yards_per_attempt",
-        "ypa_multiplier", "projected_passing_yards",
+        "team_attempts_per_game", "attempt_volume_multiplier", "projected_attempts",
+        "yards_per_attempt", "ypa_multiplier", "projected_passing_yards",
     ]
     scoped = weekly_df if "season_type" not in weekly_df.columns else weekly_df[weekly_df["season_type"] == "REG"]
     scoped = scoped[scoped["position"] == "QB"]
@@ -716,7 +833,10 @@ def project_qb_stats(
 
     low, high = config.NFL_PROP_PROJECTION_MULTIPLIER_CLIP
     players["ypa_multiplier"] = players["ypa_multiplier"].clip(low, high)
-    players["projected_attempts"] = players["attempt_share"] * players["team_attempts_per_game"]
+    players = _apply_game_script(players, schedule_df, ("attempt_volume_multiplier",))
+    players["projected_attempts"] = (
+        players["attempt_share"] * players["team_attempts_per_game"] * players["attempt_volume_multiplier"]
+    )
     players["projected_passing_yards"] = (
         players["projected_attempts"] * players["yards_per_attempt"] * players["ypa_multiplier"]
     )
