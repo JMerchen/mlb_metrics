@@ -5404,6 +5404,45 @@ own real recent yardage rate), not accounting for real game-script
 factors (a blowout, injury, a real key opposing-line absence) a human
 bettor would also weigh.
 
+**Current-season snap-share filter** (`compute_current_season_snap_share`,
+added 2026-09-17): a real user report - "we need a snap share filter for
+the current season... there's four different running backs just from AZ"
+- turned out to understate the problem. All four of those real Arizona
+backs on the real shipped week-2 board (Trey Benson, James Conner,
+Michael Carter, Bam Knight) had **zero real 2026 appearances**; Arizona's
+actual current backs were Tyler Allgeier and Jeremiyah Love.
+
+Root cause: a player's own per-game rate is built from `history["weekly"]`,
+which spans the PRIOR season plus the current one. A player who produced
+real rates all last season therefore still carries a rate, still resolves
+to a real `latest_team`, and still gets matched to that team's real
+upcoming opponent - even having never taken a snap this year.
+`config.NFL_PROP_MIN_GAMES` cannot catch this, because those games are
+real; they just happened last season.
+
+The filter measures each player's real snaps this season as a share of
+their own team's real season snap total (the same denominator convention
+`nfl_bestball.compute_player_snap_share` established - a one-game cameo
+correctly reads LOW against the team's full season, rather than high
+against only the game the player appeared in), crosswalked from
+`pfr_player_id` to the gsis `player_id` via `rosters_weekly`. Measured
+for BOTH sides of the ball, unlike the bestball version: the Sacks
+category is about real pass RUSHERS, and an offense-only share would
+silently filter every real defender off the board.
+
+Applied in `build_prop_edges` rather than alongside the other qualifiers
+in `top_prop_bets`, deliberately - ranking is a WITHIN-CATEGORY
+percentile, so players who aren't playing have to be gone *before*
+anything is ranked, or they shift every remaining real player's own
+percentile. Real measured effect on the real week-2 board: the candidate
+pool dropped from 2,280 to 1,070 rows (**53% of it was players not in the
+current season at all**), all four phantom Arizona backs disappeared, and
+the top 10 went from 6 teams with 4 from one team to **7 teams with at
+most 3** - the replacements being real current contributors (Carson
+Wentz, Travis Etienne, Tucker Kraft, Jonnu Smith, Gunnar Helm). At real
+week 1 no current-season snaps exist yet for anyone, so the filter
+honestly skips itself rather than emptying the board.
+
 **Real results tracking** (`nfl_prop_predictions.py`, added 2026-09-16):
 a real, structural gap found while reviewing this feature against its own
 goal - `docs/data/nfl_player_props.csv` is OVERWRITTEN every week, and

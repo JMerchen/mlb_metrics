@@ -241,7 +241,27 @@ def run(
             # Actions minutes are a real, finite budget - see module
             # docstring). Independent of whether the win-probability
             # model below succeeds.
-            props_edges = nfl_player_props.build_prop_edges(history["weekly"], this_week_games)
+            # Real current-season snap share (see
+            # nfl_player_props.compute_current_season_snap_share): a
+            # player's own rate is built from the PRIOR season plus this
+            # one, so without this a departed player keeps a real rate, a
+            # real latest_team, and therefore a real upcoming opponent -
+            # confirmed live on the real week-2 board, which surfaced four
+            # Arizona backs who had not played a single real 2026 snap.
+            # Uses `history`, not `fresh`: history is already restricted
+            # to real weeks strictly BEFORE the week being predicted, so
+            # this can never be told who actually suited up for the game
+            # it is predicting. `fresh` would carry that week's own real
+            # snaps once the week has been played, which is harmless for
+            # a live forward run but is real lookahead the moment this is
+            # re-run or replayed - the exact distinction
+            # nfl_game_picks_backtest.py exists to respect.
+            snap_share = nfl_player_props.compute_current_season_snap_share(
+                history.get("snap_counts", pd.DataFrame()), history["rosters_weekly"], season
+            )
+            props_edges = nfl_player_props.build_prop_edges(
+                history["weekly"], this_week_games, snap_share=snap_share
+            )
             top_props = nfl_player_props.write_prop_bets_csv(
                 props_edges, os.path.join(output_dir, "nfl_player_props.csv")
             )

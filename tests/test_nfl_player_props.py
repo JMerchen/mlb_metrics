@@ -441,3 +441,116 @@ def test_top_prop_bets_ranks_on_the_unclipped_ratio_not_the_clipped_one():
     ordered = [p for p in top["player_id"] if p in ("wr_extreme", "wr_mild")]
 
     assert ordered[0] == "wr_extreme"
+
+
+def _snap_row(pfr_id, team, week, offense=0.0, defense=0.0, season=2026, game_type="REG"):
+    return {
+        "season": season, "game_type": game_type, "week": week, "team": team,
+        "game_id": f"{season}_{week:02d}_{team}", "pfr_player_id": pfr_id,
+        "offense_snaps": offense, "defense_snaps": defense,
+    }
+
+
+def _roster(gsis_id, pfr_id, season=2026):
+    return {"season": season, "gsis_id": gsis_id, "pfr_id": pfr_id}
+
+
+def test_compute_current_season_snap_share_measures_share_of_team_season_snaps():
+    # Team plays 2 real games at 60 snaps each = 120 real team snaps.
+    # The starter takes 60+60; the backup takes 12 in one game only.
+    snaps = pd.DataFrame([
+        _snap_row("pfr_start", "ARI", 1, offense=60.0), _snap_row("pfr_start", "ARI", 2, offense=60.0),
+        _snap_row("pfr_back", "ARI", 1, offense=12.0),
+    ])
+    rosters = pd.DataFrame([_roster("starter", "pfr_start"), _roster("backup", "pfr_back")])
+
+    result = nfl_player_props.compute_current_season_snap_share(snaps, rosters, 2026).set_index("player_id")
+
+    assert result.loc["starter", "snap_share"] == pytest.approx(1.0)
+    # 12/120 - a real one-game cameo must read LOW against the team's own
+    # full season, not high against only the game the player appeared in.
+    assert result.loc["backup", "snap_share"] == pytest.approx(0.1)
+
+
+def test_compute_current_season_snap_share_covers_defenders_too():
+    # The Sacks category is about real pass RUSHERS, who take no real
+    # offensive snaps - an offense-only share would filter every real
+    # defender off the board entirely.
+    snaps = pd.DataFrame([
+        _snap_row("pfr_edge", "GB", 1, defense=55.0),
+        _snap_row("pfr_qb", "GB", 1, offense=60.0),
+    ])
+    rosters = pd.DataFrame([_roster("edge1", "pfr_edge"), _roster("qb1", "pfr_qb")])
+
+    result = nfl_player_props.compute_current_season_snap_share(snaps, rosters, 2026).set_index("player_id")
+
+    assert result.loc["edge1", "snap_share"] == pytest.approx(1.0)
+    assert result.loc["qb1", "snap_share"] == pytest.approx(1.0)
+
+
+def test_compute_current_season_snap_share_ignores_other_seasons():
+    # The whole point is CURRENT-season participation - last season's
+    # snaps are exactly what must not count.
+    snaps = pd.DataFrame([
+        _snap_row("pfr_gone", "ARI", 1, offense=60.0, season=2025),
+        _snap_row("pfr_here", "ARI", 1, offense=60.0, season=2026),
+    ])
+    rosters = pd.DataFrame([
+        _roster("departed", "pfr_gone", season=2025), _roster("departed", "pfr_gone", season=2026),
+        _roster("current", "pfr_here"),
+    ])
+
+    result = nfl_player_props.compute_current_season_snap_share(snaps, rosters, 2026)
+
+    assert list(result["player_id"]) == ["current"]
+
+
+def test_compute_current_season_snap_share_is_empty_with_no_current_season_data():
+    snaps = pd.DataFrame([_snap_row("pfr_a", "ARI", 1, offense=60.0, season=2025)])
+    rosters = pd.DataFrame([_roster("a", "pfr_a")])
+
+    assert nfl_player_props.compute_current_season_snap_share(snaps, rosters, 2026).empty
+
+
+def _two_receiver_edges():
+    rows = []
+    rows += _multi_week_skill_rows("plays_now", "Plays Now", "SF", "SEA", "WR", range(1, 6), receptions=5)
+    rows += _multi_week_skill_rows("departed", "Departed Last Year", "SF", "SEA", "WR", range(1, 6), receptions=5)
+    return pd.DataFrame(rows), pd.DataFrame([{"home_team": "SF", "away_team": "SEA"}])
+
+
+def test_build_prop_edges_drops_players_with_no_current_season_snaps():
+    # The real reported bug (2026-09-17): all four Arizona backs on the
+    # real week-2 board had ZERO real current-season appearances. A player
+    # absent from the snap-share frame entirely is not playing.
+    weekly_df, schedule = _two_receiver_edges()
+    snap_share = pd.DataFrame([{"player_id": "plays_now", "snap_share": 0.80}])
+
+    edges = nfl_player_props.build_prop_edges(weekly_df, schedule, snap_share=snap_share)
+
+    assert set(edges["player_id"]) == {"plays_now"}
+
+
+def test_build_prop_edges_drops_players_below_the_snap_share_floor():
+    weekly_df, schedule = _two_receiver_edges()
+    snap_share = pd.DataFrame([
+        {"player_id": "plays_now", "snap_share": 0.80},
+        {"player_id": "departed", "snap_share": 0.05},
+    ])
+
+    edges = nfl_player_props.build_prop_edges(weekly_df, schedule, snap_share=snap_share, min_snap_share=0.25)
+
+    assert set(edges["player_id"]) == {"plays_now"}
+
+
+def test_build_prop_edges_skips_the_filter_entirely_at_week_one():
+    # At real week 1 nobody has a current-season snap yet - filtering on
+    # them would empty the whole board rather than narrow it.
+    weekly_df, schedule = _two_receiver_edges()
+
+    empty = nfl_player_props.build_prop_edges(
+        weekly_df, schedule, snap_share=pd.DataFrame(columns=["player_id", "snap_share"])
+    )
+    unfiltered = nfl_player_props.build_prop_edges(weekly_df, schedule)
+
+    assert set(empty["player_id"]) == set(unfiltered["player_id"]) == {"plays_now", "departed"}

@@ -1978,7 +1978,35 @@ NFL_PROP_MIN_USAGE = {
 # top_prop_bets' own docstrings) - both changed which real props this
 # feature actually surfaces, so their results must not be pooled with
 # v1's.
-NFL_PROP_MODEL_VERSION = "v2"
+NFL_PROP_MODEL_VERSION = "v3"
+
+# Minimum share of their own team's real season snaps a player must have
+# taken THIS season to appear on the props board at all
+# (nfl_player_props.compute_current_season_snap_share /
+# build_prop_edges). Added 2026-09-17 after a real user report - "we need
+# a snap share filter for the current season... there's four different
+# running backs just from AZ" - which turned out to understate the
+# problem: all four of those real Arizona backs (Trey Benson, James
+# Conner, Michael Carter, Bam Knight) had ZERO real 2026 appearances.
+# They were entirely last season's players, carried onto the board
+# because a player's own rate is built from the PRIOR season plus the
+# current one, so a departed player keeps a real rate, a real
+# `latest_team`, and therefore a real upcoming opponent. NFL_PROP_MIN_GAMES
+# cannot catch this - those games are real, they just happened last year.
+#
+# 0.25 is a judgment call, NOT a backtested optimum, and is labeled as
+# such rather than dressed up (same honest status as NFL_PROP_MIN_USAGE
+# above): this filter's real job is excluding players who aren't playing,
+# which is a correctness question rather than a tuning one. The value is
+# anchored on the real 2026 Arizona distribution that prompted it - real
+# contributors ran 0.43-0.85 (Love 0.43, Allgeier 0.59, Bourne 0.67,
+# Harrison 0.79, McBride 0.80, Wilson 0.85) while real fringe players sat
+# at 0.35 and below (Fehoko 0.08, Duvernay 0.00) - so 0.25 keeps a real
+# committee back or third receiver who genuinely earns targets while
+# dropping players with no real current role. Worth revisiting once
+# nfl_prop_predictions.py has accumulated enough real resolved picks to
+# measure a real hit rate on either side of it.
+NFL_PROP_MIN_SNAP_SHARE = 0.25
 
 # --- NFL DFS: DK Scoring (nfl_dfs.py) ---
 #
