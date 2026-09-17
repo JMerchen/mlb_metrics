@@ -5296,6 +5296,122 @@ sourced from real, confirmed nflreadpy weekly-stats columns (`def_sacks`
 for an individual defender's own real sacks, `sacks_suffered` for a
 team's own real sacks-allowed-while-on-offense).
 
+## Cross-Book Prop Market (`prop_market.py`)
+
+User question (2026-09-17): "not just when we disagree with the books but
+also when the books disagree with one another."
+
+This is a stronger idea than what preceded it, and the module says so.
+Everything else in the props path is scored against a **stand-in line** -
+the player's own trailing per-game average - because there are no book
+lines in this repo. That benchmark is weak, and it produced a 74% top-10
+hit rate that turned out on inspection to be almost entirely selection
+rather than directional skill. The de-vigged consensus of several books
+is a far sharper estimate than either that stand-in or this project's own
+projection, and measuring an outlier against it **does not require our
+model to be right at all**.
+
+**Status: the math ships, the data does not exist yet.** Every function
+takes a quote table and returns a frame; nothing fetches. That split is
+deliberate - this sandbox blocks every odds domain (re-confirmed
+2026-09-17: `site.api.espn.com` and `api.the-odds-api.com` both return
+nothing), so a fetcher can only be exercised from an Actions runner, the
+same constraint `market_odds.py` documents. A multi-book player-prop feed
+has to be provisioned before any of this produces a number. When it is,
+it must emit `QUOTE_COLUMNS` and nothing here changes.
+
+### Two kinds of disagreement, unified
+
+* **Line** disagreement - 3.5 receptions at one book, 4.5 at another. On
+  a low-integer stat that is enormous.
+* **Price** disagreement - both at 3.5, but -110 against -135.
+
+Both are translated into an implied **central estimate** of the stat, so
+a book that moved its line and a book that only moved its price become
+comparable numbers on one scale.
+
+### The measured piece
+
+Converting `(line, de-vigged P(over))` into an implied mean needs a
+distribution. The spread of these stats is not constant in the level:
+receiving-yards residuals had a standard deviation of 14.7 around a
+7.7-yard projection but 35.5 around a 58.1-yard one. Dividing by the
+square root of the level flattens that almost exactly - 5.28, 4.77, 4.72,
+4.65 across quartiles - the signature of a count-like or compound-sum
+process.
+
+So `sigma = k * sqrt(level)`, k fitted by maximum likelihood on
+`residual^2 / level`:
+
+| Category | 2025 k | 2024 k | shipped |
+| --- | --- | --- | --- |
+| Passing Yards | 6.994 | 7.596 | 7.30 |
+| Receiving Yards | 5.172 | 5.242 | 5.21 |
+| Receptions | 1.143 | 1.201 | 1.17 |
+| Rushing Yards | 6.334 | 6.139 | 6.24 |
+
+These **replicate across seasons**, which is worth stating because the
+EPA blend and the game-script adjustment did not, and were shipped off as
+a result. Sacks has no fitted k - it has no projection to take residuals
+against - so a sack quote cannot be translated, and that gap is left
+visible as a missing key rather than filled with a guess.
+
+### Which book disagrees matters more than that one does
+
+An outlier is one of three things and only the first is money:
+
+1. a slow or soft book that has not moved - **exploitable**;
+2. a book that moved FIRST on real news - **you are the mark**;
+3. a stale quote about to be pulled.
+
+Nothing in a price distinguishes these. `flag_stale_quotes` marks
+anything past `PROP_QUOTE_MAX_STALENESS_MINUTES`, and
+`score_book_disagreement` reports `outlier_is_sharpest_book` so a caller
+can see when the sharpest book is the one out of line - information, not
+opportunity.
+
+`PROP_BOOK_SHARPNESS` is deliberately **empty**. Which books are sharp is
+an empirical question this project cannot answer yet, because it has no
+multi-book history to answer it from; the right way to fill it is to
+accumulate snapshots and measure which books' lines the rest of the
+market moves toward. Populating it from reputation would be exactly the
+kind of unmeasured constant this codebase has repeatedly had to walk
+back.
+
+### Leave-one-out consensus
+
+Each book is scored against the rest of the market **excluding itself**.
+This is a correctness requirement, not a refinement: at the three-book
+minimum an outlier can *be* the median of the three, and would be scored
+as agreeing with a consensus that is mostly its own quote.
+
+### Middles and arbitrage
+
+Kept separate because they are different animals. An **arb** needs no
+view of the outcome distribution at all, so it carries no model risk. A
+**middle**'s value depends entirely on the probability of landing in the
+gap - and middles are genuinely available here because receptions and
+rush attempts are low integers: Over 3.5 at one book and Under 4.5 at
+another both cash on exactly 4.
+
+### Why this matters most: closing-line value
+
+`closing_line_value` compares the price a bet was taken at against the
+last quote before kickoff, re-pricing the close at the **bet's** line so
+a pure price move is still visible. Beating the close is the best-
+established leading indicator of long-run profit in betting, and it
+resolves in **days** rather than hundreds of settled wagers.
+
+That is the constraint every props decision in this project has run into:
+the prediction log holds ten pending picks and will not say anything for
+weeks. CLV replaces that. It is a leading indicator, not a result -
+positive CLV with a losing record is normal over small samples - so the
+function deliberately reports no win rate, to keep the two from being
+conflated.
+
+It would also subject this project's own projection to the test it has so
+far avoided. The honest expectation is that **the consensus beats it**.
+
 ## NFL Prop Projections (`nfl_prop_projections.py`)
 
 Real, direct user report (2026-09-17): the props board showed an
