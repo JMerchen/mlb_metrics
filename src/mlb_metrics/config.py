@@ -2188,6 +2188,80 @@ NFL_PROP_GAME_SCRIPT_CLIP = (0.85, 1.15)
 # effect worth chasing.
 NFL_PROP_GAME_SCRIPT_ENABLED = False
 
+# --- Cross-book prop market (prop_market.py) ---
+#
+# Outcome spread per category, as `sigma = k * sqrt(level)`. This is the
+# one measured input to the cross-book math: translating a book's
+# (line, price) into an implied central estimate needs a distribution,
+# and the spread of these stats is NOT constant in the level.
+#
+# Measured on 2025 replay, receiving-yards residuals had a standard
+# deviation of 14.7 around a 7.7-yard projection but 35.5 around a
+# 58.1-yard one. Dividing by the square root of the level flattens that
+# almost exactly - 5.28, 4.77, 4.72, 4.65 across projection quartiles -
+# which is the signature of a count-like or compound-sum process, as
+# receptions (counts) and receiving yards (a sum over catches) both are.
+#
+# k is the maximum-likelihood fit of residual^2 / level. These values
+# REPLICATE across seasons, which is worth recording because two other
+# ideas measured in this same session did not and were shipped off as a
+# result (see NFL_PROP_DEFENSE_EPA_BLEND and
+# NFL_PROP_GAME_SCRIPT_ENABLED):
+#
+#   category           2025 k   2024 k   shipped
+#   Passing Yards       6.994    7.596   7.30
+#   Receiving Yards     5.172    5.242   5.21
+#   Receptions          1.143    1.201   1.17
+#   Rushing Yards       6.334    6.139   6.24
+#
+# Sacks is absent: it has no projection to take residuals against (see
+# nfl_prop_projections.compute_sacks_allowed_per_game for why), so no k
+# was fitted and a sack quote cannot be translated to an implied mean.
+# That is a real gap, left visible as a missing key rather than filled
+# with a guess.
+PROP_OUTCOME_SIGMA_K = {
+    "Passing Yards": 7.30,
+    "Receiving Yards": 5.21,
+    "Receptions": 1.17,
+    "Rushing Yards": 6.24,
+}
+
+# Floor on the level used inside `outcome_sigma`, so a 0.5-reception line
+# does not imply a near-zero spread that would make every price look like
+# a near-certainty and manufacture enormous fake edges at the bottom of
+# the board.
+PROP_SIGMA_MIN_LEVEL = 0.5
+
+# Per-book weight in the consensus. A low-margin, high-limit book that
+# takes sharp action is a better estimate of truth than a retail book
+# with wide vig and low limits, so it should move the consensus more.
+#
+# DELIBERATELY EMPTY, and that is not an oversight. Which books are sharp
+# is an empirical question this project cannot answer yet, because it has
+# no multi-book prop history to answer it FROM - the right way to fill
+# this is to accumulate snapshots and measure which books' lines the rest
+# of the market moves toward. Populating it now from reputation would be
+# exactly the kind of unmeasured constant this codebase has repeatedly
+# had to walk back. Until then every book is weighted equally via
+# PROP_BOOK_DEFAULT_SHARPNESS and the consensus is a plain median, which
+# is the honest default rather than a pretend-informed one.
+PROP_BOOK_SHARPNESS = {}
+PROP_BOOK_DEFAULT_SHARPNESS = 1.0
+
+# How old a quote may be before `flag_stale_quotes` marks it. Staleness
+# is the main way an apparent outlier turns out to be a line about to be
+# pulled rather than an edge, and nothing in the price itself reveals
+# which one it is. 10 minutes is a starting point for an in-week NFL
+# market, not a measured value - it should be tightened once snapshot
+# history shows how fast these lines actually move.
+PROP_QUOTE_MAX_STALENESS_MINUTES = 10.0
+
+# Books required before a group is treated as having a consensus worth
+# betting against. Two books that disagree are two opinions, not a
+# consensus and an outlier - the distinction only becomes meaningful once
+# enough books agree that one of them standing apart is informative.
+PROP_MIN_BOOKS_FOR_CONSENSUS = 3
+
 # --- NFL DFS: DK Scoring (nfl_dfs.py) ---
 #
 # DraftKings NFL Classic scoring, confirmed live via web search against
