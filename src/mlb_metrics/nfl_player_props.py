@@ -40,9 +40,10 @@ the wrong tool here."""
 
 import os
 
+import numpy as np
 import pandas as pd
 
-from mlb_metrics import config, nfl_matchup, nfl_passing, nfl_rush_rec, nfl_teams
+from mlb_metrics import config, nfl_matchup, nfl_passing, nfl_prop_projections, nfl_rush_rec, nfl_teams
 
 
 # The real weekly-stats column each real prop category is ultimately
@@ -319,34 +320,70 @@ def _skill_category_edges(
     players = skill_rolling.merge(names, on="player_id", how="left").merge(latest_team, on="player_id", how="left")
     players = players.merge(opponents, on="team", how="left")
 
+    projections = nfl_prop_projections.project_player_stats(weekly_df, opponents, latest_team)
+    defense_rates = nfl_prop_projections.compute_opponent_multipliers(
+        nfl_prop_projections.compute_position_defense_per_play_rates(weekly_df),
+        nfl_prop_projections.league_efficiency_rates(weekly_df),
+    )
+    league_rates = nfl_prop_projections.league_efficiency_rates(weekly_df).set_index("position")
+
+    # (category, per-game baseline column, projection column, the defense's
+    # own per-PLAY allowed column, that column's league prior, and what one
+    # "play" means for this category - reported as `rate_basis` so the
+    # allowed rate on the board is self-describing rather than silently
+    # changing units between categories.
     category_specs = [
-        ("Receptions", "receptions_per_game", "receptions"),
-        ("Receiving Yards", "receiving_yards_per_game", "receiving_yards"),
-        ("Rushing Yards", "rushing_yards_per_game", "rushing_yards"),
+        ("Receptions", "receptions_per_game", "projected_receptions",
+         "catch_rate_allowed", "catch_rate", "per target"),
+        ("Receiving Yards", "receiving_yards_per_game", "projected_receiving_yards",
+         "yards_allowed_per_target", "yards_per_target", "per target"),
+        ("Rushing Yards", "rushing_yards_per_game", "projected_rushing_yards",
+         "yards_allowed_per_carry", "yards_per_carry", "per carry"),
+    ]
+
+    projection_columns = ["player_id", "projected_targets", "projected_carries"] + [
+        spec[2] for spec in category_specs
     ]
 
     frames = []
-    for category, player_col, stat_col in category_specs:
+    for category, player_col, projection_col, allowed_col, league_col, basis in category_specs:
         rows = players.rename(columns={player_col: "player_rate"}).copy()
         rows["category"] = category
+        rows["rate_basis"] = basis
 
-        position_rates = compute_position_defense_rolling_rates(weekly_df, stat_col)
-        defense_by_opponent = position_rates.rename(columns={"team": "opponent", "allowed_per_game": "opponent_allowed_rate"})
+        rows = rows.merge(projections[projection_columns], on="player_id", how="left")
+        rows = rows.rename(columns={projection_col: "projection"})
+
+        # The opponent's own PER-PLAY allowed rate, not the per-game one
+        # the ratio model used. See nfl_prop_projections' module docstring
+        # for the measured reason: per-game confounds defensive quality
+        # with how many plays the defense faces, and the live board's
+        # 202.4 receiving-yards-per-game figure was that confound showing
+        # through at a scale no individual receiver could ever reach.
+        allowed = defense_rates.rename(columns={"team": "opponent", allowed_col: "opponent_allowed_rate"})
         rows = rows.merge(
-            defense_by_opponent[["opponent", "position", "opponent_allowed_rate"]],
-            on=["opponent", "position"], how="left",
+            allowed[["opponent", "position", "opponent_allowed_rate"]], on=["opponent", "position"], how="left"
         )
-
-        league_rate_by_position = position_rates.groupby("position")["allowed_per_game"].mean()
-        rows["league_rate"] = rows["position"].map(league_rate_by_position)
+        rows["league_rate"] = rows["position"].map(league_rates[league_col])
         rows["opponent_allowed_rate"] = rows["opponent_allowed_rate"].fillna(rows["league_rate"])
-        rows["ratio"] = nfl_matchup.compute_opponent_adjustment_ratio(
-            rows["opponent_allowed_rate"], rows["league_rate"], weight, clip=config.NFL_PROP_MATCHUP_CLIP
+
+        # `ratio` stays in the schema as the opponent's per-play multiplier
+        # so downstream consumers (nfl_prop_predictions' log, the docs
+        # table) keep working, but it is now a per-play quantity and is no
+        # longer what the board ranks on - `top_prop_bets` ranks on how far
+        # the projection departs from the player's own baseline.
+        # A league rate of zero is possible for a category no one in the
+        # pool has attempted yet (no TE has taken a carry, say). That is
+        # "no information", which is a ratio of 1.0 - dividing would give
+        # inf and let an empty category outrank every real matchup.
+        rows["ratio"] = np.where(
+            rows["league_rate"] > 0, rows["opponent_allowed_rate"] / rows["league_rate"], 1.0
         )
 
         frames.append(rows[[
             "player_id", "player_name", "team", "position", "opponent", "games",
-            "category", "player_rate", "opponent_allowed_rate", "league_rate", "ratio",
+            "category", "player_rate", "projection", "projected_targets", "projected_carries",
+            "opponent_allowed_rate", "league_rate", "rate_basis", "ratio",
         ]])
 
     return pd.concat(frames, ignore_index=True)
@@ -386,10 +423,22 @@ def _passing_category_edges(
     rows["ratio"] = nfl_matchup.compute_opponent_adjustment_ratio(
         rows["opponent_allowed_rate"], league_rate, weight, clip=config.NFL_PROP_MATCHUP_CLIP
     )
+    # Passing Yards has no projection: nfl_prop_projections models
+    # receiving and rushing from usage share x team volume, and a QB has
+    # no equivalent share to take of his own team's attempts. The columns
+    # are carried as NaN so every category shares one schema, and
+    # `top_prop_bets` falls back to ranking this category on its matchup
+    # ratio - the same basis it always used, left deliberately unchanged
+    # because nothing has been measured that would justify altering it.
+    rows["projection"] = float("nan")
+    rows["projected_targets"] = float("nan")
+    rows["projected_carries"] = float("nan")
+    rows["rate_basis"] = "per game"
 
     return rows[[
         "player_id", "player_name", "team", "position", "opponent", "games",
-        "category", "player_rate", "opponent_allowed_rate", "league_rate", "ratio",
+        "category", "player_rate", "projection", "projected_targets", "projected_carries",
+        "opponent_allowed_rate", "league_rate", "rate_basis", "ratio",
     ]]
 
 
@@ -423,10 +472,18 @@ def _sacks_category_edges(
     rows["ratio"] = nfl_matchup.compute_opponent_adjustment_ratio(
         rows["opponent_allowed_rate"], league_rate, weight, clip=config.NFL_PROP_MATCHUP_CLIP
     )
+    # No projection for Sacks, for the same reason as Passing Yards above
+    # (and more so: a sack is a rare counting event with no usage-share
+    # decomposition at all). Ranked on its matchup ratio, unchanged.
+    rows["projection"] = float("nan")
+    rows["projected_targets"] = float("nan")
+    rows["projected_carries"] = float("nan")
+    rows["rate_basis"] = "per game"
 
     return rows[[
         "player_id", "player_name", "team", "position", "opponent", "games",
-        "category", "player_rate", "opponent_allowed_rate", "league_rate", "ratio",
+        "category", "player_rate", "projection", "projected_targets", "projected_carries",
+        "opponent_allowed_rate", "league_rate", "rate_basis", "ratio",
     ]]
 
 
@@ -559,7 +616,113 @@ def top_prop_bets(edges_df: pd.DataFrame, n: int = 10, min_games: int = None) ->
     qualified = qualified[qualified["player_rate"] >= qualified["min_usage"]]
     qualified = qualified.dropna(subset=["opponent"])
 
-    qualified["direction"] = qualified["ratio"].apply(lambda r: "Over" if r > 1 else "Under")
+    # The board's confidence signal, per category:
+    #
+    #   skill categories (Receptions/Receiving Yards/Rushing Yards) - how
+    #     far the PROJECTION departs from the player's own recency-blended
+    #     per-game baseline, as a fraction of that baseline.
+    #   Passing Yards / Sacks - the old |ratio - 1|, because those two
+    #     categories have no projection (see their own edge functions).
+    #
+    # Both are "larger = more confident" and both are percentile-ranked
+    # within their own category before being compared, so the cross-
+    # category comparability the previous design established is preserved.
+    #
+    # Ranking on the projection gap is measured, not assumed
+    # (scripts/backtest_nfl_prop_projections.py, replaying 2025 weeks
+    # 4-18 with strict no-lookahead history). Directional accuracy rises
+    # monotonically with the size of the gap - for Receptions, quintiles
+    # of the gap hit 48.6% / 50.5% / 53.7% / 56.9% / 61.7% - and taking
+    # only the top 10 rows per week by gap, which is exactly what this
+    # function serves, hit 74.0% on Receiving Yards, 76.7% on Receptions
+    # and 70.7% on Rushing Yards against 55.1% / 54.3% / 56.6% for all
+    # qualified rows in those same categories.
+    #
+    # Against the ratio model this replaces, on a player-clustered paired
+    # bootstrap over 419 receivers and 218 backs: Receiving Yards +4.5
+    # points of hit rate (95% CI +2.2 to +6.8), Receptions +4.1 (+2.1 to
+    # +6.2), Rushing Yards +3.0 (-1.1 to +7.0). The rushing interval
+    # spans zero - the gain there is NOT established, and the projection
+    # is used for that category on the strength of its (also
+    # not-quite-significant) error reduction and the two categories where
+    # the effect is solid, not because rushing itself was proven.
+    #
+    # WHAT THAT NUMBER ACTUALLY IS, because it is easy to misread in two
+    # separate ways, and the first is not obvious:
+    #
+    # 1. It is mostly SELECTION, not direction. On those same top-10
+    #    rows, simply betting Over every time scores 74.0% on Receiving
+    #    Yards and 76.7% on Receptions - identical to the model, because
+    #    the model calls Over on nearly all of them. For the two
+    #    receiving categories the model is therefore not out-predicting a
+    #    coin flip on WHICH SIDE; it is picking players whose trailing
+    #    average understates them, after which the side is automatic.
+    #    That is still real skill and it is the skill this ranking is
+    #    for, but it is selection skill and is described as such. Only
+    #    Rushing Yards adds direction on top (70.7% against 66.0% for
+    #    always-Over on the same rows). A skewed base rate is NOT the
+    #    explanation: across all qualified rows the actual beats the
+    #    trailing mean just 45.4% / 50.0% / 49.0% of the time, so the
+    #    stand-in line is fair and the effect is genuinely in the
+    #    selection.
+    #
+    # 2. The line is a stand-in. These hit rates score against the
+    #    player's own blended per-game rate, because this repo has no
+    #    book prop lines (see nfl_prop_projections' module docstring). A
+    #    real sportsbook line is far sharper than a trailing average and
+    #    already prices in most of the role change the selection above
+    #    is detecting. These figures establish that the ranking ORDERS
+    #    bets by genuine confidence; they do NOT imply a 74% win rate
+    #    against a real market, and must not be quoted as though they do.
+    # Coerced explicitly: Passing Yards and Sacks contribute an all-NaN
+    # `projection`, and concatenating those with the skill categories'
+    # real floats can leave the column as object dtype, which numpy's
+    # log rejects outright.
+    projection = pd.to_numeric(qualified["projection"], errors="coerce")
+    baseline = pd.to_numeric(qualified["player_rate"], errors="coerce")
+    has_projection = projection.notna() & (baseline > 0) & (projection > 0)
+    # The gap is measured in LOG space, deliberately. A projection is a
+    # product of three ratios (share x volume x efficiency), so its
+    # distribution is right-skewed: measured on the live 2026 week-2
+    # slate, projection/baseline ran a q10 of 0.72 against a q90 of 1.58
+    # for Receiving Yards, and 0.58 against 2.85 for Rushing Yards. A
+    # plain |projection - baseline| / baseline therefore scores a 2x
+    # overshoot as a gap of 1.0 and a 2x undershoot as only 0.5, and it
+    # divides by a baseline that is itself smallest for the least
+    # established players. Both effects push the same way, and the board
+    # showed it: ranked on the percentage gap, the top 10 came back 100%
+    # "Over" on Receiving Yards in backtest and 10 of 10 Over live. The
+    # log ratio treats halving and doubling as equal departures, which is
+    # the correct symmetry for a multiplicative quantity.
+    #
+    # It costs nothing measurable to do this. Top-10-per-week directional
+    # accuracy over 2025 weeks 4-18 was 0.7333 / 0.7267 / 0.7067 on log
+    # gap against 0.7400 / 0.7667 / 0.7067 on percentage gap - differences
+    # of at most 1.1 standard errors on a 150-row sample, and that before
+    # accounting for the clustering that makes the true interval wider
+    # still - while the share of "Over" calls in the top 10 falls from
+    # 100% / 96% / 82% to 92% / 82% / 70%.
+    projection_gap = np.log(
+        projection.where(has_projection) / baseline.where(has_projection)
+    ).abs()
+    ratio_gap = pd.Series(
+        np.where(
+            qualified["league_rate"] > 0,
+            (qualified["opponent_allowed_rate"] / qualified["league_rate"] - 1).abs(),
+            0.0,
+        ),
+        index=qualified.index,
+    )
+    qualified["confidence_signal"] = projection_gap.fillna(ratio_gap)
+
+    # Over/Under follows whichever signal that category actually used: a
+    # projection above the baseline is an Over, and where there is no
+    # projection the opponent's matchup ratio decides as before.
+    qualified["direction"] = np.where(
+        has_projection,
+        np.where(projection > baseline, "Over", "Under"),
+        np.where(qualified["ratio"] > 1, "Over", "Under"),
+    )
     # Ranked on the UNCLIPPED ratio, deliberately, even though `ratio`
     # (clipped to config.NFL_PROP_MATCHUP_CLIP) remains the real reported
     # signal - a real, measured fix (2026-09-16), not a preference:
@@ -585,17 +748,14 @@ def top_prop_bets(edges_df: pd.DataFrame, n: int = 10, min_games: int = None) ->
     # `weight` is a positive constant, so rank(1 + w*(raw - 1)) == rank(raw)
     # - ranking the plain unclipped ratio here is the same real ordering
     # the weighted-but-unclipped value would give, without re-deriving it.
-    unclipped_ratio = qualified["opponent_allowed_rate"] / qualified["league_rate"]
-    percentile = unclipped_ratio.groupby(qualified["category"]).rank(pct=True)
-    qualified["edge_percentile"] = (percentile - 0.5).abs()
+    qualified["edge_percentile"] = qualified.groupby("category")["confidence_signal"].rank(pct=True)
     qualified["usage_percentile"] = qualified.groupby("category")["player_rate"].rank(pct=True)
-    qualified["raw_edge_magnitude"] = (qualified["opponent_allowed_rate"] / qualified["league_rate"] - 1).abs()
 
     ranked = qualified.sort_values(
-        ["edge_percentile", "usage_percentile", "raw_edge_magnitude"], ascending=[False, False, False]
+        ["edge_percentile", "usage_percentile", "confidence_signal"], ascending=[False, False, False]
     ).head(n)
     return ranked.drop(
-        columns=["min_usage", "edge_percentile", "usage_percentile", "raw_edge_magnitude"]
+        columns=["min_usage", "edge_percentile", "usage_percentile"]
     ).reset_index(drop=True)
 
 

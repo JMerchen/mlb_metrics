@@ -5264,6 +5264,15 @@ props by matchup quality alone - no real sportsbook prop line to
 compare against, so these are real "good spots to look," not a priced
 +EV pick.
 
+> **Superseded for the three skill categories as of 2026-09-17.**
+> Receptions, Receiving Yards and Rushing Yards now come from a
+> per-player PROJECTION (`nfl_prop_projections.py`, see the section
+> immediately below), not from the per-game opponent ratio described
+> here. Passing Yards and Sacks still work exactly as written below.
+> The ratio description is kept because those two categories still use
+> it, and because the backtest numbers quoted further down are what the
+> projection was measured against.
+
 **5 real categories**: Receptions, Receiving Yards, Rushing Yards,
 Passing Yards, Sacks. For each, a player's own real recent per-game
 rate (`nfl_rush_rec.compute_skill_rolling_stats`/
@@ -5283,6 +5292,103 @@ feature adds (a pass-RUSHER prop, not a skill-player one) -
 sourced from real, confirmed nflreadpy weekly-stats columns (`def_sacks`
 for an individual defender's own real sacks, `sacks_suffered` for a
 team's own real sacks-allowed-while-on-offense).
+
+## NFL Prop Projections (`nfl_prop_projections.py`)
+
+Real, direct user report (2026-09-17): the props board showed an
+`opponent_allowed_rate` of 202.4 next to Jauan Jennings' 31.7 receiving
+yards per game - "that's at a team level and not what an individual
+wide receiver might get." It also asked for something the board had
+never produced: an actual prediction of what a player might get.
+
+**The bug was bias, not just scale.** 202.4 was the opponent's total
+receiving yards allowed to ALL opposing WRs per GAME. Per-game allowed
+rates confound two unrelated things - how many targets a defense faces
+(its offense's pace, game script, how often it trails) and how many
+yards it gives up on each one. Measured on the 2025+2026 history the
+board runs on, Chicago allowed 202.4 per game against a 138.2 league
+rate, a 1.47x "matchup"; per TARGET they allowed 9.32 against 7.91, a
+1.17x matchup. The per-game framing overstated the edge by roughly
+Chicago's pace deviation, and `NFL_PROP_MATCHUP_CLIP` then hid the
+overstatement by pinning the ratio at its 1.2 ceiling.
+
+**The model.** Volume times efficiency:
+
+```
+projected_targets    = target_share x team_targets_per_game
+projected_receptions = projected_targets x catch_rate x catch_multiplier
+projected_rec_yards  = projected_targets x yards_per_target x ypt_multiplier
+```
+
+with the rushing mirror through carry share and yards per carry. Volume
+carries the signal and is used essentially as observed (target share is
+team-normalised and settles within a few games); efficiency is noisy and
+is shrunk toward the position's league rate by empirical Bayes
+(`NFL_PROP_EFFICIENCY_PRIOR_TARGETS`, `NFL_PROP_DEFENSE_PRIOR_TARGETS`).
+The opponent adjustment applies to the EFFICIENCY terms only -
+multiplying a volume estimate by a per-game allowed rate is what
+double-counts pace in the first place.
+
+This is what separates two players who share a defense. Jefferson and
+Jennings, same team and same opponent, had target shares of 0.314 and
+0.162 and received an identical 1.2 ratio and identical "Over" from the
+old model; the projection splits them roughly 2:1.
+
+**Measured against what it replaces** (`scripts/backtest_nfl_prop_projections.py`,
+replaying 2025 weeks 4-18, strict no-lookahead, player-clustered paired
+bootstrap over 419 receivers and 218 backs):
+
+| Category | v3 ratio hit rate | projection | hit-rate delta (95% CI) |
+| --- | --- | --- | --- |
+| Receiving Yards | 0.5067 | 0.5520 | +4.5 pts (+2.2, +6.8) |
+| Receptions | 0.5028 | 0.5440 | +4.1 pts (+2.1, +6.2) |
+| Rushing Yards | 0.5399 | 0.5702 | +3.0 pts (-1.1, +7.0) |
+
+The live v3 model was a coin flip on both receiving categories, and its
+MAE was WORSE than making no opponent adjustment at all (18.85 vs 18.66
+receiving yards; 1.393 vs 1.367 receptions). The projection beats the
+no-adjustment baseline on MAE in all three. The rushing interval spans
+zero - that gain is not established.
+
+**EPA was tested and is off.** `NFL_PROP_DEFENSE_EPA_BLEND` blends
+defensive EPA-allowed into the ORDERING of the opponent multiplier
+(EPA is not in yards, so it cannot scale a projection directly). It
+produced no measurable improvement at any weight, including over the
+thin-sample early weeks where its faster settling should have helped
+most: 0.5607 / 0.5598 / 0.5634 / 0.5598 at weights 0.0 / 0.35 / 0.7 /
+1.0. It ships at 0.0, and the machinery is retained as a tested lever
+rather than deleted.
+
+**What the ranking is, precisely.** The board ranks skill categories on
+`|log(projection / baseline)|` - how far the projection departs from the
+player's own trailing per-game average, symmetric in log space because a
+projection is a product of ratios and is right-skewed (a percentage gap
+scored doubling at 1.0 but halving at only 0.5, which fed the board a
+100%-"Over" top 10). Top-10-per-week directional accuracy over 2025 was
+0.7333 / 0.7267 / 0.7067.
+
+That number needs two honest caveats:
+
+1. **It is mostly SELECTION, not direction.** On the same top-10 rows,
+   betting Over every time scores 74.0% on Receiving Yards and 76.7% on
+   Receptions - identical to the model, because the model calls Over on
+   nearly all of them. The model finds players whose trailing average
+   understates them; the side is then automatic. Only Rushing Yards adds
+   direction on top (70.7% vs 66.0%). This is not a skewed base rate:
+   across all qualified rows the actual beats the trailing mean only
+   45.4% / 50.0% / 49.0% of the time.
+2. **The line is a stand-in.** There are still no book prop lines in
+   this repo, so the "line" is the player's own blended per-game rate. A
+   real sportsbook line is far sharper and already prices in most of the
+   role change this selection detects. These figures show the ranking
+   orders bets by genuine confidence; they do NOT imply a 74% win rate
+   against a real market.
+
+**Known limitation, not hidden:** team volume is the team's own
+recency-weighted rate and is NOT adjusted for the upcoming game's
+script. A heavy favourite throws less than its season rate and a heavy
+underdog more, and `spread_line`/`total_line` are on the schedule to
+model it. Left out deliberately as an untested effect.
 
 **Real backtest validation** (`scripts/backtest_nfl_player_props.py`,
 all 10 real cached seasons 2016-2025): does a more favorable real
