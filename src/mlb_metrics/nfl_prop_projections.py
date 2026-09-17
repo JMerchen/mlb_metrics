@@ -561,6 +561,244 @@ def project_player_stats(
     return players
 
 
+def compute_team_pass_volume(weekly_df: pd.DataFrame) -> pd.DataFrame:
+    """One row per team: recency-weighted pass attempts per game, and the
+    same for the attempts each DEFENSE faces.
+
+    Built from the `attempts` column rather than the `targets` the
+    receiving side uses, because a QB prop is scored on official pass
+    attempts - the two differ by throwaways and a handful of plays with
+    no recorded receiver, which matters at the QB's own scale even though
+    it barely moves a target share.
+    """
+    scoped = weekly_df if "season_type" not in weekly_df.columns else weekly_df[weekly_df["season_type"] == "REG"]
+    columns = ["team", "games", "team_attempts_per_game", "attempts_faced_per_game"]
+    if scoped.empty:
+        return pd.DataFrame(columns=columns)
+
+    offense = scoped.groupby(["team", "season", "week"], as_index=False).agg(attempts=("attempts", "sum"))
+    defense = scoped.groupby(["opponent_team", "season", "week"], as_index=False).agg(
+        attempts_faced=("attempts", "sum")
+    ).rename(columns={"opponent_team": "team"})
+    team_week = offense.merge(defense, on=["team", "season", "week"], how="outer").fillna(
+        {"attempts": 0.0, "attempts_faced": 0.0}
+    )
+
+    ordered = team_week.sort_values(["season", "week"], ascending=False)
+    ordered["_recency_rank"] = ordered.groupby("team").cumcount()
+    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_SKILL_WINDOWS)
+    ordered["_wt_attempts"] = ordered["attempts"] * ordered["_weight"]
+    ordered["_wt_faced"] = ordered["attempts_faced"] * ordered["_weight"]
+
+    agg = ordered.groupby("team", as_index=False).agg(
+        games=("_recency_rank", "size"), _wt=("_weight", "sum"),
+        _wt_attempts=("_wt_attempts", "sum"), _wt_faced=("_wt_faced", "sum"),
+    )
+    agg["team_attempts_per_game"] = agg["_wt_attempts"] / agg["_wt"]
+    agg["attempts_faced_per_game"] = agg["_wt_faced"] / agg["_wt"]
+    return agg[columns]
+
+
+def compute_pass_defense_per_play_rates(weekly_df: pd.DataFrame) -> pd.DataFrame:
+    """One row per defending team: passing yards allowed PER ATTEMPT,
+    shrunk toward the league rate.
+
+    The per-GAME equivalent this replaces is confounded by volume in
+    exactly the way the receiving side was, and measurably so: across
+    2024-2025, a defense's passing yards allowed per game correlates
+    +0.659 with the pass attempts it faces, while its yards allowed per
+    attempt correlates -0.229 with the same quantity. Per game, the
+    league spans 198 to 261 yards - a 1.32x spread that reads as a large
+    matchup difference but is substantially a measure of how often each
+    defense's own offense forces opponents to throw.
+    """
+    scoped = weekly_df if "season_type" not in weekly_df.columns else weekly_df[weekly_df["season_type"] == "REG"]
+    columns = ["team", "attempts_faced", "yards_allowed_per_attempt", "sacks_per_attempt_faced"]
+    if scoped.empty:
+        return pd.DataFrame(columns=columns)
+
+    defense_game = scoped.groupby(["opponent_team", "season", "week"], as_index=False).agg(
+        attempts=("attempts", "sum"), passing_yards=("passing_yards", "sum"),
+        sacks=("sacks_suffered", "sum"),
+    ).rename(columns={"opponent_team": "team"})
+
+    ordered = defense_game.sort_values(["season", "week"], ascending=False)
+    ordered["_recency_rank"] = ordered.groupby("team").cumcount()
+    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_DEFENSE_WINDOWS)
+    for column in ("attempts", "passing_yards", "sacks"):
+        ordered[f"_wt_{column}"] = ordered[column].fillna(0.0) * ordered["_weight"]
+
+    agg = ordered.groupby("team", as_index=False).agg(
+        attempts_faced=("_wt_attempts", "sum"),
+        yards_allowed=("_wt_passing_yards", "sum"),
+        sacks_forced=("_wt_sacks", "sum"),
+    )
+    league_ypa = agg["yards_allowed"].sum() / agg["attempts_faced"].sum() if agg["attempts_faced"].sum() else 0.0
+    league_sack_rate = agg["sacks_forced"].sum() / agg["attempts_faced"].sum() if agg["attempts_faced"].sum() else 0.0
+    strength = config.NFL_PROP_DEFENSE_PRIOR_ATTEMPTS
+
+    agg["yards_allowed_per_attempt"] = _shrink_rate(
+        agg["yards_allowed"], agg["attempts_faced"], league_ypa, strength
+    )
+    agg["sacks_per_attempt_faced"] = _shrink_rate(
+        agg["sacks_forced"], agg["attempts_faced"], league_sack_rate, strength
+    )
+    return agg[columns]
+
+
+def project_qb_stats(
+    weekly_df: pd.DataFrame, opponents_df: pd.DataFrame, latest_team_df: pd.DataFrame = None
+) -> pd.DataFrame:
+    """Projected passing yards per QB: attempt share x team attempts x
+    shrunk yards per attempt x the opponent's per-attempt multiplier.
+
+    The same volume x efficiency decomposition the receiving side uses,
+    with attempt share standing in for target share. A starter takes
+    essentially all of his team's attempts so the share is near 1.0 and
+    does little work, but expressing it as a share is what keeps a QB who
+    split time mid-season - or one who just took over - from projecting
+    on a per-game average that mixes both roles.
+    """
+    columns = [
+        "player_id", "team", "opponent", "games", "attempt_share",
+        "team_attempts_per_game", "projected_attempts", "yards_per_attempt",
+        "ypa_multiplier", "projected_passing_yards",
+    ]
+    scoped = weekly_df if "season_type" not in weekly_df.columns else weekly_df[weekly_df["season_type"] == "REG"]
+    scoped = scoped[scoped["position"] == "QB"]
+    if scoped.empty:
+        return pd.DataFrame(columns=columns)
+
+    team_week = scoped.groupby(["team", "season", "week"], as_index=False).agg(_team_attempts=("attempts", "sum"))
+    scoped = scoped.merge(team_week, on=["team", "season", "week"], how="left")
+    scoped["_attempt_share"] = np.where(
+        scoped["_team_attempts"] > 0, scoped["attempts"] / scoped["_team_attempts"], 0.0
+    )
+
+    ordered = scoped.sort_values(["season", "week"], ascending=False)
+    ordered["_recency_rank"] = ordered.groupby("player_id").cumcount()
+    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_QB_WINDOWS)
+    ordered["_wt_share"] = ordered["_attempt_share"] * ordered["_weight"]
+    for column in ("attempts", "passing_yards"):
+        ordered[f"_wt_{column}"] = ordered[column].fillna(0.0) * ordered["_weight"]
+
+    players = ordered.groupby("player_id", as_index=False).agg(
+        games=("_recency_rank", "size"), _wt=("_weight", "sum"),
+        _wt_share=("_wt_share", "sum"),
+        attempts=("_wt_attempts", "sum"), passing_yards=("_wt_passing_yards", "sum"),
+    )
+    players["attempt_share"] = players["_wt_share"] / players["_wt"]
+
+    league_ypa = (
+        players["passing_yards"].sum() / players["attempts"].sum() if players["attempts"].sum() else 0.0
+    )
+    players["yards_per_attempt"] = _shrink_rate(
+        players["passing_yards"], players["attempts"], league_ypa, config.NFL_PROP_QB_PRIOR_ATTEMPTS
+    )
+
+    if latest_team_df is None:
+        latest_team_df = ordered.groupby("player_id", as_index=False).first()[["player_id", "team"]]
+    volume = compute_team_pass_volume(weekly_df)
+    defense = compute_pass_defense_per_play_rates(weekly_df)
+
+    players = players.merge(latest_team_df, on="player_id", how="left")
+    players = players.merge(volume[["team", "team_attempts_per_game"]], on="team", how="left")
+    players = players.merge(opponents_df, on="team", how="left")
+
+    league_defense_ypa = (
+        defense["yards_allowed_per_attempt"].mean() if not defense.empty else league_ypa
+    )
+    multiplier = defense.rename(columns={"team": "opponent"})[["opponent", "yards_allowed_per_attempt"]]
+    players = players.merge(multiplier, on="opponent", how="left")
+    players["ypa_multiplier"] = (
+        players["yards_allowed_per_attempt"] / league_defense_ypa
+    ).fillna(1.0) if league_defense_ypa else 1.0
+
+    low, high = config.NFL_PROP_PROJECTION_MULTIPLIER_CLIP
+    players["ypa_multiplier"] = players["ypa_multiplier"].clip(low, high)
+    players["projected_attempts"] = players["attempt_share"] * players["team_attempts_per_game"]
+    players["projected_passing_yards"] = (
+        players["projected_attempts"] * players["yards_per_attempt"] * players["ypa_multiplier"]
+    )
+    return players[columns]
+
+
+def compute_sacks_allowed_per_game(weekly_df: pd.DataFrame) -> pd.DataFrame:
+    """One row per OFFENSE: sacks allowed per game, shrunk toward the
+    league rate, plus the per-dropback rate behind it.
+
+    Deliberately kept PER GAME, unlike every other opponent rate in this
+    module, and the reason is a real asymmetry rather than an oversight.
+    Everywhere else, a per-game allowed rate is confounded because the
+    volume a defense faces is set by its own offense and says nothing
+    about the player being projected. For a pass rusher the opponent's
+    dropbacks are not a confound - they ARE his opportunity, so a rate
+    that already includes them is the quantity the prop turns on.
+
+    Measured rather than assumed, over 2024-2025: sacks allowed per game
+    correlates only +0.153 with dropbacks per game, so the per-game
+    figure is barely volume-inflated in the first place. Compare the
+    +0.659 the passing-yards-per-game rate showed on the same data, which
+    is why THAT one moved to a per-attempt basis and this one did not.
+
+    What was genuinely wrong here was the clipping, not the basis. The
+    board's Sacks column was pinned to a config.NFL_PROP_MATCHUP_CLIP
+    boundary on 63% of rows - 16 distinct values across 135 - so it
+    reported "at least 20%" while appearing to report a measurement.
+    Replayed over 2025 weeks 4-18, removing the clip changed 54.5% of
+    Sacks rows and left the directional hit rate EXACTLY unchanged at
+    0.5490, which is the expected result rather than a disappointing
+    one: direction depends on which side of 1.0 a ratio falls, and
+    clipping is a positive monotonic transform that cannot move it.
+    Unclipping is therefore a pure honesty fix - the number starts
+    meaning what it says - bought at no cost in accuracy.
+
+    NO PROJECTION IS OFFERED FOR SACKS, and that is a measured decision.
+    A `projected_sacks = shrunk player rate x opponent multiplier` was
+    built and backtested exactly like the other categories, and it was
+    materially WORSE than the ratio model it would have replaced: a
+    directional hit rate of 0.3845 against 0.5490, a difference of
+    -0.1645 with a player-clustered 95% interval of [-0.1883, -0.1413],
+    and a worse MAE too (0.2947 against 0.2805). Sacks are a rare,
+    heavily zero-inflated counting event with no usage-share
+    decomposition available in the weekly table - there is no
+    pass-rush-snap denominator to play the role targets play for a
+    receiver - so shrinking the per-game rate mostly destroyed the
+    signal that separates rushers. The code for it was deleted rather
+    than left dormant, so that nobody wires up a projection this project
+    has already measured as harmful.
+    """
+    scoped = weekly_df if "season_type" not in weekly_df.columns else weekly_df[weekly_df["season_type"] == "REG"]
+    columns = ["team", "games", "sacks_allowed_per_game", "sacks_allowed_per_dropback"]
+    if scoped.empty:
+        return pd.DataFrame(columns=columns)
+
+    team_week = scoped.groupby(["team", "season", "week"], as_index=False).agg(
+        sacks=("sacks_suffered", "sum"), attempts=("attempts", "sum")
+    )
+    ordered = team_week.sort_values(["season", "week"], ascending=False)
+    ordered["_recency_rank"] = ordered.groupby("team").cumcount()
+    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_DEFENSE_WINDOWS)
+    ordered["_wt_sacks"] = ordered["sacks"].fillna(0.0) * ordered["_weight"]
+    ordered["_wt_attempts"] = ordered["attempts"].fillna(0.0) * ordered["_weight"]
+
+    agg = ordered.groupby("team", as_index=False).agg(
+        games=("_recency_rank", "size"), _wt=("_weight", "sum"),
+        sacks=("_wt_sacks", "sum"), attempts=("_wt_attempts", "sum"),
+    )
+    league_per_game = agg["sacks"].sum() / agg["_wt"].sum() if agg["_wt"].sum() else 0.0
+    dropbacks = agg["attempts"] + agg["sacks"]
+    league_per_dropback = agg["sacks"].sum() / dropbacks.sum() if dropbacks.sum() else 0.0
+
+    agg["sacks_allowed_per_game"] = _shrink_rate(
+        agg["sacks"], agg["_wt"], league_per_game, config.NFL_PROP_SACK_PRIOR_GAMES
+    )
+    agg["sacks_allowed_per_dropback"] = _shrink_rate(
+        agg["sacks"], dropbacks, league_per_dropback, config.NFL_PROP_DEFENSE_PRIOR_ATTEMPTS
+    )
+    return agg[columns]
+
+
 # Column name each prop category's projection lives under, so callers can
 # map a category straight onto its projected value without a branch.
 PROP_CATEGORY_PROJECTION_COLUMNS = {

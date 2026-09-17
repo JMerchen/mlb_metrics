@@ -8,7 +8,7 @@ from mlb_metrics import config, nfl_player_props
 def _row(
     player_id, player_name, team, opponent_team, position, season, week,
     passing_yards=0, rushing_yards=0, receiving_yards=0, receptions=0, targets=0, carries=0,
-    def_sacks=0.0, sacks_suffered=0.0,
+    def_sacks=0.0, sacks_suffered=0.0, attempts=0,
 ):
     return {
         "player_id": player_id,
@@ -20,7 +20,7 @@ def _row(
         "week": week,
         "season_type": "REG",
         "game_id": f"{season}_{week:02d}_{team}_{opponent_team}",
-        "attempts": 0,
+        "attempts": attempts,
         "completions": 0,
         "passing_yards": passing_yards,
         "passing_tds": 0,
@@ -138,11 +138,14 @@ def test_build_prop_edges_covers_all_five_categories():
     rows = []
     rows += _multi_week_skill_rows("wr1", "WR One", "SF", "SEA", "WR", range(1, 6), receptions=5, receiving_yards=60)
     rows += _multi_week_skill_rows("rb1", "RB One", "SF", "SEA", "RB", range(1, 6), rushing_yards=80, carries=15)
-    rows += _multi_week_skill_rows("qb1", "QB One", "SF", "SEA", "QB", range(1, 6), passing_yards=250)
+    rows += _multi_week_skill_rows("qb1", "QB One", "SF", "SEA", "QB", range(1, 6), passing_yards=250, attempts=35)
     rows += _multi_week_skill_rows("edge1", "Edge One", "SF", "SEA", "DE", range(1, 6), def_sacks=1.0)
     # A real opposing defense (SEA) whose players allowed the above -
     # give SEA's own offense a real sacks_suffered history too.
-    rows += _multi_week_skill_rows("seaqb", "SEA QB", "SEA", "SF", "QB", range(1, 6), sacks_suffered=2.0)
+    rows += _multi_week_skill_rows(
+        "seaqb", "SEA QB", "SEA", "SF", "QB", range(1, 6),
+        sacks_suffered=2.0, passing_yards=200, attempts=30,
+    )
     weekly_df = pd.DataFrame(rows)
 
     current_week_schedule = pd.DataFrame([{"home_team": "SF", "away_team": "SEA"}])
@@ -155,11 +158,16 @@ def test_build_prop_edges_covers_all_five_categories():
         "category", "player_rate", "projection", "projected_targets", "projected_carries",
         "opponent_allowed_rate", "league_rate", "rate_basis", "ratio",
     }
-    # Passing Yards and Sacks have no projection (see their own edge
-    # functions) - they must still carry the column, as NaN, so every
+    # Four of the five categories carry a projection. Sacks alone does
+    # not, and that is measured rather than missing: a projected-sacks
+    # model was built and backtested and came out materially WORSE than
+    # the ratio it would have replaced (hit rate 0.3845 vs 0.5490), so it
+    # was deleted. Sacks still has to carry the column, as NaN, so every
     # category shares one schema.
     projections = edges.set_index("category")["projection"]
-    assert projections.loc[["Passing Yards", "Sacks"]].isna().all()
+    assert projections.loc[["Sacks"]].isna().all()
+    assert projections.loc["Passing Yards"].notna().all()
+    assert (projections.loc["Passing Yards"] > 0).all()
 
 
 def test_build_prop_edges_favorable_matchup_produces_a_ratio_above_one():
@@ -382,10 +390,19 @@ def test_top_prop_bets_breaks_ties_by_usage_not_incidental_team_order():
     # trusting the ordering assertion below.
     assert receptions_only["ratio"].nunique() == 1
 
-    top = nfl_player_props.top_prop_bets(edges, n=10)
+    # With the diversity cap lifted, the full ordering is visible and is
+    # by usage, highest first.
+    top = nfl_player_props.top_prop_bets(edges, n=10, max_per_team_category=99)
     ordered_ids = list(top[top["category"] == "Receptions"]["player_id"])
-
     assert ordered_ids == ["wr_high", "wr_mid", "wr_low"]
+
+    # And under the shipped cap of one row per (team, category), the one
+    # that survives is the highest-usage receiver - not `wr_low`, which is
+    # first in the fixture's own row order. That is the same property the
+    # full ordering above asserts, and it is the one that actually reaches
+    # the board.
+    capped = nfl_player_props.top_prop_bets(edges, n=10)
+    assert list(capped[capped["category"] == "Receptions"]["player_id"]) == ["wr_high"]
 
 
 def test_opponent_allowed_rate_is_per_play_not_per_game():
@@ -609,3 +626,58 @@ def test_top_prop_bets_ranks_halving_and_doubling_as_equal_departures():
     # Equal and opposite in log space, so neither outranks the other.
     assert top.loc["doubler", "confidence_signal"] == pytest.approx(np.log(2.0))
     assert top.loc["halver", "confidence_signal"] == pytest.approx(np.log(2.0))
+
+
+def test_top_prop_bets_caps_correlated_rows_from_one_team_and_category():
+    """Every player in one (team, category) bucket shares an opponent
+    rate, so where no projection separates them - Sacks - they receive an
+    identical ranking signal. Observed live on the 2026 week-2 slate:
+    three Chicago rushers facing Minnesota, all at +32%, took three of
+    ten slots. That is one opinion about one offensive line sold as three
+    bets, the same defect a user reported when four Arizona running backs
+    filled the board.
+    """
+    rows = []
+    for name, sacks in (("edge_a", 1.2), ("edge_b", 0.9), ("edge_c", 0.7)):
+        rows += _multi_week_skill_rows(name, name, "CHI", "MIN", "DE", range(1, 6), def_sacks=sacks)
+    rows += _multi_week_skill_rows(
+        "min_qb", "MIN QB", "MIN", "CHI", "QB", range(1, 6),
+        sacks_suffered=6.0, passing_yards=200, attempts=30,
+    )
+    edges = nfl_player_props.build_prop_edges(
+        pd.DataFrame(rows), pd.DataFrame([{"home_team": "CHI", "away_team": "MIN"}])
+    )
+    sacks_rows = edges[edges["category"] == "Sacks"]
+    # Confirm the fixture really does hand all three the same signal.
+    assert sacks_rows["ratio"].nunique() == 1
+
+    top = nfl_player_props.top_prop_bets(edges, n=10)
+    chicago_sacks = top[(top["team"] == "CHI") & (top["category"] == "Sacks")]
+    assert len(chicago_sacks) == config.NFL_PROP_MAX_PER_TEAM_CATEGORY
+    # The survivor is the best of the tied group, not an arbitrary one.
+    assert chicago_sacks.iloc[0]["player_id"] == "edge_a"
+
+
+def test_top_prop_bets_cap_removes_rather_than_reorders():
+    """The cap is applied AFTER ranking, so it can only ever drop the
+    weaker member of a correlated pair - it must never promote a row
+    above one that outranked it."""
+    rows = []
+    rows += _multi_week_skill_rows("wr_a", "WR A", "SF", "SEA", "WR", range(1, 6), targets=12, receiving_yards=120, receptions=8)
+    rows += _multi_week_skill_rows("wr_b", "WR B", "SF", "SEA", "WR", range(1, 6), targets=8, receiving_yards=20, receptions=2)
+    rows += _multi_week_skill_rows("wr_c", "KC WR", "KC", "NE", "WR", range(1, 6), targets=10, receiving_yards=70, receptions=5)
+    rows += _multi_week_skill_rows("wr_d", "NE WR", "NE", "KC", "WR", range(1, 6), targets=10, receiving_yards=70, receptions=5)
+    edges = nfl_player_props.build_prop_edges(
+        pd.DataFrame(rows),
+        pd.DataFrame([{"home_team": "SF", "away_team": "SEA"}, {"home_team": "KC", "away_team": "NE"}]),
+    )
+
+    uncapped = nfl_player_props.top_prop_bets(edges, n=20, max_per_team_category=99)
+    capped = nfl_player_props.top_prop_bets(edges, n=20)
+
+    # Capped output is a subsequence of the uncapped ranking: same
+    # relative order throughout, only removals.
+    uncapped_keys = list(zip(uncapped["player_id"], uncapped["category"]))
+    capped_keys = list(zip(capped["player_id"], capped["category"]))
+    iterator = iter(uncapped_keys)
+    assert all(key in iterator for key in capped_keys)
