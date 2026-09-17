@@ -392,48 +392,70 @@ def _skill_category_edges(
 def _passing_category_edges(
     weekly_df: pd.DataFrame, current_week_schedule_df: pd.DataFrame, weight: float
 ) -> pd.DataFrame:
-    """Passing Yards - a QB's own real rolling passing_yards_per_game
-    against the real opponent's own pass_yards_allowed_per_game (the
-    SAME real allowed-rate table `_skill_category_edges` already uses
-    for the Receiving Yards category - a real pass defense's own
-    weakness is exactly the same real number whether it shows up as a
-    WR's real receiving yards or the opposing QB's real passing yards)."""
-    qb_rolling = nfl_passing.compute_qb_rolling_stats(weekly_df)
+    """Passing Yards - a QB's projected stat line (attempt share x team
+    attempts x shrunk yards per attempt x the opponent's per-ATTEMPT
+    multiplier), against his own rolling passing_yards_per_game as the
+    baseline.
+
+    Converted from the per-game opponent rate on 2026-09-17, for the
+    same measured reason the receiving categories were: a defense's
+    passing yards allowed per game correlates +0.659 with the pass
+    attempts it faces across 2024-2025, so most of what looked like a
+    1.32x league-wide spread in matchup quality (198 to 261 yards) was
+    really a spread in how often each defense's own offense forces
+    opponents to throw. Per attempt that correlation falls to -0.229.
+
+    HONESTLY LABELLED: unlike the receiving categories, this change is
+    NOT statistically established. Replaying 2025 weeks 4-18, the
+    projection beat the per-game ratio model on every metric - hit rate
+    0.5738 against 0.5656, MAE 65.43 against 66.29, RMSE 83.70 against
+    85.74 - but a player-clustered bootstrap puts the hit-rate gain at
+    +0.008 with a 95% interval of [-0.058, +0.076]. There are only 70
+    distinct QBs in the replay, which is far too few to resolve an
+    effect this size. It ships on the mechanistic argument (it removes a
+    confound that is directly measurable in the data, independent of the
+    outcome test) plus point estimates that agree across all three
+    metrics - not on a significant result, and it should not be
+    described as one."""
     names = _latest_player_names(weekly_df)
-    defense_rates = nfl_teams.compute_defense_rolling_rates(weekly_df)
     opponents = nfl_matchup.team_opponents(current_week_schedule_df)
 
     ordered = weekly_df.sort_values(["season", "week"], ascending=False)
     latest_info = ordered.groupby("player_id", as_index=False).first()[["player_id", "team", "position"]]
 
+    qb_rolling = nfl_passing.compute_qb_rolling_stats(weekly_df)
     players = qb_rolling.merge(names, on="player_id", how="left").merge(latest_info, on="player_id", how="left")
     players = players.merge(opponents, on="team", how="left")
 
     rows = players.rename(columns={"passing_yards_per_game": "player_rate"}).copy()
     rows["category"] = "Passing Yards"
+    rows["rate_basis"] = "per attempt"
 
-    defense_by_opponent = defense_rates.rename(
-        columns={"team": "opponent", "pass_yards_allowed_per_game": "opponent_allowed_rate"}
+    projections = nfl_prop_projections.project_qb_stats(
+        weekly_df, opponents, latest_info[["player_id", "team"]]
     )
-    rows = rows.merge(defense_by_opponent[["opponent", "opponent_allowed_rate"]], on="opponent", how="left")
+    rows = rows.merge(
+        projections[["player_id", "projected_passing_yards", "projected_attempts"]],
+        on="player_id", how="left",
+    ).rename(columns={"projected_passing_yards": "projection"})
 
-    league_rate = defense_rates["pass_yards_allowed_per_game"].mean()
+    defense_rates = nfl_prop_projections.compute_pass_defense_per_play_rates(weekly_df)
+    league_rate = defense_rates["yards_allowed_per_attempt"].mean() if not defense_rates.empty else 0.0
+    rows = rows.merge(
+        defense_rates.rename(
+            columns={"team": "opponent", "yards_allowed_per_attempt": "opponent_allowed_rate"}
+        )[["opponent", "opponent_allowed_rate"]],
+        on="opponent", how="left",
+    )
     rows["opponent_allowed_rate"] = rows["opponent_allowed_rate"].fillna(league_rate)
     rows["league_rate"] = league_rate
-    rows["ratio"] = nfl_matchup.compute_opponent_adjustment_ratio(
-        rows["opponent_allowed_rate"], league_rate, weight, clip=config.NFL_PROP_MATCHUP_CLIP
+    # Unclipped, like every other per-play ratio the board now reports.
+    rows["ratio"] = np.where(
+        rows["league_rate"] > 0, rows["opponent_allowed_rate"] / rows["league_rate"], 1.0
     )
-    # Passing Yards has no projection: nfl_prop_projections models
-    # receiving and rushing from usage share x team volume, and a QB has
-    # no equivalent share to take of his own team's attempts. The columns
-    # are carried as NaN so every category shares one schema, and
-    # `top_prop_bets` falls back to ranking this category on its matchup
-    # ratio - the same basis it always used, left deliberately unchanged
-    # because nothing has been measured that would justify altering it.
-    rows["projection"] = float("nan")
+    # A QB takes no targets or carries worth projecting here.
     rows["projected_targets"] = float("nan")
     rows["projected_carries"] = float("nan")
-    rows["rate_basis"] = "per game"
 
     return rows[[
         "player_id", "player_name", "team", "position", "opponent", "games",
@@ -461,20 +483,42 @@ def _sacks_category_edges(
     rows = players.rename(columns={"sacks_per_game": "player_rate"}).copy()
     rows["category"] = "Sacks"
 
-    sacks_allowed_by_opponent = sacks_allowed.rename(
-        columns={"team": "opponent", "sacks_allowed_per_game": "opponent_allowed_rate"}
+    # Shrunk toward the league rate, and deliberately NOT converted to a
+    # per-play basis: for a pass rusher the opponent's dropbacks are real
+    # opportunity rather than a confound, and sacks allowed per game
+    # correlates only +0.153 with dropbacks per game across 2024-2025
+    # (against +0.659 for the passing-yards-per-game rate, which is why
+    # that one did move). See compute_sacks_allowed_per_game's docstring.
+    shrunk_allowed = nfl_prop_projections.compute_sacks_allowed_per_game(weekly_df)
+    if shrunk_allowed.empty:
+        shrunk_allowed = sacks_allowed.rename(columns={"sacks_allowed_per_game": "sacks_allowed_per_game"})
+    rows = rows.merge(
+        shrunk_allowed.rename(
+            columns={"team": "opponent", "sacks_allowed_per_game": "opponent_allowed_rate"}
+        )[["opponent", "opponent_allowed_rate"]],
+        on="opponent", how="left",
     )
-    rows = rows.merge(sacks_allowed_by_opponent[["opponent", "opponent_allowed_rate"]], on="opponent", how="left")
 
-    league_rate = sacks_allowed["sacks_allowed_per_game"].mean()
+    league_rate = shrunk_allowed["sacks_allowed_per_game"].mean()
     rows["opponent_allowed_rate"] = rows["opponent_allowed_rate"].fillna(league_rate)
     rows["league_rate"] = league_rate
-    rows["ratio"] = nfl_matchup.compute_opponent_adjustment_ratio(
-        rows["opponent_allowed_rate"], league_rate, weight, clip=config.NFL_PROP_MATCHUP_CLIP
+    # UNCLIPPED. The clip was pinning 63% of Sacks rows to a boundary -
+    # 16 distinct values across 135 - so the board reported "at least
+    # 20%" while looking like it reported a measurement. Removing it
+    # changed 54.5% of rows in replay and left the directional hit rate
+    # exactly unchanged at 0.5490, because direction turns on which side
+    # of 1.0 a ratio falls and clipping cannot move that. Pure honesty
+    # fix, no accuracy cost either way.
+    rows["ratio"] = np.where(
+        rows["league_rate"] > 0, rows["opponent_allowed_rate"] / rows["league_rate"], 1.0
     )
-    # No projection for Sacks, for the same reason as Passing Yards above
-    # (and more so: a sack is a rare counting event with no usage-share
-    # decomposition at all). Ranked on its matchup ratio, unchanged.
+    # NO PROJECTION FOR SACKS - a measured decision, not an omission. One
+    # was built and backtested and came out materially worse than this
+    # ratio model: hit rate 0.3845 against 0.5490, a clustered difference
+    # of -0.1645 [-0.1883, -0.1413], and a worse MAE. A sack is a rare,
+    # zero-inflated event with no usage-share denominator available in
+    # the weekly table, so shrinking the per-game rate mostly destroyed
+    # what separates rushers. See compute_sacks_allowed_per_game.
     rows["projection"] = float("nan")
     rows["projected_targets"] = float("nan")
     rows["projected_carries"] = float("nan")
@@ -548,7 +592,9 @@ def build_prop_edges(
     return edges[edges["player_id"].isin(set(qualified))].reset_index(drop=True)
 
 
-def top_prop_bets(edges_df: pd.DataFrame, n: int = 10, min_games: int = None) -> pd.DataFrame:
+def top_prop_bets(
+    edges_df: pd.DataFrame, n: int = 10, min_games: int = None, max_per_team_category: int = None
+) -> pd.DataFrame:
     """Filters `edges_df` to real, meaningfully-rostered players
     (`games >= min_games` - config.NFL_PROP_MIN_GAMES if not given -
     AND `player_rate` at or above that category's own real
@@ -610,6 +656,9 @@ def top_prop_bets(edges_df: pd.DataFrame, n: int = 10, min_games: int = None) ->
     as the PRIMARY key (which is exactly the "Sacks crowds out everything
     else" bug this function's own percentile-rank design already fixed)."""
     min_games = config.NFL_PROP_MIN_GAMES if min_games is None else min_games
+    max_per_team_category = (
+        config.NFL_PROP_MAX_PER_TEAM_CATEGORY if max_per_team_category is None else max_per_team_category
+    )
 
     qualified = edges_df[edges_df["games"] >= min_games].copy()
     qualified["min_usage"] = qualified["category"].map(config.NFL_PROP_MIN_USAGE)
@@ -753,7 +802,17 @@ def top_prop_bets(edges_df: pd.DataFrame, n: int = 10, min_games: int = None) ->
 
     ranked = qualified.sort_values(
         ["edge_percentile", "usage_percentile", "confidence_signal"], ascending=[False, False, False]
-    ).head(n)
+    )
+    # Diversity guard, applied AFTER ranking so it only ever removes the
+    # weaker member of a correlated pair, never reorders the board. Every
+    # player in one (team, category) bucket shares an opponent rate, so
+    # where no projection separates them - Sacks - they receive an
+    # identical signal and differ only on usage. Three Chicago rushers
+    # (Sweat, Street, Booker vs MIN, all at +32%) took three of ten slots
+    # on the live week-2 slate once unclipping raised that category's
+    # magnitude. See config.NFL_PROP_MAX_PER_TEAM_CATEGORY.
+    per_bucket = ranked.groupby(["team", "category"]).cumcount()
+    ranked = ranked[per_bucket < max_per_team_category].head(n)
     return ranked.drop(
         columns=["min_usage", "edge_percentile", "usage_percentile"]
     ).reset_index(drop=True)

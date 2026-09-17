@@ -250,3 +250,89 @@ def test_league_efficiency_rates_are_attempt_weighted_not_player_averaged():
     assert league.loc["WR", "yards_per_target"] == pytest.approx(780 / 101)
     # An average of the two players' rates would have been (7.0 + 80.0)/2.
     assert league.loc["WR", "yards_per_target"] < 10.0
+
+
+def _qb_row(player_id, team, opponent_team, season, week, attempts=0, passing_yards=0, sacks_suffered=0.0):
+    row = _row(player_id, team, opponent_team, "QB", season, week)
+    row.update({"attempts": attempts, "passing_yards": passing_yards, "sacks_suffered": sacks_suffered})
+    return row
+
+
+def _qb_weeks(player_id, team, opponent, weeks, **stats):
+    return [_qb_row(player_id, team, opponent, 2025, week, **stats) for week in weeks]
+
+
+def test_pass_defense_rate_is_per_attempt_not_per_game():
+    """The confound that moved Passing Yards off a per-game basis: a
+    defense facing more attempts must not look worse per play."""
+    rows = []
+    # SEA faces 2 QBs' worth of volume at 7.0 yards an attempt; NE faces
+    # half the volume at the identical efficiency.
+    rows += _qb_weeks("sf_qb", "SF", "SEA", range(1, 6), attempts=20, passing_yards=140)
+    rows += _qb_weeks("sf_qb2", "SF", "SEA", range(1, 6), attempts=20, passing_yards=140)
+    rows += _qb_weeks("kc_qb", "KC", "NE", range(1, 6), attempts=20, passing_yards=140)
+
+    rates = nfl_prop_projections.compute_pass_defense_per_play_rates(pd.DataFrame(rows)).set_index("team")
+
+    assert rates.loc["SEA", "yards_allowed_per_attempt"] == pytest.approx(7.0)
+    assert rates.loc["NE", "yards_allowed_per_attempt"] == pytest.approx(7.0)
+    assert rates.loc["SEA", "attempts_faced"] == pytest.approx(2 * rates.loc["NE", "attempts_faced"])
+
+
+def test_qb_projection_is_attempt_share_times_volume_times_efficiency():
+    rows = _qb_weeks("starter", "SF", "SEA", range(1, 6), attempts=30, passing_yards=210)
+    weekly = pd.DataFrame(rows)
+    opponents = pd.DataFrame([{"team": "SF", "opponent": "SEA"}])
+
+    projections = nfl_prop_projections.project_qb_stats(weekly, opponents).set_index("player_id")
+
+    # Sole QB on the team, so he takes the whole attempt share.
+    assert projections.loc["starter", "attempt_share"] == pytest.approx(1.0)
+    assert projections.loc["starter", "projected_attempts"] == pytest.approx(30.0)
+    # Only one defense exists here, so it is the league and is neutral.
+    assert projections.loc["starter", "ypa_multiplier"] == pytest.approx(1.0)
+    assert projections.loc["starter", "projected_passing_yards"] == pytest.approx(
+        30.0 * projections.loc["starter", "yards_per_attempt"]
+    )
+
+
+def test_qb_attempt_share_splits_a_two_quarterback_team():
+    """Expressing QB volume as a SHARE is what keeps a QB who split time
+    from projecting on a per-game average that mixes both roles."""
+    rows = []
+    rows += _qb_weeks("starter", "SF", "SEA", range(1, 6), attempts=24, passing_yards=168)
+    rows += _qb_weeks("backup", "SF", "SEA", range(1, 6), attempts=6, passing_yards=42)
+    opponents = pd.DataFrame([{"team": "SF", "opponent": "SEA"}])
+
+    projections = nfl_prop_projections.project_qb_stats(pd.DataFrame(rows), opponents).set_index("player_id")
+
+    assert projections.loc["starter", "attempt_share"] == pytest.approx(0.8)
+    assert projections.loc["backup", "attempt_share"] == pytest.approx(0.2)
+    assert projections.loc["starter", "projected_attempts"] == pytest.approx(24.0)
+    assert projections.loc["backup", "projected_attempts"] == pytest.approx(6.0)
+
+
+def test_sacks_allowed_stays_per_game_and_is_shrunk():
+    """Sacks deliberately keeps a per-GAME opponent basis - for a pass
+    rusher the opponent's dropbacks are opportunity, not a confound (the
+    measured correlation with dropbacks is +0.153, against +0.659 for
+    the passing-yards rate that did move)."""
+    rows = []
+    rows += _qb_weeks("leaky_qb", "NYJ", "MIA", range(1, 6), attempts=30, passing_yards=210, sacks_suffered=5.0)
+    rows += _qb_weeks("clean_qb", "PHI", "DAL", range(1, 6), attempts=30, passing_yards=210, sacks_suffered=1.0)
+
+    allowed = nfl_prop_projections.compute_sacks_allowed_per_game(pd.DataFrame(rows)).set_index("team")
+
+    assert allowed.loc["NYJ", "sacks_allowed_per_game"] > allowed.loc["PHI", "sacks_allowed_per_game"]
+    # Shrunk toward the 3.0 league rate, so neither reaches its raw 5.0/1.0.
+    assert allowed.loc["NYJ", "sacks_allowed_per_game"] < 5.0
+    assert allowed.loc["PHI", "sacks_allowed_per_game"] > 1.0
+
+
+def test_no_sack_projection_is_offered():
+    """A projected-sacks model was built, backtested, measured WORSE than
+    the ratio it would have replaced (hit rate 0.3845 vs 0.5490, a
+    clustered difference of -0.1645 [-0.1883, -0.1413]) and deleted. This
+    guards against it being reintroduced without a fresh measurement."""
+    assert not hasattr(nfl_prop_projections, "project_sack_stats")
+    assert "Sacks" not in nfl_prop_projections.PROP_CATEGORY_PROJECTION_COLUMNS

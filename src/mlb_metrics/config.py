@@ -2065,6 +2065,45 @@ NFL_PROP_DEFENSE_EPA_BLEND = 0.0
 # rather than that the clip is too wide.
 NFL_PROP_PROJECTION_MULTIPLIER_CLIP = (0.70, 1.30)
 
+# Shrinkage prior strengths for the Passing Yards and Sacks projections,
+# in the units each rate is measured over (pass attempts, or games for
+# the per-game sack rate). Separate from the receiving priors above
+# because the denominators are on completely different scales: a starting
+# QB accumulates ~35 attempts a week where a receiver takes ~8 targets,
+# and a defense faces ~35 attempts a week, so a prior calibrated for
+# targets would barely bind on either. Backtested in
+# scripts/backtest_nfl_prop_projections.py alongside the receiving ones.
+NFL_PROP_QB_PRIOR_ATTEMPTS = 80
+NFL_PROP_DEFENSE_PRIOR_ATTEMPTS = 150
+
+# Sacks are a rare counting event - many real starting pass rushers post
+# a 0-sack game more often than not - so an individual rate needs real
+# help at small samples. Measured in games rather than attempts because
+# the sack opponent rate stays per-game (see
+# nfl_prop_projections.compute_sacks_allowed_per_game for why that one
+# category is deliberately not converted to a per-play basis).
+NFL_PROP_SACK_PRIOR_GAMES = 6
+
+# At most this many rows from the same (team, category) may appear on the
+# board. This is a correlation/diversity guard, not an accuracy claim, so
+# it is deliberately not backtested - a hit rate cannot tell you that
+# three bets which win and lose together are worth less than three
+# independent ones.
+#
+# The concrete failure it prevents, observed live on the 2026 week-2
+# slate: an opponent rate is shared by every player in the same
+# (team, category) bucket, so for a category with no projection to
+# separate them - Sacks - every pass rusher on a team gets the IDENTICAL
+# ranking signal and the tie is broken only by usage. Unclipping the
+# Sacks ratio (see nfl_prop_projections.compute_sacks_allowed_per_game)
+# raised that category's raw magnitude from a pinned 0.20 to a real
+# 0.32, and three Chicago rushers - Sweat, Street and Booker, all facing
+# Minnesota, all at +32% - immediately took three of the top ten slots.
+# That is one opinion about one offensive line sold as three bets, and it
+# is the same defect a user already reported once when four Arizona
+# running backs filled the board.
+NFL_PROP_MAX_PER_TEAM_CATEGORY = 1
+
 # --- NFL DFS: DK Scoring (nfl_dfs.py) ---
 #
 # DraftKings NFL Classic scoring, confirmed live via web search against

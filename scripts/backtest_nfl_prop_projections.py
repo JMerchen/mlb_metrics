@@ -56,6 +56,11 @@ CATEGORIES = [
     ("Receptions", "receptions", "projected_receptions", "targets"),
     ("Receiving Yards", "receiving_yards", "projected_receiving_yards", "targets"),
     ("Rushing Yards", "rushing_yards", "projected_rushing_yards", "carries"),
+    ("Passing Yards", "passing_yards", "projected_passing_yards", "attempts"),
+    # A pass rusher who played and recorded nothing is a real 0, not an
+    # absence, so Sacks has no attempt column to qualify on - every row
+    # present that week counts. `None` is the sentinel for that.
+    ("Sacks", "def_sacks", "projected_sacks", None),
 ]
 
 V3_STAT_COLUMNS = {
@@ -104,7 +109,32 @@ def baseline_projections(history: pd.DataFrame, opponents: pd.DataFrame) -> pd.D
         rows["v3_ratio"] = rows["naive"] * ratio
         frames.append(rows[["player_id", "position", "team", "opponent", "category", "naive", "v3_ratio", "games"]])
 
-    return pd.concat(frames, ignore_index=True)
+    frames.append(_passing_baseline(history, opponents))
+    frames.append(_sacks_baseline(history, opponents))
+    return pd.concat([f for f in frames if not f.empty], ignore_index=True)
+
+
+def _shipped_edges(history, opponents, category, builder):
+    """`naive` and `v3_ratio` for a category whose shipped edge function
+    already produces both - called through the production code so the
+    comparison indicts what actually runs."""
+    schedule = opponents.rename(columns={"team": "home_team", "opponent": "away_team"})
+    rows = builder(history, schedule, config.NFL_PROP_MATCHUP_WEIGHT)
+    if rows.empty:
+        return pd.DataFrame()
+    rows = rows.drop(columns=["opponent"]).merge(opponents, on="team", how="left")
+    rows = rows.rename(columns={"player_rate": "naive"})
+    rows["v3_ratio"] = rows["naive"] * rows["ratio"]
+    rows["category"] = category
+    return rows[["player_id", "position", "team", "opponent", "category", "naive", "v3_ratio", "games"]]
+
+
+def _passing_baseline(history, opponents):
+    return _shipped_edges(history, opponents, "Passing Yards", nfl_player_props._passing_category_edges)
+
+
+def _sacks_baseline(history, opponents):
+    return _shipped_edges(history, opponents, "Sacks", nfl_player_props._sacks_category_edges)
 
 
 def replay_week(weekly: pd.DataFrame, season: int, week: int, min_games: int) -> pd.DataFrame:
@@ -123,18 +153,32 @@ def replay_week(weekly: pd.DataFrame, season: int, week: int, min_games: int) ->
         columns={"opponent_team": "opponent"}
     )
 
-    projections = nfl_prop_projections.project_player_stats(history, opponents)
-    if projections.empty:
+    skill = nfl_prop_projections.project_player_stats(history, opponents)
+    passing = nfl_prop_projections.project_qb_stats(history, opponents)
+    sacks = nfl_prop_projections.project_sack_stats(history, opponents)
+    if skill.empty:
         return pd.DataFrame()
     baselines = baseline_projections(history, opponents)
 
+    projections_by_category = {}
+    for category, _, projection_col, _ in CATEGORIES:
+        source = {"Passing Yards": passing, "Sacks": sacks}.get(category, skill)
+        if not source.empty and projection_col in source.columns:
+            projections_by_category[category] = source[["player_id", projection_col]]
+
     frames = []
     for category, actual_col, projection_col, attempt_col in CATEGORIES:
-        actual = actual_rows[["player_id", actual_col, attempt_col]].rename(
-            columns={actual_col: "actual", attempt_col: "attempts"}
-        )
+        if category not in projections_by_category:
+            continue
+        wanted = ["player_id", actual_col] + ([attempt_col] if attempt_col else [])
+        actual = actual_rows[wanted].rename(columns={actual_col: "actual"})
+        if attempt_col:
+            actual = actual.rename(columns={attempt_col: "attempts"})
+        else:
+            # No attempt qualifier for Sacks - simply playing counts.
+            actual["attempts"] = 1.0
         merged = baselines[baselines["category"] == category].merge(
-            projections[["player_id", projection_col]], on="player_id", how="inner"
+            projections_by_category[category], on="player_id", how="inner"
         ).rename(columns={projection_col: "projection"}).merge(actual, on="player_id", how="inner")
         merged["season"] = season
         merged["week"] = week

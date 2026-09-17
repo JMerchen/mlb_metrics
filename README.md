@@ -5264,14 +5264,17 @@ props by matchup quality alone - no real sportsbook prop line to
 compare against, so these are real "good spots to look," not a priced
 +EV pick.
 
-> **Superseded for the three skill categories as of 2026-09-17.**
-> Receptions, Receiving Yards and Rushing Yards now come from a
-> per-player PROJECTION (`nfl_prop_projections.py`, see the section
-> immediately below), not from the per-game opponent ratio described
-> here. Passing Yards and Sacks still work exactly as written below.
-> The ratio description is kept because those two categories still use
-> it, and because the backtest numbers quoted further down are what the
-> projection was measured against.
+> **Superseded as of 2026-09-17.** All five categories have moved off
+> the clipped per-game opponent ratio described here:
+>
+> * Receptions, Receiving Yards, Rushing Yards and Passing Yards come
+>   from a per-player PROJECTION (`nfl_prop_projections.py`, section
+>   immediately below).
+> * Sacks keeps a per-game opponent rate - deliberately, and for a
+>   measured reason - but shrunk and UNCLIPPED, with no projection.
+>
+> The ratio description is kept because the backtest numbers quoted
+> further down are what the projection was measured against.
 
 **5 real categories**: Receptions, Receiving Yards, Rushing Yards,
 Passing Yards, Sacks. For each, a player's own real recent per-game
@@ -5383,6 +5386,68 @@ That number needs two honest caveats:
    role change this selection detects. These figures show the ranking
    orders bets by genuine confidence; they do NOT imply a 74% win rate
    against a real market.
+
+### Passing Yards and Sacks needed different answers
+
+Both were converted on 2026-09-17 after a user asked why every bet on the
+board showed +/-20%. They did not need the same fix, and checking rather
+than assuming is what separated them.
+
+The question is whether a per-GAME opponent rate is confounded by the
+volume that opponent faces. Across 2024-2025:
+
+| Rate | Correlation with volume faced |
+| --- | --- |
+| Passing yards allowed per game | **+0.659** |
+| Passing yards allowed per attempt | -0.229 |
+| Sacks allowed per game | **+0.153** |
+
+So Passing Yards carried exactly the receiving confound and moved to a
+per-ATTEMPT basis with a full projection (`attempt_share x team_attempts
+x shrunk yards per attempt x per-attempt opponent multiplier`).
+
+**Sacks did not.** For a pass rusher the opponent's dropbacks are not a
+confound - they ARE his opportunity - and the correlation is weak anyway.
+Sacks therefore keeps a per-game opponent rate, now shrunk and unclipped.
+
+**Two honest results worth recording:**
+
+1. **The Passing Yards projection is NOT statistically established.** It
+   beat the ratio model on every metric (hit rate 0.5738 vs 0.5656, MAE
+   65.43 vs 66.29, RMSE 83.70 vs 85.74), but the clustered bootstrap puts
+   the hit-rate gain at +0.008 with a 95% interval of [-0.058, +0.076].
+   There are only 70 distinct QBs in the replay. It ships on the
+   mechanistic argument - it removes a directly measurable confound -
+   plus point estimates that agree across all three metrics, not on a
+   significant result.
+2. **A projected-sacks model was built, measured, and deleted.** It came
+   out materially WORSE than the ratio it would have replaced: hit rate
+   0.3845 vs 0.5490, a clustered difference of -0.1645 [-0.1883,
+   -0.1413], and a worse MAE. Sacks are rare and zero-inflated with no
+   usage-share denominator available in the weekly table, so shrinking
+   the per-game rate mostly destroyed what separates rushers. The code
+   was removed rather than left dormant.
+
+**Unclipping is an honesty fix, not an accuracy fix.** Removing the clip
+changed 54.5% of Sacks rows and left the directional hit rate exactly
+unchanged at 0.5490 - the expected result, since direction turns on which
+side of 1.0 a ratio falls and clipping is a monotonic transform that
+cannot move it. The number simply starts meaning what it says: Sacks rows
+now reach +32% where the ceiling was +20%.
+
+### Diversity cap
+
+`NFL_PROP_MAX_PER_TEAM_CATEGORY` allows at most one row per (team,
+category). This is a correlation guard, not an accuracy claim, and is
+deliberately not backtested - a hit rate cannot tell you that three bets
+which win and lose together are worth less than three independent ones.
+It is applied AFTER ranking, so it only ever drops the weaker member of a
+correlated pair and never reorders the board.
+
+It exists because unclipping Sacks immediately put three Chicago rushers
+(Sweat, Street, Booker, all facing Minnesota, all at +32%) into the top
+ten - one opinion about one offensive line sold as three bets, the same
+defect a user reported when four Arizona running backs filled the board.
 
 **Known limitation, not hidden:** team volume is the team's own
 recency-weighted rate and is NOT adjusted for the upcoming game's
