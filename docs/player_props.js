@@ -10,13 +10,14 @@
 // stays safely require()-able from node --test.
 
 const PLAYER_PROPS_COLUMN_LABELS = {
+rank: "#", game: "Game",
 player_name: "Player", team: "Team", opponent: "Opp", position: "Pos",
 category: "Category", direction: "Bet", player_rate: "Own Avg",
 projection: "Projected", opponent_allowed_rate: "Opp Allows",
 league_rate: "League Avg", ratio: "Opp vs Avg", games: "Games",
 }
 const PLAYER_PROPS_COLUMNS = [
-"player_name", "team", "opponent", "position", "category", "direction",
+"rank", "game", "player_name", "team", "opponent", "position", "category", "direction",
 "player_rate", "projection", "opponent_allowed_rate", "league_rate", "ratio", "games",
 ]
 
@@ -73,6 +74,32 @@ return `${pct >= 0 ? "+" : ""}${pct.toFixed(0)}%`
 return value
 }
 
+// The board carries the overall top 10 UNION the best few rows of every
+// individual matchup (see nfl_player_props.build_prop_board), so a game
+// filter always has something to show. "All games" deliberately renders
+// only the overall top 10 rather than all ~80 rows, so the default view
+// is the same board it has always been - the extra rows exist to make
+// single-game views possible, not to lengthen the front page.
+const PLAYER_PROPS_ALL_GAMES = "All games"
+
+function playerPropsGames(data){
+const seen = []
+data.forEach(row=>{
+const game = row.game
+if(game && !seen.includes(game)){ seen.push(game) }
+})
+// Ordered by best overall rank, which `data` is already sorted by, so
+// the most interesting matchup sits at the top of the dropdown.
+return seen
+}
+
+function filterPlayerProps(data, game, topN){
+if(!game || game === PLAYER_PROPS_ALL_GAMES){
+return data.slice(0, topN === undefined ? 10 : topN)
+}
+return data.filter(row=>row.game === game)
+}
+
 function buildPlayerPropsTable(data, id){
 const el = document.getElementById(id)
 if(!data.length){ el.innerHTML = "No player props data yet - this board updates weekly."; return }
@@ -88,9 +115,30 @@ html += "</table>"
 el.innerHTML = html
 }
 
+function buildPlayerPropsSection(data, selectId, tableId){
+const select = document.getElementById(selectId)
+const render = ()=> buildPlayerPropsTable(
+filterPlayerProps(data, select ? select.value : PLAYER_PROPS_ALL_GAMES), tableId
+)
+if(select){
+const games = playerPropsGames(data)
+select.innerHTML = [PLAYER_PROPS_ALL_GAMES].concat(games)
+.map(g=>`<option value="${g}">${g}</option>`).join("")
+// A board with no game labels at all (an older CSV written before
+// they existed) leaves the picker hidden rather than showing a
+// dropdown whose only entry does nothing.
+select.style.display = games.length ? "" : "none"
+select.onchange = render
+}
+render()
+}
+
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 formatPlayerPropsValue,
+playerPropsGames,
+filterPlayerProps,
+PLAYER_PROPS_ALL_GAMES,
 PLAYER_PROPS_COLUMNS,
 PLAYER_PROPS_COLUMN_LABELS,
 }
