@@ -442,3 +442,59 @@ def test_apply_market_tiebreak_default_threshold_matches_config():
 
     # 0.15 disagreement clears config.GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD (0.10).
     assert result.iloc[0]["home_win_probability"] == pytest.approx(0.50)
+
+
+def test_apply_market_tiebreak_survives_a_doubleheader():
+    """Real confirmed production failure (2026-09-22): the daily run died
+    with "IndexError: Boolean index has wrong length: 18 instead of 16"
+    on a real 16-game slate.
+
+    `market_odds` can only match games by (home_team, away_team) - ESPN
+    event ids are unrelated to MLB's game_pk - so on a doubleheader BOTH
+    frames carry two rows for the same pair and a left merge fans out
+    2 x 2 = 4 rows where there were 2. The mask built from the merged
+    frame then no longer lines up with the result, and pandas raises from
+    deep inside its indexing rather than anywhere naming the cause.
+    """
+    win_probabilities = pd.DataFrame([
+        {"game_pk": 1, "home_team": "BAL", "away_team": "TOR", "home_win_probability": 0.80},
+        {"game_pk": 2, "home_team": "BAL", "away_team": "TOR", "home_win_probability": 0.80},
+        {"game_pk": 3, "home_team": "SF", "away_team": "MIN", "home_win_probability": 0.55},
+    ])
+    # The market frame carries BOTH games of the doubleheader, which is
+    # exactly what produces the fan-out.
+    market = pd.DataFrame([
+        {"home_team": "BAL", "away_team": "TOR", "market_home_win_probability": 0.50},
+        {"home_team": "BAL", "away_team": "TOR", "market_home_win_probability": 0.50},
+        {"home_team": "SF", "away_team": "MIN", "market_home_win_probability": 0.54},
+    ])
+
+    result = game_picks.apply_market_tiebreak(win_probabilities, market, disagreement_threshold=0.10)
+
+    # Row count preserved - this is what used to blow up.
+    assert len(result) == 3
+    # Both halves of the doubleheader disagree with the market by 0.30,
+    # so both defer to it.
+    assert result.loc[0, "home_win_probability"] == pytest.approx(0.50)
+    assert result.loc[1, "home_win_probability"] == pytest.approx(0.50)
+    # The non-doubleheader game agrees closely and is left alone.
+    assert result.loc[2, "home_win_probability"] == pytest.approx(0.55)
+
+
+def test_apply_market_tiebreak_raises_clearly_if_a_merge_ever_fans_out(monkeypatch):
+    """The de-dup should make this unreachable, but if a future change
+    lets a duplicate key through, the failure must name the cause rather
+    than surfacing as an IndexError from pandas internals."""
+    win_probabilities = pd.DataFrame([
+        {"game_pk": 1, "home_team": "BAL", "away_team": "TOR", "home_win_probability": 0.80},
+    ])
+    market = pd.DataFrame([
+        {"home_team": "BAL", "away_team": "TOR", "market_home_win_probability": 0.50},
+        {"home_team": "BAL", "away_team": "TOR", "market_home_win_probability": 0.40},
+    ])
+    # Neutralise the de-dup to simulate a duplicate slipping through.
+    monkeypatch.setattr(
+        pd.DataFrame, "drop_duplicates", lambda self, *a, **k: self, raising=False
+    )
+    with pytest.raises(ValueError, match="changed row count"):
+        game_picks.apply_market_tiebreak(win_probabilities, market, disagreement_threshold=0.10)
