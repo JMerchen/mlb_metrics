@@ -2104,6 +2104,22 @@ NFL_PROP_SACK_PRIOR_GAMES = 6
 # running backs filled the board.
 NFL_PROP_MAX_PER_TEAM_CATEGORY = 1
 
+# How many rows the props board keeps for EACH individual matchup, on top
+# of the overall top 10 (nfl_player_props.build_prop_board).
+#
+# Exists for the per-game selector added 2026-09-22. The overall top 10
+# is extremely concentrated: on the live week-2 board those 10 rows
+# covered only 6 of the week's 16 matchups, so filtering to a single game
+# would have shown an empty table for ten games out of sixteen. Keeping a
+# few rows per game guarantees every matchup has something to show.
+#
+# 5 is a display choice, not a modelling one - it is the number of rows
+# that reads comfortably in a single-game table, and every row still
+# carries its overall `rank` so a thin game's best bet is visibly ranked
+# 84th rather than looking like a top pick in isolation. The overall top
+# 10 is unioned in unchanged, so the default view is unaffected.
+NFL_PROP_PER_GAME_ROWS = 5
+
 # --- NFL props: game script (nfl_prop_projections.py) ---
 #
 # How a game's betting market moves a team's expected VOLUME away from

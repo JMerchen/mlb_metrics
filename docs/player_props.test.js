@@ -3,6 +3,9 @@ const test = require("node:test")
 const assert = require("node:assert/strict")
 const {
   formatPlayerPropsValue,
+  playerPropsGames,
+  filterPlayerProps,
+  PLAYER_PROPS_ALL_GAMES,
   PLAYER_PROPS_COLUMNS,
   PLAYER_PROPS_COLUMN_LABELS,
 } = require("./player_props.js")
@@ -73,4 +76,60 @@ test("PLAYER_PROPS_COLUMNS: the projected stat line is actually displayed", () =
   // The projection is the whole point of the 2026-09-17 model change;
   // shipping it in the CSV but not the table would make it invisible.
   assert.ok(PLAYER_PROPS_COLUMNS.includes("projection"))
+})
+
+test("playerPropsGames: distinct games, ordered by best overall rank", () => {
+  const data = [
+    { rank: 1, game: "IND @ KC" },
+    { rank: 2, game: "CAR @ ATL" },
+    { rank: 6, game: "CAR @ ATL" },
+    { rank: 17, game: "MIN @ CHI" },
+  ]
+  assert.deepEqual(playerPropsGames(data), ["IND @ KC", "CAR @ ATL", "MIN @ CHI"])
+})
+
+test("playerPropsGames: ignores rows with no game label", () => {
+  // An older CSV written before game labels existed, or a bye-week row.
+  const data = [{ rank: 1, game: "" }, { rank: 2 }, { rank: 3, game: "GB @ NYJ" }]
+  assert.deepEqual(playerPropsGames(data), ["GB @ NYJ"])
+})
+
+test("filterPlayerProps: 'All games' shows only the overall top 10", () => {
+  // The board carries ~80 rows so single-game views have something to
+  // show; the default view must stay the board it has always been.
+  const data = Array.from({ length: 80 }, (_, i) => ({ rank: i + 1, game: `G${i % 16}` }))
+  const shown = filterPlayerProps(data, PLAYER_PROPS_ALL_GAMES)
+  assert.equal(shown.length, 10)
+  assert.equal(shown[0].rank, 1)
+  assert.equal(shown[9].rank, 10)
+})
+
+test("filterPlayerProps: an unset game falls back to the default view", () => {
+  const data = Array.from({ length: 30 }, (_, i) => ({ rank: i + 1, game: "A @ B" }))
+  assert.equal(filterPlayerProps(data, undefined).length, 10)
+  assert.equal(filterPlayerProps(data, "").length, 10)
+})
+
+test("filterPlayerProps: a single game shows all of that game's rows", () => {
+  const data = [
+    { rank: 1, game: "IND @ KC" },
+    { rank: 17, game: "MIN @ CHI" },
+    { rank: 25, game: "MIN @ CHI" },
+    { rank: 40, game: "MIN @ CHI" },
+  ]
+  const shown = filterPlayerProps(data, "MIN @ CHI")
+  assert.equal(shown.length, 3)
+  // Overall rank is preserved, so a thin game's best bet is visibly
+  // ranked 17th rather than looking like a top pick in isolation.
+  assert.deepEqual(shown.map(r => r.rank), [17, 25, 40])
+})
+
+test("filterPlayerProps: a game with no rows returns empty, not everything", () => {
+  const data = [{ rank: 1, game: "IND @ KC" }]
+  assert.deepEqual(filterPlayerProps(data, "SEA @ ARI"), [])
+})
+
+test("PLAYER_PROPS_COLUMNS: rank and game are displayed", () => {
+  assert.ok(PLAYER_PROPS_COLUMNS.includes("rank"))
+  assert.ok(PLAYER_PROPS_COLUMNS.includes("game"))
 })

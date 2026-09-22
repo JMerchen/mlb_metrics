@@ -534,6 +534,45 @@ def _sacks_category_edges(
     ]]
 
 
+def attach_game_labels(edges_df: pd.DataFrame, current_week_schedule_df: pd.DataFrame) -> pd.DataFrame:
+    """Adds a `game` column - "AWAY @ HOME" - to every prop row, so the
+    board can be filtered to one matchup.
+
+    The edge builders only ever know a player's own `team` and the
+    `opponent` they face; which of the two is at home lives solely on the
+    schedule. Reading it here rather than in each builder keeps the
+    home/away lookup in one place, and a row whose team is missing from
+    the schedule (a bye, or a player whose latest team has no game this
+    week) gets a null label rather than a fabricated matchup - the same
+    posture the `opponent` merge already takes.
+    """
+    if edges_df.empty:
+        return edges_df.assign(game=[])
+
+    labelled = edges_df.copy()
+    if (
+        current_week_schedule_df is None
+        or current_week_schedule_df.empty
+        or not {"home_team", "away_team"}.issubset(current_week_schedule_df.columns)
+    ):
+        labelled["game"] = pd.NA
+        return labelled
+
+    games = current_week_schedule_df[["home_team", "away_team"]].drop_duplicates()
+    games["game"] = games["away_team"] + " @ " + games["home_team"]
+    # One row per TEAM, so a player is matched by his own team whichever
+    # side of the fixture he is on.
+    by_team = pd.concat(
+        [
+            games[["home_team", "game"]].rename(columns={"home_team": "team"}),
+            games[["away_team", "game"]].rename(columns={"away_team": "team"}),
+        ],
+        ignore_index=True,
+    ).drop_duplicates("team")
+
+    return labelled.merge(by_team, on="team", how="left")
+
+
 def build_prop_edges(
     weekly_df: pd.DataFrame,
     current_week_schedule_df: pd.DataFrame,
@@ -582,6 +621,7 @@ def build_prop_edges(
         ],
         ignore_index=True,
     )
+    edges = attach_game_labels(edges, current_week_schedule_df)
 
     if snap_share is None or snap_share.empty:
         if snap_share is not None:
@@ -821,21 +861,71 @@ def top_prop_bets(
     ).reset_index(drop=True)
 
 
+def build_prop_board(edges_df: pd.DataFrame, top_n: int = 10, per_game: int = None) -> pd.DataFrame:
+    """The board the site renders: the overall top `top_n` rows UNION the
+    best `per_game` rows for every individual matchup, each carrying its
+    own `rank` in the overall ordering.
+
+    Why a union rather than simply taking more rows overall (2026-09-22
+    user request: a per-game selector, "if I just want to see the top
+    bets for a certain game"): the overall top 10 is extremely
+    concentrated. Measured on the live week-2 board, those 10 rows
+    covered just 6 of the week's 16 matchups, so a game filter over them
+    would have shown an empty table for ten games out of sixteen. Taking
+    the top N per game guarantees every matchup has something to show,
+    while unioning the overall top `top_n` guarantees the default "All
+    games" view is byte-for-byte the same board as before this change.
+
+    `rank` is the position in the OVERALL ordering, kept on every row so
+    a single-game view still communicates how a bet stacks up against the
+    rest of the slate - a game's best prop being overall rank 84 is
+    exactly the sort of thing a per-game view would otherwise hide.
+    """
+    per_game = config.NFL_PROP_PER_GAME_ROWS if per_game is None else per_game
+
+    # One ranking pass over everything, so `rank` and both slices below
+    # all derive from the same ordering rather than three separate sorts
+    # that could disagree.
+    ranked = top_prop_bets(edges_df, n=len(edges_df))
+    if ranked.empty:
+        return ranked
+    ranked = ranked.reset_index(drop=True)
+    ranked["rank"] = ranked.index + 1
+
+    overall = ranked.head(top_n)
+    if "game" in ranked.columns and ranked["game"].notna().any():
+        per_game_rows = ranked[ranked["game"].notna()].groupby("game", sort=False).head(per_game)
+        board = pd.concat([overall, per_game_rows], ignore_index=True)
+        board = board.drop_duplicates(subset=["rank"], keep="first")
+    else:
+        board = overall
+
+    return board.sort_values("rank").reset_index(drop=True)
+
+
 def write_prop_bets_csv(edges_df: pd.DataFrame, output_path: str, top_n: int = 10) -> pd.DataFrame:
-    """Real `top_prop_bets` output written to `output_path` - if NO real
-    row qualifies this week (a real bye-heavy week, or every real player
-    fails config.NFL_PROP_MIN_GAMES/NFL_PROP_MIN_USAGE), nothing is
-    written and the prior week's real CSV is left in place, the same
-    "don't let one bad/quiet week erase real history" posture
-    `board_runner.run_board` already establishes for the 3 consensus
-    boards. Returns the real top-N DataFrame (empty if nothing
-    qualified)."""
-    top = top_prop_bets(edges_df, n=top_n)
-    if top.empty:
+    """Writes the per-game board (see `build_prop_board`) to
+    `output_path` - if NO real row qualifies this week (a real bye-heavy
+    week, or every real player fails config.NFL_PROP_MIN_GAMES/
+    NFL_PROP_MIN_USAGE), nothing is written and the prior week's real CSV
+    is left in place, the same "don't let one bad/quiet week erase real
+    history" posture `board_runner.run_board` already establishes for the
+    3 consensus boards.
+
+    RETURNS ONLY THE OVERALL TOP `top_n`, not the whole written board,
+    and that distinction is load-bearing. The caller
+    (nfl_pipeline) feeds this return value straight into
+    `nfl_prop_predictions.select_prop_picks`, so returning the full
+    per-game board would silently start logging ~80 picks a week instead
+    of 10 - which would swamp the v2/v3/v4 model comparison the
+    prediction log exists to measure. The site gets the wide board; the
+    log keeps recording exactly the ten bets it always has."""
+    board = build_prop_board(edges_df, top_n=top_n)
+    if board.empty:
         print("No real player props qualified this week - writing nothing, leaving the prior CSV in place.")
-        return top
+        return board
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    top.to_csv(output_path, index=False)
-    print(f"Wrote {output_path}")
-    return top
+    board.to_csv(output_path, index=False)
+    print(f"Wrote {output_path} ({len(board)} rows across {board['game'].nunique()} games)")
+    return board.head(top_n).reset_index(drop=True)

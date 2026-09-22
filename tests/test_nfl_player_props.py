@@ -156,8 +156,11 @@ def test_build_prop_edges_covers_all_five_categories():
     assert set(edges.columns) == {
         "player_id", "player_name", "team", "position", "opponent", "games",
         "category", "player_rate", "projection", "projected_targets", "projected_carries",
-        "opponent_allowed_rate", "league_rate", "rate_basis", "ratio",
+        "opponent_allowed_rate", "league_rate", "rate_basis", "ratio", "game",
     }
+    # Every row knows its matchup, so the board can be filtered to one
+    # game (see attach_game_labels / build_prop_board).
+    assert set(edges["game"].dropna()) == {"SEA @ SF"}
     # Four of the five categories carry a projection. Sacks alone does
     # not, and that is measured rather than missing: a projected-sacks
     # model was built and backtested and came out materially WORSE than
@@ -681,3 +684,119 @@ def test_top_prop_bets_cap_removes_rather_than_reorders():
     capped_keys = list(zip(capped["player_id"], capped["category"]))
     iterator = iter(uncapped_keys)
     assert all(key in iterator for key in capped_keys)
+
+
+def test_attach_game_labels_uses_home_and_away_from_the_schedule():
+    """Edge builders only know a player's own team and opponent; which
+    side is at home lives solely on the schedule."""
+    edges = pd.DataFrame([
+        {"player_id": "a", "team": "SF", "opponent": "SEA"},
+        {"player_id": "b", "team": "SEA", "opponent": "SF"},
+    ])
+    schedule = pd.DataFrame([{"home_team": "SF", "away_team": "SEA"}])
+
+    labelled = nfl_player_props.attach_game_labels(edges, schedule).set_index("player_id")
+
+    # Both sides of the fixture get the SAME label, so filtering to one
+    # game returns both teams' players.
+    assert labelled.loc["a", "game"] == "SEA @ SF"
+    assert labelled.loc["b", "game"] == "SEA @ SF"
+
+
+def test_attach_game_labels_leaves_a_bye_team_unlabelled():
+    edges = pd.DataFrame([{"player_id": "a", "team": "KC", "opponent": None}])
+    schedule = pd.DataFrame([{"home_team": "SF", "away_team": "SEA"}])
+
+    labelled = nfl_player_props.attach_game_labels(edges, schedule)
+
+    # A fabricated matchup would be worse than none at all.
+    assert pd.isna(labelled.loc[0, "game"])
+
+
+def test_build_prop_board_covers_every_game_while_keeping_the_top_ten():
+    """The reason the board is wider than ten rows (2026-09-22 user
+    request for a per-game selector): the overall top 10 covered only 6
+    of 16 matchups on the live board, so a game filter would have shown
+    an empty table for ten games."""
+    rows = []
+    schedule = []
+    # Eight distinct matchups, each with its own receivers.
+    for index in range(8):
+        home, away = f"H{index}", f"A{index}"
+        schedule.append({"home_team": home, "away_team": away})
+        # Deliberately uneven so one matchup dominates the overall top.
+        yards = 120 - index * 10
+        rows += _multi_week_skill_rows(
+            f"wr_h{index}", f"WR H{index}", home, away, "WR", range(1, 6),
+            targets=10, receiving_yards=yards, receptions=5,
+        )
+        rows += _multi_week_skill_rows(
+            f"wr_a{index}", f"WR A{index}", away, home, "WR", range(1, 6),
+            targets=10, receiving_yards=60, receptions=5,
+        )
+    edges = nfl_player_props.build_prop_edges(pd.DataFrame(rows), pd.DataFrame(schedule))
+
+    board = nfl_player_props.build_prop_board(edges, top_n=10, per_game=3)
+
+    # Every matchup is represented ...
+    assert board["game"].nunique() == 8
+    # ... and the default view is still exactly the overall top 10.
+    top_ten = board.sort_values("rank").head(10)
+    assert list(top_ten["rank"]) == list(range(1, 11))
+    # Rank is the OVERALL position, so a thin game's best row is honestly
+    # numbered rather than looking like a top pick in isolation.
+    assert board["rank"].max() > 10
+
+
+def test_build_prop_board_matches_top_prop_bets_for_the_default_view():
+    """Widening the board must not change the ten rows that were always
+    shown."""
+    rows = []
+    schedule = []
+    for index in range(6):
+        home, away = f"H{index}", f"A{index}"
+        schedule.append({"home_team": home, "away_team": away})
+        rows += _multi_week_skill_rows(
+            f"wr_h{index}", f"WR H{index}", home, away, "WR", range(1, 6),
+            targets=10, receiving_yards=100 - index * 8, receptions=5,
+        )
+        rows += _multi_week_skill_rows(
+            f"wr_a{index}", f"WR A{index}", away, home, "WR", range(1, 6),
+            targets=10, receiving_yards=55, receptions=5,
+        )
+    edges = nfl_player_props.build_prop_edges(pd.DataFrame(rows), pd.DataFrame(schedule))
+
+    board_top = nfl_player_props.build_prop_board(edges, top_n=10, per_game=3).head(10)
+    direct_top = nfl_player_props.top_prop_bets(edges, n=10)
+
+    assert list(board_top["player_id"]) == list(direct_top["player_id"])
+    assert list(board_top["category"]) == list(direct_top["category"])
+
+
+def test_write_prop_bets_csv_returns_only_the_top_ten_for_pick_logging(tmp_path):
+    """Load-bearing: the caller feeds this return value into
+    select_prop_picks, so returning the whole per-game board would
+    silently start logging ~80 picks a week instead of 10 and swamp the
+    v2/v3/v4 comparison the prediction log exists to measure."""
+    rows = []
+    schedule = []
+    for index in range(8):
+        home, away = f"H{index}", f"A{index}"
+        schedule.append({"home_team": home, "away_team": away})
+        rows += _multi_week_skill_rows(
+            f"wr_h{index}", f"WR H{index}", home, away, "WR", range(1, 6),
+            targets=10, receiving_yards=120 - index * 10, receptions=5,
+        )
+        rows += _multi_week_skill_rows(
+            f"wr_a{index}", f"WR A{index}", away, home, "WR", range(1, 6),
+            targets=10, receiving_yards=60, receptions=5,
+        )
+    edges = nfl_player_props.build_prop_edges(pd.DataFrame(rows), pd.DataFrame(schedule))
+
+    path = str(tmp_path / "board" / "nfl_player_props.csv")
+    returned = nfl_player_props.write_prop_bets_csv(edges, path, top_n=10)
+
+    written = pd.read_csv(path)
+    assert len(returned) == 10
+    assert len(written) > 10           # the site gets the wide board ...
+    assert list(returned["rank"]) == list(range(1, 11))   # ... the log gets ten.

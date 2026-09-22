@@ -675,10 +675,10 @@ buildConsensusTable([], "nflDraftBoardTable")
 async function loadNflPlayerProps(){
 try{
 const props = await loadCSV("./data/nfl_player_props.csv")
-buildPlayerPropsTable(props, "nflPlayerPropsTable")
+buildPlayerPropsSection(props, "nflPlayerPropsGame", "nflPlayerPropsTable")
 }catch(e){
 console.log("no nfl_player_props.csv yet", e)
-buildPlayerPropsTable([], "nflPlayerPropsTable")
+buildPlayerPropsSection([], "nflPlayerPropsGame", "nflPlayerPropsTable")
 }
 }
 

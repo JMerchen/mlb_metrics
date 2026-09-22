@@ -5610,6 +5610,31 @@ through a player's usage share into a projected stat line, because the
 team's own trailing average has already absorbed nearly all of it. The
 machinery stays, tested, behind the flag.
 
+### Per-game selector
+
+The board carries the overall top 10 UNION the best
+`NFL_PROP_PER_GAME_ROWS` rows of every individual matchup
+(`build_prop_board`), and `docs/nfl.html` exposes a game dropdown that
+defaults to "All games".
+
+The union is why the board is ~80 rows rather than 10. A straight
+per-game filter over the old board would have been useless: on the live
+week-2 slate those 10 rows covered only **6 of 16 matchups**, so ten
+games would have shown an empty table. Every row keeps its `rank` in the
+OVERALL ordering, so a single-game view still says where a bet sits on
+the slate - a matchup whose best prop is overall rank 65 is visibly thin
+rather than looking like a top pick in isolation.
+
+"All games" renders only the overall top 10, so the default view is the
+same board it has always been.
+
+**`write_prop_bets_csv` returns only the top 10, not the written board**,
+and that is load-bearing rather than incidental: `nfl_pipeline` feeds the
+return value straight into `select_prop_picks`, so returning the wide
+board would silently start logging ~80 picks a week instead of 10 and
+swamp the v2/v3/v4 comparison the prediction log exists to measure. The
+site gets the wide board; the log keeps recording ten bets.
+
 **Backtest harness fix found while measuring this:** `_shipped_edges`
 fabricated a schedule by renaming the both-directions `opponents` frame
 straight to home/away columns, so every game was created twice and each
