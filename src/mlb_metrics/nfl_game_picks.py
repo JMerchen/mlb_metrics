@@ -465,6 +465,19 @@ def apply_market_tiebreak(
         market_probabilities[["home_team", "away_team", "market_home_win_probability"]],
         on=["home_team", "away_team"], how="left",
     )
+    # The MLB twin of this function de-duplicates the market side before
+    # merging, because a real doubleheader legitimately puts two games
+    # with the same (home_team, away_team) on one date and fans the merge
+    # out - a live 2026-09-22 crash, see game_picks.apply_market_tiebreak.
+    # No NFL equivalent exists: two teams never meet twice in one week,
+    # so a duplicate key here would be a genuine data fault rather than a
+    # real fixture, and it should be loud instead of silently collapsed.
+    if len(merged) != len(win_probabilities):
+        raise ValueError(
+            f"market tiebreak merge changed row count ({len(win_probabilities)} -> {len(merged)}); "
+            "duplicate (home_team, away_team) keys in market_probabilities"
+        )
+
     disagreement = (merged["home_win_probability"] - merged["market_home_win_probability"]).abs()
     should_defer = (disagreement >= threshold).fillna(False).to_numpy()
 

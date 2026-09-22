@@ -306,10 +306,41 @@ def apply_market_tiebreak(
     if "market_home_win_probability" not in market_probabilities.columns:
         return win_probabilities
 
+    # DOUBLEHEADER GUARD, and a real confirmed production failure: the
+    # 2026-09-22 daily run died here with "IndexError: Boolean index has
+    # wrong length: 18 instead of 16" on a real 16-game slate.
+    #
+    # `market_odds` matches games by (home_team, away_team) ONLY - ESPN's
+    # event ids are unrelated to MLB's game_pk, so there is nothing else
+    # to join on (see that module's own docstring, which discloses this
+    # exact limitation). On a doubleheader the same two teams play twice
+    # in one day, so BOTH frames carry two rows for that pair and a left
+    # merge fans out 2 x 2 = 4 rows where there were 2. The mask built
+    # from `merged` then no longer lines up with `result`, and pandas
+    # raises several frames deep in indexing rather than anywhere that
+    # names the cause.
+    #
+    # De-duplicating the market side keeps the merge strictly 1:1, so
+    # `merged` is guaranteed to stay row-aligned with
+    # `win_probabilities`. The honest consequence is that a
+    # doubleheader's two games share one market probability - the same
+    # simplification `market_odds` and `schedule.normalize_schedule_games`
+    # already document, now made explicit here rather than crashing.
+    market = market_probabilities.drop_duplicates(subset=["home_team", "away_team"], keep="first")
+
     merged = win_probabilities.merge(
-        market_probabilities[["home_team", "away_team", "market_home_win_probability"]],
+        market[["home_team", "away_team", "market_home_win_probability"]],
         on=["home_team", "away_team"], how="left",
     )
+    if len(merged) != len(win_probabilities):
+        # Belt and braces: if some future duplicate key slips past the
+        # de-dup above, fail with a message that says what happened
+        # instead of an IndexError from inside pandas' indexing internals.
+        raise ValueError(
+            f"market tiebreak merge changed row count ({len(win_probabilities)} -> {len(merged)}); "
+            "duplicate (home_team, away_team) keys in market_probabilities"
+        )
+
     disagreement = (merged["home_win_probability"] - merged["market_home_win_probability"]).abs()
     should_defer = (disagreement >= threshold).fillna(False).to_numpy()
 
