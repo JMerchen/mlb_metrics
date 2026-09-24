@@ -1,6 +1,8 @@
 date,rank,name,predicted_probability,combined_probability,actual_hit,status,grade
-2026-09-23,1,Gabriel Moreno,0.6756702597190412,0.7066602364098246,,pending,recommended
-2026-09-23,2,Jake McCarthy,0.675657031491893,0.6939564356966978,,pending,recommended
+2026-09-24,1,TJ Rumfield,0.6401373416981553,0.7017150782428323,,pending,recommended
+2026-09-24,2,Yordan Álvarez,0.6409225204959406,0.6950551971107188,,pending,recommended
+2026-09-23,1,Gabriel Moreno,0.6756702597190412,0.7066602364098246,1.0,hit,recommended
+2026-09-23,2,Jake McCarthy,0.675657031491893,0.6939564356966978,1.0,hit,recommended
 2026-09-22,1,Jake McCarthy,0.693351259707655,0.7349805509668172,0.0,miss,recommended
 2026-09-22,2,Gabriel Moreno,0.6747326474618611,0.7042037093960983,1.0,hit,recommended
 2026-09-21,1,Kevin McGonigle,0.6344806875817218,0.6177296826327733,,no_game,speculative
