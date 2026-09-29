@@ -183,7 +183,19 @@ def solve_optimal_lineup(
 
     pool = pool.reset_index(drop=True)
     problem = pulp.LpProblem("optimal_lineup", pulp.LpMaximize)
-    x = {i: pulp.LpVariable(f"x_{i}", cat="Binary") for i in pool.index}
+    # `problem.add_variable(...)` rather than `pulp.LpVariable(..., cat=)`:
+    # constructing an LpVariable directly is deprecated in PuLP 3.x and
+    # REMOVED in 4.x, which broke CI outright (48 failures, all
+    # "LpVariable.__init__() got an unexpected keyword argument 'cat'")
+    # the first time a runner resolved the newer release - `pulp` is
+    # unpinned in requirements.txt, so CI picks up whatever is current
+    # while a local environment keeps whatever it installed.
+    #
+    # This call is the migration path PuLP's own deprecation message
+    # names, and it exists in 3.x as well, so one spelling works on both
+    # and needs no version branch. The variable is attached to the model
+    # on creation, which is why `problem` is built first.
+    x = {i: problem.add_variable(f"x_{i}", cat="Binary") for i in pool.index}
 
     problem += pulp.lpSum(x[i] * pool.loc[i, objective_column] for i in pool.index)
     problem += pulp.lpSum(x[i] * pool.loc[i, "Estimated_Salary"] for i in pool.index) <= salary_cap
