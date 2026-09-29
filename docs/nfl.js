@@ -681,11 +681,11 @@ console.log("no nfl_player_props.csv yet", e)
 buildPlayerPropsSection([], "nflPlayerPropsGame", "nflPlayerPropsTable")
 }
 try{
-const streaks = await loadCSV("./data/nfl_prop_streaks.csv")
-buildPlayerStreakSection(streaks, "nflPlayerStreaksStat", "nflPlayerStreaksGame", "nflPlayerStreaksTable")
+const floors = await loadCSV("./data/nfl_position_floors.csv")
+buildPositionFloorsSection(floors, "nflPositionFloorTabs", "nflPositionFloorGame", "nflPositionFloorTable")
 }catch(e){
-console.log("no nfl_prop_streaks.csv yet", e)
-buildPlayerStreakSection([], "nflPlayerStreaksStat", "nflPlayerStreaksGame", "nflPlayerStreaksTable")
+console.log("no nfl_position_floors.csv yet", e)
+buildPositionFloorsSection([], "nflPositionFloorTabs", "nflPositionFloorGame", "nflPositionFloorTable")
 }
 }
 

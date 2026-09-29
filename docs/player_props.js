@@ -135,118 +135,151 @@ render()
 
 
 
-// Season-long floors (nfl_prop_streaks.py) - a HISTORY board, not a
-// prediction one: the most each player has produced in every game so
-// far ("4+ every week" once his receptions go 5, 6, 4), kept where that
-// floor is rare among his position peers. Nothing here projects
-// anything; every number already happened.
-const PLAYER_STREAK_ALL_STATS = "All stats"
-// In the "All stats" view, the best few per stat - enough to show what
-// every stat looks like without one deep stat (tackles, among 170+ DBs)
-// burying the rest. Picking a stat shows every qualifying row for it.
-const PLAYER_STREAK_ALL_STATS_PER_STAT = 3
+// Season floors by position (nfl_position_floors.py) - a HISTORY board,
+// not a prediction one. One tab per position, the top 32 there by season
+// snaps, and for every stat the lowest number the player has posted in a
+// game this season - zero included. Games he left injured are left out
+// of the floor but still shown in the game log, in brackets.
+const POSITION_FLOOR_TABS = ["QB", "RB", "WR", "TE", "DL", "DB"]
 
-const PLAYER_STREAK_COLUMN_LABELS = {
-player_name: "Player", position: "Pos", team: "Team", game: "Next Game",
-stat: "Stat", floor: "Every Week", game_log: "Game Log",
-season_avg: "Avg", rarity: "How Rare",
-}
-const PLAYER_STREAK_COLUMNS = [
-"player_name", "position", "team", "game", "stat", "floor",
-"game_log", "season_avg", "rarity",
-]
-
-// Plural label for the peer pool a floor was compared against. Most
-// pools are position groups ("WRs", "DBs"); kickers are pooled by exact
-// position because the SPEC group also holds punters and long snappers.
-const PLAYER_STREAK_POOL_LABELS = { K: "kickers" }
-
-function playerStreakPoolLabel(group){
-return PLAYER_STREAK_POOL_LABELS[group] || `${group}s`
+// Per-tab stat columns, in the order they were asked for. Keys are the
+// CSV's own column names; each has a matching `<key>_log` game log.
+const POSITION_FLOOR_STATS = {
+QB: [["completions", "Completions"], ["passing_tds", "Pass TDs"], ["passing_yards", "Pass Yds"],
+["interceptions_thrown", "INTs"], ["anytime_td", "Anytime TD"], ["rushing_yards", "Rush Yds"]],
+RB: [["receptions", "Receptions"], ["receiving_yards", "Rec Yds"], ["rushing_yards", "Rush Yds"], ["anytime_td", "Anytime TD"]],
+WR: [["receptions", "Receptions"], ["receiving_yards", "Rec Yds"], ["rushing_yards", "Rush Yds"], ["anytime_td", "Anytime TD"]],
+TE: [["receptions", "Receptions"], ["receiving_yards", "Rec Yds"], ["rushing_yards", "Rush Yds"], ["anytime_td", "Anytime TD"]],
+DL: [["tackles", "Tackles"], ["sacks", "Sacks"], ["def_interceptions", "INTs"]],
+DB: [["tackles", "Tackles"], ["sacks", "Sacks"], ["def_interceptions", "INTs"]],
 }
 
-function formatPlayerStreakValue(column, value, row){
-if(column === "floor"){
+function _isBlank(value){
+return value === "" || value === null || value === undefined || (typeof value === "number" && isNaN(value))
+}
+
+// A floor of zero is a real floor and prints "0". Only a floor with no
+// counted games behind it (every game he played was an injury exit)
+// prints a dash - there is nothing to take a minimum over.
+function formatPositionFloor(value){
+if(_isBlank(value)){ return "-" }
 const n = Number(value)
-if(value === "" || value === null || value === undefined || isNaN(n)){ return value }
-// Number() already drops a CSV's trailing ".0" (4.0 -> "4") and keeps
-// a split sack as "0.5", so no special-casing is needed.
-return `${n}+`
-}
-if(column === "season_avg"){
-const n = Number(value)
-return isNaN(n) || value === "" ? value : n.toFixed(1)
-}
-if(column === "rarity"){
-// Said the way a person would say it - "2 of 32 kickers" - rather
-// than as a fraction, because the counts ARE the information.
-if(!row){ return value }
-return `${row.players_at_or_above} of ${row.pool_size} ${playerStreakPoolLabel(row.pool_group)}`
-}
-if(column === "game" && (value === "" || value === null || value === undefined)){
-return "bye"
-}
-return value
+// Number() drops a CSV's ".0" and keeps a split sack's "0.5".
+return isNaN(n) ? String(value) : String(n)
 }
 
-function playerStreakStats(data){
-const seen = []
-data.forEach(row=>{ if(row.stat && !seen.includes(row.stat)){ seen.push(row.stat) } })
-return seen
+function positionFloorNote(row){
+const notes = []
+if(!_isBlank(row.excluded_weeks)){
+notes.push(`Injured wk ${row.excluded_weeks} - not counted`)
+}
+if(!_isBlank(row.flagged_week)){
+notes.push(`Left wk ${row.flagged_week} early - counted unless he's out next game`)
+}
+return notes.join("; ")
 }
 
-function filterPlayerStreaks(data, stat, game){
-let rows = data
+function filterPositionFloors(data, tab, game){
+let rows = data.filter(row=>row.tab === tab)
 if(game && game !== PLAYER_PROPS_ALL_GAMES){
 rows = rows.filter(row=>row.game === game)
 }
-if(stat && stat !== PLAYER_STREAK_ALL_STATS){
-return rows.filter(row=>row.stat === stat)
+return rows
 }
-const counts = {}
-return rows.filter(row=>{
-counts[row.stat] = (counts[row.stat] || 0) + 1
-return counts[row.stat] <= PLAYER_STREAK_ALL_STATS_PER_STAT
+
+// Highest floor first; a blank floor sinks to the bottom whichever way.
+// With no sort key the board stays in snap-count order.
+function sortPositionFloors(rows, key){
+const copy = rows.slice()
+if(!key){
+return copy.sort((a, b)=>Number(a.rank) - Number(b.rank))
+}
+return copy.sort((a, b)=>{
+const av = _isBlank(a[key]) ? -Infinity : Number(a[key])
+const bv = _isBlank(b[key]) ? -Infinity : Number(b[key])
+if(bv !== av){ return bv - av }
+return Number(a.rank) - Number(b.rank)
 })
 }
 
-function buildPlayerStreakTable(data, id){
+function positionFloorGames(data){
+const seen = []
+data.forEach(row=>{ if(row.game && !seen.includes(row.game)){ seen.push(row.game) } })
+return seen.sort()
+}
+
+function buildPositionFloorTable(rows, tab, sortKey, id, onSort){
 const el = document.getElementById(id)
 if(!el){ return }
-if(!data.length){
-el.innerHTML = "No season-long floors to show for this selection."
+if(!rows.length){
+el.innerHTML = "No players to show for this selection."
 return
 }
-let html = "<table><tr>"
-PLAYER_STREAK_COLUMNS.forEach(c=>{ html += `<th>${PLAYER_STREAK_COLUMN_LABELS[c] || c}</th>` })
-html += "</tr>"
-data.forEach(row=>{
-html += "<tr>"
-PLAYER_STREAK_COLUMNS.forEach(c=>{ html += `<td>${formatPlayerStreakValue(c, row[c], row)}</td>` })
-html += "</tr>"
+const stats = POSITION_FLOOR_STATS[tab] || []
+let html = "<table><tr><th>#</th><th>Player</th><th>Pos</th><th>Team</th><th>Next Game</th><th>Games</th>"
+stats.forEach(([key, label])=>{
+const marker = key === sortKey ? " &#9660;" : ""
+html += `<th data-floor-sort="${key}" style="cursor:pointer" title="Sort by ${label} floor">${label}${marker}</th>`
+})
+html += "<th>Note</th></tr>"
+rows.forEach(row=>{
+const counted = Number(row.games_counted)
+const played = Number(row.games_played)
+const games = counted === played ? `${played}` : `${counted} of ${played}`
+html += `<tr><td>${row.rank}</td><td>${row.player_name}</td><td>${row.position}</td><td>${row.team}</td>`
+html += `<td>${_isBlank(row.game) ? "bye" : row.game}</td><td>${games}</td>`
+stats.forEach(([key])=>{
+const log = row[`${key}_log`]
+html += `<td><b>${formatPositionFloor(row[key])}</b>`
+if(!_isBlank(log)){
+html += `<br><span style="font-size:0.8em;opacity:0.7;white-space:nowrap">${log}</span>`
+}
+html += "</td>"
+})
+html += `<td style="font-size:0.85em">${positionFloorNote(row)}</td></tr>`
 })
 html += "</table>"
 el.innerHTML = html
+if(onSort){
+el.querySelectorAll("th[data-floor-sort]").forEach(th=>{
+th.onclick = ()=> onSort(th.getAttribute("data-floor-sort"))
+})
+}
 }
 
-function buildPlayerStreakSection(data, statSelectId, gameSelectId, tableId){
-const statSelect = document.getElementById(statSelectId)
+function buildPositionFloorsSection(data, tabsId, gameSelectId, tableId){
+const tabsEl = document.getElementById(tabsId)
 const gameSelect = document.getElementById(gameSelectId)
-const render = ()=> buildPlayerStreakTable(
-filterPlayerStreaks(
-data,
-statSelect ? statSelect.value : PLAYER_STREAK_ALL_STATS,
-gameSelect ? gameSelect.value : PLAYER_PROPS_ALL_GAMES,
-),
-tableId,
+const state = { tab: POSITION_FLOOR_TABS[0], sortKey: null }
+const render = ()=>{
+const rows = sortPositionFloors(
+filterPositionFloors(data, state.tab, gameSelect ? gameSelect.value : PLAYER_PROPS_ALL_GAMES),
+state.sortKey,
 )
-if(statSelect){
-statSelect.innerHTML = [PLAYER_STREAK_ALL_STATS].concat(playerStreakStats(data))
-.map(s=>`<option value="${s}">${s}</option>`).join("")
-statSelect.onchange = render
+buildPositionFloorTable(rows, state.tab, state.sortKey, tableId, key=>{
+// Clicking the sorted column again goes back to snap order.
+state.sortKey = state.sortKey === key ? null : key
+render()
+})
+if(tabsEl){
+tabsEl.querySelectorAll("button").forEach(b=>{
+b.classList.toggle("active", b.getAttribute("data-floor-tab") === state.tab)
+})
+}
+}
+if(tabsEl){
+tabsEl.innerHTML = POSITION_FLOOR_TABS
+.map(t=>`<button class="tabButton" data-floor-tab="${t}">${t}</button>`).join("")
+tabsEl.querySelectorAll("button").forEach(b=>{
+b.onclick = ()=>{
+state.tab = b.getAttribute("data-floor-tab")
+state.sortKey = null
+render()
+}
+})
 }
 if(gameSelect){
-const games = playerPropsGames(data)
+const games = positionFloorGames(data)
 gameSelect.innerHTML = [PLAYER_PROPS_ALL_GAMES].concat(games)
 .map(g=>`<option value="${g}">${g}</option>`).join("")
 gameSelect.style.display = games.length ? "" : "none"
@@ -263,13 +296,12 @@ filterPlayerProps,
 PLAYER_PROPS_ALL_GAMES,
 PLAYER_PROPS_COLUMNS,
 PLAYER_PROPS_COLUMN_LABELS,
-formatPlayerStreakValue,
-playerStreakStats,
-filterPlayerStreaks,
-playerStreakPoolLabel,
-PLAYER_STREAK_ALL_STATS,
-PLAYER_STREAK_ALL_STATS_PER_STAT,
-PLAYER_STREAK_COLUMNS,
-PLAYER_STREAK_COLUMN_LABELS,
+formatPositionFloor,
+positionFloorNote,
+filterPositionFloors,
+sortPositionFloors,
+positionFloorGames,
+POSITION_FLOOR_TABS,
+POSITION_FLOOR_STATS,
 }
 }

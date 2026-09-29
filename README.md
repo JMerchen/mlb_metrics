@@ -5296,57 +5296,54 @@ sourced from real, confirmed nflreadpy weekly-stats columns (`def_sacks`
 for an individual defender's own real sacks, `sacks_suffered` for a
 team's own real sacks-allowed-while-on-offense).
 
-## NFL Season-Long Floors (`nfl_prop_streaks.py`)
+## NFL Season Floors by Position (`nfl_position_floors.py`)
 
 A **history** section on the player props page, not a prediction one.
-User request (2026-09-29): "Let's say a player has had 5+ every week but
-then the next week drops to 4, the screen should now show that he's had
-4+ every week... I'd like to consider yards, touchdowns (especially),
-sacks, completions, ints, etc. It's just a way to see what players are
-doing... This is just a history section, not necessarily a prediction
-section."
+User request (2026-09-29): "a table with selectable tabs by position with
+the top 32 at that position by snap count... For each we'd have their
+stats as columns with their floor value... a game where they get injured
+shouldn't count toward their floor, but otherwise their floor is shown,
+even if it's zero." It replaces the rarity-ranked "Season-Long Floors"
+list shipped earlier the same day.
 
-The first version of this board ranked players by a model probability of
-clearing a line again and filtered to a fair-odds band. That answered a
-question that was not asked, and it has been replaced outright: nothing
-here projects anything, and every number on the board already happened.
+**Tabs and stats**, as requested:
 
-**The floor** is the minimum a player has recorded across his games. If
-his receptions go 10, 9, 4, he shows "4+ every week"; post a 3 and it
-drops to "3+". No rounding to betting increments - a record, not a
-price. The **game log** shows every game, so the pattern is visible
-rather than summarised.
+| Tab | Positions | Stats |
+|-----|-----------|-------|
+| QB | QB | completions, pass TDs, pass yards, INTs thrown, anytime TD, rush yards |
+| RB / WR / TE | RB+HB+FB / WR / TE | receptions, rec yards, rush yards, anytime TD |
+| DL | DE, DT, NT | tackles (solo + assisted), sacks, INTs |
+| DB | CB, S, FS, SS | tackles, sacks, INTs |
 
-**18 stats**, touchdowns first: anytime TD (rush + rec), passing TDs,
-receptions, targets, receiving yards, rushing yards, rush attempts, rush
-+ rec yards, passing yards, completions, pass attempts, interceptions
-thrown, sacks, tackles, QB hits, defensive interceptions, passes
-defended, field goals made.
+Each tab lists the top `NFL_FLOOR_TOP_N` (32) by season snaps on that
+side of the ball. There is no LB tab, so edge rushers listed as outside
+linebackers do not appear under DL.
 
-**What makes a floor worth listing.** Almost every regular has some
-positive floor - 165 skill players had 1+ reception every week after
-three weeks - so the board keeps floors that are rare among a player's
-position peers, and says so in plain counts: "3 of 119 WRs". That is
-still descriptive (it counts what other players did), and it is capped
-at `NFL_STREAK_MAX_RARITY` (25%).
+**The floor** is the lowest number the player has posted in a counted
+game, zero included. Under each floor is the game log in week order.
+Click a stat heading to sort by that floor; click again to go back to
+snap order. A **Game** filter narrows the tab to one matchup.
 
-Rarity is measured **only among positions where the stat is part of the
-job**. That is a correctness fix, not a tidy-up: pooling every position
-surfaced "Deebo Samuel, 4+ rushing yards every week - only 1 of 119 WRs",
-true and meaningless. Kickers are pooled by exact position because the
-special-teams group also holds punters and long snappers - which had
-turned "2 of 32 kickers" into "2 of 62".
+**Games come from snap counts, not the stats table.** The stats table has
+no row for a game where a player recorded nothing - 6.9% of 2025
+appearances by WRs, TEs and RBs with 10+ snaps - so taking the minimum
+over it would skip exactly the zero games. Any game with snaps counts,
+and a missing stat there is a real zero.
 
-**"Every week" means every game his team played**, so a bye is not a
-miss. A game the player sat out is, which is the literal reading of the
-request and thins the board after an injury. A player traded mid-season
-is compared against his current team's schedule and usually drops out -
-a known simplification.
+**Injury games.** Snap share alone cannot tell an injury from a blowout
+(players leaving hurt played a median 24% of their usual snaps; starters
+pulled in blowouts, 25%). So a game is excluded only when both happened:
+snap share fell below half the player's usual (`NFL_FLOOR_INJURY_SNAP_RATIO`)
+**and** the roster had him inactive or on reserve for his team's next
+game (`NFL_FLOOR_INJURY_STATUSES`; a bye is skipped over). Confirming on
+"didn't play next game" instead misfired on 201 of 447 exclusions in
+2025 - mostly healthy backups, including 28 quarterback relief
+appearances. Excluded games stay in the log in `[brackets]`, and the
+Note column says which week was left out. Blowouts and benchings count.
 
-The board has **Stat** and **Game** filters. "All stats" shows the best
-three per stat so one deep pool (tackles, among 170+ DBs) cannot bury the
-rest; picking a stat shows every qualifying row. A team on bye still
-appears, marked "bye" - the record stands either way.
+The **most recent game** cannot be confirmed yet, so an early exit there
+is counted and marked `?`; next week's run excludes it if the player is
+then inactive.
 
 It is deliberately **not** fed into the prediction log: it makes no
 prediction, so there is nothing to grade.

@@ -2120,27 +2120,35 @@ NFL_PROP_MAX_PER_TEAM_CATEGORY = 1
 # 10 is unioned in unchanged, so the default view is unaffected.
 NFL_PROP_PER_GAME_ROWS = 5
 
-# --- NFL props: season-long floors (nfl_prop_streaks.py) ---
+# --- NFL props: season floors by position (nfl_position_floors.py) ---
 #
-# A HISTORY board, not a prediction one (2026-09-29 user clarification:
-# "This is just a history section, not necessarily a prediction
-# section"). Its earlier version ranked by a model probability and
-# filtered to a fair-odds band; both are gone, and nothing below is a
-# modelling parameter - they only decide what is worth displaying.
+# Players shown per position tab, ranked by season snaps on their side of
+# the ball - the request's own number ("the top 32 at that position by
+# snap count").
+NFL_FLOOR_TOP_N = 32
+
+# A game is treated as an injury exit - and left out of a player's floor
+# - when his share of his side's snaps fell below this fraction of his
+# own usual (median) share AND he then missed his team's next game.
 #
-# A floor is shown when at most this share of the player's position
-# peers matched or beat it. Almost every regular has SOME positive floor
-# (165 skill players had 1+ reception every week after three weeks), so
-# without a cut the list is unreadable; 25% keeps "only 3 of 119 WRs
-# scored every week" and drops "1+ reception, like most receivers".
-NFL_STREAK_MAX_RARITY = 0.25
+# The confirmation half is what does the work; the threshold alone does
+# not identify injuries. Measured over 2025 regulars, 377 games fell
+# below half the player's usual share, and only 37% were followed by an
+# injury. Players leaving hurt played a median 24% of their usual snaps
+# and starters pulled in blowouts played 25%, so no threshold separates
+# them - every cut from 50% down to 20% stayed near 40% injuries. 0.5 is
+# therefore a generous net for "left the game early", and the roster
+# check below decides whether it was an injury.
+NFL_FLOOR_INJURY_SNAP_RATIO = 0.5
 
-# Peer pools smaller than this are skipped - "1 of 3" says nothing.
-NFL_STREAK_MIN_POOL = 8
-
-# Rows kept per stat, so one stat with a deep pool (tackles, among 170+
-# defensive backs) cannot swamp the board.
-NFL_STREAK_PER_STAT_ROWS = 25
+# Roster statuses for a team's NEXT game that confirm a snap collapse was
+# an injury: INA (inactive on game day - the "out" designation lands here)
+# and RES (reserve, including injured reserve). Measured over 2025, the
+# older rule of "took no snaps next game" wrongly excluded 201 games whose
+# player was still ACT (174), back on the practice squad as DEV (22) or
+# CUT (5) - healthy backups above all - and this pair drops every one of
+# them while keeping C.J. Stroud (INA) and Daniel Jones (RES).
+NFL_FLOOR_INJURY_STATUSES = ("INA", "RES")
 
 # --- NFL props: game script (nfl_prop_projections.py) ---
 #
