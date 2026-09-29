@@ -218,7 +218,9 @@ def compute_position_floors(
     schedule_df: pd.DataFrame = None,
 ) -> pd.DataFrame:
     """One row per player: the top `config.NFL_FLOOR_TOP_N` at each tab by
-    season snaps, with a floor and a game log for every stat in that tab.
+    season snaps, with a floor, mean, standard deviation and game log for
+    every stat in that tab. The page shows the floor with mean and SD
+    under it; the game log stays in the CSV but is not displayed.
 
     A floor is the minimum over COUNTED games - every game he played
     except confirmed injury exits - and is a real zero whenever he had a
@@ -231,7 +233,9 @@ def compute_position_floors(
         else rosters_df
     )
     games = flag_injury_games(player_games(snap_counts_df, rosters_df, season), season_rosters)
-    output_columns = BASE_COLUMNS + [c for key in ALL_STAT_KEYS for c in (key, f"{key}_log")]
+    output_columns = BASE_COLUMNS + [
+        c for key in ALL_STAT_KEYS for c in (key, f"{key}_mean", f"{key}_sd", f"{key}_log")
+    ]
     if games.empty:
         return pd.DataFrame(columns=output_columns)
 
@@ -277,7 +281,13 @@ def compute_position_floors(
             }
             for key, (_label, columns) in stats.items():
                 values = mine[columns].sum(axis=1)
-                row[key] = float(values[~mine["excluded"]].min()) if len(counted) else np.nan
+                counted_values = values[~mine["excluded"]]
+                row[key] = float(counted_values.min()) if len(counted) else np.nan
+                # Mean and sample SD over the same counted games as the
+                # floor, so all three describe one set of games. One game
+                # has no spread to measure, so its SD is left empty.
+                row[f"{key}_mean"] = float(counted_values.mean()) if len(counted) else np.nan
+                row[f"{key}_sd"] = float(counted_values.std(ddof=1)) if len(counted) > 1 else np.nan
                 row[f"{key}_log"] = ", ".join(
                     f"[{_format_value(v)}]" if excluded else (f"{_format_value(v)}?" if flagged else _format_value(v))
                     for v, excluded, flagged in zip(values, mine["excluded"], mine["flagged"])

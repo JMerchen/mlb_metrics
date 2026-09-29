@@ -9,6 +9,7 @@ const {
   PLAYER_PROPS_COLUMNS,
   PLAYER_PROPS_COLUMN_LABELS,
   formatPositionFloor,
+  formatPositionFloorSpread,
   positionFloorNote,
   filterPositionFloors,
   sortPositionFloors,
@@ -153,6 +154,21 @@ test("formatPositionFloor: no counted games prints a dash", () => {
   assert.equal(formatPositionFloor(""), "-")
   assert.equal(formatPositionFloor(undefined), "-")
   assert.equal(formatPositionFloor(NaN), "-")
+})
+
+test("formatPositionFloorSpread: yardage rounds to whole numbers", () => {
+  assert.equal(formatPositionFloorSpread("33.0", "6.0"), "avg 33 \u00b1 6")
+  assert.equal(formatPositionFloorSpread("86.4", "12.49"), "avg 86 \u00b1 12")
+})
+
+test("formatPositionFloorSpread: small counts keep one decimal", () => {
+  assert.equal(formatPositionFloorSpread("0.333", "0.577"), "avg 0.3 \u00b1 0.6")
+  assert.equal(formatPositionFloorSpread("6.0", "1.0"), "avg 6.0 \u00b1 1.0")
+})
+
+test("formatPositionFloorSpread: one game shows the average alone, no games shows nothing", () => {
+  assert.equal(formatPositionFloorSpread("4.0", ""), "avg 4.0")
+  assert.equal(formatPositionFloorSpread("", ""), "")
 })
 
 test("positionFloorNote: explains excluded and flagged games", () => {

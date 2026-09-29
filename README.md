@@ -5320,7 +5320,10 @@ side of the ball. There is no LB tab, so edge rushers listed as outside
 linebackers do not appear under DL.
 
 **The floor** is the lowest number the player has posted in a counted
-game, zero included. Under each floor is the game log in week order.
+game, zero included. Under each floor is his average and sample standard
+deviation over the same counted games ("avg 86 ± 12"; whole numbers once
+the average reaches 10, one decimal below that). The per-game log is kept
+in the CSV (`<stat>_log`) but not shown, to keep the table readable.
 Click a stat heading to sort by that floor; click again to go back to
 snap order. A **Game** filter narrows the tab to one matchup.
 
@@ -5338,12 +5341,12 @@ snap share fell below half the player's usual (`NFL_FLOOR_INJURY_SNAP_RATIO`)
 game (`NFL_FLOOR_INJURY_STATUSES`; a bye is skipped over). Confirming on
 "didn't play next game" instead misfired on 201 of 447 exclusions in
 2025 - mostly healthy backups, including 28 quarterback relief
-appearances. Excluded games stay in the log in `[brackets]`, and the
-Note column says which week was left out. Blowouts and benchings count.
+appearances. The Note column says which week was left out (the CSV's
+game log shows it in `[brackets]`). Blowouts and benchings count.
 
 The **most recent game** cannot be confirmed yet, so an early exit there
-is counted and marked `?`; next week's run excludes it if the player is
-then inactive.
+is counted and noted (`?` in the CSV log); next week's run excludes it
+if the player is then inactive.
 
 It is deliberately **not** fed into the prediction log: it makes no
 prediction, so there is nothing to grade.

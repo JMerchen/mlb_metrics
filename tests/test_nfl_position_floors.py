@@ -60,6 +60,14 @@ def test_floor_is_the_minimum_over_counted_games():
     assert board.loc["g_wr1", "receiving_yards"] == 41
 
 
+def test_one_game_has_a_mean_but_no_sd():
+    snaps = [_snap("wr1", "SF", 1)]
+    rosters = [_roster("wr1", 1)]
+    board = _board(snaps, rosters, [_stat("wr1", 1, receptions=4)])
+    assert board.loc["g_wr1", "receptions_mean"] == 4
+    assert pd.isna(board.loc["g_wr1", "receptions_sd"])
+
+
 def test_anytime_td_sums_rushing_and_receiving():
     snaps = [_snap("rb1", "SF", w, position="RB") for w in (1, 2)]
     rosters = [_roster("rb1", w) for w in (1, 2)]
@@ -89,6 +97,9 @@ def _injury_case(next_status):
 def test_a_confirmed_injury_exit_does_not_count_toward_the_floor():
     board = _injury_case("INA")
     assert board.loc["g_wr1", "receptions"] == 5
+    # Mean and SD cover the same counted games as the floor.
+    assert board.loc["g_wr1", "receptions_mean"] == 6
+    assert board.loc["g_wr1", "receptions_sd"] == 1
     assert board.loc["g_wr1", "excluded_weeks"] == "2"
     assert board.loc["g_wr1", "games_played"] == 4
     assert board.loc["g_wr1", "games_counted"] == 3

@@ -138,8 +138,8 @@ render()
 // Season floors by position (nfl_position_floors.py) - a HISTORY board,
 // not a prediction one. One tab per position, the top 32 there by season
 // snaps, and for every stat the lowest number the player has posted in a
-// game this season - zero included. Games he left injured are left out
-// of the floor but still shown in the game log, in brackets.
+// game this season - zero included - with his average and standard
+// deviation under it. Games he left injured are left out of all three.
 const POSITION_FLOOR_TABS = ["QB", "RB", "WR", "TE", "DL", "DB"]
 
 // Per-tab stat columns, in the order they were asked for. Keys are the
@@ -166,6 +166,20 @@ if(_isBlank(value)){ return "-" }
 const n = Number(value)
 // Number() drops a CSV's ".0" and keeps a split sack's "0.5".
 return isNaN(n) ? String(value) : String(n)
+}
+
+// The line under each floor: "avg 31 ± 5". Yardage-sized numbers
+// (mean of 10 or more) round to whole numbers; small counts like
+// receptions or touchdowns keep one decimal so 0.3 and 0.7 stay apart.
+// SD uses the mean's precision, and is dropped when there is only one
+// game to measure it over.
+function formatPositionFloorSpread(mean, sd){
+if(_isBlank(mean) || isNaN(Number(mean))){ return "" }
+const m = Number(mean)
+const digits = Math.abs(m) >= 10 ? 0 : 1
+const avg = `avg ${m.toFixed(digits)}`
+if(_isBlank(sd) || isNaN(Number(sd))){ return avg }
+return `${avg} \u00b1 ${Number(sd).toFixed(digits)}`
 }
 
 function positionFloorNote(row){
@@ -229,10 +243,10 @@ const games = counted === played ? `${played}` : `${counted} of ${played}`
 html += `<tr><td>${row.rank}</td><td>${row.player_name}</td><td>${row.position}</td><td>${row.team}</td>`
 html += `<td>${_isBlank(row.game) ? "bye" : row.game}</td><td>${games}</td>`
 stats.forEach(([key])=>{
-const log = row[`${key}_log`]
+const spread = formatPositionFloorSpread(row[`${key}_mean`], row[`${key}_sd`])
 html += `<td><b>${formatPositionFloor(row[key])}</b>`
-if(!_isBlank(log)){
-html += `<br><span style="font-size:0.8em;opacity:0.7;white-space:nowrap">${log}</span>`
+if(spread){
+html += `<br><span style="font-size:0.8em;opacity:0.7;white-space:nowrap">${spread}</span>`
 }
 html += "</td>"
 })
@@ -297,6 +311,7 @@ PLAYER_PROPS_ALL_GAMES,
 PLAYER_PROPS_COLUMNS,
 PLAYER_PROPS_COLUMN_LABELS,
 formatPositionFloor,
+formatPositionFloorSpread,
 positionFloorNote,
 filterPositionFloors,
 sortPositionFloors,
