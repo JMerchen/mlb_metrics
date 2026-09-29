@@ -135,47 +135,86 @@ render()
 
 
 
-// Season-long streak board (nfl_prop_streaks.py) - a different question
-// from the main board, so its own columns and its own table. The streak
-// is the SCREEN (this player has literally never missed this line);
-// `hit_probability` is the ranking, because with only a couple of weeks
-// played a perfect streak is mostly the binomial being itself - a player
-// whose true weekly rate is 70% runs a perfect 2-game streak 49% of the
-// time. See that module's own docstring for the measured numbers.
+// Season-long floors (nfl_prop_streaks.py) - a HISTORY board, not a
+// prediction one: the most each player has produced in every game so
+// far ("4+ every week" once his receptions go 5, 6, 4), kept where that
+// floor is rare among his position peers. Nothing here projects
+// anything; every number already happened.
+const PLAYER_STREAK_ALL_STATS = "All stats"
+// In the "All stats" view, the best few per stat - enough to show what
+// every stat looks like without one deep stat (tackles, among 170+ DBs)
+// burying the rest. Picking a stat shows every qualifying row for it.
+const PLAYER_STREAK_ALL_STATS_PER_STAT = 3
+
 const PLAYER_STREAK_COLUMN_LABELS = {
-game: "Game", player_name: "Player", category: "Category", line: "Line",
-season_low: "Season Low", games_played: "Weeks", projection: "Projected",
-hit_probability: "Hit Chance", fair_odds: "Fair Odds",
+player_name: "Player", position: "Pos", team: "Team", game: "Next Game",
+stat: "Stat", floor: "Every Week", game_log: "Game Log",
+season_avg: "Avg", rarity: "How Rare",
 }
 const PLAYER_STREAK_COLUMNS = [
-"game", "player_name", "category", "line", "season_low", "games_played",
-"projection", "hit_probability", "fair_odds",
+"player_name", "position", "team", "game", "stat", "floor",
+"game_log", "season_avg", "rarity",
 ]
 
-function formatPlayerStreakValue(column, value){
-if(column === "hit_probability"){
-const n = Number(value)
-return isNaN(n) ? value : `${(n * 100).toFixed(0)}%`
+// Plural label for the peer pool a floor was compared against. Most
+// pools are position groups ("WRs", "DBs"); kickers are pooled by exact
+// position because the SPEC group also holds punters and long snappers.
+const PLAYER_STREAK_POOL_LABELS = { K: "kickers" }
+
+function playerStreakPoolLabel(group){
+return PLAYER_STREAK_POOL_LABELS[group] || `${group}s`
 }
-if(column === "fair_odds"){
+
+function formatPlayerStreakValue(column, value, row){
+if(column === "floor"){
 const n = Number(value)
-if(isNaN(n)){ return value }
-// American odds carry their own sign, and a positive price has to
-// show the + or it reads as a negative one.
-return n > 0 ? `+${n}` : `${n}`
+if(value === "" || value === null || value === undefined || isNaN(n)){ return value }
+// Number() already drops a CSV's trailing ".0" (4.0 -> "4") and keeps
+// a split sack as "0.5", so no special-casing is needed.
+return `${n}+`
 }
-if(["line", "season_low", "projection"].includes(column)){
+if(column === "season_avg"){
 const n = Number(value)
-return isNaN(n) ? value : n.toFixed(1)
+return isNaN(n) || value === "" ? value : n.toFixed(1)
+}
+if(column === "rarity"){
+// Said the way a person would say it - "2 of 32 kickers" - rather
+// than as a fraction, because the counts ARE the information.
+if(!row){ return value }
+return `${row.players_at_or_above} of ${row.pool_size} ${playerStreakPoolLabel(row.pool_group)}`
+}
+if(column === "game" && (value === "" || value === null || value === undefined)){
+return "bye"
 }
 return value
+}
+
+function playerStreakStats(data){
+const seen = []
+data.forEach(row=>{ if(row.stat && !seen.includes(row.stat)){ seen.push(row.stat) } })
+return seen
+}
+
+function filterPlayerStreaks(data, stat, game){
+let rows = data
+if(game && game !== PLAYER_PROPS_ALL_GAMES){
+rows = rows.filter(row=>row.game === game)
+}
+if(stat && stat !== PLAYER_STREAK_ALL_STATS){
+return rows.filter(row=>row.stat === stat)
+}
+const counts = {}
+return rows.filter(row=>{
+counts[row.stat] = (counts[row.stat] || 0) + 1
+return counts[row.stat] <= PLAYER_STREAK_ALL_STATS_PER_STAT
+})
 }
 
 function buildPlayerStreakTable(data, id){
 const el = document.getElementById(id)
 if(!el){ return }
 if(!data.length){
-el.innerHTML = "No prop streaks qualified yet - this board needs at least one completed week."
+el.innerHTML = "No season-long floors to show for this selection."
 return
 }
 let html = "<table><tr>"
@@ -183,11 +222,37 @@ PLAYER_STREAK_COLUMNS.forEach(c=>{ html += `<th>${PLAYER_STREAK_COLUMN_LABELS[c]
 html += "</tr>"
 data.forEach(row=>{
 html += "<tr>"
-PLAYER_STREAK_COLUMNS.forEach(c=>{ html += `<td>${formatPlayerStreakValue(c, row[c])}</td>` })
+PLAYER_STREAK_COLUMNS.forEach(c=>{ html += `<td>${formatPlayerStreakValue(c, row[c], row)}</td>` })
 html += "</tr>"
 })
 html += "</table>"
 el.innerHTML = html
+}
+
+function buildPlayerStreakSection(data, statSelectId, gameSelectId, tableId){
+const statSelect = document.getElementById(statSelectId)
+const gameSelect = document.getElementById(gameSelectId)
+const render = ()=> buildPlayerStreakTable(
+filterPlayerStreaks(
+data,
+statSelect ? statSelect.value : PLAYER_STREAK_ALL_STATS,
+gameSelect ? gameSelect.value : PLAYER_PROPS_ALL_GAMES,
+),
+tableId,
+)
+if(statSelect){
+statSelect.innerHTML = [PLAYER_STREAK_ALL_STATS].concat(playerStreakStats(data))
+.map(s=>`<option value="${s}">${s}</option>`).join("")
+statSelect.onchange = render
+}
+if(gameSelect){
+const games = playerPropsGames(data)
+gameSelect.innerHTML = [PLAYER_PROPS_ALL_GAMES].concat(games)
+.map(g=>`<option value="${g}">${g}</option>`).join("")
+gameSelect.style.display = games.length ? "" : "none"
+gameSelect.onchange = render
+}
+render()
 }
 
 if (typeof module !== "undefined" && module.exports) {
@@ -199,6 +264,11 @@ PLAYER_PROPS_ALL_GAMES,
 PLAYER_PROPS_COLUMNS,
 PLAYER_PROPS_COLUMN_LABELS,
 formatPlayerStreakValue,
+playerStreakStats,
+filterPlayerStreaks,
+playerStreakPoolLabel,
+PLAYER_STREAK_ALL_STATS,
+PLAYER_STREAK_ALL_STATS_PER_STAT,
 PLAYER_STREAK_COLUMNS,
 PLAYER_STREAK_COLUMN_LABELS,
 }

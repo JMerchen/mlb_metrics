@@ -5296,61 +5296,60 @@ sourced from real, confirmed nflreadpy weekly-stats columns (`def_sacks`
 for an individual defender's own real sacks, `sacks_suffered` for a
 team's own real sacks-allowed-while-on-offense).
 
-## NFL Season-Long Streaks (`nfl_prop_streaks.py`)
+## NFL Season-Long Floors (`nfl_prop_streaks.py`)
 
-User request (2026-09-29): a section for "bets that have hit every week
-of that season to that point... if a tight end has had 3+ receptions
-every week", showing "the ten that have the best odds of happening",
-excluding prices like -1100 where "winning means very little and losing
-means losing money."
+A **history** section on the player props page, not a prediction one.
+User request (2026-09-29): "Let's say a player has had 5+ every week but
+then the next week drops to 4, the screen should now show that he's had
+4+ every week... I'd like to consider yards, touchdowns (especially),
+sacks, completions, ints, etc. It's just a way to see what players are
+doing... This is just a history section, not necessarily a prediction
+section."
 
-**The streak is the screen, not the signal**, and that is the whole
-design. A perfect season-to-date streak sounds like strong evidence and
-mostly is not. Measured on the live 2026 board with two weeks played:
-269 skill players have a full game log and **59 of them cleared 3+
-receptions every week** - but a player whose true weekly rate is 70% runs
-a perfect two-game streak 49% of the time, and one at 60% does it 36% of
-the time. Most of that list is the binomial being itself.
+The first version of this board ranked players by a model probability of
+clearing a line again and filtered to a fair-odds band. That answered a
+question that was not asked, and it has been replaced outright: nothing
+here projects anything, and every number on the board already happened.
 
-So the streak decides who is ELIGIBLE and `hit_probability` decides the
-ORDER. That probability comes from the same projection the main board
-uses, pushed through `prop_market.probability_over`, so it reflects a
-player's whole history and this week's matchup rather than two lucky
-games. Ranking on streak length instead would be a ranking of luck.
+**The floor** is the minimum a player has recorded across his games. If
+his receptions go 10, 9, 4, he shows "4+ every week"; post a 3 and it
+drops to "3+". No rounding to betting increments - a record, not a
+price. The **game log** shows every game, so the pattern is visible
+rather than summarised.
 
-**The line** is the highest standard prop number a player cleared in
-every game - his season *floor*, rounded down to a real line (5-yard
-steps for yardage, whole numbers for receptions). A receiver whose worst
-week was 12 yards carries 9.5, not his average. That is what makes
-"never missed" literal, and it self-regulates the odds: a line at a
-player's floor lands in a bettable range rather than the 99% a line at
-his average would imply.
+**18 stats**, touchdowns first: anytime TD (rush + rec), passing TDs,
+receptions, targets, receiving yards, rushing yards, rush attempts, rush
++ rec yards, passing yards, completions, pass attempts, interceptions
+thrown, sacks, tackles, QB hits, defensive interceptions, passes
+defended, field goals made.
 
-**The juice cap** (`NFL_STREAK_PROBABILITY_BAND`, 0.55-0.75, about -122
-to -300) is the user's own constraint made explicit. It does real work:
-capping at 0.85 instead on the live week-3 slate still produced a top ten
-priced around **-550**, where five wins are needed to cover one loss. At
-0.75 the same board comes back between -277 and -299.
+**What makes a floor worth listing.** Almost every regular has some
+positive floor - 165 skill players had 1+ reception every week after
+three weeks - so the board keeps floors that are rare among a player's
+position peers, and says so in plain counts: "3 of 119 WRs". That is
+still descriptive (it counts what other players did), and it is capped
+at `NFL_STREAK_MAX_RARITY` (25%).
 
-| | |
-| --- | --- |
-| Patrick Mahomes | Passing Yards 179.5, season low 184, 75%, -297 |
-| Omarion Hampton | Rushing Yards 39.5, season low 43, 74%, -291 |
+Rarity is measured **only among positions where the stat is part of the
+job**. That is a correctness fix, not a tidy-up: pooling every position
+surfaced "Deebo Samuel, 4+ rushing yards every week - only 1 of 119 WRs",
+true and meaningless. Kickers are pooled by exact position because the
+special-teams group also holds punters and long snappers - which had
+turned "2 of 32 kickers" into "2 of 62".
 
-**What this is not.** There are still no sportsbook lines in this
-project. `fair_odds` is **this model's own implied price**, not one
-anyone is offering, and nothing here can say whether a book disagrees.
-The request asked for "the ones where vegas might not agree"; that half
-is not deliverable until a feed exists, and inventing a comparison
-number would be worse than saying so.
+**"Every week" means every game his team played**, so a bye is not a
+miss. A game the player sat out is, which is the literal reading of the
+request and thins the board after an injury. A player traded mid-season
+is compared against his current team's schedule and usually drops out -
+a known simplification.
 
-**Sacks are excluded** - no fitted outcome spread in
-`PROP_OUTCOME_SIGMA_K` (it has no projection to take residuals against),
-so any probability for it would be backed by nothing.
+The board has **Stat** and **Game** filters. "All stats" shows the best
+three per stat so one deep pool (tackles, among 170+ DBs) cannot bury the
+rest; picking a stat shows every qualifying row. A team on bye still
+appears, marked "bye" - the record stands either way.
 
-**A player who missed a week is excluded entirely**, however well he has
-played since. That is the literal reading of "every week", but it does
-thin the board after an injury week.
+It is deliberately **not** fed into the prediction log: it makes no
+prediction, so there is nothing to grade.
 
 ## Cross-Book Prop Market (`prop_market.py`)
 

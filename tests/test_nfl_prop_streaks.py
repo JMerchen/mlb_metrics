@@ -1,202 +1,217 @@
-import numpy as np
 import pandas as pd
 import pytest
 
 from mlb_metrics import config, nfl_prop_streaks
 
 
-def _week(player_id, season, week, receptions=0, receiving_yards=0, rushing_yards=0, passing_yards=0):
-    return {
-        "player_id": player_id, "season": season, "week": week, "season_type": "REG",
-        "receptions": receptions, "receiving_yards": receiving_yards,
-        "rushing_yards": rushing_yards, "passing_yards": passing_yards,
+def _week(player_id, team, week, position="WR", position_group="WR", season=2026, name=None, **stats):
+    row = {
+        "player_id": player_id, "player_display_name": name or player_id,
+        "team": team, "position": position, "position_group": position_group,
+        "season": season, "week": week, "season_type": "REG",
     }
+    row.update(stats)
+    return row
 
 
-def _edge(player_id, category, projection, player_name="Player One"):
-    return {
-        "player_id": player_id, "player_name": player_name, "team": "SF",
-        "opponent": "SEA", "game": "SEA @ SF", "category": category, "projection": projection,
-    }
+def _floors(rows, stat):
+    floors = nfl_prop_streaks.compute_season_floors(pd.DataFrame(rows), 2026)
+    return floors[floors["stat"] == stat].set_index("player_id")
 
 
-def test_highest_line_always_cleared_for_a_whole_number_stat():
-    """A back whose worst game was exactly 4 receptions carries 3.5 - he
-    cleared it - not 4.5, which he did not."""
-    assert nfl_prop_streaks.highest_line_always_cleared(4.0, 1.0) == pytest.approx(3.5)
-    assert nfl_prop_streaks.highest_line_always_cleared(3.0, 1.0) == pytest.approx(2.5)
-    assert nfl_prop_streaks.highest_line_always_cleared(1.0, 1.0) == pytest.approx(0.5)
-
-
-def test_highest_line_always_cleared_for_a_five_yard_step():
-    """Yardage props are posted in 5-yard steps, so a receiver whose
-    worst week was 12 yards carries 9.5."""
-    assert nfl_prop_streaks.highest_line_always_cleared(12.0, 5.0) == pytest.approx(9.5)
-    assert nfl_prop_streaks.highest_line_always_cleared(20.0, 5.0) == pytest.approx(19.5)
-    assert nfl_prop_streaks.highest_line_always_cleared(45.0, 5.0) == pytest.approx(44.5)
-    # Always strictly below the floor - never a line the player failed.
-    for low in (7.0, 13.0, 28.0, 101.0):
-        assert nfl_prop_streaks.highest_line_always_cleared(low, 5.0) < low
-
-
-def test_highest_line_always_cleared_returns_zero_for_a_scoreless_game():
-    """A player held scoreless in any game has no streak at any line."""
-    assert nfl_prop_streaks.highest_line_always_cleared(0.0, 1.0) == 0.0
-    assert nfl_prop_streaks.highest_line_always_cleared(0.0, 5.0) == 0.0
-    assert nfl_prop_streaks.highest_line_always_cleared(float("nan"), 1.0) == 0.0
-
-
-def test_probability_to_american_odds_both_sides_of_even_money():
-    assert nfl_prop_streaks.probability_to_american_odds(0.75) == -300
-    assert nfl_prop_streaks.probability_to_american_odds(0.50) == -100
-    assert nfl_prop_streaks.probability_to_american_odds(0.40) == 150
-    # The price the request called out as not worth showing.
-    assert nfl_prop_streaks.probability_to_american_odds(0.9167) == pytest.approx(-1100, abs=5)
-
-
-def test_season_streaks_require_a_player_to_have_played_every_week():
-    """A streak with a gap in it is not a streak - literal to the request
-    ("hit every week of that season to that point")."""
+def test_floor_is_the_minimum_so_it_drops_when_a_game_dips():
+    """The user's own example: "5+ every week but then the next week drops
+    to 4, the screen should now show that he's had 4+ every week"."""
     rows = [
-        _week("ever_present", 2026, 1, receptions=5),
-        _week("ever_present", 2026, 2, receptions=4),
-        # Missed week 1 entirely, however good week 2 was.
-        _week("missed_a_week", 2026, 2, receptions=9),
+        _week("wr1", "SF", 1, receptions=5),
+        _week("wr1", "SF", 2, receptions=6),
     ]
-    streaks = nfl_prop_streaks.compute_season_streaks(pd.DataFrame(rows), 2026)
-    receptions = streaks[streaks["category"] == "Receptions"]
+    assert _floors(rows, "Receptions").loc["wr1", "floor"] == 5
 
-    assert list(receptions["player_id"]) == ["ever_present"]
-    # Measured at his FLOOR (4), not his average.
-    assert receptions.iloc[0]["line"] == pytest.approx(3.5)
-    assert receptions.iloc[0]["season_low"] == pytest.approx(4.0)
+    rows.append(_week("wr1", "SF", 3, receptions=4))
+    floors = _floors(rows, "Receptions")
+    assert floors.loc["wr1", "floor"] == 4
+    # The game log shows every game in week order, so the dip is visible.
+    assert floors.loc["wr1", "game_log"] == "5, 6, 4"
 
 
-def test_season_streaks_use_the_floor_not_the_average():
-    """One bad week must sink the line, which is what lets the board
-    claim it has never failed."""
+def test_floor_is_the_actual_number_not_a_betting_line():
+    """This is a record, not a price - no rounding to 5-yard increments."""
+    rows = [_week("wr1", "SF", 1, receiving_yards=47), _week("wr1", "SF", 2, receiving_yards=52)]
+    assert _floors(rows, "Receiving Yards").loc["wr1", "floor"] == 47
+
+
+def test_combined_stats_sum_per_game_before_taking_the_floor():
+    """An anytime touchdown is rushing OR receiving - one of each in
+    different games is still a touchdown every week."""
     rows = [
-        _week("steady", 2026, 1, receiving_yards=60),
-        _week("steady", 2026, 2, receiving_yards=58),
-        _week("spiky", 2026, 1, receiving_yards=115),
-        _week("spiky", 2026, 2, receiving_yards=6),
+        _week("rb1", "SF", 1, position="RB", position_group="RB", rushing_tds=1, receiving_tds=0),
+        _week("rb1", "SF", 2, position="RB", position_group="RB", rushing_tds=0, receiving_tds=1),
     ]
-    streaks = nfl_prop_streaks.compute_season_streaks(pd.DataFrame(rows), 2026)
-    lines = streaks[streaks["category"] == "Receiving Yards"].set_index("player_id")["line"]
-
-    # Both average around 59, but the spiky player's floor is 6.
-    assert lines["steady"] == pytest.approx(54.5)
-    assert lines["spiky"] == pytest.approx(4.5)
+    assert _floors(rows, "Anytime TD (Rush + Rec)").loc["rb1", "floor"] == 1
 
 
-def test_season_streaks_ignore_other_seasons():
+def test_a_bye_week_is_not_a_missed_week():
+    """The team did not play either, so the streak is unbroken."""
     rows = [
-        _week("wr1", 2025, 1, receptions=9),
-        _week("wr1", 2025, 2, receptions=9),
-        _week("wr1", 2026, 1, receptions=3),
-        _week("wr1", 2026, 2, receptions=2),
+        # SF played weeks 1 and 3 (bye in 2); its receiver played both.
+        _week("sf_wr", "SF", 1, receptions=5),
+        _week("sf_wr", "SF", 3, receptions=5),
+        # KC played all three, so the league has three weeks of data.
+        _week("kc_wr", "KC", 1, receptions=5),
+        _week("kc_wr", "KC", 2, receptions=5),
+        _week("kc_wr", "KC", 3, receptions=5),
     ]
-    streaks = nfl_prop_streaks.compute_season_streaks(pd.DataFrame(rows), 2026)
-    receptions = streaks[streaks["category"] == "Receptions"].set_index("player_id")
-
-    # Last season's monster games must not lift this season's floor.
-    assert receptions.loc["wr1", "line"] == pytest.approx(1.5)
+    floors = _floors(rows, "Receptions")
+    assert "sf_wr" in floors.index
+    assert floors.loc["sf_wr", "games"] == 2
 
 
-def test_streak_board_ranks_on_probability_not_on_streak_length():
-    """The heart of the design. A perfect streak is a weak signal - with
-    two weeks played, a player whose true rate is 70% runs one 49% of the
-    time - so the streak decides eligibility and the model's projection
-    decides the order.
-    """
+def test_a_game_the_player_sat_out_breaks_the_streak():
+    """Literal to the request - "every week" - so a player who missed a
+    game his team played is not listed."""
+    rows = [
+        _week("starter", "SF", 1, receptions=5),
+        _week("starter", "SF", 2, receptions=5),
+        _week("starter", "SF", 3, receptions=5),
+        # Missed week 2 while SF played.
+        _week("hurt", "SF", 1, receptions=9),
+        _week("hurt", "SF", 3, receptions=9),
+    ]
+    floors = _floors(rows, "Receptions")
+    assert "starter" in floors.index
+    assert "hurt" not in floors.index
+
+
+def test_other_seasons_do_not_leak_into_this_seasons_floor():
+    rows = [
+        _week("wr1", "SF", 1, season=2025, receptions=12),
+        _week("wr1", "SF", 1, receptions=3),
+        _week("wr1", "SF", 2, receptions=4),
+    ]
+    assert _floors(rows, "Receptions").loc["wr1", "floor"] == 3
+
+
+def _peer_pool(stat_column, values, position="WR", group="WR", team_prefix="T"):
     rows = []
-    # Both players have an identical, perfect two-week streak at the same
-    # line. Only the projection separates them.
-    for player in ("modest", "strong"):
-        rows += [_week(player, 2026, 1, receptions=4), _week(player, 2026, 2, receptions=4)]
-    edges = pd.DataFrame([
-        _edge("modest", "Receptions", 4.1, "Modest Projection"),
-        _edge("strong", "Receptions", 5.6, "Strong Projection"),
-    ])
-
-    board = nfl_prop_streaks.build_streak_board(edges, pd.DataFrame(rows), 2026, probability_band=(0.0, 1.0))
-
-    assert list(board["player_name"]) == ["Strong Projection", "Modest Projection"]
-    assert board.iloc[0]["hit_probability"] > board.iloc[1]["hit_probability"]
+    for index, value in enumerate(values):
+        for week in (1, 2):
+            rows.append(_week(
+                f"p{index}", f"{team_prefix}{index}", week,
+                position=position, position_group=group, **{stat_column: value},
+            ))
+    return rows
 
 
-def test_streak_board_excludes_prices_that_are_not_worth_taking():
-    """The user's own constraint: "something with odds of -1100 probably
-    shouldn't show, because winning means very little and losing means
-    losing money"."""
-    rows = [
-        # A near-certainty at its line - the -1100 case.
-        _week("lock", 2026, 1, receptions=4), _week("lock", 2026, 2, receptions=4),
-        # A genuine coin flip - too thin to call a repeat likely.
-        _week("toss_up", 2026, 1, receptions=4), _week("toss_up", 2026, 2, receptions=4),
-    ]
-    edges = pd.DataFrame([
-        _edge("lock", "Receptions", 12.0, "Near Lock"),
-        _edge("toss_up", "Receptions", 3.5, "Toss Up"),
-    ])
+def test_rarity_counts_peers_who_matched_or_beat_the_floor():
+    # Twelve receivers: one caught 8 every week, two caught 5, nine caught 1.
+    rows = _peer_pool("receptions", [8, 5, 5] + [1] * 9)
+    board = nfl_prop_streaks.build_streak_board(pd.DataFrame(rows), 2026)
+    receptions = board[board["stat"] == "Receptions"].set_index("player_id")
 
-    board = nfl_prop_streaks.build_streak_board(edges, pd.DataFrame(rows), 2026)
-
-    names = list(board["player_name"])
-    assert "Near Lock" not in names      # too short to be worth taking
-    assert "Toss Up" not in names        # too thin to call a repeat
+    assert receptions.loc["p0", "players_at_or_above"] == 1
+    # 3 of 12 = exactly the 25% cap, so still listed ...
+    assert receptions.loc["p1", "players_at_or_above"] == 3
+    assert receptions.loc["p0", "pool_size"] == 12
+    # ... while "1+ reception, like most receivers" is common - not listed.
+    assert "p3" not in receptions.index
 
 
-def test_streak_board_reports_fair_odds_inside_the_configured_band():
+def test_rarity_cap_excludes_a_floor_most_peers_share():
+    # 3 of 10 at or above 5 is 30%, over the 25% cap.
+    rows = _peer_pool("receptions", [8, 5, 5] + [1] * 7)
+    board = nfl_prop_streaks.build_streak_board(pd.DataFrame(rows), 2026)
+    receptions = board[board["stat"] == "Receptions"].set_index("player_id")
+
+    assert "p0" in receptions.index
+    assert "p1" not in receptions.index
+
+
+def test_rarity_is_measured_only_where_the_stat_is_part_of_the_job():
+    """The correctness case that forced per-stat position pools: on the
+    live board, pooling every position made "4+ rushing yards every week"
+    look rare for a WR, only because receivers seldom carry the ball."""
+    rows = _peer_pool("rushing_yards", [4] + [0] * 9, position="WR", group="WR")
+    board = nfl_prop_streaks.build_streak_board(pd.DataFrame(rows), 2026)
+
+    assert board[board["stat"] == "Rushing Yards"].empty
+
+
+def test_kickers_are_pooled_by_position_not_by_special_teams_group():
+    """The SPEC group holds punters and long snappers, who never attempt a
+    field goal - pooling them in turned "2 of 32 kickers" into "2 of 62"."""
     rows = []
-    for index in range(6):
-        player = f"wr{index}"
-        rows += [
-            _week(player, 2026, 1, receiving_yards=40 + index * 6),
-            _week(player, 2026, 2, receiving_yards=42 + index * 6),
-        ]
-    edges = pd.DataFrame([
-        _edge(f"wr{index}", "Receiving Yards", 55 + index * 8, f"WR {index}")
-        for index in range(6)
-    ])
+    for index in range(10):
+        for week in (1, 2):
+            rows.append(_week(f"k{index}", f"K{index}", week, position="K", position_group="SPEC",
+                              fg_made=3 if index == 0 else 1))
+            rows.append(_week(f"p{index}", f"K{index}", week, position="P", position_group="SPEC", fg_made=0))
+    board = nfl_prop_streaks.build_streak_board(pd.DataFrame(rows), 2026)
+    fgs = board[board["stat"] == "Field Goals Made"].set_index("player_id")
 
-    board = nfl_prop_streaks.build_streak_board(edges, pd.DataFrame(rows), 2026)
-    low, high = config.NFL_STREAK_PROBABILITY_BAND
-
-    assert not board.empty
-    assert board["hit_probability"].between(low, high).all()
-    # Fair odds and probability must agree - the odds column is derived,
-    # not independently computed.
-    for _, row in board.iterrows():
-        assert row["fair_odds"] == nfl_prop_streaks.probability_to_american_odds(row["hit_probability"])
+    assert fgs.loc["k0", "pool_size"] == 10       # kickers only, no punters
+    assert fgs.loc["k0", "pool_group"] == "K"
 
 
-def test_streak_board_excludes_sacks():
-    """Sacks has no fitted outcome spread (no projection to take
-    residuals against), so a probability for it would be backed by
-    nothing."""
-    assert "Sacks" not in nfl_prop_streaks.STREAK_CATEGORY_LINES
+def test_small_pools_are_skipped():
+    """"1 of 3" says nothing."""
+    rows = _peer_pool("receptions", [8, 1, 1])
+    board = nfl_prop_streaks.build_streak_board(pd.DataFrame(rows), 2026)
+    assert board[board["stat"] == "Receptions"].empty
+    assert config.NFL_STREAK_MIN_POOL > 3
 
 
-def test_streak_board_survives_empty_inputs():
-    empty_weekly = pd.DataFrame(columns=["player_id", "season", "week", "season_type", "receptions"])
-    empty_edges = pd.DataFrame(columns=["player_id", "category", "projection"])
-
-    assert nfl_prop_streaks.compute_season_streaks(empty_weekly, 2026).empty
-    assert nfl_prop_streaks.build_streak_board(empty_edges, empty_weekly, 2026).empty
-    # And a season nobody has played yet.
-    rows = pd.DataFrame([_week("wr1", 2025, 1, receptions=5)])
-    assert nfl_prop_streaks.compute_season_streaks(rows, 2026).empty
+def test_a_zero_floor_is_never_shown():
+    rows = _peer_pool("receiving_tds", [0] * 10)
+    board = nfl_prop_streaks.build_streak_board(pd.DataFrame(rows), 2026)
+    assert board[board["stat"] == "Anytime TD (Rush + Rec)"].empty
 
 
-def test_write_streak_board_leaves_a_prior_file_alone_when_nothing_qualifies(tmp_path):
+def test_touchdowns_come_first_in_the_board_order():
+    """The request singled touchdowns out ("touchdowns (especially)")."""
+    rows = []
+    for index in range(10):
+        for week in (1, 2):
+            rows.append(_week(
+                f"p{index}", f"T{index}", week,
+                receptions=9 if index == 0 else 1,
+                receiving_tds=1 if index == 1 else 0,
+            ))
+    board = nfl_prop_streaks.build_streak_board(pd.DataFrame(rows), 2026)
+    assert board.iloc[0]["stat"] == "Anytime TD (Rush + Rec)"
+
+
+def test_next_game_is_attached_and_a_bye_stays_on_the_board():
+    """History stands whether or not the player plays this week."""
+    rows = _peer_pool("receptions", [8] + [1] * 9)
+    schedule = pd.DataFrame([{"home_team": "T1", "away_team": "T2"}])
+    board = nfl_prop_streaks.build_streak_board(pd.DataFrame(rows), 2026, schedule)
+    receptions = board[board["stat"] == "Receptions"].set_index("player_id")
+
+    # T0 is not on this week's schedule - a bye - and is still listed.
+    assert "p0" in receptions.index
+    assert pd.isna(receptions.loc["p0", "game"])
+
+
+def test_the_board_makes_no_prediction():
+    """A history section, per the request - no probability, projection or
+    odds column should survive into the output."""
+    for column in ("hit_probability", "projection", "fair_odds"):
+        assert column not in nfl_prop_streaks.STREAK_COLUMNS
+
+
+def test_empty_inputs_produce_an_empty_board():
+    empty = pd.DataFrame(columns=["player_id", "team", "season", "week", "season_type"])
+    assert nfl_prop_streaks.compute_season_floors(empty, 2026).empty
+    assert nfl_prop_streaks.build_streak_board(empty, 2026).empty
+
+
+def test_write_leaves_a_prior_file_alone_when_nothing_qualifies(tmp_path):
+    import os
+
     path = str(tmp_path / "board" / "nfl_prop_streaks.csv")
-    empty = pd.DataFrame(columns=["player_id", "category", "projection"])
-
-    result = nfl_prop_streaks.write_streak_board_csv(
-        empty, pd.DataFrame(columns=["player_id", "season", "week"]), 2026, path
-    )
+    empty = pd.DataFrame(columns=["player_id", "team", "season", "week", "season_type"])
+    result = nfl_prop_streaks.write_streak_board_csv(empty, 2026, None, path)
 
     assert result.empty
-    import os
     assert not os.path.exists(path)

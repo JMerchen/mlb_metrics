@@ -273,17 +273,14 @@ def run(
             # BEFORE the games are played, resolved on a later real run
             # once real weekly stats exist for that week - the same
             # log -> resolve loop every other pick in this project uses.
-            # Season-long streak board - a SEPARATE, narrower question
-            # from the main board's "biggest projected departure from
-            # baseline": who has cleared the same line every week so far,
-            # and how likely are they to do it again. Written from the
-            # same edges so the projection behind both is identical, and
-            # deliberately NOT fed into select_prop_picks below: these
-            # are a different kind of bet and pooling them into the v4
-            # pick log would make that log unreadable as a model
-            # comparison.
+            # Season-long floors - a HISTORY board, not a prediction one:
+            # the most each player has produced in every game so far,
+            # across many stats, kept where that floor is rare among his
+            # position peers (see nfl_prop_streaks' module docstring).
+            # Deliberately NOT fed into select_prop_picks below - it makes
+            # no prediction, so there is nothing for the pick log to grade.
             nfl_prop_streaks.write_streak_board_csv(
-                props_edges, history["weekly"], season,
+                history["weekly"], season, this_week_games,
                 os.path.join(output_dir, "nfl_prop_streaks.csv"),
             )
 

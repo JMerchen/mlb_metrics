@@ -9,6 +9,10 @@ const {
   PLAYER_PROPS_COLUMNS,
   PLAYER_PROPS_COLUMN_LABELS,
   formatPlayerStreakValue,
+  playerStreakStats,
+  filterPlayerStreaks,
+  PLAYER_STREAK_ALL_STATS,
+  PLAYER_STREAK_ALL_STATS_PER_STAT,
   PLAYER_STREAK_COLUMNS,
   PLAYER_STREAK_COLUMN_LABELS,
 } = require("./player_props.js")
@@ -137,26 +141,66 @@ test("PLAYER_PROPS_COLUMNS: rank and game are displayed", () => {
   assert.ok(PLAYER_PROPS_COLUMNS.includes("game"))
 })
 
-test("formatPlayerStreakValue: hit probability renders as a percentage", () => {
-  assert.equal(formatPlayerStreakValue("hit_probability", 0.749), "75%")
-  assert.equal(formatPlayerStreakValue("hit_probability", 0.55), "55%")
+test("formatPlayerStreakValue: the floor reads as N+", () => {
+  assert.equal(formatPlayerStreakValue("floor", "4.0"), "4+")
+  assert.equal(formatPlayerStreakValue("floor", 47), "47+")
+  // A split sack is a real half.
+  assert.equal(formatPlayerStreakValue("floor", "0.5"), "0.5+")
 })
 
-test("formatPlayerStreakValue: a positive price keeps its plus sign", () => {
-  // Without the +, an underdog price reads as a favourite's.
-  assert.equal(formatPlayerStreakValue("fair_odds", 150), "+150")
-  assert.equal(formatPlayerStreakValue("fair_odds", -300), "-300")
+test("formatPlayerStreakValue: rarity reads as counts, not a fraction", () => {
+  const row = { players_at_or_above: 3, pool_size: 119, pool_group: "WR" }
+  assert.equal(formatPlayerStreakValue("rarity", 0.025, row), "3 of 119 WRs")
 })
 
-test("formatPlayerStreakValue: lines and projections show one decimal", () => {
-  assert.equal(formatPlayerStreakValue("line", 9.5), "9.5")
-  assert.equal(formatPlayerStreakValue("season_low", 12), "12.0")
-  assert.equal(formatPlayerStreakValue("projection", 20.2841), "20.3")
+test("formatPlayerStreakValue: kickers are labelled as kickers", () => {
+  const row = { players_at_or_above: 2, pool_size: 32, pool_group: "K" }
+  assert.equal(formatPlayerStreakValue("rarity", 0.0625, row), "2 of 32 kickers")
 })
 
-test("formatPlayerStreakValue: a non-numeric value passes through", () => {
-  assert.equal(formatPlayerStreakValue("player_name", "Patrick Mahomes"), "Patrick Mahomes")
-  assert.equal(formatPlayerStreakValue("fair_odds", undefined), undefined)
+test("formatPlayerStreakValue: a team on bye shows 'bye', not a blank", () => {
+  assert.equal(formatPlayerStreakValue("game", ""), "bye")
+  assert.equal(formatPlayerStreakValue("game", "DET @ CAR"), "DET @ CAR")
+})
+
+test("formatPlayerStreakValue: the game log passes through untouched", () => {
+  assert.equal(formatPlayerStreakValue("game_log", "5, 6, 4"), "5, 6, 4")
+})
+
+const STREAK_ROWS = [
+  { stat: "Anytime TD (Rush + Rec)", game: "LAC @ SEA", player_name: "A" },
+  { stat: "Anytime TD (Rush + Rec)", game: "DET @ CAR", player_name: "B" },
+  { stat: "Receptions", game: "DET @ CAR", player_name: "C" },
+  { stat: "Receptions", game: "ATL @ NO", player_name: "D" },
+  { stat: "Receptions", game: "ATL @ NO", player_name: "E" },
+  { stat: "Receptions", game: "KC @ LV", player_name: "F" },
+  { stat: "Receptions", game: "KC @ LV", player_name: "G" },
+]
+
+test("playerStreakStats: distinct stats in board order", () => {
+  assert.deepEqual(playerStreakStats(STREAK_ROWS), ["Anytime TD (Rush + Rec)", "Receptions"])
+})
+
+test("filterPlayerStreaks: 'All stats' caps each stat so no one stat buries the rest", () => {
+  const shown = filterPlayerStreaks(STREAK_ROWS, PLAYER_STREAK_ALL_STATS, PLAYER_PROPS_ALL_GAMES)
+  const receptions = shown.filter(r => r.stat === "Receptions")
+  assert.equal(receptions.length, PLAYER_STREAK_ALL_STATS_PER_STAT)
+  assert.equal(shown.filter(r => r.stat === "Anytime TD (Rush + Rec)").length, 2)
+})
+
+test("filterPlayerStreaks: picking a stat shows every row for it", () => {
+  const shown = filterPlayerStreaks(STREAK_ROWS, "Receptions", PLAYER_PROPS_ALL_GAMES)
+  assert.equal(shown.length, 5)
+})
+
+test("filterPlayerStreaks: stat and game filters combine", () => {
+  const shown = filterPlayerStreaks(STREAK_ROWS, "Receptions", "ATL @ NO")
+  assert.deepEqual(shown.map(r => r.player_name), ["D", "E"])
+})
+
+test("filterPlayerStreaks: a game filter alone spans every stat", () => {
+  const shown = filterPlayerStreaks(STREAK_ROWS, PLAYER_STREAK_ALL_STATS, "DET @ CAR")
+  assert.deepEqual(shown.map(r => r.player_name), ["B", "C"])
 })
 
 test("PLAYER_STREAK_COLUMNS: every column has a label", () => {
@@ -165,10 +209,9 @@ test("PLAYER_STREAK_COLUMNS: every column has a label", () => {
   })
 })
 
-test("PLAYER_STREAK_COLUMNS: the honest columns are all shown", () => {
-  // Season low and weeks are what let a reader judge the streak for
-  // themselves; fair odds is what keeps the payout visible.
-  ;["season_low", "games_played", "hit_probability", "fair_odds"].forEach(c => {
-    assert.ok(PLAYER_STREAK_COLUMNS.includes(c))
+test("PLAYER_STREAK_COLUMNS: a history board, so no prediction columns", () => {
+  ;["hit_probability", "fair_odds", "projection"].forEach(c => {
+    assert.ok(!PLAYER_STREAK_COLUMNS.includes(c), `"${c}" is a prediction column`)
   })
+  assert.ok(PLAYER_STREAK_COLUMNS.includes("game_log"))
 })
