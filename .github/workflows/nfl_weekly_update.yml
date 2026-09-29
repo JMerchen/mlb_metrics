@@ -74,7 +74,7 @@ jobs:
           # missing from this list. nfl_player_props_results.csv and
           # nfl_prop_predictions.csv are the same class of file - add new
           # outputs here at the same time they're wired into the pipeline.
-          git add docs/data/nfl_game_picks_picks.csv docs/data/nfl_game_picks_summary.csv docs/data/nfl_game_picks_summary_by_version.csv docs/data/nfl_player_props.csv data/raw/nfl/ data/predictions/nfl_game_predictions.csv
+          git add docs/data/nfl_game_picks_picks.csv docs/data/nfl_game_picks_summary.csv docs/data/nfl_game_picks_summary_by_version.csv docs/data/nfl_player_props.csv docs/data/nfl_prop_streaks.csv data/raw/nfl/ data/predictions/nfl_game_predictions.csv
           # These two are only written once there's real data for them
           # (a real first prop-logging run, and a real first resolved
           # pick) - `git add` on a path that doesn't exist yet fails the

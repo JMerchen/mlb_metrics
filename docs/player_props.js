@@ -133,6 +133,63 @@ select.onchange = render
 render()
 }
 
+
+
+// Season-long streak board (nfl_prop_streaks.py) - a different question
+// from the main board, so its own columns and its own table. The streak
+// is the SCREEN (this player has literally never missed this line);
+// `hit_probability` is the ranking, because with only a couple of weeks
+// played a perfect streak is mostly the binomial being itself - a player
+// whose true weekly rate is 70% runs a perfect 2-game streak 49% of the
+// time. See that module's own docstring for the measured numbers.
+const PLAYER_STREAK_COLUMN_LABELS = {
+game: "Game", player_name: "Player", category: "Category", line: "Line",
+season_low: "Season Low", games_played: "Weeks", projection: "Projected",
+hit_probability: "Hit Chance", fair_odds: "Fair Odds",
+}
+const PLAYER_STREAK_COLUMNS = [
+"game", "player_name", "category", "line", "season_low", "games_played",
+"projection", "hit_probability", "fair_odds",
+]
+
+function formatPlayerStreakValue(column, value){
+if(column === "hit_probability"){
+const n = Number(value)
+return isNaN(n) ? value : `${(n * 100).toFixed(0)}%`
+}
+if(column === "fair_odds"){
+const n = Number(value)
+if(isNaN(n)){ return value }
+// American odds carry their own sign, and a positive price has to
+// show the + or it reads as a negative one.
+return n > 0 ? `+${n}` : `${n}`
+}
+if(["line", "season_low", "projection"].includes(column)){
+const n = Number(value)
+return isNaN(n) ? value : n.toFixed(1)
+}
+return value
+}
+
+function buildPlayerStreakTable(data, id){
+const el = document.getElementById(id)
+if(!el){ return }
+if(!data.length){
+el.innerHTML = "No prop streaks qualified yet - this board needs at least one completed week."
+return
+}
+let html = "<table><tr>"
+PLAYER_STREAK_COLUMNS.forEach(c=>{ html += `<th>${PLAYER_STREAK_COLUMN_LABELS[c] || c}</th>` })
+html += "</tr>"
+data.forEach(row=>{
+html += "<tr>"
+PLAYER_STREAK_COLUMNS.forEach(c=>{ html += `<td>${formatPlayerStreakValue(c, row[c])}</td>` })
+html += "</tr>"
+})
+html += "</table>"
+el.innerHTML = html
+}
+
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 formatPlayerPropsValue,
@@ -141,5 +198,8 @@ filterPlayerProps,
 PLAYER_PROPS_ALL_GAMES,
 PLAYER_PROPS_COLUMNS,
 PLAYER_PROPS_COLUMN_LABELS,
+formatPlayerStreakValue,
+PLAYER_STREAK_COLUMNS,
+PLAYER_STREAK_COLUMN_LABELS,
 }
 }

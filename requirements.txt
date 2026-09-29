@@ -7,7 +7,22 @@ scikit-learn
 statsmodels
 scipy
 joblib
-pulp
+# Pinned below 4.0 deliberately (2026-09-29). PuLP 4.0 requires Python
+# >=3.12, so CI (3.12) resolved it while local environments on 3.11 cap
+# at 3.3.2 - and 4.0 removes APIs this project uses. That divergence
+# broke CI outright with 48 failures, all "LpVariable.__init__() got an
+# unexpected keyword argument 'cat'", on a run that touched none of the
+# DFS code.
+#
+# dfs_optimizer.py has already been migrated to `problem.add_variable`,
+# the replacement PuLP's own deprecation message names, which works on
+# both 3.x and 4.x. What is NOT yet migrated is the solver: 4.0 also
+# removes PULP_CBC_CMD in favour of COIN_CMD with CBC installed
+# separately (`pip install pulp[cbc]`), and that cannot be verified from
+# a Python 3.11 environment where PuLP 4 will not install. Pinning to
+# the version family that can actually be tested is the honest choice
+# until then; lift it together with the solver migration.
+pulp<4
 nflreadpy
 requests
 lxml

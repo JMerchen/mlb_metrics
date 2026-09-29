@@ -8,6 +8,9 @@ const {
   PLAYER_PROPS_ALL_GAMES,
   PLAYER_PROPS_COLUMNS,
   PLAYER_PROPS_COLUMN_LABELS,
+  formatPlayerStreakValue,
+  PLAYER_STREAK_COLUMNS,
+  PLAYER_STREAK_COLUMN_LABELS,
 } = require("./player_props.js")
 
 test("formatPlayerPropsValue: rounds real per-game rates to one decimal", () => {
@@ -132,4 +135,40 @@ test("filterPlayerProps: a game with no rows returns empty, not everything", () 
 test("PLAYER_PROPS_COLUMNS: rank and game are displayed", () => {
   assert.ok(PLAYER_PROPS_COLUMNS.includes("rank"))
   assert.ok(PLAYER_PROPS_COLUMNS.includes("game"))
+})
+
+test("formatPlayerStreakValue: hit probability renders as a percentage", () => {
+  assert.equal(formatPlayerStreakValue("hit_probability", 0.749), "75%")
+  assert.equal(formatPlayerStreakValue("hit_probability", 0.55), "55%")
+})
+
+test("formatPlayerStreakValue: a positive price keeps its plus sign", () => {
+  // Without the +, an underdog price reads as a favourite's.
+  assert.equal(formatPlayerStreakValue("fair_odds", 150), "+150")
+  assert.equal(formatPlayerStreakValue("fair_odds", -300), "-300")
+})
+
+test("formatPlayerStreakValue: lines and projections show one decimal", () => {
+  assert.equal(formatPlayerStreakValue("line", 9.5), "9.5")
+  assert.equal(formatPlayerStreakValue("season_low", 12), "12.0")
+  assert.equal(formatPlayerStreakValue("projection", 20.2841), "20.3")
+})
+
+test("formatPlayerStreakValue: a non-numeric value passes through", () => {
+  assert.equal(formatPlayerStreakValue("player_name", "Patrick Mahomes"), "Patrick Mahomes")
+  assert.equal(formatPlayerStreakValue("fair_odds", undefined), undefined)
+})
+
+test("PLAYER_STREAK_COLUMNS: every column has a label", () => {
+  PLAYER_STREAK_COLUMNS.forEach(c => {
+    assert.ok(PLAYER_STREAK_COLUMN_LABELS[c], `missing a label for "${c}"`)
+  })
+})
+
+test("PLAYER_STREAK_COLUMNS: the honest columns are all shown", () => {
+  // Season low and weeks are what let a reader judge the streak for
+  // themselves; fair odds is what keeps the payout visible.
+  ;["season_low", "games_played", "hit_probability", "fair_odds"].forEach(c => {
+    assert.ok(PLAYER_STREAK_COLUMNS.includes(c))
+  })
 })

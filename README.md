@@ -5296,6 +5296,62 @@ sourced from real, confirmed nflreadpy weekly-stats columns (`def_sacks`
 for an individual defender's own real sacks, `sacks_suffered` for a
 team's own real sacks-allowed-while-on-offense).
 
+## NFL Season-Long Streaks (`nfl_prop_streaks.py`)
+
+User request (2026-09-29): a section for "bets that have hit every week
+of that season to that point... if a tight end has had 3+ receptions
+every week", showing "the ten that have the best odds of happening",
+excluding prices like -1100 where "winning means very little and losing
+means losing money."
+
+**The streak is the screen, not the signal**, and that is the whole
+design. A perfect season-to-date streak sounds like strong evidence and
+mostly is not. Measured on the live 2026 board with two weeks played:
+269 skill players have a full game log and **59 of them cleared 3+
+receptions every week** - but a player whose true weekly rate is 70% runs
+a perfect two-game streak 49% of the time, and one at 60% does it 36% of
+the time. Most of that list is the binomial being itself.
+
+So the streak decides who is ELIGIBLE and `hit_probability` decides the
+ORDER. That probability comes from the same projection the main board
+uses, pushed through `prop_market.probability_over`, so it reflects a
+player's whole history and this week's matchup rather than two lucky
+games. Ranking on streak length instead would be a ranking of luck.
+
+**The line** is the highest standard prop number a player cleared in
+every game - his season *floor*, rounded down to a real line (5-yard
+steps for yardage, whole numbers for receptions). A receiver whose worst
+week was 12 yards carries 9.5, not his average. That is what makes
+"never missed" literal, and it self-regulates the odds: a line at a
+player's floor lands in a bettable range rather than the 99% a line at
+his average would imply.
+
+**The juice cap** (`NFL_STREAK_PROBABILITY_BAND`, 0.55-0.75, about -122
+to -300) is the user's own constraint made explicit. It does real work:
+capping at 0.85 instead on the live week-3 slate still produced a top ten
+priced around **-550**, where five wins are needed to cover one loss. At
+0.75 the same board comes back between -277 and -299.
+
+| | |
+| --- | --- |
+| Patrick Mahomes | Passing Yards 179.5, season low 184, 75%, -297 |
+| Omarion Hampton | Rushing Yards 39.5, season low 43, 74%, -291 |
+
+**What this is not.** There are still no sportsbook lines in this
+project. `fair_odds` is **this model's own implied price**, not one
+anyone is offering, and nothing here can say whether a book disagrees.
+The request asked for "the ones where vegas might not agree"; that half
+is not deliverable until a feed exists, and inventing a comparison
+number would be worse than saying so.
+
+**Sacks are excluded** - no fitted outcome spread in
+`PROP_OUTCOME_SIGMA_K` (it has no projection to take residuals against),
+so any probability for it would be backed by nothing.
+
+**A player who missed a week is excluded entirely**, however well he has
+played since. That is the literal reading of "every week", but it does
+thin the board after an injury week.
+
 ## Cross-Book Prop Market (`prop_market.py`)
 
 User question (2026-09-17): "not just when we disagree with the books but
