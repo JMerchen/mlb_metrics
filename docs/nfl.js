@@ -682,10 +682,10 @@ buildPlayerPropsSection([], "nflPlayerPropsGame", "nflPlayerPropsTable")
 }
 try{
 const streaks = await loadCSV("./data/nfl_prop_streaks.csv")
-buildPlayerStreakTable(streaks, "nflPlayerStreaksTable")
+buildPlayerStreakSection(streaks, "nflPlayerStreaksStat", "nflPlayerStreaksGame", "nflPlayerStreaksTable")
 }catch(e){
 console.log("no nfl_prop_streaks.csv yet", e)
-buildPlayerStreakTable([], "nflPlayerStreaksTable")
+buildPlayerStreakSection([], "nflPlayerStreaksStat", "nflPlayerStreaksGame", "nflPlayerStreaksTable")
 }
 }
 

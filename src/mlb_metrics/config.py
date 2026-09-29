@@ -2120,29 +2120,27 @@ NFL_PROP_MAX_PER_TEAM_CATEGORY = 1
 # 10 is unioned in unchanged, so the default view is unaffected.
 NFL_PROP_PER_GAME_ROWS = 5
 
-# --- NFL props: season-long streak board (nfl_prop_streaks.py) ---
+# --- NFL props: season-long floors (nfl_prop_streaks.py) ---
 #
-# How many streak rows the board shows.
-NFL_STREAK_TOP_N = 10
+# A HISTORY board, not a prediction one (2026-09-29 user clarification:
+# "This is just a history section, not necessarily a prediction
+# section"). Its earlier version ranked by a model probability and
+# filtered to a fair-odds band; both are gone, and nothing below is a
+# modelling parameter - they only decide what is worth displaying.
+#
+# A floor is shown when at most this share of the player's position
+# peers matched or beat it. Almost every regular has SOME positive floor
+# (165 skill players had 1+ reception every week after three weeks), so
+# without a cut the list is unreadable; 25% keeps "only 3 of 119 WRs
+# scored every week" and drops "1+ reception, like most receivers".
+NFL_STREAK_MAX_RARITY = 0.25
 
-# The fair-odds band a streak bet must fall inside, as model probability.
-# 0.55 is about -122, 0.75 is exactly -300.
-#
-# This is the user's own stated constraint made explicit (2026-09-29:
-# "something with odds of -1100 probably shouldn't show, because winning
-# means very little and losing means losing money") and it is a judgment
-# call rather than a measured optimum - there is no book price to
-# optimise against.
-#
-# The ceiling does real work. Streak-eligible players are measured at
-# their season FLOOR, so their probabilities skew high: capping at 0.85
-# instead of 0.75 on the live week-3 slate still produced a top ten
-# priced around -550, where five wins are needed to cover a single loss.
-# At 0.75 the same board comes back between -277 and -299, which is the
-# arithmetic the request was actually asking for. The floor exists so
-# the list means "likely to repeat" rather than "a coin flip with a
-# streak attached".
-NFL_STREAK_PROBABILITY_BAND = (0.55, 0.75)
+# Peer pools smaller than this are skipped - "1 of 3" says nothing.
+NFL_STREAK_MIN_POOL = 8
+
+# Rows kept per stat, so one stat with a deep pool (tackles, among 170+
+# defensive backs) cannot swamp the board.
+NFL_STREAK_PER_STAT_ROWS = 25
 
 # --- NFL props: game script (nfl_prop_projections.py) ---
 #

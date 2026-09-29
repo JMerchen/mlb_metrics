@@ -270,20 +270,23 @@ for the full methodology and real backtest validation) - these are real
 Loading...
 </div>
 
-<h3 style="margin-top:28px">Season-Long Streaks</h3>
+<h3 style="margin-top:28px">Season-Long Floors</h3>
 <p>
-Players who have cleared the same line in <em>every</em> game of the
-season so far, ranked by how likely this model thinks they are to do it
-again. The streak is the screen, not the signal - with only a couple of
-weeks played a perfect streak is mostly chance (a player whose true
-weekly rate is 70% runs a perfect 2-game streak 49% of the time), so the
-ordering comes from the same projection the board above uses. Each
-player is measured at his season <em>floor</em> rounded down to a real
-line, which is what makes "never missed" literal. Prices outside roughly
--122 to -300 are filtered out, because a heavy favourite pays too little
-to be worth the risk of a loss. <strong>Fair Odds is this model's own
-implied price, not a sportsbook's</strong> - there are no book lines in
-this project, so nothing here can tell you whether Vegas disagrees.
+A history section, not a prediction: the most each player has produced
+in <em>every</em> game so far this season. If a receiver's catches go 5,
+6, 4, he shows "4+" - and the moment he posts a 3, it drops to "3+". The
+game log shows every game so you can see the pattern for yourself. Only
+floors that are rare among a player's position peers are listed ("How
+Rare" counts how many peers have matched it), and each stat is compared
+only among the positions that actually do that job. A bye week isn't a
+missed week; a game the player sat out is.
+</p>
+
+<p style="margin:0 0 8px 0">
+<label for="nflPlayerStreaksStat" style="font-size:0.9em">Stat:</label>
+<select id="nflPlayerStreaksStat" style="margin-left:6px"></select>
+<label for="nflPlayerStreaksGame" style="font-size:0.9em;margin-left:14px">Game:</label>
+<select id="nflPlayerStreaksGame" style="margin-left:6px"></select>
 </p>
 
 <div class="scrollbox" id="nflPlayerStreaksTable">
