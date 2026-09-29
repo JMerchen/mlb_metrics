@@ -2120,6 +2120,30 @@ NFL_PROP_MAX_PER_TEAM_CATEGORY = 1
 # 10 is unioned in unchanged, so the default view is unaffected.
 NFL_PROP_PER_GAME_ROWS = 5
 
+# --- NFL props: season-long streak board (nfl_prop_streaks.py) ---
+#
+# How many streak rows the board shows.
+NFL_STREAK_TOP_N = 10
+
+# The fair-odds band a streak bet must fall inside, as model probability.
+# 0.55 is about -122, 0.75 is exactly -300.
+#
+# This is the user's own stated constraint made explicit (2026-09-29:
+# "something with odds of -1100 probably shouldn't show, because winning
+# means very little and losing means losing money") and it is a judgment
+# call rather than a measured optimum - there is no book price to
+# optimise against.
+#
+# The ceiling does real work. Streak-eligible players are measured at
+# their season FLOOR, so their probabilities skew high: capping at 0.85
+# instead of 0.75 on the live week-3 slate still produced a top ten
+# priced around -550, where five wins are needed to cover a single loss.
+# At 0.75 the same board comes back between -277 and -299, which is the
+# arithmetic the request was actually asking for. The floor exists so
+# the list means "likely to repeat" rather than "a coin flip with a
+# streak attached".
+NFL_STREAK_PROBABILITY_BAND = (0.55, 0.75)
+
 # --- NFL props: game script (nfl_prop_projections.py) ---
 #
 # How a game's betting market moves a team's expected VOLUME away from

@@ -43,7 +43,7 @@ import pandas as pd
 
 from mlb_metrics import (
     config, market_odds, nfl_data, nfl_game_evaluation, nfl_game_picks, nfl_game_predictions,
-    nfl_player_props, nfl_prop_predictions, nfl_team_strength,
+    nfl_player_props, nfl_prop_predictions, nfl_prop_streaks, nfl_team_strength,
 )
 
 NFL_GAME_PREDICTIONS_LOG_PATH = "data/predictions/nfl_game_predictions.csv"
@@ -273,6 +273,20 @@ def run(
             # BEFORE the games are played, resolved on a later real run
             # once real weekly stats exist for that week - the same
             # log -> resolve loop every other pick in this project uses.
+            # Season-long streak board - a SEPARATE, narrower question
+            # from the main board's "biggest projected departure from
+            # baseline": who has cleared the same line every week so far,
+            # and how likely are they to do it again. Written from the
+            # same edges so the projection behind both is identical, and
+            # deliberately NOT fed into select_prop_picks below: these
+            # are a different kind of bet and pooling them into the v4
+            # pick log would make that log unreadable as a model
+            # comparison.
+            nfl_prop_streaks.write_streak_board_csv(
+                props_edges, history["weekly"], season,
+                os.path.join(output_dir, "nfl_prop_streaks.csv"),
+            )
+
             prop_picks = nfl_prop_predictions.select_prop_picks(top_props, season, week)
             nfl_prop_predictions.append_prop_predictions(prop_picks, prop_predictions_log_path)
 
