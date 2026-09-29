@@ -270,26 +270,30 @@ for the full methodology and real backtest validation) - these are real
 Loading...
 </div>
 
-<h3 style="margin-top:28px">Season-Long Floors</h3>
+<h3 style="margin-top:28px">Season Floors by Position</h3>
 <p>
-A history section, not a prediction: the most each player has produced
-in <em>every</em> game so far this season. If a receiver's catches go 5,
-6, 4, he shows "4+" - and the moment he posts a 3, it drops to "3+". The
-game log shows every game so you can see the pattern for yourself. Only
-floors that are rare among a player's position peers are listed ("How
-Rare" counts how many peers have matched it), and each stat is compared
-only among the positions that actually do that job. A bye week isn't a
-missed week; a game the player sat out is.
+A history section, not a prediction: the 32 players at each position with
+the most snaps this season, and for every stat the <em>lowest</em> number
+they've posted in a game so far - zero included. If a receiver's catches
+go 5, 6, 4, his floor is 4; the moment he posts a 3, it drops to 3. The
+small line under each floor is the game log, in week order.
+</p>
+<p>
+A game the player left injured doesn't count toward his floor: that's a
+game where his snaps fell below half his usual share <em>and</em> he was
+inactive or on injured reserve for his team's next game. Those games stay
+in the log in [brackets]. A blowout or a benching still counts. His most
+recent game can't be confirmed yet, so an early exit there is counted and
+marked with a "?" until next week's run. Click a stat heading to sort by it.
 </p>
 
+<div id="nflPositionFloorTabs" style="margin:0 0 8px 0"></div>
 <p style="margin:0 0 8px 0">
-<label for="nflPlayerStreaksStat" style="font-size:0.9em">Stat:</label>
-<select id="nflPlayerStreaksStat" style="margin-left:6px"></select>
-<label for="nflPlayerStreaksGame" style="font-size:0.9em;margin-left:14px">Game:</label>
-<select id="nflPlayerStreaksGame" style="margin-left:6px"></select>
+<label for="nflPositionFloorGame" style="font-size:0.9em">Game:</label>
+<select id="nflPositionFloorGame" style="margin-left:6px"></select>
 </p>
 
-<div class="scrollbox" id="nflPlayerStreaksTable">
+<div class="scrollbox" id="nflPositionFloorTable">
 Loading...
 </div>
 

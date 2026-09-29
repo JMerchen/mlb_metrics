@@ -8,13 +8,13 @@ const {
   PLAYER_PROPS_ALL_GAMES,
   PLAYER_PROPS_COLUMNS,
   PLAYER_PROPS_COLUMN_LABELS,
-  formatPlayerStreakValue,
-  playerStreakStats,
-  filterPlayerStreaks,
-  PLAYER_STREAK_ALL_STATS,
-  PLAYER_STREAK_ALL_STATS_PER_STAT,
-  PLAYER_STREAK_COLUMNS,
-  PLAYER_STREAK_COLUMN_LABELS,
+  formatPositionFloor,
+  positionFloorNote,
+  filterPositionFloors,
+  sortPositionFloors,
+  positionFloorGames,
+  POSITION_FLOOR_TABS,
+  POSITION_FLOOR_STATS,
 } = require("./player_props.js")
 
 test("formatPlayerPropsValue: rounds real per-game rates to one decimal", () => {
@@ -141,77 +141,58 @@ test("PLAYER_PROPS_COLUMNS: rank and game are displayed", () => {
   assert.ok(PLAYER_PROPS_COLUMNS.includes("game"))
 })
 
-test("formatPlayerStreakValue: the floor reads as N+", () => {
-  assert.equal(formatPlayerStreakValue("floor", "4.0"), "4+")
-  assert.equal(formatPlayerStreakValue("floor", 47), "47+")
+test("formatPositionFloor: a zero floor is shown as 0, not hidden", () => {
+  assert.equal(formatPositionFloor("0.0"), "0")
+  assert.equal(formatPositionFloor(0), "0")
+  assert.equal(formatPositionFloor("47.0"), "47")
   // A split sack is a real half.
-  assert.equal(formatPlayerStreakValue("floor", "0.5"), "0.5+")
+  assert.equal(formatPositionFloor("0.5"), "0.5")
 })
 
-test("formatPlayerStreakValue: rarity reads as counts, not a fraction", () => {
-  const row = { players_at_or_above: 3, pool_size: 119, pool_group: "WR" }
-  assert.equal(formatPlayerStreakValue("rarity", 0.025, row), "3 of 119 WRs")
+test("formatPositionFloor: no counted games prints a dash", () => {
+  assert.equal(formatPositionFloor(""), "-")
+  assert.equal(formatPositionFloor(undefined), "-")
+  assert.equal(formatPositionFloor(NaN), "-")
 })
 
-test("formatPlayerStreakValue: kickers are labelled as kickers", () => {
-  const row = { players_at_or_above: 2, pool_size: 32, pool_group: "K" }
-  assert.equal(formatPlayerStreakValue("rarity", 0.0625, row), "2 of 32 kickers")
+test("positionFloorNote: explains excluded and flagged games", () => {
+  assert.equal(positionFloorNote({ excluded_weeks: "", flagged_week: "" }), "")
+  assert.match(positionFloorNote({ excluded_weeks: "2", flagged_week: "" }), /Injured wk 2 - not counted/)
+  assert.match(positionFloorNote({ excluded_weeks: "", flagged_week: "3" }), /Left wk 3 early/)
 })
 
-test("formatPlayerStreakValue: a team on bye shows 'bye', not a blank", () => {
-  assert.equal(formatPlayerStreakValue("game", ""), "bye")
-  assert.equal(formatPlayerStreakValue("game", "DET @ CAR"), "DET @ CAR")
-})
-
-test("formatPlayerStreakValue: the game log passes through untouched", () => {
-  assert.equal(formatPlayerStreakValue("game_log", "5, 6, 4"), "5, 6, 4")
-})
-
-const STREAK_ROWS = [
-  { stat: "Anytime TD (Rush + Rec)", game: "LAC @ SEA", player_name: "A" },
-  { stat: "Anytime TD (Rush + Rec)", game: "DET @ CAR", player_name: "B" },
-  { stat: "Receptions", game: "DET @ CAR", player_name: "C" },
-  { stat: "Receptions", game: "ATL @ NO", player_name: "D" },
-  { stat: "Receptions", game: "ATL @ NO", player_name: "E" },
-  { stat: "Receptions", game: "KC @ LV", player_name: "F" },
-  { stat: "Receptions", game: "KC @ LV", player_name: "G" },
+const FLOOR_ROWS = [
+  { tab: "WR", rank: "1", player_name: "A", game: "DET @ CAR", receptions: "3.0" },
+  { tab: "WR", rank: "2", player_name: "B", game: "ATL @ NO", receptions: "5.0" },
+  { tab: "WR", rank: "3", player_name: "C", game: "", receptions: "" },
+  { tab: "WR", rank: "4", player_name: "D", game: "DET @ CAR", receptions: "0.0" },
+  { tab: "TE", rank: "1", player_name: "E", game: "DET @ CAR", receptions: "4.0" },
 ]
 
-test("playerStreakStats: distinct stats in board order", () => {
-  assert.deepEqual(playerStreakStats(STREAK_ROWS), ["Anytime TD (Rush + Rec)", "Receptions"])
+test("filterPositionFloors: one tab at a time, optionally one game", () => {
+  assert.deepEqual(filterPositionFloors(FLOOR_ROWS, "WR", PLAYER_PROPS_ALL_GAMES).map(r => r.player_name), ["A", "B", "C", "D"])
+  assert.deepEqual(filterPositionFloors(FLOOR_ROWS, "WR", "DET @ CAR").map(r => r.player_name), ["A", "D"])
+  assert.deepEqual(filterPositionFloors(FLOOR_ROWS, "TE").map(r => r.player_name), ["E"])
 })
 
-test("filterPlayerStreaks: 'All stats' caps each stat so no one stat buries the rest", () => {
-  const shown = filterPlayerStreaks(STREAK_ROWS, PLAYER_STREAK_ALL_STATS, PLAYER_PROPS_ALL_GAMES)
-  const receptions = shown.filter(r => r.stat === "Receptions")
-  assert.equal(receptions.length, PLAYER_STREAK_ALL_STATS_PER_STAT)
-  assert.equal(shown.filter(r => r.stat === "Anytime TD (Rush + Rec)").length, 2)
+test("sortPositionFloors: highest floor first, zero above blank, snap order by default", () => {
+  const wr = filterPositionFloors(FLOOR_ROWS, "WR")
+  assert.deepEqual(sortPositionFloors(wr, "receptions").map(r => r.player_name), ["B", "A", "D", "C"])
+  assert.deepEqual(sortPositionFloors(wr.slice().reverse(), null).map(r => r.player_name), ["A", "B", "C", "D"])
 })
 
-test("filterPlayerStreaks: picking a stat shows every row for it", () => {
-  const shown = filterPlayerStreaks(STREAK_ROWS, "Receptions", PLAYER_PROPS_ALL_GAMES)
-  assert.equal(shown.length, 5)
+test("positionFloorGames: distinct games, sorted, byes left out", () => {
+  assert.deepEqual(positionFloorGames(FLOOR_ROWS), ["ATL @ NO", "DET @ CAR"])
 })
 
-test("filterPlayerStreaks: stat and game filters combine", () => {
-  const shown = filterPlayerStreaks(STREAK_ROWS, "Receptions", "ATL @ NO")
-  assert.deepEqual(shown.map(r => r.player_name), ["D", "E"])
-})
-
-test("filterPlayerStreaks: a game filter alone spans every stat", () => {
-  const shown = filterPlayerStreaks(STREAK_ROWS, PLAYER_STREAK_ALL_STATS, "DET @ CAR")
-  assert.deepEqual(shown.map(r => r.player_name), ["B", "C"])
-})
-
-test("PLAYER_STREAK_COLUMNS: every column has a label", () => {
-  PLAYER_STREAK_COLUMNS.forEach(c => {
-    assert.ok(PLAYER_STREAK_COLUMN_LABELS[c], `missing a label for "${c}"`)
+test("POSITION_FLOOR_STATS: the requested tabs and stats", () => {
+  assert.deepEqual(POSITION_FLOOR_TABS, ["QB", "RB", "WR", "TE", "DL", "DB"])
+  const keys = tab => POSITION_FLOOR_STATS[tab].map(([k]) => k)
+  assert.deepEqual(keys("QB"), ["completions", "passing_tds", "passing_yards", "interceptions_thrown", "anytime_td", "rushing_yards"])
+  ;["RB", "WR", "TE"].forEach(tab => {
+    assert.deepEqual(keys(tab), ["receptions", "receiving_yards", "rushing_yards", "anytime_td"])
   })
-})
-
-test("PLAYER_STREAK_COLUMNS: a history board, so no prediction columns", () => {
-  ;["hit_probability", "fair_odds", "projection"].forEach(c => {
-    assert.ok(!PLAYER_STREAK_COLUMNS.includes(c), `"${c}" is a prediction column`)
+  ;["DL", "DB"].forEach(tab => {
+    assert.deepEqual(keys(tab), ["tackles", "sacks", "def_interceptions"])
   })
-  assert.ok(PLAYER_STREAK_COLUMNS.includes("game_log"))
 })

@@ -43,7 +43,7 @@ import pandas as pd
 
 from mlb_metrics import (
     config, market_odds, nfl_data, nfl_game_evaluation, nfl_game_picks, nfl_game_predictions,
-    nfl_player_props, nfl_prop_predictions, nfl_prop_streaks, nfl_team_strength,
+    nfl_player_props, nfl_position_floors, nfl_prop_predictions, nfl_team_strength,
 )
 
 NFL_GAME_PREDICTIONS_LOG_PATH = "data/predictions/nfl_game_predictions.csv"
@@ -273,15 +273,17 @@ def run(
             # BEFORE the games are played, resolved on a later real run
             # once real weekly stats exist for that week - the same
             # log -> resolve loop every other pick in this project uses.
-            # Season-long floors - a HISTORY board, not a prediction one:
-            # the most each player has produced in every game so far,
-            # across many stats, kept where that floor is rare among his
-            # position peers (see nfl_prop_streaks' module docstring).
-            # Deliberately NOT fed into select_prop_picks below - it makes
-            # no prediction, so there is nothing for the pick log to grade.
-            nfl_prop_streaks.write_streak_board_csv(
+            # Season floors by position - a HISTORY board, not a
+            # prediction one: the top 32 by snaps at each position tab,
+            # with the lowest number each has posted in every game,
+            # injury exits left out (see nfl_position_floors' module
+            # docstring). Deliberately NOT fed into select_prop_picks
+            # below - it makes no prediction, so there is nothing for the
+            # pick log to grade.
+            nfl_position_floors.write_position_floors_csv(
+                history.get("snap_counts", pd.DataFrame()), history["rosters_weekly"],
                 history["weekly"], season, this_week_games,
-                os.path.join(output_dir, "nfl_prop_streaks.csv"),
+                os.path.join(output_dir, "nfl_position_floors.csv"),
             )
 
             prop_picks = nfl_prop_predictions.select_prop_picks(top_props, season, week)
