@@ -48,6 +48,8 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 
+from mlb_metrics import data
+
 LN2 = np.log(2.0)
 
 # Statcast and the live schedule spell two teams differently; features are
@@ -68,11 +70,7 @@ DEFAULT_PARAMS = {
     "pen_k": 150.0,
 }
 
-STATCAST_COLUMNS = [
-    "game_pk", "game_date", "game_type", "home_team", "away_team", "inning_topbot",
-    "at_bat_number", "pitch_number", "pitcher", "post_home_score", "post_away_score",
-    "events", "woba_value", "woba_denom", "estimated_woba_using_speedangle",
-]
+STATCAST_COLUMNS = data.GAME_MODEL_STATCAST_COLUMNS
 
 _ORIGIN = pd.Timestamp("2015-01-01")
 

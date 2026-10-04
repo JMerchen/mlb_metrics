@@ -215,6 +215,66 @@ def load_persisted_statcast(raw_dir: str, season: int, columns: list | None = No
     return combined
 
 
+# The columns mlb_game_model reads. Older seasons, needed only as history
+# for that model, are persisted in this compact form - one file per season
+# under data/raw/game_model/ - rather than as full ~120-column monthly
+# files, which would add roughly 120 MB per season to a repository whose
+# git history is already over 2 GB.
+GAME_MODEL_STATCAST_COLUMNS = [
+    "game_pk", "game_date", "game_type", "home_team", "away_team", "inning_topbot",
+    "at_bat_number", "pitch_number", "pitcher", "batter", "stand", "p_throws",
+    "post_home_score", "post_away_score", "events", "woba_value", "woba_denom",
+    "estimated_woba_using_speedangle",
+]
+
+
+def compact_statcast_path(raw_dir: str, season: int) -> str:
+    return os.path.join(raw_dir, "game_model", f"statcast_{season}.parquet")
+
+
+def load_compact_statcast(raw_dir: str, season: int) -> pd.DataFrame | None:
+    path = compact_statcast_path(raw_dir, season)
+    if not os.path.exists(path):
+        return None
+    df = pd.read_parquet(path)
+    df["game_date"] = pd.to_datetime(df["game_date"])
+    return df
+
+
+def persist_compact_statcast(df: pd.DataFrame, raw_dir: str, season: int) -> pd.DataFrame:
+    """Merges `df`, trimmed to GAME_MODEL_STATCAST_COLUMNS, into the
+    season's compact file (deduped by pitch key) and returns the result -
+    the same contract as persist_raw_statcast, so the backfill script can
+    use either."""
+    trimmed = df[[c for c in GAME_MODEL_STATCAST_COLUMNS if c in df.columns]].copy()
+    trimmed["game_date"] = pd.to_datetime(trimmed["game_date"])
+    existing = load_compact_statcast(raw_dir, season)
+    combined = trimmed if existing is None else pd.concat([existing, trimmed], ignore_index=True)
+    combined = combined.drop_duplicates(subset=PITCH_KEY_COLUMNS, keep="last").sort_values(
+        ["game_date", "game_pk", "at_bat_number", "pitch_number"]
+    ).reset_index(drop=True)
+    path = compact_statcast_path(raw_dir, season)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    combined.to_parquet(path, index=False)
+    return combined
+
+
+def load_game_model_history(raw_dir: str, seasons) -> pd.DataFrame:
+    """Every persisted pitch for `seasons`, GAME_MODEL_STATCAST_COLUMNS
+    only: the full monthly files where a season has them (the current and
+    recent seasons), otherwise the compact backfill."""
+    frames = []
+    for season in seasons:
+        season_df = load_persisted_statcast(raw_dir, season, columns=GAME_MODEL_STATCAST_COLUMNS)
+        if season_df is None:
+            season_df = load_compact_statcast(raw_dir, season)
+        if season_df is not None and not season_df.empty:
+            frames.append(season_df)
+    if not frames:
+        return pd.DataFrame(columns=GAME_MODEL_STATCAST_COLUMNS)
+    return pd.concat(frames, ignore_index=True)
+
+
 def persist_raw_statcast(df: pd.DataFrame, raw_dir: str, season: int) -> pd.DataFrame:
     """Splits `df` by real calendar month and merges/dedupes/writes each
     month into its own persisted file (see module docstring for why -
