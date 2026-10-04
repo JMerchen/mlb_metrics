@@ -162,7 +162,12 @@ const nBets = Number(s.n_bets_advised)
 if(!nBets){
 statEl.textContent = 'no bets resolved yet'
 } else {
-statEl.innerHTML = `<b>${fmtPct(s.win_rate_on_advised_bets)}</b> win rate · <b>${(Number(s.roi) * 100).toFixed(1)}%</b> ROI · ${nBets} bets`
+// "(odds implied X%)" is what these bets were priced to win - most are
+// underdogs, so the raw win rate means little without it.
+const implied = s.odds_implied_win_rate !== undefined && s.odds_implied_win_rate !== ""
+? ` (odds implied ${fmtPct(s.odds_implied_win_rate)})`
+: ""
+statEl.innerHTML = `<b>${fmtPct(s.win_rate_on_advised_bets)}</b> win rate${implied} · <b>${(Number(s.roi) * 100).toFixed(1)}%</b> ROI · ${nBets} bets`
 }
 
 // bet_units > 0 is the real "was a bet advised" signal (Kelly sizing/

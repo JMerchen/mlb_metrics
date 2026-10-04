@@ -144,6 +144,7 @@ def test_build_game_picks_export_no_resolved_games_yet():
 
     assert summary.loc[0, "n_bets_advised"] == 0
     assert pd.isna(summary.loc[0, "win_rate_on_advised_bets"])
+    assert pd.isna(summary.loc[0, "odds_implied_win_rate"])
     assert summary.loc[0, "current_bet_streak"] == 0
     assert summary.loc[0, "best_bet_streak"] == 0
 
@@ -174,6 +175,9 @@ def test_build_game_picks_export_bet_pnl_metrics_real_win_and_loss():
     expected_profit = 3 * (100 / 150) - 1.5
     assert summary.loc[0, "total_profit_units"] == pytest.approx(expected_profit)
     assert summary.loc[0, "roi"] == pytest.approx(expected_profit / 4.5)
+    # Priced to win: -150 -> 0.6, -120 -> 120/220. The pending -130 bet
+    # is not resolved, so it is not part of the yardstick either.
+    assert summary.loc[0, "odds_implied_win_rate"] == pytest.approx((0.6 + 120 / 220) / 2)
 
     expected_wr_low, expected_wr_high = evaluation.wilson_confidence_interval(1, 2)
     assert summary.loc[0, "win_rate_on_advised_bets_ci_low"] == pytest.approx(expected_wr_low)
