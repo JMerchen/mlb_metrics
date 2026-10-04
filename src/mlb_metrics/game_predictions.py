@@ -217,6 +217,7 @@ def select_game_picks(
     kelly_fraction_multiplier: float = config.KELLY_FRACTION_MULTIPLIER,
     min_edge: float = config.KELLY_MIN_EDGE,
     confidence: pd.DataFrame | None = None,
+    betting_enabled: bool = True,
 ) -> pd.DataFrame:
     """Turn game_picks.compute_game_win_probabilities' output into the
     day's logged games - EVERY scheduled game, not just the ones that clear
@@ -275,7 +276,11 @@ def select_game_picks(
     `kelly_fraction_multiplier` still applied on top of it (see that
     function's own docstring for why - "we need the units risked to not
     be arbitrary," and its 2026-08-26 follow-up on why the flat
-    multiplier isn't dropped once this pessimistic probability exists)."""
+    multiplier isn't dropped once this pessimistic probability exists).
+
+    `betting_enabled=False` logs every pick and the market's price exactly
+    as usual but advises no bet (bet_units 0.0 throughout) - the pipeline
+    passes config.GAME_PICK_BETTING_ENABLED here."""
     df = win_probabilities.copy()
     favors_home = df["home_win_probability"] >= 0.5
     df["predicted_winner"] = df["home_team"].where(favors_home, df["away_team"])
@@ -315,7 +320,7 @@ def select_game_picks(
         picks["home_win_probability_pessimistic"] = pd.NA
         picks["away_win_probability_pessimistic"] = pd.NA
 
-    if has_moneylines:
+    if has_moneylines and betting_enabled:
         advice = advise_bets(picks, market_probabilities, kelly_fraction_multiplier, min_edge)
         dupe_game_pks = advice.loc[advice["game_pk"].duplicated(keep=False), "game_pk"].unique()
         if len(dupe_game_pks) > 0:

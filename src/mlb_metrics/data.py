@@ -38,6 +38,7 @@ import os
 import time
 
 import pandas as pd
+import pyarrow.parquet as pq
 
 from mlb_metrics import config
 
@@ -193,11 +194,20 @@ def _month_paths(raw_dir: str, season: int) -> list[str]:
     )
 
 
-def load_persisted_statcast(raw_dir: str, season: int) -> pd.DataFrame | None:
-    frames = [pd.read_parquet(path) for path in _month_paths(raw_dir, season)]
+def load_persisted_statcast(raw_dir: str, season: int, columns: list | None = None) -> pd.DataFrame | None:
+    """Every persisted pitch for `season`, or None if nothing is persisted.
+    `columns` limits the read to those columns (any not in a file are
+    skipped), which matters when only a few of Statcast's ~120 are needed."""
+    def _read(path):
+        if columns is None:
+            return pd.read_parquet(path)
+        available = set(pq.ParquetFile(path).schema_arrow.names)
+        return pd.read_parquet(path, columns=[c for c in columns if c in available])
+
+    frames = [_read(path) for path in _month_paths(raw_dir, season)]
     legacy_path = _legacy_season_path(raw_dir, season)
     if os.path.exists(legacy_path):
-        frames.append(pd.read_parquet(legacy_path))
+        frames.append(_read(legacy_path))
     if not frames:
         return None
     combined = pd.concat(frames, ignore_index=True) if len(frames) > 1 else frames[0]

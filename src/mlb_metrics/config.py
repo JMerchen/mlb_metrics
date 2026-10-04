@@ -747,7 +747,18 @@ GAME_PICK_SUSCEPTIBILITY_WEIGHT = 0.5
 # Same purpose as HITTER_MODEL_VERSION above, for game_predictions.py -
 # bump whenever compute_game_win_probabilities'/select_game_picks' logic
 # meaningfully changes (e.g. GAME_PICK_SUSCEPTIBILITY_WEIGHT's introduction).
-GAME_PICK_MODEL_VERSION = "v1"
+GAME_PICK_MODEL_VERSION = "v2"  # v2 (2026-10-04): mlb_game_model's trained logistic model replaces the composite ratio
+
+# Whether the daily pipeline advises MLB moneyline bets at all. Off since
+# v2 (2026-10-04): v1's advised bets won 32.8% against 39.6% implied by
+# their odds, for -21% ROI over 122 bets, and replaying the bet rule with
+# v2's probabilities still lost money at every setting tried (-4% to -34%
+# ROI on the 488 games with logged odds - scripts/backtest_mlb_game_model.py).
+# Picks are still logged every day with the market's price beside them,
+# so v2 builds a genuinely out-of-sample record. Turn this on only once
+# that record shows the model adding information beyond the market and the
+# replayed bets making money. scripts/recommend_bets.py is unaffected.
+GAME_PICK_BETTING_ENABLED = False
 
 # --- Age Curves (exploratory, separate page - not part of the daily pick pipeline) ---
 #

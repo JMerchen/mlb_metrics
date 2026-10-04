@@ -20,7 +20,7 @@ import pandas as pd
 
 from mlb_metrics import (
     config, data, dfs_ml, evaluation, game_evaluation, game_picks, game_predictions,
-    hitters, lineup, market_odds, matchup, pitchers, predictions, schedule, teams,
+    hitters, lineup, market_odds, matchup, mlb_game_model, pitchers, predictions, schedule, teams,
 )
 
 
@@ -237,6 +237,20 @@ def write_game_picks_export(game_predictions_log_path: str, output_dir: str) -> 
     by_version_summary.to_csv(os.path.join(output_dir, "game_picks_summary_by_version.csv"), index=False)
 
 
+def _game_model_history(current_season: pd.DataFrame, raw_dir: str, season: int) -> pd.DataFrame:
+    """This season's pitches plus last season's persisted ones, trimmed to
+    the columns mlb_game_model reads. Last season matters early in the year,
+    when a team or starter has only a handful of games."""
+    frames = []
+    prior = data.load_persisted_statcast(raw_dir, season - 1, columns=mlb_game_model.STATCAST_COLUMNS)
+    for frame in (prior, current_season):
+        if frame is not None and not frame.empty:
+            frames.append(frame[[c for c in mlb_game_model.STATCAST_COLUMNS if c in frame.columns]])
+    if not frames:
+        return pd.DataFrame(columns=mlb_game_model.STATCAST_COLUMNS)
+    return pd.concat(frames, ignore_index=True)
+
+
 def run(
     as_of_date: datetime.date,
     raw_dir: str = "data/raw",
@@ -369,15 +383,20 @@ def run(
         write_beat_the_streak_export(predictions_log_path, output_dir)
 
         if schedule_games_df is not None and not schedule_games_df.empty:
-            win_probabilities = game_picks.compute_game_win_probabilities(
-                outputs["confidence"], outputs["pave"], schedule_games_df
+            # Win probabilities from the model trained on results
+            # (mlb_game_model, 2026-10-04), fit on this season's and last
+            # season's persisted Statcast. The old composite ratio and its
+            # saved recalibration remain only as a fallback for when there
+            # is too little history to fit (see mlb_game_model's docstring
+            # for why the ratio was replaced).
+            win_probabilities = mlb_game_model.compute_game_win_probabilities(
+                _game_model_history(df, raw_dir, fetch_start.year), schedule_games_df
             )
-            # Quant-analytics follow-up "dig into calibration": rescales
-            # the raw heuristic ratio through the saved recalibration, if
-            # one has been trained and cleared its own real-holdout bar
-            # (see game_picks.apply_calibration's own docstring) - a no-op
-            # returning win_probabilities completely unchanged otherwise.
-            win_probabilities = game_picks.apply_calibration(win_probabilities)
+            if win_probabilities is None:
+                win_probabilities = game_picks.compute_game_win_probabilities(
+                    outputs["confidence"], outputs["pave"], schedule_games_df
+                )
+                win_probabilities = game_picks.apply_calibration(win_probabilities)
             # A real market-odds fetch failure must never suppress real
             # game-pick logging - deliberately a separate try/except from
             # schedule_games_df's own above, not shared with it. Quant-
@@ -413,6 +432,7 @@ def run(
                 as_of_date,
                 market_probabilities=market_probabilities,
                 confidence=outputs["confidence"],
+                betting_enabled=config.GAME_PICK_BETTING_ENABLED,
             )
             game_predictions.append_game_predictions(todays_game_picks, game_predictions_log_path)
 
