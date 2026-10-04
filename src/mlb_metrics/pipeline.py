@@ -238,14 +238,14 @@ def write_game_picks_export(game_predictions_log_path: str, output_dir: str) -> 
 
 
 def _game_model_history(current_season: pd.DataFrame, raw_dir: str, season: int) -> pd.DataFrame:
-    """This season's pitches plus last season's persisted ones, trimmed to
-    the columns mlb_game_model reads. Last season matters early in the year,
-    when a team or starter has only a handful of games."""
-    frames = []
-    prior = data.load_persisted_statcast(raw_dir, season - 1, columns=mlb_game_model.STATCAST_COLUMNS)
-    for frame in (prior, current_season):
-        if frame is not None and not frame.empty:
-            frames.append(frame[[c for c in mlb_game_model.STATCAST_COLUMNS if c in frame.columns]])
+    """This season's pitches plus every earlier persisted season from
+    config.GAME_MODEL_HISTORY_FIRST_SEASON, trimmed to the columns
+    mlb_game_model reads. Earlier seasons give veterans and players back
+    from injury a real track record instead of the league average."""
+    earlier = data.load_game_model_history(raw_dir, range(config.GAME_MODEL_HISTORY_FIRST_SEASON, season))
+    frames = [earlier] if not earlier.empty else []
+    if current_season is not None and not current_season.empty:
+        frames.append(current_season[[c for c in mlb_game_model.STATCAST_COLUMNS if c in current_season.columns]])
     if not frames:
         return pd.DataFrame(columns=mlb_game_model.STATCAST_COLUMNS)
     return pd.concat(frames, ignore_index=True)

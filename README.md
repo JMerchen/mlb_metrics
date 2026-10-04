@@ -2606,8 +2606,9 @@ place rather than crashing or overwriting with nothing) and are wired into
 > the market, and it added nothing the market didn't already know
 > (`scripts/backtest_market_shrinkage.py`).
 >
-> `mlb_game_model.py` is a logistic regression refit every day on all
-> completed 2025–2026 games, using three pregame features computed only
+> `mlb_game_model.py` is a logistic regression refit every day on every
+> completed game since 2021 (2021–2024 kept in compact form under
+> `data/raw/game_model/`), using three pregame features computed only
 > from earlier games: run differential, the probable starter's
 > strikeouts minus walks per batter, and bullpen expected wOBA allowed.
 > The intercept is home-field advantage. In a month-by-month walk-forward
@@ -2617,17 +2618,20 @@ place rather than crashing or overwriting with nothing) and are wired into
 > | | Brier (lower is better) |
 > |---|---|
 > | Market (de-vigged) | 0.2345 |
-> | **v2** | **0.2363** |
+> | **v2** | **0.2346** |
 > | v1 ratio | 0.2455 |
 >
-> v2 is a much better forecaster than v1, but still slightly behind the
-> market. It shows some sign of information the market lacks (p = 0.02),
-> but that test was run after several looks at the same games. Replaying
-> the bet rule with v2 still lost money at every setting (−4% to −34% ROI).
-> So `config.GAME_PICK_BETTING_ENABLED` is off: picks and market prices
-> are still logged every day, building an out-of-sample record, and
-> betting should be switched back on only if that record shows the model
-> beating the market. The v1 notes below are kept for history.
+> v2 forecasts about as well as the market; the difference is well
+> within noise (95% CI about ±0.003). The extra history was the biggest
+> single gain (0.2452 → 0.2443 Brier on the same 3,990 games).
+> Roster-based team ratings, bullpen fatigue and actual-lineup quality
+> were tested and added nothing measurable. Replaying the bet rule loses
+> about 2% at the main settings, with a win rate matching what the odds
+> implied - market-level, not an edge. So `config.GAME_PICK_BETTING_ENABLED`
+> stays off: picks and market prices are still logged every day,
+> building an out-of-sample record, and betting should be switched back
+> on only if that record shows the model beating the market. The v1
+> notes below are kept for history.
 
 > **Real, measured status (2026-09-16), stated up front rather than
 > buried:** across all **373 real resolved games** in
