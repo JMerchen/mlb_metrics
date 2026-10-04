@@ -518,7 +518,17 @@ const winRate = hasBets
 ? (Number(s.win_rate_on_advised_bets) * 100).toFixed(1) + "%"
 : "-"
 
-const winRateSub = hasBets ? ciLabel(s.win_rate_on_advised_bets_ci_low, s.win_rate_on_advised_bets_ci_high) : ""
+// What these same bets were priced to win (evaluation.odds_implied_win_rate).
+// Most advised bets are underdogs, so a win rate in the 30s can be right
+// on track - this is the number it has to be read against, and beating it
+// is what makes money. Shown first because it changes what the headline
+// number means; the CI follows on its own line.
+const oddsImplied = hasBets && s.odds_implied_win_rate !== undefined && s.odds_implied_win_rate !== ""
+? `odds implied ${(Number(s.odds_implied_win_rate) * 100).toFixed(1)}%`
+: ""
+const winRateSub = hasBets
+? [oddsImplied, ciLabel(s.win_rate_on_advised_bets_ci_low, s.win_rate_on_advised_bets_ci_high)].filter(Boolean).join("<br>")
+: ""
 
 const pnl = hasBets
 ? (Number(s.total_profit_units) >= 0 ? "+" : "") + Number(s.total_profit_units).toFixed(2) + "u"

@@ -567,6 +567,31 @@ def test_select_game_picks_logs_a_real_advised_bet():
     assert pd.isna(row["bet_profit_units"])  # not resolved yet
 
 
+def test_select_game_picks_advises_nothing_when_betting_is_disabled():
+    """The same clear edge as the test above, with betting switched off:
+    the pick and the market's price are still logged, but no bet."""
+    win_probs = _win_probabilities([
+        {"game_pk": 1, "date": pd.Timestamp("2026-08-24"), "home_team": "NYY", "away_team": "TOR",
+         "home_win_probability": 0.70},
+    ])
+    market = _full_market([{"home_team": "NYY", "away_team": "TOR", "home_moneyline": -150, "away_moneyline": 130}])
+
+    picks = game_predictions.select_game_picks(
+        win_probs, pd.Timestamp("2026-08-24"), market_probabilities=market, kelly_fraction_multiplier=1.0,
+        betting_enabled=False,
+    )
+
+    row = picks.iloc[0]
+    assert row["bet_units"] == 0.0
+    assert pd.isna(row["bet_team"])
+    assert row["predicted_winner"] == "NYY"
+    assert row["market_home_win_probability"] == pytest.approx(market.iloc[0]["market_home_win_probability"])
+
+
+def test_mlb_betting_is_off_until_the_model_earns_it():
+    assert config.GAME_PICK_BETTING_ENABLED is False
+
+
 def test_select_game_picks_uses_confidence_for_a_smaller_pessimistic_stake():
     # Real follow-up (2026-08-25 - "we need the units risked to not be
     # arbitrary"): passing `confidence` (teams.assemble_team_metrics' real

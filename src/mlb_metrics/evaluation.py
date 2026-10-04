@@ -65,6 +65,21 @@ def log_loss(predictions: pd.DataFrame, eps: float = 1e-6, outcome_col: str = "a
     return float(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p)))
 
 
+def odds_implied_win_rate(moneylines) -> float:
+    """The win rate a set of bets was priced to have: the mean vigged
+    implied probability of each bet's own moneyline. This is the honest
+    yardstick for a bets-only win rate, which on its own misleads - a
+    slate of +150 underdogs is priced to win about 40% of the time, so a
+    40% win rate there is on track, not broken. Winning at exactly this
+    rate loses roughly the vig; beating it is what makes money. NaN when
+    there are no moneylines to average."""
+    lines = pd.to_numeric(pd.Series(moneylines), errors="coerce").dropna()
+    if lines.empty:
+        return float("nan")
+    implied = np.where(lines < 0, -lines / (-lines + 100), 100 / (lines + 100))
+    return float(np.mean(implied))
+
+
 def wilson_confidence_interval(successes: int, n: int, alpha: float = 0.05) -> tuple[float, float]:
     """Scalar Wilson score confidence interval for one aggregate backtest
     rate (accuracy, beat_closing_line_rate, win_rate_on_advised_bets,

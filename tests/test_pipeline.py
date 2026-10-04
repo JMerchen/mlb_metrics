@@ -575,6 +575,10 @@ def test_run_resolves_game_picks_across_two_runs(monkeypatch, tmp_path):
     monkeypatch.setattr(pipeline.data, "persist_raw_statcast", lambda df, raw_dir, season: df)
     monkeypatch.setattr(pipeline, "compute_outputs", lambda df: _minimal_outputs_with_confidence())
     monkeypatch.setattr(pipeline.schedule, "fetch_probable_pitchers", _no_schedule)
+    # Live MLB betting is switched off (config.GAME_PICK_BETTING_ENABLED);
+    # this test is about how an advised bet is logged and resolved, so it
+    # switches it back on.
+    monkeypatch.setattr(pipeline.config, "GAME_PICK_BETTING_ENABLED", True)
 
     # This test is about the day-1/day-2 resolve wiring, not about
     # calibration - bypass game_picks.apply_calibration's real, LIVE

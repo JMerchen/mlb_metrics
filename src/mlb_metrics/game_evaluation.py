@@ -89,6 +89,7 @@ def build_game_picks_export(
         n_bets_advised, bets_won, bets_lost, win_rate_on_advised_bets,
         total_staked_units, total_profit_units, roi, current_bet_streak, best_bet_streak,
         win_rate_on_advised_bets_ci_low, win_rate_on_advised_bets_ci_high, roi_p_value,
+        odds_implied_win_rate,
     ) = _bet_pnl_metrics(picks)
 
     # Real follow-up (2026-08-28 - "we're dumping almost everything data
@@ -134,6 +135,7 @@ def build_game_picks_export(
                 "win_rate_on_advised_bets": win_rate_on_advised_bets,
                 "win_rate_on_advised_bets_ci_low": win_rate_on_advised_bets_ci_low,
                 "win_rate_on_advised_bets_ci_high": win_rate_on_advised_bets_ci_high,
+                "odds_implied_win_rate": odds_implied_win_rate,
                 "total_staked_units": total_staked_units,
                 "total_profit_units": total_profit_units,
                 "roi": roi,
@@ -195,7 +197,7 @@ def _bet_pnl_metrics(picks: pd.DataFrame):
     resolved = picks[picks["bet_profit_units"].notna()].copy()
     n_bets_advised = len(resolved)
     if n_bets_advised == 0:
-        return 0, 0, 0, float("nan"), 0.0, 0.0, float("nan"), 0, 0, 0.0, 1.0, float("nan")
+        return 0, 0, 0, float("nan"), 0.0, 0.0, float("nan"), 0, 0, 0.0, 1.0, float("nan"), float("nan")
 
     resolved["bet_profit_units"] = resolved["bet_profit_units"].astype(float)
     resolved["bet_units"] = resolved["bet_units"].astype(float)
@@ -208,6 +210,9 @@ def _bet_pnl_metrics(picks: pd.DataFrame):
     total_profit = float(resolved["bet_profit_units"].sum())
     roi = total_profit / total_staked if total_staked else float("nan")
     roi_p_value = evaluation.mean_significance(resolved["bet_profit_units"], null_value=0.0)
+    # What the same bets were priced to win - the yardstick win_rate is
+    # read against (see evaluation.odds_implied_win_rate).
+    odds_implied = evaluation.odds_implied_win_rate(resolved["bet_moneyline"])
 
     # Streak is DAYS, not bets (2026-08-25 - "the streak should be days...
     # if the cumulative bets made money that day"): a day can carry several
@@ -226,7 +231,7 @@ def _bet_pnl_metrics(picks: pd.DataFrame):
 
     return (
         n_bets_advised, bets_won, bets_lost, win_rate, total_staked, total_profit, roi, current_streak, best_streak,
-        win_rate_ci_low, win_rate_ci_high, roi_p_value,
+        win_rate_ci_low, win_rate_ci_high, roi_p_value, odds_implied,
     )
 
 

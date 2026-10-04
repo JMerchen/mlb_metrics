@@ -407,3 +407,14 @@ def test_build_beat_the_streak_export_model_version_filters_and_labels_summary()
     assert summary.loc[0, "model_version"] == "v1"
     assert summary.loc[0, "n_days_resolved"] == 5  # unchanged from the all-v1 fixture above
     assert summary.loc[0, "day_survival_rate"] == pytest.approx(4 / 5)  # 4 of 5 resolved days didn't reset
+
+
+def test_odds_implied_win_rate_reads_underdogs_as_priced_to_lose_more_often():
+    # +150 is priced at 40%, -150 at 60%.
+    assert evaluation.odds_implied_win_rate([150, 150]) == pytest.approx(0.4)
+    assert evaluation.odds_implied_win_rate([150, -150]) == pytest.approx(0.5)
+
+
+def test_odds_implied_win_rate_ignores_missing_lines_and_handles_none():
+    assert evaluation.odds_implied_win_rate([150, None]) == pytest.approx(0.4)
+    assert math.isnan(evaluation.odds_implied_win_rate([]))
