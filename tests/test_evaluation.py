@@ -418,3 +418,31 @@ def test_odds_implied_win_rate_reads_underdogs_as_priced_to_lose_more_often():
 def test_odds_implied_win_rate_ignores_missing_lines_and_handles_none():
     assert evaluation.odds_implied_win_rate([150, None]) == pytest.approx(0.4)
     assert math.isnan(evaluation.odds_implied_win_rate([]))
+
+
+def test_model_vs_market_scores_both_on_the_same_played_games():
+    picks = pd.DataFrame([
+        # Model and market both favor the home team, who wins.
+        {"home_team": "A", "predicted_winner": "A", "predicted_probability": 0.6,
+         "actual_winner": "A", "market_home_win_probability": 0.7, "game_played": 1},
+        # Model favors the away team; the market favors home, who wins.
+        {"home_team": "C", "predicted_winner": "D", "predicted_probability": 0.55,
+         "actual_winner": "C", "market_home_win_probability": 0.6, "game_played": 1},
+        # No market price - left out of both.
+        {"home_team": "E", "predicted_winner": "E", "predicted_probability": 0.9,
+         "actual_winner": "F", "market_home_win_probability": None, "game_played": 1},
+        # Pending - left out.
+        {"home_team": "G", "predicted_winner": "G", "predicted_probability": 0.6,
+         "actual_winner": None, "market_home_win_probability": 0.5, "game_played": None},
+    ])
+    result = evaluation.model_vs_market(picks)
+    assert result["model_vs_market_n"] == 2
+    assert result["model_pick_accuracy"] == pytest.approx(0.5)
+    assert result["market_pick_accuracy"] == pytest.approx(1.0)
+    # Home-basis Brier: model home probs 0.6 and 0.45, market 0.7 and 0.6, both games home wins.
+    assert result["model_brier"] == pytest.approx(((0.4) ** 2 + (0.55) ** 2) / 2)
+    assert result["market_brier"] == pytest.approx(((0.3) ** 2 + (0.4) ** 2) / 2)
+
+
+def test_model_vs_market_is_empty_without_market_data():
+    assert evaluation.model_vs_market(pd.DataFrame())["model_vs_market_n"] == 0

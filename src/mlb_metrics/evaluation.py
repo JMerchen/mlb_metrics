@@ -80,6 +80,44 @@ def odds_implied_win_rate(moneylines) -> float:
     return float(np.mean(implied))
 
 
+def model_vs_market(picks: pd.DataFrame) -> dict:
+    """The model and the market scored on exactly the same games: every
+    played game with a logged market probability, whether or not a bet was
+    advised. Pick accuracy is how often each side's favorite won; Brier is
+    on the home team's win probability, so the two are on one basis even
+    when they favor different teams. This is the honest headline while
+    betting is paused - "does the model forecast as well as the market"
+    rather than a bet record built only from the games it chose to bet.
+
+    `picks` needs home_team, predicted_winner, predicted_probability,
+    actual_winner and market_home_win_probability. All values NaN (and n
+    0) when no game qualifies."""
+    empty = {
+        "model_vs_market_n": 0, "model_pick_accuracy": float("nan"), "market_pick_accuracy": float("nan"),
+        "model_brier": float("nan"), "market_brier": float("nan"),
+    }
+    if picks.empty or "market_home_win_probability" not in picks.columns:
+        return empty
+    market_home = pd.to_numeric(picks["market_home_win_probability"], errors="coerce")
+    scoped = picks[market_home.notna() & picks["actual_winner"].notna() & (picks["actual_winner"] != "")].copy()
+    if "game_played" in scoped.columns:
+        scoped = scoped[pd.to_numeric(scoped["game_played"], errors="coerce") != 0]
+    if scoped.empty:
+        return empty
+    market_home = pd.to_numeric(scoped["market_home_win_probability"], errors="coerce")
+    home_won = (scoped["actual_winner"] == scoped["home_team"]).astype(float)
+    model_favors_home = scoped["predicted_winner"] == scoped["home_team"]
+    predicted = pd.to_numeric(scoped["predicted_probability"], errors="coerce")
+    model_home = predicted.where(model_favors_home, 1 - predicted)
+    return {
+        "model_vs_market_n": int(len(scoped)),
+        "model_pick_accuracy": float((model_favors_home == home_won.astype(bool)).mean()),
+        "market_pick_accuracy": float(((market_home >= 0.5) == home_won.astype(bool)).mean()),
+        "model_brier": float(((model_home - home_won) ** 2).mean()),
+        "market_brier": float(((market_home - home_won) ** 2).mean()),
+    }
+
+
 def wilson_confidence_interval(successes: int, n: int, alpha: float = 0.05) -> tuple[float, float]:
     """Scalar Wilson score confidence interval for one aggregate backtest
     rate (accuracy, beat_closing_line_rate, win_rate_on_advised_bets,

@@ -75,12 +75,16 @@ return {asOf, todaysPicks, summary, topApproach: qualified[0] || null}
 // docs/nfl.js's own renderNflTodaysGamePicks, which groups the same way).
 async function loadGamePicksSection(prefix, {groupByWeek = false} = {}){
 
-const [picks, summaryRows] = await Promise.all([
+const [picks, summaryRows, byVersion] = await Promise.all([
 loadCSV(`./data/${prefix}_picks.csv`),
 loadCSV(`./data/${prefix}_summary.csv`),
+loadCSV(`./data/${prefix}_summary_by_version.csv`).catch(() => []),
 ])
 
 const summary = summaryRows[0] || {}
+// The row for the model making picks now (by-version holds "all_time"
+// plus that one).
+summary.current = byVersion.find(r => r.model_version && r.model_version !== 'all_time') || null
 
 if(!picks.length){
 return {asOf: null, upcomingPicks: [], summary}
@@ -146,6 +150,13 @@ document.getElementById('picks-list').innerHTML = todaysPicks.map(p => `
 
 }
 
+// The market's number for the model's pick, so each line reads as a
+// comparison ("58.9% · mkt 60.5%"). Blank when no market price was logged.
+function marketNote(g){
+const m = g.market_predicted_winner_probability
+return m !== undefined && m !== '' && !Number.isNaN(Number(m)) ? ` <span class="mkt">· mkt ${fmtPct(m)}</span>` : ''
+}
+
 function renderGamePicks(sport, data){
 
 const listEl = document.getElementById(`${sport}-gp-list`)
@@ -159,7 +170,17 @@ return
 }
 
 const nBets = Number(s.n_bets_advised)
-if(!nBets){
+// Bet advice switched off (config.GAME_PICK_BETTING_ENABLED): lead with the
+// current model against the market on the same games, and say it is
+// paused, rather than showing a bet record that is no longer growing.
+if(String(s.betting_enabled).toLowerCase() === 'false'){
+const c = s.current
+const n = c ? Number(c.model_vs_market_n) || 0 : 0
+const record = n
+? `${c.model_version}: <b>${fmtPct(c.model_pick_accuracy)}</b> picks right (market ${fmtPct(c.market_pick_accuracy)}, ${n} games)`
+: `${c ? c.model_version + ': ' : ''}no results yet`
+statEl.innerHTML = `${record} · bet advice paused`
+} else if(!nBets){
 statEl.textContent = 'no bets resolved yet'
 } else {
 // "(odds implied X%)" is what these bets were priced to win - most are
@@ -185,7 +206,7 @@ return `<div class="game">
 <span class="${!homeWins ? 'winner' : ''} away">${esc(g.away_team)}</span> @
 <span class="${homeWins ? 'winner' : ''}">${esc(g.home_team)}</span>
 </div>
-<span class="prob">${fmtPct(g.predicted_probability)}</span>
+<span class="prob">${fmtPct(g.predicted_probability)}${marketNote(g)}</span>
 ${bet}
 </div>`
 }).join('') || '<div class="empty-note">No games scheduled yet.</div>'

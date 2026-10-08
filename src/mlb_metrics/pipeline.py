@@ -230,6 +230,10 @@ def write_game_picks_export(game_predictions_log_path: str, output_dir: str) -> 
         log, model_version=config.GAME_PICK_MODEL_VERSION
     )
     by_version_summary = pd.concat([summary, current_version_summary], ignore_index=True)
+    # Lets the dashboard say plainly when bet advice is switched off, rather
+    # than leaving a bet record to read as if it were still being added to.
+    summary["betting_enabled"] = config.GAME_PICK_BETTING_ENABLED
+    by_version_summary["betting_enabled"] = config.GAME_PICK_BETTING_ENABLED
 
     os.makedirs(output_dir, exist_ok=True)
     picks.to_csv(os.path.join(output_dir, "game_picks_picks.csv"), index=False)
