@@ -760,6 +760,13 @@ GAME_PICK_MODEL_VERSION = "v2"  # v2 (2026-10-04): mlb_game_model's trained logi
 # replayed bets making money. scripts/recommend_bets.py is unaffected.
 GAME_PICK_BETTING_ENABLED = False
 
+# First season of Statcast history mlb_game_model reads (2026-10-04).
+# 2021-2024 are persisted in compact form (data/raw/game_model/, see
+# data.GAME_MODEL_STATCAST_COLUMNS). Training on 2021 on instead of only
+# the last two seasons improved Brier on the same 3,990 games from 0.2452
+# to 0.2443 (95% CI of the difference -0.0017 to -0.00001).
+GAME_MODEL_HISTORY_FIRST_SEASON = 2021
+
 # --- Age Curves (exploratory, separate page - not part of the daily pick pipeline) ---
 #
 # Given a current player's age and season stat line (traditional_stats.py,

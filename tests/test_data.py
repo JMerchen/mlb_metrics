@@ -386,3 +386,21 @@ def test_fetch_statcast_range_tolerates_a_real_empty_result(monkeypatch):
     monkeypatch.setattr(data, "_fetch_statcast_window", lambda s, e: pd.DataFrame())
 
     assert data.fetch_statcast_range("2026-01-01", "2026-01-02").empty
+
+
+def test_compact_statcast_round_trip_dedupes_and_history_prefers_full_files(tmp_path):
+    raw = str(tmp_path)
+    rows = pd.DataFrame({
+        "game_pk": [1, 1], "game_date": ["2023-04-01", "2023-04-01"], "at_bat_number": [1, 1],
+        "pitch_number": [1, 2], "pitcher": [10, 10], "events": [None, "single"],
+        "release_spin_rate": [2200, 2300],  # not a game-model column, so dropped
+    })
+    data.persist_compact_statcast(rows, raw, 2023)
+    # Re-persisting the same pitches does not duplicate them.
+    combined = data.persist_compact_statcast(rows, raw, 2023)
+    assert len(combined) == 2
+    assert "release_spin_rate" not in combined.columns
+
+    history = data.load_game_model_history(raw, [2022, 2023])
+    assert len(history) == 2  # 2022 has nothing persisted and is skipped
+    assert set(history.columns) <= set(data.GAME_MODEL_STATCAST_COLUMNS)

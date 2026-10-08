@@ -22,6 +22,10 @@ on:
       end_date:
         description: "Optional override (YYYY-MM-DD) - defaults to September 28 of season"
         required: false
+      compact:
+        description: "Store only the game model's columns under data/raw/game_model/ (use for older seasons)"
+        type: boolean
+        default: false
 
 jobs:
   backfill:
@@ -53,6 +57,9 @@ jobs:
           fi
           if [ -n "${{ inputs.end_date }}" ]; then
             ARGS="$ARGS --end-date ${{ inputs.end_date }}"
+          fi
+          if [ "${{ inputs.compact }}" = "true" ]; then
+            ARGS="$ARGS --compact"
           fi
           python scripts/backfill_statcast_season.py $ARGS
 

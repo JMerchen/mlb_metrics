@@ -1,8 +1,9 @@
 """Walk-forward backtest of mlb_game_model against the old composite ratio
 and the betting market.
 
-Each calendar month from June 2025 on is predicted by a model fit only on
-games before that month. Reported three ways:
+Each calendar month from April 2022 on is predicted by a model fit only
+on games before that month, with history from 2021 (2021-2024 from the
+compact backfill under data/raw/game_model/). Reported three ways:
   1. Brier score and log loss on every predicted game, and on games before
      2026-08-01 (the period the recency/shrinkage settings were tuned on).
   2. On the games with logged market odds (August 2026 on, held back from
@@ -32,18 +33,13 @@ sys.path.insert(0, os.path.dirname(__file__))
 from mlb_metrics import data, mlb_game_model  # noqa: E402
 from backtest_market_shrinkage import LOG_PATH, rebuild_market, replay, summarize  # noqa: E402
 
-SEASONS = (2025, 2026)
-FIRST_PREDICTED_MONTH = "2025-06"
+SEASONS = tuple(range(2021, 2027))
+FIRST_PREDICTED_MONTH = "2022-04"
 TUNING_CUTOFF = "2026-08-01"
 
 
 def load_statcast(raw_dir: str = "data/raw") -> pd.DataFrame:
-    frames = []
-    for season in SEASONS:
-        season_df = data.load_persisted_statcast(raw_dir, season, columns=mlb_game_model.STATCAST_COLUMNS)
-        if season_df is not None:
-            frames.append(season_df)
-    return pd.concat(frames, ignore_index=True)
+    return data.load_game_model_history(raw_dir, SEASONS)
 
 
 def walk_forward(games: pd.DataFrame, pa: pd.DataFrame, params: dict = None) -> pd.DataFrame:

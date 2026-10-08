@@ -30,23 +30,42 @@ intercept that is the home-field advantage:
                  starter; xwOBA on contact, actual value otherwise)
 
 HOW THEY WERE CHOSEN (scripts/backtest_mlb_game_model.py, 2026-10-04). Each
-month from June 2025 on was predicted by a model fit only on earlier games.
-Recency and shrinkage settings were tuned on games before 2026-08-01 only;
-August 2026 on - the 488 games with logged market odds - was held back as
-the test. On the tuning games, this set tied the best alternative (team
-offense wOBA and starter xwOBA instead of K-BB; Brier 0.2468 both) with
-fewer inputs, and on the held-back games it was better (0.2363 vs 0.2386).
-That later period was therefore used as a tiebreak, which is worth knowing
-when reading its numbers.
+month is predicted by a model fit only on earlier games. Recency and
+shrinkage settings were tuned on games before 2026-08-01 only; August 2026
+on - the 488 games with logged market odds - was held back as the test.
+With two seasons of history, this set tied the best alternative on the
+tuning games (team offense wOBA and starter xwOBA instead of K-BB) with
+fewer inputs and was better on the held-back games, so that later period
+served as a tiebreak.
 
-On the held-back games: Brier 0.2363 for this model, 0.2455 for the old
-ratio, 0.2345 for the de-vigged market. It is a better forecaster than the
-model it replaces, and still slightly worse than the market.
+HISTORY. Statcast from 2021 on (config.GAME_MODEL_HISTORY_FIRST_SEASON;
+2021-2024 in compact form) rather than only the last two seasons improved
+Brier on the same 3,990 games from 0.2452 to 0.2443 (95% CI of the
+difference -0.0017 to -0.00001). Re-tuning the settings on the longer
+history (11,204 tuning games) gained only 0.0003, within noise, so the
+settings were kept.
+
+TRIED AND NOT KEPT: roster-based team strength - each team's offense as
+the hitters it has used lately (weighted by recent playing time), and its
+bullpen as the relievers getting the innings, each rated on his own
+multi-season track record. Adding either to these features, or using them
+in place of run differential, did not improve Brier on the 11,204 tuning
+games (0.24242-0.24245 against 0.24243). Bullpen fatigue (relief batters
+faced over the prior three days) and the actual starting lineup's quality
+also added nothing measurable.
+
+RESULT on the held-back games: Brier 0.2346 for this model, 0.2345 for
+the de-vigged market (95% CI of the difference about -0.003 to +0.003) and
+0.2455 for the old ratio. The bet rule replayed on those games loses about
+2% at the main settings, with a win rate matching what the odds implied:
+market-level forecasting, not an edge.
 """
 
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
+
+from mlb_metrics import data
 
 LN2 = np.log(2.0)
 
@@ -68,11 +87,7 @@ DEFAULT_PARAMS = {
     "pen_k": 150.0,
 }
 
-STATCAST_COLUMNS = [
-    "game_pk", "game_date", "game_type", "home_team", "away_team", "inning_topbot",
-    "at_bat_number", "pitch_number", "pitcher", "post_home_score", "post_away_score",
-    "events", "woba_value", "woba_denom", "estimated_woba_using_speedangle",
-]
+STATCAST_COLUMNS = data.GAME_MODEL_STATCAST_COLUMNS
 
 _ORIGIN = pd.Timestamp("2015-01-01")
 

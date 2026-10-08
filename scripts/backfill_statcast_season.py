@@ -36,8 +36,13 @@ Needs real internet access to Statcast (blocked in this project's own dev
 sandbox - dispatch via the paired backfill_statcast_season.yml workflow,
 same as every other real-network task this project has needed).
 
+`--compact` keeps only data.GAME_MODEL_STATCAST_COLUMNS, in one file per
+season under data/raw/game_model/ - for older seasons that are only needed
+as history for mlb_game_model, at a small fraction of the full size.
+
 Usage:
     python scripts/backfill_statcast_season.py --season 2025
+    python scripts/backfill_statcast_season.py --season 2023 --compact
     python scripts/backfill_statcast_season.py --season 2025 --start-date 2025-03-18 --end-date 2025-09-28
 """
 
@@ -133,6 +138,11 @@ def main():
         help="Defaults to September 28 of --season (real MLB regular-season end window).",
     )
     parser.add_argument("--raw-dir", default="data/raw")
+    parser.add_argument(
+        "--compact", action="store_true",
+        help="Persist only the columns mlb_game_model reads, one file per season under "
+             "data/raw/game_model/ (for seasons needed only as model history).",
+    )
     args = parser.parse_args()
 
     start_date = datetime.date.fromisoformat(args.start_date) if args.start_date else datetime.date(args.season, 3, 18)
@@ -140,7 +150,13 @@ def main():
 
     print(f"Backfilling real Statcast data for season={args.season}, {start_date} through {end_date}...")
 
-    final = backfill_statcast_season(args.raw_dir, args.season, start_date, end_date, data.fetch_statcast_range)
+    if args.compact:
+        final = backfill_statcast_season(
+            args.raw_dir, args.season, start_date, end_date, data.fetch_statcast_range,
+            persist_fn=data.persist_compact_statcast, load_fn=data.load_compact_statcast,
+        )
+    else:
+        final = backfill_statcast_season(args.raw_dir, args.season, start_date, end_date, data.fetch_statcast_range)
 
     if final is None or final.empty:
         print(f"\nNo real data ended up persisted for season={args.season}.")
