@@ -854,6 +854,13 @@ btn
 
 )
 
+// Open on the highest-rated team rather than an empty "Select a team"
+// panel; clicking another team then compares the two.
+const top = confidence.reduce((best, r)=>Number(r.Confidence) > Number(best.Confidence) ? r : best, confidence[0])
+if(top && selectedTeams.length === 0){
+selectTeam(top.team)
+}
+
 }
 
 function selectTeam(team){
@@ -1357,6 +1364,49 @@ park
 
 }
 
+// Display helpers for the leaderboards and history tables: the CSVs keep
+// full precision for the models, but a reader needs a few significant
+// digits, plain-English headers and no internal ids.
+function fmtNum(v, digits){
+return v === undefined || v === null || v === "" || Number.isNaN(Number(v)) ? "-" : Number(v).toFixed(digits)
+}
+
+function fmtPctRange(v, low, high){
+const p = x=>(Number(x) * 100).toFixed(1)
+if(v === undefined || v === null || v === "" || Number.isNaN(Number(v))){ return "-" }
+if(low === undefined || low === "" || high === undefined || high === ""){ return p(v) + "%" }
+return `${p(v)}% <span class="dim">(${p(low)}–${p(high)})</span>`
+}
+
+function waveLeaderboardRow(p){
+return {
+"Player": `${p.name_first} ${p.name_last}`,
+"Team": p.team,
+"PA": Math.round(Number(p.PA_L || 0) + Number(p.PA_R || 0)),
+// No range here: WAVE_CI_Low/High describe the raw full-season hit rate,
+// not WAVE's recency blend (hitters.compute_wave), so beside WAVE they can
+// even exclude it (Moreno: 23.6% shown against 23.7-31.2%).
+"WAVE": fmtPctRange(p.WAVE),
+"Game Hit %": fmtPctRange(p.Game_Hit_Probability),
+"xBA": fmtNum(p.xBA, 3),
+"xwOBA": fmtNum(p.xwOBA, 3),
+"Barrel %": fmtPctRange(p.Barrel_Rate),
+}
+}
+
+function paveLeaderboardRow(p){
+return {
+"Pitcher": `${p.name_first} ${p.name_last}`,
+"Team": p.team,
+"Throws": p.Throws || "-",
+"At Bats": p.at_bats,
+"PAVE": fmtNum(p.PAVE, 3),
+"PAVE+": fmtNum(p.PAVE_PLUS, 2),
+"Power A+": fmtNum(p.Power_A_PLUS, 2),
+"Exp. Hits": fmtNum(p.Expected_Hits, 1),
+}
+}
+
 async function loadAll(){
 
 wave =
@@ -1468,11 +1518,9 @@ meanPA
 
 buildTable(
 
-filteredWave,
+filteredWave.slice(0, 20).map(waveLeaderboardRow),
 
-"waveTable",
-
-20
+"waveTable"
 
 )
 
@@ -1521,11 +1569,9 @@ minAB
 
 buildTable(
 
-filteredPave,
+filteredPave.slice(0, 20).map(paveLeaderboardRow),
 
-"paveTable",
-
-20
+"paveTable"
 
 )
 
@@ -1671,10 +1717,20 @@ const sorted = picks
 .slice()
 .sort((a,b)=>b.date.localeCompare(a.date) || Number(a.rank) - Number(b.rank))
 
+const results = {hit: "✓ hit", miss: "✗ miss", no_game: "no game", pending: "pending", no_pick: "no pick"}
+const grades = {recommended: "Recommended", speculative: "Speculative"}
+
 buildTable(
-sorted,
-"streakHistoryTable",
-100
+sorted.slice(0, 100).map(p=>({
+"Date": p.date,
+"#": p.rank,
+"Player": p.name || "-",
+"Predicted": fmtPctRange(p.predicted_probability),
+"Combined": fmtPctRange(p.combined_probability),
+"Result": results[p.status] || p.status,
+"Grade": grades[p.grade] || "-",
+})),
+"streakHistoryTable"
 )
 
 }
@@ -1753,10 +1809,18 @@ async function loadGamePicks(){
 let summary = []
 let picks = []
 
+let byVersion = []
+
 try{
 summary = await loadCSV("./data/game_picks_summary.csv")
 }catch(e){
 console.log("no game_picks_summary.csv yet", e)
+}
+
+try{
+byVersion = await loadCSV("./data/game_picks_summary_by_version.csv")
+}catch(e){
+console.log("no game_picks_summary_by_version.csv yet", e)
 }
 
 try{
@@ -1765,9 +1829,61 @@ picks = await loadCSV("./data/game_picks_picks.csv")
 console.log("no game_picks_picks.csv yet", e)
 }
 
+const allTime = summary[0]
+const bettingPaused = Boolean(allTime) && String(allTime.betting_enabled).toLowerCase() === "false"
+if(bettingPaused){
+renderPausedGamePickStats(allTime, currentVersionRow(byVersion))
+}else{
 renderGamePickStats(summary)
-renderTodaysGamePicks(picks)
+}
+renderTodaysGamePicks(picks, bettingPaused)
 renderGamePickHistory(picks)
+
+}
+
+// The by-version summary holds "all_time" plus one row for the model now
+// making picks (config.GAME_PICK_MODEL_VERSION).
+function currentVersionRow(byVersion){
+return byVersion.find(r=>r.model_version && r.model_version !== "all_time") || null
+}
+
+function fmtPct1(v){
+return v === undefined || v === null || v === "" || Number.isNaN(Number(v)) ? "-" : (Number(v) * 100).toFixed(1) + "%"
+}
+
+// While bet advice is switched off (config.GAME_PICK_BETTING_ENABLED), the
+// headline is the CURRENT model against the market on the same games - not
+// a bet record that is no longer being added to and was built by a
+// retired model. That older record moves to a small line underneath.
+function renderPausedGamePickStats(allTime, current){
+
+const note = document.getElementById("gamePickNote")
+note.style.display = ""
+note.innerHTML = `<b>Bet advice is paused.</b> The current model${current ? ` (${current.model_version})` : ""} forecasts about as well as the betting market but hasn't shown an edge over it, so these picks are tracked, not bet.`
+
+const stat = (value, label, sub) =>
+`<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`
+
+const el = document.getElementById("gamePickStats")
+const n = current ? Number(current.model_vs_market_n) || 0 : 0
+if(!n){
+el.innerHTML = stat("-", "Picks Right", "no resolved games yet") + stat(0, "Games Tracked", current ? `model ${current.model_version}` : "")
+}else{
+const small = n < 100 ? " · too few games to judge yet" : ""
+el.innerHTML =
+stat(fmtPct1(current.model_pick_accuracy), "Picks Right", `market ${fmtPct1(current.market_pick_accuracy)} on the same games`) +
+stat(Number(current.model_brier).toFixed(3), "Forecast Error", `market ${Number(current.market_brier).toFixed(3)} · lower is better`) +
+stat(n, "Games Tracked", `model ${current.model_version}${small}`)
+}
+
+const record = document.getElementById("gamePickBetRecord")
+const bets = Number(allTime.n_bets_advised) || 0
+if(bets){
+const units = Number(allTime.total_profit_units)
+record.innerHTML = `Betting record before the pause: ${bets} bets, ${fmtPct1(allTime.win_rate_on_advised_bets)} won against ${fmtPct1(allTime.odds_implied_win_rate)} implied by their odds, ${units >= 0 ? "+" : ""}${units.toFixed(2)}u (${(Number(allTime.roi) * 100).toFixed(1)}% ROI).`
+}else{
+record.innerHTML = ""
+}
 
 }
 
@@ -1865,7 +1981,7 @@ stat(beatClosingLine, "Beat Closing Line", beatClosingLineSub)
 
 }
 
-function renderTodaysGamePicks(picks){
+function renderTodaysGamePicks(picks, bettingPaused){
 
 const el = document.getElementById("todaysGamePicks")
 
@@ -1902,10 +2018,15 @@ pending: "pending",
 el.innerHTML = todays
 .map(p=>{
 
-const prob =
-p.predicted_probability && p.predicted_probability !== ""
-? (Number(p.predicted_probability) * 100).toFixed(1) + "% predicted"
-: ""
+// The matchup once, with the model's pick bolded, and the market's
+// number for the same team beside the model's - the comparison that
+// matters, now that the model is judged against the market.
+const homePicked = p.predicted_winner === p.home_team
+const matchup = homePicked
+? `${p.away_team} @ <b>${p.home_team}</b>`
+: `<b>${p.away_team}</b> @ ${p.home_team}`
+const market = fmtPct1(p.market_predicted_winner_probability)
+const prob = `${fmtPct1(p.predicted_probability)} ${p.predicted_winner}${market !== "-" ? ` · market ${market}` : ""}`
 
 // bet_units is the real "was a bet advised" signal - 0 (or blank/NaN on
 // an older row) means no bet, any positive number is real units to risk.
@@ -1918,7 +2039,7 @@ const betLine = betAdvised
 
 return `
 <div class="pickCard ${p.status}${betAdvised ? " recommended" : ""}">
-<div class="pickName">${p.predicted_winner} (${p.away_team} @ ${p.home_team})</div>
+<div class="pickName">${matchup}</div>
 <div class="pickProb">${prob}</div>
 <div class="pickStatus">${statusLabels[p.status] || p.status}</div>
 ${betLine}
@@ -1954,25 +2075,34 @@ v !== undefined && v !== null && v !== "" && !Number.isNaN(Number(v))
 // whatever's in game_picks_picks.csv. renderTodaysGamePicks (above)
 // still reads the full row for its own cards, so nothing is removed
 // from the underlying data, just from THIS table's display.
-const formatted = sorted.map(p=>({
+// One "Bet" cell ("ATL 1.89u, +2.10u") instead of three columns, and only
+// when some row in view actually had a bet - while bet advice is paused,
+// three columns of dashes would just push the useful ones off a phone.
+const shown = sorted.slice(0, 100)
+const anyBets = shown.some(p=>Number(p.bet_units) > 0)
+const betCell = p=>{
+if(!(Number(p.bet_units) > 0)){ return "-" }
+const profit = p.bet_profit_units !== undefined && p.bet_profit_units !== "" && !Number.isNaN(Number(p.bet_profit_units))
+? `, ${Number(p.bet_profit_units) >= 0 ? "+" : ""}${Number(p.bet_profit_units).toFixed(2)}u`
+: ""
+return `${p.bet_team} ${Number(p.bet_units).toFixed(2)}u${profit}`
+}
+const formatted = shown.map(p=>{
+const row = {
 "Date": p.date,
-"Predicted Winner": p.predicted_winner,
-"Predicted Loser": p.predicted_loser,
-"Model Probability": pct(p.predicted_probability),
-"Market Probability": pct(p.market_predicted_winner_probability),
-"Bet Units": p.bet_units && Number(p.bet_units) > 0 ? Number(p.bet_units).toFixed(2) : "-",
-"Bet Team": p.bet_team || "-",
-"Status": statusLabels[p.status] || p.status,
-"Bet Profit Units":
-p.bet_profit_units !== undefined && p.bet_profit_units !== "" && !Number.isNaN(Number(p.bet_profit_units))
-? (Number(p.bet_profit_units) >= 0 ? "+" : "") + Number(p.bet_profit_units).toFixed(2) + "u"
-: "-",
-}))
+"Game": `${p.away_team} @ ${p.home_team}`,
+"Pick": p.predicted_winner,
+"Model": pct(p.predicted_probability),
+"Market": pct(p.market_predicted_winner_probability),
+"Result": statusLabels[p.status] || p.status,
+}
+if(anyBets){ row["Bet"] = betCell(p) }
+return row
+})
 
 buildTable(
 formatted,
-"gamePickHistoryTable",
-100
+"gamePickHistoryTable"
 )
 
 }

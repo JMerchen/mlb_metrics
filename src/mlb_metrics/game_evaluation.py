@@ -153,6 +153,7 @@ def build_game_picks_export(
                 "beat_closing_line_rate_ci_low": beat_closing_line_rate_ci_low,
                 "beat_closing_line_rate_ci_high": beat_closing_line_rate_ci_high,
                 "beat_closing_line_rate_p_value": beat_closing_line_rate_p_value,
+                **evaluation.model_vs_market(picks),
             }
         ]
     )

@@ -65,10 +65,26 @@ const DRAFT_ASSISTANT_STORAGE_KEY = "nflDraftAssistant.v1"
 let myDraftRoster = [] // [{player_id, player_display_name, position}]
 let myDraftConsidering = [] // [{player_id, player_display_name, position}] - players being weighed for the CURRENT pick, not yet drafted
 
+const NFL_TABS = ["preseason", "gamepicks", "draftboard", "playerprops"]
+
+// Which tab the page opens on: a "#gamepicks"-style link wins; otherwise
+// Game Picks during the season (September through February) and
+// Preseason in the offseason, so the page opens on what's current.
+function nflDefaultTab(date, hash){
+const fromHash = (hash || "").replace("#", "")
+if(NFL_TABS.includes(fromHash)){ return fromHash }
+const month = date.getMonth() + 1
+return month >= 9 || month <= 2 ? "gamepicks" : "preseason"
+}
+
 function selectNflTab(tab){
 document.querySelectorAll("#nflTabs .tabButton").forEach(btn=>{
 btn.classList.toggle("active", btn.dataset.nflTab === tab)
 })
+// Keep the open tab in the address, so a link or a refresh lands on it.
+if(window.history && window.history.replaceState){
+window.history.replaceState(null, "", `#${tab}`)
+}
 document.getElementById("preseasonSection").style.display = tab === "preseason" ? "" : "none"
 document.getElementById("gamePicksSection").style.display = tab === "gamepicks" ? "" : "none"
 document.getElementById("draftBoardSection").style.display = tab === "draftboard" ? "" : "none"
@@ -593,9 +609,16 @@ pending: "pending",
 el.innerHTML = thisWeek
 .map(p=>{
 
-const prob =
-p.predicted_probability && p.predicted_probability !== ""
-? (Number(p.predicted_probability) * 100).toFixed(1) + "% predicted"
+// The matchup once, with the pick bolded, and the market's number for
+// the same team beside the model's - same layout as the MLB cards.
+const pct = v=>v !== undefined && v !== null && v !== "" && !Number.isNaN(Number(v)) ? (Number(v) * 100).toFixed(1) + "%" : ""
+const homePicked = p.predicted_winner === p.home_team
+const matchup = homePicked
+? `${p.away_team} @ <b>${p.home_team}</b>`
+: `<b>${p.away_team}</b> @ ${p.home_team}`
+const market = pct(p.market_predicted_winner_probability)
+const prob = pct(p.predicted_probability)
+? `${pct(p.predicted_probability)} ${p.predicted_winner}${market ? ` · market ${market}` : ""}`
 : ""
 
 const betUnits = Number(p.bet_units)
@@ -607,7 +630,7 @@ const betLine = betAdvised
 
 return `
 <div class="pickCard ${p.status}${betAdvised ? " recommended" : ""}">
-<div class="pickName">${p.predicted_winner} (${p.away_team} @ ${p.home_team})</div>
+<div class="pickName">${matchup}</div>
 <div class="pickProb">${prob}</div>
 <div class="pickStatus">${statusLabels[p.status] || p.status}</div>
 ${betLine}
@@ -706,3 +729,5 @@ loadNflGamePicks()
 loadNflDraftBoard()
 
 loadNflPlayerProps()
+
+selectNflTab(nflDefaultTab(new Date(), window.location.hash))

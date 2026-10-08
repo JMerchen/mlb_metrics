@@ -467,6 +467,42 @@ border-top:1px solid var(--border);
 
 }
 
+/* A one-line status above a section's tiles - e.g. "bet advice is
+paused" - so the state is stated, not left to be inferred from blanks. */
+.statusNote{
+
+background:var(--bg-raised);
+
+border:1px solid var(--border-strong);
+
+border-left:3px solid var(--accent);
+
+border-radius:var(--radius-sm);
+
+padding:10px 14px;
+
+margin:0 0 16px 0;
+
+font-size:14px;
+
+line-height:1.45;
+
+max-width:760px;
+
+}
+
+/* Supporting detail under a row of tiles - smaller and dimmer than the
+tiles, so it reads as context rather than a second headline. */
+.secondaryLine{
+
+font-size:13px;
+
+color:var(--text-dim);
+
+margin:-8px 0 18px 0;
+
+}
+
 .streakStats{
 
 display:flex;
@@ -1129,5 +1165,48 @@ template already relies on these exact names. */
 .game .btsMatchup .away{color:var(--text-dim);}
 .game .btsMatchup .winner{font-weight:700;color:var(--on-accent);background:var(--accent);padding:1px 7px;border-radius:4px;}
 .game .prob{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.game .prob .mkt{opacity:.75;}
+/* A confidence range or other detail inside a table cell. */
+td .dim{color:var(--text-dim);font-size:.9em;}
 .bet-badge{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:3px 7px;border-radius:20px;border:1px solid var(--accent);color:var(--accent);white-space:nowrap;}
 .empty-note{padding:14px 16px;color:var(--text-dim);font-size:13px;line-height:1.5;}
+
+/* Phones. Until now the stylesheet had no breakpoints, so a phone got the
+desktop layout squeezed: the title and four nav buttons wrapped onto
+three lines, the two leaderboards sat side by side at ~170px each, and
+stat tiles and pick cards kept desktop padding. */
+@media (max-width: 700px){
+
+.container{padding:12px 16px 48px;}
+
+/* One compact header line: smaller title, nav scrolls sideways instead
+of wrapping. */
+.siteHeader{gap:10px;padding:12px 0 12px;margin-bottom:14px;}
+.brandRow{gap:10px;}
+.brandMark{width:28px;height:28px;}
+h1{font-size:20px;}
+.pageTabs{display:flex;flex-wrap:nowrap;overflow-x:auto;width:100%;gap:6px;-webkit-overflow-scrolling:touch;}
+.tabButton{padding:7px 12px;font-size:13px;}
+/* Small enough that all four site tabs fit a 390px screen. */
+.pageTabs .tabButton{flex:0 0 auto;padding:6px 10px;font-size:12.5px;}
+
+/* Paired tables stack. */
+.leaderboards{flex-direction:column;}
+.leaderboards>div{max-width:100%;width:100%;}
+
+/* Two tiles per row, tighter. */
+.streakStats{gap:10px;}
+.streakStat{flex:1 1 calc(50% - 5px);min-width:0;padding:12px 10px;}
+.streakStat .value{font-size:22px;}
+
+/* Pick cards full width. */
+.todaysPicks{gap:10px;}
+.pickCard{flex:1 1 100%;min-width:0;}
+
+/* Denser tables; they still scroll sideways inside their box. */
+td,th{padding:7px 8px;font-size:12px;}
+.scrollbox{padding:2px 6px;}
+
+.statusNote{font-size:13px;}
+
+}
