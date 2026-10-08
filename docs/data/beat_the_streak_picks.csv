@@ -1,6 +1,8 @@
 date,rank,name,predicted_probability,combined_probability,actual_hit,status,grade
-2026-10-07,1,Chandler Simpson,0.639332603910377,0.6565711174902418,,pending,recommended
-2026-10-07,2,Chase Meidroth,0.617811382029555,0.6478201786981662,,pending,speculative
+2026-10-08,1,Steven Kwan,0.6364053836734209,0.6348601814680412,,pending,speculative
+2026-10-08,2,Jo Adell,0.614528729950701,0.6357858286422486,,pending,speculative
+2026-10-07,1,Chandler Simpson,0.639332603910377,0.6565711174902418,,no_game,recommended
+2026-10-07,2,Chase Meidroth,0.617811382029555,0.6478201786981662,1.0,hit,speculative
 2026-10-06,1,Michael Harris,0.6108223376134568,0.6244718534997978,1.0,hit,speculative
 2026-10-06,2,Jackson Merrill,0.6300245013395579,0.6206134629586265,1.0,hit,speculative
 2026-10-05,1,Chase Meidroth,0.6131815064658822,0.6466706652722315,1.0,hit,speculative
