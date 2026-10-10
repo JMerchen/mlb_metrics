@@ -16,6 +16,10 @@ on:
         description: "Also check a real date this many days in the past (tests whether odds survive past game day)"
         required: false
         default: "5"
+      historical:
+        description: "Instead probe ESPN's core API for past seasons' odds (scripts/probe_espn_historical_odds.py)"
+        type: boolean
+        default: false
 
 jobs:
   debug:
@@ -35,7 +39,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install requests pandas
 
+      - name: Probe historical odds (core API)
+        if: ${{ inputs.historical }}
+        run: python scripts/probe_espn_historical_odds.py
+
       - name: Print real ESPN odds response shapes
+        if: ${{ !inputs.historical }}
         run: |
           if [ -n "${{ inputs.days_back }}" ]; then
             python scripts/debug_espn_odds.py --days-back "${{ inputs.days_back }}"
