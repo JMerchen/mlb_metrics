@@ -1,4 +1,6 @@
 date,rank,name,predicted_probability,combined_probability,actual_hit,status,grade
+2026-10-10,1,Steven Kwan,0.6407974421863862,0.6362513452338632,,pending,speculative
+2026-10-10,2,Chase DeLauter,0.6124190716055602,0.6093977927800681,,pending,speculative
 2026-10-08,1,Steven Kwan,0.6364053836734209,0.6348601814680412,1.0,hit,speculative
 2026-10-08,2,Jo Adell,0.614528729950701,0.6357858286422486,1.0,hit,speculative
 2026-10-07,1,Chandler Simpson,0.639332603910377,0.6565711174902418,,no_game,recommended
