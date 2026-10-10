@@ -107,6 +107,13 @@ function renderPicks(){
   `).join('') || '<div class="pick"><span class="name">No picks logged yet today.</span></div>';
 }
 
+// The market's number for the model's pick ("58.9% · mkt 60.5%"), as on
+// the real Today page (docs/today.js). Blank when none was logged.
+function marketNote(g){
+  const m = g.market_predicted_winner_probability;
+  return m !== undefined && m !== null && m !== '' && !Number.isNaN(Number(m)) ? ` <span class="mkt">· mkt ${fmtPct(m)}</span>` : '';
+}
+
 function renderGamePicks(sport, data){
   const listEl = document.getElementById(`${sport}-gp-list`);
   const statEl = document.getElementById(`${sport}-gp-stat-line`);
@@ -117,10 +124,23 @@ function renderGamePicks(sport, data){
     statEl.textContent = '';
     return;
   }
-  if (s.n_bets_advised === 0) {
+  // Same headline logic as docs/today.js (keep the two in step): while
+  // bet advice is switched off, lead with the current model against the
+  // market on the same games and say it is paused, rather than showing a
+  // bet record that is no longer growing.
+  const current = (data.summaryByVersion || []).find(r => r.model_version && r.model_version !== 'all_time') || null;
+  if (String(s.betting_enabled).toLowerCase() === 'false') {
+    const n = current ? Number(current.model_vs_market_n) || 0 : 0;
+    const record = n
+      ? `${current.model_version}: <b>${fmtPct(current.model_pick_accuracy)}</b> picks right (market ${fmtPct(current.market_pick_accuracy)}, ${n} games)`
+      : `${current ? current.model_version + ': ' : ''}no results yet`;
+    statEl.innerHTML = `${record} · bet advice paused`;
+  } else if (!Number(s.n_bets_advised)) {
     statEl.textContent = 'no bets resolved yet';
   } else {
-    statEl.innerHTML = `<b>${fmtPct(s.win_rate_on_advised_bets)}</b> win rate · <b>${(s.roi*100).toFixed(1)}%</b> ROI · ${s.n_bets_advised} bets`;
+    const implied = s.odds_implied_win_rate !== undefined && s.odds_implied_win_rate !== null
+      ? ` (odds implied ${fmtPct(s.odds_implied_win_rate)})` : '';
+    statEl.innerHTML = `<b>${fmtPct(s.win_rate_on_advised_bets)}</b> win rate${implied} · <b>${(s.roi*100).toFixed(1)}%</b> ROI · ${s.n_bets_advised} bets`;
   }
 
   listEl.innerHTML = data.upcomingPicks.map(g => {
@@ -139,7 +159,7 @@ function renderGamePicks(sport, data){
         <span class="${!homeWins ? 'winner' : ''} away">${esc(g.away_team)}</span> @
         <span class="${homeWins ? 'winner' : ''}">${esc(g.home_team)}</span>
       </div>
-      <span class="prob">${fmtPct(g.predicted_probability)}</span>
+      <span class="prob">${fmtPct(g.predicted_probability)}${marketNote(g)}</span>
       ${bet}
     </div>`;
   }).join('') || '<div class="empty-note">No games scheduled yet.</div>';
