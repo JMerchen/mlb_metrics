@@ -21,8 +21,9 @@ fit by ridge regression with exponentially decaying weights on older
 games (and a further discount on earlier seasons). A game's feature is
 the home side's expected edge: (off_home + def_away) - (off_away + def_home).
 
-Variants, each a logistic regression refit season by season on earlier
-seasons only, scored on 2019-2025 (2016-2017 warm up the ratings):
+Variants, each a (standardized) logistic regression refit season by
+season on earlier seasons only, scored on 2019-2025 (2016-2017 warm up
+the ratings):
     A  points only (adjusted)
     B  one combined EPA per play (adjusted) - closest to today's model
     C  pass and rush EPA, separately (adjusted)
@@ -32,23 +33,28 @@ Each is compared with the de-vigged closing moneyline on the same games,
 plus a logistic regression of home wins on both log-odds (does the model
 add anything the market doesn't know?).
 
-RESULT (2026-10-11, 1,865 games 2019-2025 with a moneyline):
-    market                              Brier 0.2105, picks right 66.5%
-    A points only (adjusted)            Brier 0.2245, 64.5%
-    B one combined EPA (adjusted)       Brier 0.2358, 58.8%
-    C pass + rush EPA (adjusted)        Brier 0.2314, 60.7%
-    D pass + rush + points (adjusted)   Brier 0.2246, 64.3%
-    E pass + rush + points (unadjusted) Brier 0.2247, 64.1%
-Splitting into categories adds nothing over points alone, and solving the
-opponent adjustment jointly changes almost nothing (D vs E). Every
-variant trails the market, and in the logistic regression on both
-log-odds the model's coefficient is NEGATIVE (-0.26 for D, -0.65 for C):
-once the market's price is known, these ratings point the wrong way -
-they overreact to noise the market already discounts. A sweep of
-half-life (6-40 weeks), prior-season discount (0.5-0.7) and ridge
-strength (5-80) moved the best Brier between 0.2245 and 0.2321 and never
-changed the sign. Not shipped; the idea is sound, but the market already
-prices it in.
+RESULT (2026-10-11, 1,865 games 2019-2025 with a moneyline; features
+standardized before the logistic regression):
+    market                                  Brier 0.2105, picks right 66.5%
+    A points only                           0.2245
+    B one combined EPA                      0.2249
+    C pass + rush EPA                       0.2260
+    D pass + rush + points                  0.2252
+    E D without the opponent adjustment     0.2249
+    F C + mismatch interactions             0.2262
+    G play-mix weighted EPA edge            0.2251
+Every version lands within 0.002 of the others - less than the noise on
+1,865 games - and 0.014 behind the market. Splitting units, compounding
+mismatches, weighting by play mix and the joint opponent adjustment
+don't separate from points alone; mismatch terms get weights near zero.
+Given the market's price, every version's coefficient is negative: the
+ratings point the wrong way, overreacting to noise the market already
+discounts. A sweep of half-life (6-40 weeks), prior-season discount
+(0.5-0.7) and ridge strength (5-80) never changed that. Not shipped.
+
+An earlier run without standardization understated the EPA versions
+(pass + rush 0.2314, combined EPA 0.2358): their edges are ~100x smaller
+than points edges, and regularization shrank their weights.
 
 Usage:
     python scripts/backtest_nfl_category_ratings.py
@@ -62,6 +68,8 @@ import pandas as pd
 import statsmodels.api as sm
 from sklearn.linear_model import LogisticRegression, Ridge
 from sklearn.metrics import brier_score_loss, log_loss
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -94,6 +102,7 @@ def load_team_games() -> pd.DataFrame:
             "pass_epa": g.loc[g["pass"] == 1, "epa"].mean(),
             "rush_epa": g.loc[g["rush"] == 1, "epa"].mean(),
             "all_epa": g["epa"].mean(),
+            "pass_rate": (g["pass"] == 1).mean(),
             "plays": len(g),
         }), include_groups=False).reset_index()
         frames.append(agg)
@@ -151,6 +160,32 @@ def build_features(team_games: pd.DataFrame, sched: pd.DataFrame) -> pd.DataFram
         if season < 2017:
             continue
         feats = {gid: {} for gid in slate["game_id"]}
+        # How pass-heavy each team has been lately (same recency weights),
+        # for the play-mix weighted edge below.
+        now = season * 20 + week
+        past = team_games[team_games["t"] < now]
+        w = 0.5 ** ((now - past["t"]) / HALF_LIFE_WEEKS) * np.where(past["season"] < season, PRIOR_SEASON_DISCOUNT, 1.0)
+        pass_rate = past.assign(w=w).groupby("team").apply(
+            lambda g: np.average(g["pass_rate"], weights=g["w"]), include_groups=False)
+        adjusted_ratings = {c: ratings_as_of(team_games, season, week, c, True).set_index("team")
+                            for c in ("pass_epa", "rush_epa")}
+        for g in slate.itertuples():
+            def rating(c, team, col):
+                r = adjusted_ratings[c]
+                return r[col].get(team, 0.0) if not r.empty else 0.0
+            f = feats[g.game_id]
+            # Mismatch: an offense's strength times the opponent's weakness in
+            # the same unit (strong run game x weak run defense), home minus away.
+            for c in ("pass_epa", "rush_epa"):
+                f[f"{c}_mismatch"] = (rating(c, g.home_team, "off") * rating(c, g.away_team, "def")
+                                      - rating(c, g.away_team, "off") * rating(c, g.home_team, "def"))
+            # Play-mix weighted: each side's expected EPA per play, weighting
+            # its pass and run matchups by how often it actually passes.
+            def expected(team, opp):
+                pr = pass_rate.get(team, 0.58)
+                return (pr * (rating("pass_epa", team, "off") + rating("pass_epa", opp, "def"))
+                        + (1 - pr) * (rating("rush_epa", team, "off") + rating("rush_epa", opp, "def")))
+            f["mix_weighted_edge"] = expected(g.home_team, g.away_team) - expected(g.away_team, g.home_team)
         for adjusted in (True, False):
             for category in CATEGORIES:
                 r = ratings_as_of(team_games, season, week, category, adjusted).set_index("team")
@@ -176,6 +211,8 @@ VARIANTS = {
     "C pass + rush EPA (adjusted)": ["pass_epa_adj", "rush_epa_adj"],
     "D pass + rush + points (adjusted)": ["pass_epa_adj", "rush_epa_adj", "points_adj"],
     "E pass + rush + points (NOT adjusted)": ["pass_epa_raw", "rush_epa_raw", "points_raw"],
+    "F pass + rush + mismatch interactions": ["pass_epa_adj", "rush_epa_adj", "pass_epa_mismatch", "rush_epa_mismatch"],
+    "G play-mix weighted EPA edge": ["mix_weighted_edge"],
 }
 
 
@@ -184,7 +221,11 @@ def walk_forward(df: pd.DataFrame, columns: list) -> pd.DataFrame:
     for season in SCORED_SEASONS:
         train = df[df["season"] < season]
         test = df[df["season"] == season]
-        model = LogisticRegression(C=1.0).fit(train[columns], train["home_win"])
+        # Standardized first: EPA-per-play edges are ~100x smaller than
+        # points edges, and without scaling the regularization shrinks
+        # their weights toward zero - an earlier run of this script did
+        # exactly that and understated the category ratings.
+        model = make_pipeline(StandardScaler(), LogisticRegression(C=1.0)).fit(train[columns], train["home_win"])
         out.append(test.assign(p=model.predict_proba(test[columns])[:, 1]))
     return pd.concat(out, ignore_index=True)
 
