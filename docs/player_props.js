@@ -11,10 +11,10 @@
 
 const PLAYER_PROPS_COLUMN_LABELS = {
 rank: "#", game: "Game",
-player_name: "Player", team: "Team", opponent: "Opp", position: "Pos",
-category: "Category", direction: "Bet", player_rate: "Own Avg",
-projection: "Projected", opponent_allowed_rate: "Opp Allows",
-league_rate: "League Avg", ratio: "Opp vs Avg", games: "Games",
+player_name: "Player", team: "Team", opponent: "Opponent", position: "Pos",
+category: "Stat", direction: "Lean", player_rate: "His average",
+projection: "Our projection", opponent_allowed_rate: "Opponent allows",
+league_rate: "League average", ratio: "Opponent vs. average", games: "Games",
 }
 const PLAYER_PROPS_COLUMNS = [
 "rank", "game", "player_name", "team", "opponent", "position", "category", "direction",

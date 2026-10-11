@@ -5,6 +5,7 @@ json would otherwise emit) and the template marker substitution."""
 
 import importlib.util
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -22,7 +23,17 @@ def _load_module():
     return module
 
 
+def _write_shared_js(tmp_path):
+    """The real docs/teams.js and docs/summary_render.js, which a
+    standalone page inlines (build_html's include_shared_js)."""
+    import shutil
+    real_docs = os.path.join(os.path.dirname(__file__), "..", "docs")
+    for name in ("teams.js", "summary_render.js"):
+        shutil.copy(os.path.join(real_docs, name), tmp_path / name)
+
+
 def _write_docs_data(tmp_path):
+    _write_shared_js(tmp_path)
     docs_data = tmp_path / "docs_data"
     docs_data.mkdir()
 

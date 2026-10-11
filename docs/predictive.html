@@ -37,10 +37,10 @@ href="./style.css">
 </div>
 
 <div class="tabGroup pageTabs">
-<a class="tabButton" href="./index.html">Today's Summary</a>
+<a class="tabButton" href="./index.html">Today</a>
 <a class="tabButton active" href="./predictive.html">MLB</a>
 <a class="tabButton" href="./nfl.html">NFL</a>
-<a class="tabButton" href="./methodology.html">Methodology</a>
+<a class="tabButton" href="./methodology.html">How it works</a>
 </div>
 
 </div>
@@ -55,20 +55,22 @@ href="./style.css">
 </div>
 
 <div class="tabGroup" id="mlbSubTabs">
-<a class="tabButton active" href="./predictive.html">Predictive Metrics</a>
-<a class="tabButton" href="./dfs.html">DFS Rankings</a>
+<a class="tabButton active" href="./predictive.html">Picks &amp; stats</a>
+<a class="tabButton" href="./dfs.html">Fantasy (DFS)</a>
 <a class="tabButton" href="./age-curves.html">Age Curves</a>
 <a class="tabButton" href="./prospects.html">Prospects</a>
 </div>
 
 <h2>
-Beat the Streak Tracker
+Beat the Streak
 </h2>
 
+<p class="sectionIntro">Each day we pick the hitters most likely to get a hit. Our streak grows by one each day our pick gets a hit, and resets when he doesn't.</p>
+
 <div class="tabGroup" id="btsTabs">
-<button class="tabButton active" data-view="ourPicks" onclick="selectBtsView('ourPicks')">Our Picks</button>
-<button class="tabButton" data-view="hitStreaks" onclick="selectBtsView('hitStreaks')">Hit Streaks</button>
-<button class="tabButton" data-view="modelOdds" onclick="selectBtsView('modelOdds')">Model Odds</button>
+<button class="tabButton active" data-view="ourPicks" onclick="selectBtsView('ourPicks')">Our picks</button>
+<button class="tabButton" data-view="hitStreaks" onclick="selectBtsView('hitStreaks')">Longest hit streaks</button>
+<button class="tabButton" data-view="modelOdds" onclick="selectBtsView('modelOdds')">Today's best chances</button>
 </div>
 
 <div id="ourPicksSection">
@@ -82,7 +84,7 @@ Loading...
 </div>
 
 <h3>
-Today's Picks
+Today
 </h3>
 
 <div
@@ -94,7 +96,7 @@ Loading...
 </div>
 
 <h3>
-Pick History
+Recent results
 </h3>
 
 <div
@@ -134,20 +136,20 @@ Loading...
 <hr>
 
 <h2>
-Player Search
+Look up a player
 </h2>
 
 <select id="playerType">
 
 <option value="wave">
 
-Hitter (WAVE)
+Hitter
 
 </option>
 
 <option value="pave">
 
-Pitcher (PAVE)
+Pitcher
 
 </option>
 
@@ -177,7 +179,7 @@ Search
 <hr>
 
 <h2>
-Probable Pitchers
+Today's starting pitchers
 </h2>
 
 <div
@@ -191,8 +193,10 @@ Loading...
 <hr>
 
 <h2>
-Automated Game Picks
+Game picks
 </h2>
+
+<p class="sectionIntro">Who we think wins each game, next to what Vegas thinks.</p>
 
 <div
 class="statusNote"
@@ -214,7 +218,7 @@ id="gamePickBetRecord">
 </p>
 
 <h3>
-Today's Picks
+Today
 </h3>
 
 <div
@@ -226,7 +230,7 @@ Loading...
 </div>
 
 <h3>
-Pick History
+Recent results
 </h3>
 
 <div
@@ -240,8 +244,10 @@ Loading...
 <hr>
 
 <h2>
-Team Confidence
+Team profiles
 </h2>
+
+<p class="sectionIntro">Pick a team to see its profile, or two to compare them.</p>
 
 <div
 id="teamButtons">
@@ -266,7 +272,7 @@ Select a team
 <div>
 
 <h2>
-Top WAVE Players
+Hitters most likely to get a hit
 </h2>
 
 <div
@@ -282,7 +288,7 @@ Loading...
 <div>
 
 <h2>
-Top PAVE Players
+Pitchers giving up the most hits
 </h2>
 
 <div
@@ -300,6 +306,10 @@ Loading...
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<script src="./teams.js"></script>
+
+<script src="./summary_render.js"></script>
 
 <script src="./app.js"></script>
 

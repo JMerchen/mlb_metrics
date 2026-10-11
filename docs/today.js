@@ -28,6 +28,12 @@ function esc(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;
 
 // The one real date/slate column every picks CSV here has is "date" -
 // simple lexicographic max works since it's always YYYY-MM-DD.
+// "2026-10-07" -> "Wed, Oct 7"
+function friendlyDate(iso){
+const d = new Date(iso + 'T12:00:00')
+return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'})
+}
+
 function latestDateStr(rows){
 const dates = rows.map(r => r.date).filter(Boolean).sort()
 return dates.length ? dates[dates.length - 1] : null
@@ -107,110 +113,26 @@ return {asOf, upcomingPicks: upcoming, summary}
 
 }
 
+// Rendering lives in summary_render.js (shared with the full-site
+// artifact's Assistant tab, so the two can't drift apart again).
 function renderStats(all, top){
-
-const statRow = document.getElementById('stat-row')
-
-if(!all || !Object.keys(all).length){
-statRow.innerHTML = '<div class="empty-note">No stats tracked yet.</div>'
-return
-}
-
-const tiles = [
-{ label: 'Current Streak', value: all.current_streak, sub: 'picks in a row' },
-{ label: 'Longest Streak', value: all.longest_streak, sub: 'all-time best' },
-{
-label: 'Day Survival Rate',
-value: fmtPct(all.day_survival_rate),
-sub: `${(Number(all.day_survival_rate_ci_low) * 100).toFixed(0)}–${(Number(all.day_survival_rate_ci_high) * 100).toFixed(0)}% CI, n=${all.n_days_resolved}`,
-},
-{
-label: "Today's Top Approach",
-value: top ? top.name.split(' ').pop() : '—',
-sub: top ? `${top.team} · ${fmtPct(top.Game_Hit_Probability)} GHP` : 'no qualified hitters',
-},
-]
-
-statRow.innerHTML = tiles.map(t =>
-`<div class="stat"><div class="btsLabel">${esc(t.label)}</div><div class="btsValue">${esc(t.value)}</div><div class="btsSub">${esc(t.sub)}</div></div>`
-).join('')
-
+document.getElementById('stat-row').innerHTML = streakTilesHtml(all, top)
 }
 
 function renderPicks(todaysPicks){
-
-document.getElementById('picks-list').innerHTML = todaysPicks.map(p => `
-<div class="pick">
-<span class="rank">#${p.rank}</span>
-<span class="name">${esc(p.name)}</span>
-<span class="prob">${fmtPct(p.combined_probability)}</span>
-<span class="grade ${p.grade === 'recommended' ? 'btsRecommended' : 'btsSpeculative'}">${p.grade === 'recommended' ? 'Recommended' : 'Speculative'}</span>
-</div>
-`).join('') || '<div class="pick"><span class="name">No picks logged yet today.</span></div>'
-
-}
-
-// The market's number for the model's pick, so each line reads as a
-// comparison ("58.9% · mkt 60.5%"). Blank when no market price was logged.
-function marketNote(g){
-const m = g.market_predicted_winner_probability
-return m !== undefined && m !== '' && !Number.isNaN(Number(m)) ? ` <span class="mkt">· mkt ${fmtPct(m)}</span>` : ''
+document.getElementById('picks-list').innerHTML = btsPicksHtml(todaysPicks)
 }
 
 function renderGamePicks(sport, data){
-
 const listEl = document.getElementById(`${sport}-gp-list`)
 const statEl = document.getElementById(`${sport}-gp-stat-line`)
-const s = data.summary
-
 if(!data.asOf){
 listEl.innerHTML = '<div class="empty-note">No games scheduled yet.</div>'
 statEl.textContent = ''
 return
 }
-
-const nBets = Number(s.n_bets_advised)
-// Bet advice switched off (config.GAME_PICK_BETTING_ENABLED): lead with the
-// current model against the market on the same games, and say it is
-// paused, rather than showing a bet record that is no longer growing.
-if(String(s.betting_enabled).toLowerCase() === 'false'){
-const c = s.current
-const n = c ? Number(c.model_vs_market_n) || 0 : 0
-const record = n
-? `${c.model_version}: <b>${fmtPct(c.model_pick_accuracy)}</b> picks right (market ${fmtPct(c.market_pick_accuracy)}, ${n} games)`
-: `${c ? c.model_version + ': ' : ''}no results yet`
-statEl.innerHTML = `${record} · bet advice paused`
-} else if(!nBets){
-statEl.textContent = 'no bets resolved yet'
-} else {
-// "(odds implied X%)" is what these bets were priced to win - most are
-// underdogs, so the raw win rate means little without it.
-const implied = s.odds_implied_win_rate !== undefined && s.odds_implied_win_rate !== ""
-? ` (odds implied ${fmtPct(s.odds_implied_win_rate)})`
-: ""
-statEl.innerHTML = `<b>${fmtPct(s.win_rate_on_advised_bets)}</b> win rate${implied} · <b>${(Number(s.roi) * 100).toFixed(1)}%</b> ROI · ${nBets} bets`
-}
-
-// bet_units > 0 is the real "was a bet advised" signal (Kelly sizing/
-// daily caps can zero it out even when the model's own above_threshold
-// edge flag is true) - matches app.js/nfl.js's own
-// renderTodaysGamePicks/renderNflTodaysGamePicks.
-listEl.innerHTML = data.upcomingPicks.map(g => {
-const homeWins = g.predicted_winner === g.home_team
-const betUnits = Number(g.bet_units)
-const betAdvised = betUnits > 0
-const bet = betAdvised
-? `<span class="bet-badge">Bet ${esc(g.bet_team)} ${betUnits.toFixed(2)}u</span>` : ''
-return `<div class="game">
-<div class="btsMatchup">
-<span class="${!homeWins ? 'winner' : ''} away">${esc(g.away_team)}</span> @
-<span class="${homeWins ? 'winner' : ''}">${esc(g.home_team)}</span>
-</div>
-<span class="prob">${fmtPct(g.predicted_probability)}${marketNote(g)}</span>
-${bet}
-</div>`
-}).join('') || '<div class="empty-note">No games scheduled yet.</div>'
-
+statEl.innerHTML = gamePicksRecordHtml(data.summary, data.summary.current)
+listEl.innerHTML = gamePicksListHtml(data.upcomingPicks, sport)
 }
 
 (async () => {
@@ -221,7 +143,7 @@ loadGamePicksSection('game_picks'),
 loadGamePicksSection('nfl_game_picks', {groupByWeek: true}),
 ])
 
-document.getElementById('asof-badge').textContent = 'as of ' + (bts.asOf || 'no data yet')
+document.getElementById('asof-badge').textContent = bts.asOf ? 'Updated ' + friendlyDate(bts.asOf) : 'No data yet'
 renderStats(bts.summary, bts.topApproach)
 renderPicks(bts.todaysPicks)
 renderGamePicks('mlb', mlb)

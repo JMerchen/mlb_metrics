@@ -41,25 +41,25 @@ stay local here, since Today's Summary has no chat. */
 
 <div class="wrap">
   <header>
-    <h1>Beat the Streak Assistant</h1>
+    <h1>Today</h1>
     <span class="asof" id="asof-badge"></span>
   </header>
-  <p class="subtitle">Ask about today's picks — Beat the Streak, MLB Game Picks, and NFL Game Picks — WAVE/PAVE stats, or how the models work, grounded in the site's real, currently-live data. Read-only: it can discuss the picks, never change them.</p>
+  <p class="subtitle">Our picks for today in one place, plus an assistant you can ask about any player, game, or how the picks are made.</p>
 
   <div class="stat-row" id="stat-row"></div>
 
   <div class="panel">
-    <div class="panel-head">Today's Beat the Streak Picks</div>
+    <div class="panel-head">Beat the Streak: who gets a hit today</div>
     <div class="picks" id="picks-list"></div>
   </div>
 
   <div class="panel">
-    <div class="panel-head with-stats"><span>MLB Game Picks</span><span class="stat-line" id="mlb-gp-stat-line"></span></div>
+    <div class="panel-head with-stats"><span>Baseball games</span><span class="stat-line" id="mlb-gp-stat-line"></span></div>
     <div class="picks" id="mlb-gp-list"></div>
   </div>
 
   <div class="panel">
-    <div class="panel-head with-stats"><span>NFL Game Picks</span><span class="stat-line" id="nfl-gp-stat-line"></span></div>
+    <div class="panel-head with-stats"><span>Football games this week</span><span class="stat-line" id="nfl-gp-stat-line"></span></div>
     <div class="picks" id="nfl-gp-list"></div>
   </div>
 
@@ -79,97 +79,43 @@ stay local here, since Today's Summary has no chat. */
 <script>
 const ASSISTANT_DATA = /*__DATA_JSON__*/{}/*__END_DATA_JSON__*/;
 
-function fmtPct(x){ return (x*100).toFixed(1) + '%'; }
 function esc(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
 
-function renderStats(){
+// The picks panels are rendered by docs/summary_render.js (with
+// docs/teams.js), the same code the real site's Today page uses - this
+// tab used to keep its own copy, and the two drifted apart (2026-10-10).
+// Both files load as their own scripts: inlined just before this one on
+// the standalone page (build_bts_assistant_page.py), or among the
+// full-site artifact's shared scripts, which run after this block - hence
+// waiting for DOMContentLoaded.
+function renderSummaryPanels(){
   const all = ASSISTANT_DATA.streakSummary[0];
   const top = ASSISTANT_DATA.topLeaders[0];
-  const tiles = [
-    { label: 'Current Streak', value: all.current_streak, sub: 'picks in a row' },
-    { label: 'Longest Streak', value: all.longest_streak, sub: 'all-time best' },
-    { label: 'Day Survival Rate', value: fmtPct(all.day_survival_rate), sub: `${(all.day_survival_rate_ci_low*100).toFixed(0)}–${(all.day_survival_rate_ci_high*100).toFixed(0)}% CI, n=${all.n_days_resolved}` },
-    { label: "Today's Top Approach", value: top.name.split(' ').pop(), sub: `${top.team} · ${fmtPct(top.Game_Hit_Probability)} GHP` },
-  ];
-  document.getElementById('stat-row').innerHTML = tiles.map(t =>
-    `<div class="stat"><div class="btsLabel">${esc(t.label)}</div><div class="btsValue">${esc(t.value)}</div><div class="btsSub">${esc(t.sub)}</div></div>`
-  ).join('');
-}
-
-function renderPicks(){
-  document.getElementById('picks-list').innerHTML = ASSISTANT_DATA.todaysPicks.map(p => `
-    <div class="pick">
-      <span class="rank">#${p.rank}</span>
-      <span class="name">${esc(p.name)}</span>
-      <span class="prob">${fmtPct(p.combined_probability)}</span>
-      <span class="grade ${p.grade === 'recommended' ? 'btsRecommended' : 'btsSpeculative'}">${p.grade === 'recommended' ? 'Recommended' : 'Speculative'}</span>
-    </div>
-  `).join('') || '<div class="pick"><span class="name">No picks logged yet today.</span></div>';
-}
-
-// The market's number for the model's pick ("58.9% · mkt 60.5%"), as on
-// the real Today page (docs/today.js). Blank when none was logged.
-function marketNote(g){
-  const m = g.market_predicted_winner_probability;
-  return m !== undefined && m !== null && m !== '' && !Number.isNaN(Number(m)) ? ` <span class="mkt">· mkt ${fmtPct(m)}</span>` : '';
-}
-
-function renderGamePicks(sport, data){
-  const listEl = document.getElementById(`${sport}-gp-list`);
-  const statEl = document.getElementById(`${sport}-gp-stat-line`);
-  const s = data.summary[0];
-
-  if (!data.asOf) {
-    listEl.innerHTML = '<div class="empty-note">No games scheduled yet.</div>';
-    statEl.textContent = '';
-    return;
+  document.getElementById('stat-row').innerHTML = streakTilesHtml(all, top);
+  document.getElementById('picks-list').innerHTML = btsPicksHtml(ASSISTANT_DATA.todaysPicks);
+  for (const [sport, data] of [['mlb', ASSISTANT_DATA.mlbGamePicks], ['nfl', ASSISTANT_DATA.nflGamePicks]]) {
+    const listEl = document.getElementById(`${sport}-gp-list`);
+    const statEl = document.getElementById(`${sport}-gp-stat-line`);
+    if (!data.asOf) {
+      listEl.innerHTML = '<div class="empty-note">No games scheduled yet.</div>';
+      statEl.textContent = '';
+      continue;
+    }
+    const current = (data.summaryByVersion || []).find(r => r.model_version && r.model_version !== 'all_time') || null;
+    statEl.innerHTML = gamePicksRecordHtml(data.summary[0], current);
+    listEl.innerHTML = gamePicksListHtml(data.upcomingPicks, sport);
   }
-  // Same headline logic as docs/today.js (keep the two in step): while
-  // bet advice is switched off, lead with the current model against the
-  // market on the same games and say it is paused, rather than showing a
-  // bet record that is no longer growing.
-  const current = (data.summaryByVersion || []).find(r => r.model_version && r.model_version !== 'all_time') || null;
-  if (String(s.betting_enabled).toLowerCase() === 'false') {
-    const n = current ? Number(current.model_vs_market_n) || 0 : 0;
-    const record = n
-      ? `${current.model_version}: <b>${fmtPct(current.model_pick_accuracy)}</b> picks right (market ${fmtPct(current.market_pick_accuracy)}, ${n} games)`
-      : `${current ? current.model_version + ': ' : ''}no results yet`;
-    statEl.innerHTML = `${record} · bet advice paused`;
-  } else if (!Number(s.n_bets_advised)) {
-    statEl.textContent = 'no bets resolved yet';
-  } else {
-    const implied = s.odds_implied_win_rate !== undefined && s.odds_implied_win_rate !== null
-      ? ` (odds implied ${fmtPct(s.odds_implied_win_rate)})` : '';
-    statEl.innerHTML = `<b>${fmtPct(s.win_rate_on_advised_bets)}</b> win rate${implied} · <b>${(s.roi*100).toFixed(1)}%</b> ROI · ${s.n_bets_advised} bets`;
-  }
-
-  listEl.innerHTML = data.upcomingPicks.map(g => {
-    const homeWins = g.predicted_winner === g.home_team;
-    // bet_units > 0 is the real "was a bet advised" signal, same as the
-    // dashboard's own renderTodaysGamePicks/renderNflTodaysGamePicks -
-    // above_threshold alone (the model's own edge flag) does NOT mean a
-    // bet was placed (Kelly sizing/daily caps can still zero it out), so
-    // using it here showed a bet badge on games the dashboard didn't.
-    const betUnits = Number(g.bet_units);
-    const betAdvised = betUnits > 0;
-    const bet = betAdvised
-      ? `<span class="bet-badge">Bet ${esc(g.bet_team)} ${betUnits.toFixed(2)}u</span>` : '';
-    return `<div class="game">
-      <div class="btsMatchup">
-        <span class="${!homeWins ? 'winner' : ''} away">${esc(g.away_team)}</span> @
-        <span class="${homeWins ? 'winner' : ''}">${esc(g.home_team)}</span>
-      </div>
-      <span class="prob">${fmtPct(g.predicted_probability)}${marketNote(g)}</span>
-      ${bet}
-    </div>`;
-  }).join('') || '<div class="empty-note">No games scheduled yet.</div>';
+  const d = new Date(ASSISTANT_DATA.asOf + 'T12:00:00');
+  document.getElementById('asof-badge').textContent = Number.isNaN(d.getTime())
+    ? 'Updated ' + ASSISTANT_DATA.asOf
+    : 'Updated ' + d.toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'});
 }
 
-document.getElementById('asof-badge').textContent = 'as of ' + ASSISTANT_DATA.asOf;
-renderStats();
-renderPicks();
-renderGamePicks('mlb', ASSISTANT_DATA.mlbGamePicks);
-renderGamePicks('nfl', ASSISTANT_DATA.nflGamePicks);
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', renderSummaryPanels);
+} else {
+  renderSummaryPanels();
+}
 
 // --- Chat ---
 const METHODOLOGY = `This is the Beat the Streak picker for a real MLB stats project. Key terms:

@@ -48,10 +48,10 @@ this block isn't in the shared stylesheet. */
 </div>
 
 <div class="tabGroup pageTabs">
-<a class="tabButton" href="./index.html">Today's Summary</a>
+<a class="tabButton" href="./index.html">Today</a>
 <a class="tabButton" href="./predictive.html">MLB</a>
 <a class="tabButton active" href="./nfl.html">NFL</a>
-<a class="tabButton" href="./methodology.html">Methodology</a>
+<a class="tabButton" href="./methodology.html">How it works</a>
 </div>
 
 </div>
@@ -66,17 +66,19 @@ this block isn't in the shared stylesheet. */
 </div>
 
 <div class="tabGroup" id="nflTabs">
-<button class="tabButton active" data-nfl-tab="preseason" onclick="selectNflTab('preseason')">Preseason</button>
-<button class="tabButton" data-nfl-tab="gamepicks" onclick="selectNflTab('gamepicks')">Game Picks</button>
-<button class="tabButton" data-nfl-tab="draftboard" onclick="selectNflTab('draftboard')">Draft Board</button>
-<button class="tabButton" data-nfl-tab="playerprops" onclick="selectNflTab('playerprops')">Player Props</button>
+<button class="tabButton active" data-nfl-tab="preseason" onclick="selectNflTab('preseason')">Fantasy draft</button>
+<button class="tabButton" data-nfl-tab="gamepicks" onclick="selectNflTab('gamepicks')">Game picks</button>
+<button class="tabButton" data-nfl-tab="draftboard" onclick="selectNflTab('draftboard')">College prospects</button>
+<button class="tabButton" data-nfl-tab="playerprops" onclick="selectNflTab('playerprops')">Player props</button>
 </div>
 
 <div id="gamePicksSection" style="display:none">
 
 <h3>
-Automated Game Picks
+Game picks
 </h3>
+
+<p class="sectionIntro">Who we think wins each game, next to what Vegas thinks.</p>
 
 <div
 class="streakStats"
@@ -87,7 +89,7 @@ Loading...
 </div>
 
 <h3>
-This Week's Picks
+This week
 </h3>
 
 <div
@@ -99,7 +101,7 @@ Loading...
 </div>
 
 <h3>
-Pick History
+Recent results
 </h3>
 
 <div
@@ -228,15 +230,10 @@ Loading...
 <div id="draftBoardSection" style="display:none">
 
 <h3>
-NFL Draft-Eligible College Board
+College prospects for the next NFL draft
 </h3>
 
-<p style="opacity:.75; max-width:700px;">
-Real consensus board - several already-published third-party college
-big boards blended into one ranking, not a new model (see the
-<a href="https://github.com/JMerchen/mlb_metrics#consensus-rankings-prospect_sourcespy-mlb_draft_sourcespy-nfl_draft_sourcespy-consensus_rankingspy" style="color:inherit">README</a>
-for the full methodology). Updates weekly.
-</p>
+<p class="sectionIntro">Several published college big boards blended into one ranking. Updates weekly.</p>
 
 <div class="scrollbox" id="nflDraftBoardTable">
 Loading...
@@ -247,19 +244,10 @@ Loading...
 <div id="playerPropsSection" style="display:none">
 
 <h3>
-Player Prop Bets - Top Matchups
+Player props: the best matchups this week
 </h3>
 
-<p style="opacity:.75; max-width:700px;">
-Real player prop rankings by matchup quality alone - a player's own
-recent per-game rate against their real upcoming opponent's real
-allowed-rate weakness at that stat (receptions, receiving yards,
-rushing yards, passing yards, sacks). NOT priced against any real
-sportsbook line (see the
-<a href="https://github.com/JMerchen/mlb_metrics#nfl-player-props-nfl_player_propspy" style="color:inherit">README</a>
-for the full methodology and real backtest validation) - these are real
-"good spots to look," not a priced +EV pick. Updates weekly.
-</p>
+<p class="sectionIntro">Players with the friendliest matchups for receptions, receiving yards, rushing yards, passing yards and sacks, based on their recent games and how much their opponent gives up. We don't check these against sportsbook lines, so treat them as places to look, not sure bets. Updates weekly.</p>
 
 <p style="margin:0 0 8px 0">
 <label for="nflPlayerPropsGame" style="font-size:0.9em">Game:</label>
@@ -270,23 +258,9 @@ for the full methodology and real backtest validation) - these are real
 Loading...
 </div>
 
-<h3 style="margin-top:28px">Season Floors by Position</h3>
-<p>
-A history section, not a prediction: the 32 players at each position with
-the most snaps this season, and for every stat the <em>lowest</em> number
-they've posted in a game so far - zero included. If a receiver's catches
-go 5, 6, 4, his floor is 4; the moment he posts a 3, it drops to 3. Under
-each floor is his average and standard deviation (&plusmn;) for that stat,
-so you can see how far above his floor he usually lands.
-</p>
-<p>
-A game the player left injured doesn't count: that's a game where his
-snaps fell below half his usual share <em>and</em> he was inactive or on
-injured reserve for his team's next game. The Note column says which week
-was left out. A blowout or a benching still counts. His most recent game
-can't be confirmed yet, so an early exit there counts for now and is noted
-until next week's run. Click a stat heading to sort by it.
-</p>
+<h3 style="margin-top:28px">Every-game floors</h3>
+<p class="sectionIntro">The fewest each of the 32 busiest players at each position has put up in a single game this season, zeros included, with his average underneath. If a receiver's catches go 5, 6, 4, his floor is 4.</p>
+<p class="sectionIntro">Games a player left injured don't count; the Note column says which week was skipped. Click a column heading to sort.</p>
 
 <div id="nflPositionFloorTabs" style="margin:0 0 8px 0"></div>
 <p style="margin:0 0 8px 0">
@@ -309,6 +283,8 @@ Loading...
 <script src="./consensus_board.js"></script>
 
 <script src="./player_props.js"></script>
+
+<script src="./teams.js"></script>
 
 <script src="./nfl.js"></script>
 
