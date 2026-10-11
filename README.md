@@ -2632,6 +2632,19 @@ place rather than crashing or overwriting with nothing) and are wired into
 > building an out-of-sample record, and betting should be switched back
 > on only if that record shows the model beating the market. The v1
 > notes below are kept for history.
+>
+> **Graded against four seasons of closing lines (2026-10-11).**
+> `scripts/backfill_historical_odds.py` pulled 2022–2025 moneylines
+> from ESPN's core API (`data/raw/market_odds/`, about 2,450 games a
+> season: 13–14 books per game in 2022–23, ESPN BET in 2024–25), and
+> `scripts/backtest_bets_historical_odds.py` replays the walk-forward
+> predictions against them. On 9,211 games the market's close beats the
+> model every season (Brier 0.2404 vs 0.2422) and the model adds nothing
+> beyond it (p = 0.88). The bet rule loses 3.6% over 5,991 bets (95% CI
+> −6.4% to −0.7%), roughly the bookmaker's margin; a threshold chosen on
+> 2022–23 makes +1.5% on 133 bets in 2024–25 (95% CI −20% to +23%),
+> which is noise. Bet advice stays off: the earlier 488-game "tie with
+> the market" was within noise, and the larger test settles it.
 
 > **Real, measured status (2026-09-16), stated up front rather than
 > buried:** across all **373 real resolved games** in
