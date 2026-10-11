@@ -758,6 +758,9 @@ GAME_PICK_MODEL_VERSION = "v2"  # v2 (2026-10-04): mlb_game_model's trained logi
 # so v2 builds a genuinely out-of-sample record. Turn this on only once
 # that record shows the model adding information beyond the market and the
 # replayed bets making money. scripts/recommend_bets.py is unaffected.
+# Confirmed on 9,211 games of 2022-2025 closing lines (2026-10-11,
+# scripts/backtest_bets_historical_odds.py): the replayed bets lose 3.6%
+# (95% CI -6.4% to -0.7%) and the model adds nothing beyond the market.
 GAME_PICK_BETTING_ENABLED = False
 
 # First season of Statcast history mlb_game_model reads (2026-10-04).
