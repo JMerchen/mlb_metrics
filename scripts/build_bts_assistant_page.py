@@ -141,10 +141,26 @@ def build_payload(docs_data_dir: str) -> dict:
     }
 
 
-def build_html(docs_data_dir: str, include_style: bool = True) -> str:
+SHARED_JS = ["teams.js", "summary_render.js"]
+
+
+def build_html(docs_data_dir: str, include_style: bool = True, include_shared_js: bool = True) -> str:
     payload = build_payload(docs_data_dir)
     with open(TEMPLATE_PATH) as f:
         template = f.read()
+
+    # The picks panels render through the real site's docs/teams.js and
+    # docs/summary_render.js (one copy of that code, shared with the Today
+    # page). A standalone page inlines them here, ahead of the template's
+    # own script; build_full_site_artifact.py passes include_shared_js=False
+    # because it loads them once among its own shared scripts.
+    if include_shared_js:
+        docs_dir = os.path.dirname(os.path.normpath(docs_data_dir))
+        shared = []
+        for name in SHARED_JS:
+            with open(os.path.join(docs_dir, name)) as f:
+                shared.append(f"<script>\n{f.read()}\n</script>")
+        template = "\n".join(shared) + "\n" + template
 
     # The template's own .wrap/.stat-row/.panel/.pick/.game/... "summary
     # card" CSS now lives in the shared docs/style.css (also used by the

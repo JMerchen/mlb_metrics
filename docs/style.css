@@ -150,7 +150,7 @@ letter-spacing:-.005em;
 
 h3{
 
-font-size:15px;
+font-size:16px;
 
 font-weight:600;
 
@@ -158,9 +158,9 @@ margin-bottom:10px;
 
 color:var(--text-dim);
 
-text-transform:uppercase;
+text-transform:none;
 
-letter-spacing:.04em;
+letter-spacing:0;
 
 }
 
@@ -262,9 +262,9 @@ color:var(--text-dim);
 
 font-weight:600;
 
-text-transform:uppercase;
+text-transform:none;
 
-font-size:11px;
+font-size:12px;
 
 letter-spacing:.03em;
 
@@ -467,6 +467,21 @@ border-top:1px solid var(--border);
 
 }
 
+/* One plain sentence under a section heading saying what it is. */
+.sectionIntro{
+
+color:var(--text-dim);
+
+font-size:14px;
+
+line-height:1.5;
+
+margin:-4px 0 14px 0;
+
+max-width:680px;
+
+}
+
 /* A one-line status above a section's tiles - e.g. "bet advice is
 paused" - so the state is stated, not left to be inferred from blanks. */
 .statusNote{
@@ -543,13 +558,13 @@ color:var(--accent);
 
 .streakStat .label{
 
-font-size:12px;
+font-size:13px;
 
 color:var(--text-dim);
 
 margin-top:4px;
 
-text-transform:uppercase;
+text-transform:none;
 
 letter-spacing:.03em;
 
@@ -668,7 +683,7 @@ font-size:10px;
 
 font-weight:700;
 
-text-transform:uppercase;
+text-transform:none;
 
 letter-spacing:.04em;
 
@@ -708,7 +723,7 @@ font-size:11px;
 
 font-weight:600;
 
-text-transform:uppercase;
+text-transform:none;
 
 letter-spacing:.03em;
 
@@ -1135,40 +1150,41 @@ template already relies on these exact names. */
 
 .wrap header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:6px;flex-wrap:wrap;}
 .wrap h1{font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0;}
-.asof{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);}
+.asof{font-size:13px;color:var(--text-dim);}
 .subtitle{color:var(--text-dim);font-size:14px;margin:2px 0 22px;max-width:60ch;line-height:1.5;}
 
 .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:22px;}
 .stat{background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;}
-.stat .btsLabel{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:6px;}
-.stat .btsValue{font-family:var(--font-mono);font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1;}
-.stat .btsSub{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);margin-top:5px;}
+.stat .btsLabel{font-size:12px;font-weight:600;color:var(--text-dim);margin-bottom:6px;}
+.stat .btsValue{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1;}
+.stat .btsSub{font-size:12px;color:var(--text-dim);margin-top:5px;}
 
 .panel{background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:18px;overflow:hidden;}
-.panel-head{padding:11px 16px;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text-dim);}
+.panel-head{padding:12px 16px;border-bottom:1px solid var(--border);font-size:15px;font-weight:700;color:var(--text);}
 .picks{display:flex;flex-direction:column;}
 .pick{display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--border);}
 .pick:last-child{border-bottom:none;}
 .pick .rank{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);width:16px;}
 .pick .name{font-weight:600;flex:1;min-width:0;}
-.pick .prob{font-family:var(--font-mono);font-size:13px;font-variant-numeric:tabular-nums;color:var(--text-dim);}
-.grade{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:3px 7px;border-radius:20px;border:1px solid var(--border-strong);}
+.pick .prob{font-size:13px;font-variant-numeric:tabular-nums;color:var(--text-dim);}
+.grade{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid var(--border-strong);white-space:nowrap;}
 .grade.btsRecommended{color:var(--success);border-color:var(--success);}
 .grade.btsSpeculative{color:var(--text-dim);}
 
 .panel-head.with-stats{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
-.panel-head .stat-line{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400;}
+.panel-head .stat-line{font-size:13px;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400;}
 .panel-head .stat-line b{color:var(--text);font-weight:600;}
 .game{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--border);}
 .game:last-child{border-bottom:none;}
 .game .btsMatchup{flex:1;min-width:0;font-size:13px;}
 .game .btsMatchup .away{color:var(--text-dim);}
 .game .btsMatchup .winner{font-weight:700;color:var(--on-accent);background:var(--accent);padding:1px 7px;border-radius:4px;}
-.game .prob{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.game .prob{font-size:13px;color:var(--text-dim);font-variant-numeric:tabular-nums;white-space:nowrap;}
+.game .prob b{color:var(--text);font-weight:600;}
 .game .prob .mkt{opacity:.75;}
 /* A confidence range or other detail inside a table cell. */
 td .dim{color:var(--text-dim);font-size:.9em;}
-.bet-badge{font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:3px 7px;border-radius:20px;border:1px solid var(--accent);color:var(--accent);white-space:nowrap;}
+.bet-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid var(--accent);color:var(--accent);white-space:nowrap;}
 .empty-note{padding:14px 16px;color:var(--text-dim);font-size:13px;line-height:1.5;}
 
 /* Phones. Until now the stylesheet had no breakpoints, so a phone got the
@@ -1208,5 +1224,10 @@ td,th{padding:7px 8px;font-size:12px;}
 .scrollbox{padding:2px 6px;}
 
 .statusNote{font-size:13px;}
+
+/* A game row wraps instead of squeezing "We say ... · Vegas ..." */
+.game{flex-wrap:wrap;row-gap:4px;}
+.game .btsMatchup{flex-basis:100%;}
+.game .prob{white-space:normal;}
 
 }

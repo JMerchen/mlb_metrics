@@ -527,52 +527,25 @@ const s = summary[0]
 
 const stat = (value, label, sub) =>
 `<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`
+const pct0 = v=>v === undefined || v === "" || Number.isNaN(Number(v)) ? "-" : Math.round(Number(v) * 100) + "%"
 
-const hasBets = s.n_bets_advised && Number(s.n_bets_advised) > 0
-
-const winRate = hasBets
-? (Number(s.win_rate_on_advised_bets) * 100).toFixed(1) + "%"
-: "-"
-
-// What these same bets were priced to win (evaluation.odds_implied_win_rate).
-// Most advised bets are underdogs, so a win rate in the 30s can be right
-// on track - this is the number it has to be read against, and beating it
-// is what makes money. Shown first because it changes what the headline
-// number means; the CI follows on its own line.
-const oddsImplied = hasBets && s.odds_implied_win_rate !== undefined && s.odds_implied_win_rate !== ""
-? `odds implied ${(Number(s.odds_implied_win_rate) * 100).toFixed(1)}%`
-: ""
-const winRateSub = hasBets
-? [oddsImplied, ciLabel(s.win_rate_on_advised_bets_ci_low, s.win_rate_on_advised_bets_ci_high)].filter(Boolean).join("<br>")
-: ""
-
-const pnl = hasBets
-? (Number(s.total_profit_units) >= 0 ? "+" : "") + Number(s.total_profit_units).toFixed(2) + "u"
-: "-"
-
-const pnlColor = hasBets
-? (Number(s.total_profit_units) >= 0 ? "var(--success)" : "var(--danger)")
-: "inherit"
-
-const pnlSub = hasBets ? significanceLabel(s.roi_p_value) : ""
-
-const hasClosingLineData = s.beat_closing_line_rate && s.n_beat_closing_line_compared > 0
-const beatClosingLine = hasClosingLineData
-? (Number(s.beat_closing_line_rate) * 100).toFixed(1) + "%"
-: "-"
-
-const beatClosingLineSub = hasClosingLineData
-? [ciLabel(s.beat_closing_line_rate_ci_low, s.beat_closing_line_rate_ci_high), significanceLabel(s.beat_closing_line_rate_p_value)]
-.filter(Boolean).join(" · ")
-: ""
-
-el.innerHTML =
-stat(s.current_bet_streak || 0, "Week Streak") +
-stat(s.best_bet_streak || 0, "Best Week Streak") +
-stat(winRate, "Win Rate", winRateSub) +
-stat(s.n_bets_advised || 0, "Bets Tracked") +
-`<div class="streakStat"><div class="value" style="color:${pnlColor}">${pnl}</div><div class="label">P&amp;L</div>${pnlSub ? `<div class="sub">${pnlSub}</div>` : ""}</div>` +
-stat(beatClosingLine, "Beat Closing Line", beatClosingLineSub)
+// Plain-language headline: our picks next to Vegas's on the same games,
+// then the bet record as "won N of M" and units up or down.
+let html = ""
+const n = Number(s.model_vs_market_n) || 0
+if(n){
+html += stat(`${Math.round(Number(s.model_pick_accuracy) * n)} of ${n}`, "Our picks right", "games with a Vegas line")
+html += stat(`${Math.round(Number(s.market_pick_accuracy) * n)} of ${n}`, "Vegas's picks right", "same games")
+}
+const bets = Number(s.n_bets_advised) || 0
+if(bets){
+const units = Number(s.total_profit_units)
+html += stat(`${s.bets_won} of ${bets}`, "Bets won", `the odds said about ${pct0(s.odds_implied_win_rate)} would win`)
+html += `<div class="streakStat"><div class="value" style="color:${units >= 0 ? "var(--success)" : "var(--danger)"}">${units >= 0 ? "+" : "−"}${Math.abs(units).toFixed(1)}</div><div class="label">Units won or lost</div><div class="sub">${bets < 100 ? "too few bets to judge yet" : ""}</div></div>`
+}else{
+html += stat("-", "Bets won", "no bets settled yet")
+}
+el.innerHTML = html
 
 }
 
@@ -581,7 +554,7 @@ function renderNflTodaysGamePicks(picks){
 const el = document.getElementById("nflTodaysGamePicks")
 
 if(!picks.length){
-el.innerHTML = "No game picks published yet"
+el.innerHTML = "No game picks yet"
 return
 }
 
@@ -600,38 +573,32 @@ return
 }
 
 const statusLabels = {
-win: "win",
-loss: "loss",
-not_played: "not played",
-pending: "pending",
+win: "We were right",
+loss: "We were wrong",
+not_played: "Postponed",
+pending: "Not played yet",
 }
+const pct0 = v=>v !== undefined && v !== null && v !== "" && !Number.isNaN(Number(v)) ? Math.round(Number(v) * 100) + "%" : ""
 
 el.innerHTML = thisWeek
 .map(p=>{
 
-// The matchup once, with the pick bolded, and the market's number for
-// the same team beside the model's - same layout as the MLB cards.
-const pct = v=>v !== undefined && v !== null && v !== "" && !Number.isNaN(Number(v)) ? (Number(v) * 100).toFixed(1) + "%" : ""
-const homePicked = p.predicted_winner === p.home_team
-const matchup = homePicked
-? `${p.away_team} @ <b>${p.home_team}</b>`
-: `<b>${p.away_team}</b> @ ${p.home_team}`
-const market = pct(p.market_predicted_winner_probability)
-const prob = pct(p.predicted_probability)
-? `${pct(p.predicted_probability)} ${p.predicted_winner}${market ? ` · market ${market}` : ""}`
-: ""
+const away = teamName(p.away_team, "nfl")
+const home = teamName(p.home_team, "nfl")
+const pick = teamName(p.predicted_winner, "nfl")
+const matchup = p.predicted_winner === p.home_team ? `${away} at <b>${home}</b>` : `<b>${away}</b> at ${home}`
+const vegas = pct0(p.market_predicted_winner_probability)
 
 const betUnits = Number(p.bet_units)
 const betAdvised = betUnits > 0
-
 const betLine = betAdvised
-? `<div class="pickStatus">Bet advised: ${p.bet_team} @ ${p.bet_moneyline} (${betUnits.toFixed(2)}u)</div>`
+? `<div class="pickStatus">Bet ${teamName(p.bet_team, "nfl")} &middot; ${betUnits.toFixed(1)} units</div>`
 : ""
 
 return `
 <div class="pickCard ${p.status}${betAdvised ? " recommended" : ""}">
 <div class="pickName">${matchup}</div>
-<div class="pickProb">${prob}</div>
+<div class="pickProb">We say ${pick} ${pct0(p.predicted_probability)}${vegas ? ` &middot; Vegas ${vegas}` : ""}</div>
 <div class="pickStatus">${statusLabels[p.status] || p.status}</div>
 ${betLine}
 </div>
@@ -648,37 +615,41 @@ const sorted = picks
 .slice()
 .sort((a,b)=>b.date.localeCompare(a.date) || Number(b.predicted_probability) - Number(a.predicted_probability))
 
-const statusLabels = {
-win: "win",
-loss: "loss",
-not_played: "not played",
-pending: "pending",
+const results = {
+win: "✓ Right",
+loss: "✗ Wrong",
+not_played: "Postponed",
+pending: "Not played yet",
+}
+const pct0 = v=>v !== undefined && v !== null && v !== "" && !Number.isNaN(Number(v)) ? Math.round(Number(v) * 100) + "%" : "-"
+
+const shown = sorted.slice(0, 100)
+const anyBets = shown.some(p=>Number(p.bet_units) > 0)
+const betCell = p=>{
+if(!(Number(p.bet_units) > 0)){ return "-" }
+const profit = Number(p.bet_profit_units)
+const settled = p.bet_profit_units !== undefined && p.bet_profit_units !== "" && !Number.isNaN(profit)
+? (profit >= 0 ? `, won ${profit.toFixed(1)}` : `, lost ${Math.abs(profit).toFixed(1)}`)
+: ""
+return `${teamName(p.bet_team, "nfl")} ${Number(p.bet_units).toFixed(1)} units${settled}`
 }
 
-const pct = v =>
-v !== undefined && v !== null && v !== "" && !Number.isNaN(Number(v))
-? (Number(v) * 100).toFixed(1) + "%"
-: "-"
-
-const formatted = sorted.map(p=>({
-"Date": p.date,
-"Predicted Winner": p.predicted_winner,
-"Predicted Loser": p.predicted_loser,
-"Model Probability": pct(p.predicted_probability),
-"Market Probability": pct(p.market_predicted_winner_probability),
-"Bet Units": p.bet_units && Number(p.bet_units) > 0 ? Number(p.bet_units).toFixed(2) : "-",
-"Bet Team": p.bet_team || "-",
-"Status": statusLabels[p.status] || p.status,
-"Bet Profit Units":
-p.bet_profit_units !== undefined && p.bet_profit_units !== "" && !Number.isNaN(Number(p.bet_profit_units))
-? (Number(p.bet_profit_units) >= 0 ? "+" : "") + Number(p.bet_profit_units).toFixed(2) + "u"
-: "-",
-}))
+const formatted = shown.map(p=>{
+const row = {
+"Week": p.week,
+"Game": `${teamName(p.away_team, "nfl")} at ${teamName(p.home_team, "nfl")}`,
+"Our pick": teamName(p.predicted_winner, "nfl"),
+"We said": pct0(p.predicted_probability),
+"Vegas said": pct0(p.market_predicted_winner_probability),
+"Result": results[p.status] || p.status,
+}
+if(anyBets){ row["Bet"] = betCell(p) }
+return row
+})
 
 buildTable(
 formatted,
-"nflGamePickHistoryTable",
-100
+"nflGamePickHistoryTable"
 )
 
 }

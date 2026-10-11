@@ -214,7 +214,14 @@ PAGE_JS_PATCHERS = {
 # stay scoped to that file's own tag. player_props.js is the same real
 # shape for nfl.js's own Player Props tab (formatPlayerPropsValue/
 # buildPlayerPropsTable) - real, direct user request (2026-09-16).
-VERBATIM_JS = ["dfs_solver.js", "nfl_draft_assistant.js", "consensus_board.js", "player_props.js"]
+# teams.js/summary_render.js come first: team nicknames and the
+# plain-language picks rendering, used by the Assistant tab (whose own
+# script waits for DOMContentLoaded so these exist by the time it runs)
+# and by the MLB/NFL tabs.
+VERBATIM_JS = [
+    "teams.js", "summary_render.js",
+    "dfs_solver.js", "nfl_draft_assistant.js", "consensus_board.js", "player_props.js",
+]
 
 
 REAL_SITE_ONLY_NAV_MARKERS = (
@@ -247,9 +254,13 @@ def _extract_page_content(html: str, filename: str) -> str:
     page builds ONE top-level nav instead) and the trailing <script>
     tags (dropped - scripts are assembled separately, once, in a fixed
     dependency order)."""
-    nav_end = html.find(">Methodology</a>")
+    # The nav's last link (the "How it works" tab, formerly labelled
+    # "Methodology"). Matched with its href so a "how it works" link in a
+    # page's own text can't be mistaken for it.
+    nav_marker = 'href="./methodology.html">How it works</a>'
+    nav_end = html.find(nav_marker)
     if nav_end == -1:
-        raise ValueError(f"{filename}: expected nav marker '>Methodology</a>' not found")
+        raise ValueError(f"{filename}: expected nav marker {nav_marker!r} not found")
     # Two </div> closes follow the nav in every page: the pageTabs
     # wrapper, then siteHeader itself.
     closes = 0
@@ -328,7 +339,9 @@ def build_html(docs_dir: str) -> str:
     # once, globally (see below) - the Assistant fragment's own .wrap/
     # .stat-row/.panel/... CSS now lives there too, so it doesn't need
     # its own copy embedded a second time.
-    assistant_content = assistant_module.build_html(os.path.join(docs_dir, "data"), include_style=False)
+    assistant_content = assistant_module.build_html(
+        os.path.join(docs_dir, "data"), include_style=False, include_shared_js=False
+    )
 
     with open(TEMPLATE_PATH) as f:
         template = f.read()

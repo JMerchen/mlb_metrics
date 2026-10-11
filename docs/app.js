@@ -963,6 +963,26 @@ return ids[key]
 
 }
 
+// Plain names for the team card's stats (the CSV columns are model names).
+const TEAM_STAT_LABELS = {
+current: "Recent win rate",
+Strength: "Win strength",
+pyth_Strength: "Run-differential strength",
+SOS: "Schedule strength",
+pyth_SOS: "Schedule strength (by runs)",
+Confidence: "Overall rating",
+pyth_Confidence: "Overall rating (by runs)",
+true_power: "Overall power",
+offensive_edge: "Offense vs. average",
+suppression_resistance: "Hitting vs. tough pitching",
+home_run_reliance: "Reliance on home runs",
+homer_per_game: "Home runs per game",
+game_homer_rate: "Games with a home run",
+team_home_run_rate: "Home runs at home",
+away_hr_rate: "Home runs on the road",
+Park_Factor: "Ballpark factor",
+}
+
 function showTeam(){
 
 const results =
@@ -1144,10 +1164,7 @@ return `
 
 <div>
 
-${k.replaceAll(
-"_",
-" "
-)}
+${TEAM_STAT_LABELS[k] || k.replaceAll("_", " ")}
 
 </div>
 
@@ -1381,29 +1398,33 @@ return `${p(v)}% <span class="dim">(${p(low)}–${p(high)})</span>`
 function waveLeaderboardRow(p){
 return {
 "Player": `${p.name_first} ${p.name_last}`,
-"Team": p.team,
-"PA": Math.round(Number(p.PA_L || 0) + Number(p.PA_R || 0)),
+"Team": teamName(p.team, "mlb"),
+"Plate appearances": Math.round(Number(p.PA_L || 0) + Number(p.PA_R || 0)),
 // No range here: WAVE_CI_Low/High describe the raw full-season hit rate,
 // not WAVE's recency blend (hitters.compute_wave), so beside WAVE they can
 // even exclude it (Moreno: 23.6% shown against 23.7-31.2%).
-"WAVE": fmtPctRange(p.WAVE),
-"Game Hit %": fmtPctRange(p.Game_Hit_Probability),
-"xBA": fmtNum(p.xBA, 3),
-"xwOBA": fmtNum(p.xwOBA, 3),
-"Barrel %": fmtPctRange(p.Barrel_Rate),
+"Hit rate": fmtPctRange(p.WAVE),
+"Chance of a hit today": fmtPctRange(p.Game_Hit_Probability),
+"Barrel rate": fmtPctRange(p.Barrel_Rate),
 }
+}
+
+// "+78%" / "-12%" from a ratio to league average (1.78, 0.88).
+function vsAverage(ratio){
+const n = Number(ratio)
+if(ratio === undefined || ratio === "" || Number.isNaN(n)){ return "-" }
+const pct = Math.round((n - 1) * 100)
+return `${pct > 0 ? "+" : ""}${pct}%`
 }
 
 function paveLeaderboardRow(p){
 return {
 "Pitcher": `${p.name_first} ${p.name_last}`,
-"Team": p.team,
-"Throws": p.Throws || "-",
-"At Bats": p.at_bats,
-"PAVE": fmtNum(p.PAVE, 3),
-"PAVE+": fmtNum(p.PAVE_PLUS, 2),
-"Power A+": fmtNum(p.Power_A_PLUS, 2),
-"Exp. Hits": fmtNum(p.Expected_Hits, 1),
+"Team": teamName(p.team, "mlb"),
+"Throws": p.Throws === "L" ? "Left" : p.Throws === "R" ? "Right" : "-",
+"At-bats faced": p.at_bats,
+"Hit rate allowed": fmtPctRange(p.PAVE),
+"vs. average pitcher": vsAverage(p.PAVE_PLUS),
 }
 }
 
@@ -1621,24 +1642,15 @@ return
 }
 
 const s = summary[0]
-
-const survivalRate =
-s.day_survival_rate && s.day_survival_rate !== ""
-? (Number(s.day_survival_rate) * 100).toFixed(1) + "%"
-: "-"
-
-// Quant-analytics item #5: the real CI on day_survival_rate, so a small
-// n_days_resolved reads as "wide uncertainty band," not false precision.
-const survivalSub = s.n_days_resolved > 0 ? ciLabel(s.day_survival_rate_ci_low, s.day_survival_rate_ci_high) : ""
+const days = n=>`${n} day${Number(n) === 1 ? "" : "s"}`
 
 const stat = (value, label, sub) =>
 `<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`
 
 el.innerHTML =
-stat(s.current_streak || 0, "Current Streak") +
-stat(s.longest_streak || 0, "Longest Streak") +
-stat(survivalRate, "Day Survival Rate", survivalSub) +
-stat(s.n_days_resolved || 0, "Days Tracked")
+stat(days(s.current_streak || 0), "Hit streak", "in a row with a hit") +
+stat(days(s.longest_streak || 0), "Best streak", "our longest so far") +
+stat(srPct(s.day_survival_rate), "Days with a hit", `over ${days(s.n_days_resolved || 0)}`)
 
 }
 
@@ -1672,15 +1684,15 @@ return
 }
 
 const statusLabels = {
-hit: "hit",
-miss: "miss",
-no_game: "no game",
-pending: "pending",
+hit: "Got a hit",
+miss: "No hit",
+no_game: "Didn't play",
+pending: "Game not finished yet",
 }
 
 const gradeLabels = {
-recommended: "Recommended",
-speculative: "Speculative",
+recommended: "Strong pick",
+speculative: "Weaker pick",
 }
 
 el.innerHTML = todays
@@ -1688,7 +1700,7 @@ el.innerHTML = todays
 
 const prob =
 p.predicted_probability && p.predicted_probability !== ""
-? (Number(p.predicted_probability) * 100).toFixed(1) + "% predicted"
+? srPct(p.predicted_probability) + " to get a hit"
 : ""
 
 // "recommended" reuses the same highlight ring the Automated Game
@@ -1717,18 +1729,16 @@ const sorted = picks
 .slice()
 .sort((a,b)=>b.date.localeCompare(a.date) || Number(a.rank) - Number(b.rank))
 
-const results = {hit: "✓ hit", miss: "✗ miss", no_game: "no game", pending: "pending", no_pick: "no pick"}
-const grades = {recommended: "Recommended", speculative: "Speculative"}
+const results = {hit: "✓ Got a hit", miss: "✗ No hit", no_game: "Didn't play", pending: "Not finished", no_pick: "No pick"}
+const grades = {recommended: "Strong", speculative: "Weaker"}
 
 buildTable(
 sorted.slice(0, 100).map(p=>({
 "Date": p.date,
-"#": p.rank,
 "Player": p.name || "-",
-"Predicted": fmtPctRange(p.predicted_probability),
-"Combined": fmtPctRange(p.combined_probability),
+"Chance of a hit": srPct(p.combined_probability),
 "Result": results[p.status] || p.status,
-"Grade": grades[p.grade] || "-",
+"Pick": grades[p.grade] || "-",
 })),
 "streakHistoryTable"
 )
@@ -1762,8 +1772,8 @@ const top = streaks
 .slice(0, 10)
 .map(p=>({
 "Player": `${p.name_first} ${p.name_last}`,
-"Team": p.team,
-"Current Streak": p.Current_Hit_Streak,
+"Team": teamName(p.team, "mlb"),
+"Games in a row with a hit": p.Current_Hit_Streak,
 }))
 
 buildTable(top, "hitStreaksTable")
@@ -1785,7 +1795,7 @@ renderModelOdds(hitterHitPredictions)
 function renderModelOdds(predictions){
 
 if(!predictions.length){
-document.getElementById("modelOddsTable").innerHTML = "No model odds published yet"
+document.getElementById("modelOddsTable").innerHTML = "No chances posted yet today"
 return
 }
 
@@ -1795,9 +1805,9 @@ const top = predictions
 .slice(0, 10)
 .map(p=>({
 "Player": `${p.name_first} ${p.name_last}`,
-"Team": p.team,
-"Opp": `${p.is_home === "True" || p.is_home === "true" ? "vs" : "@"} ${p.opponent}`,
-"Model Odds": `${(Number(p.Model_Hit_Probability) * 100).toFixed(1)}%`,
+"Team": teamName(p.team, "mlb"),
+"Game": `${p.is_home === "True" || p.is_home === "true" ? "vs." : "at"} ${teamName(p.opponent, "mlb")}`,
+"Chance of a hit": srPct(p.Model_Hit_Probability),
 }))
 
 buildTable(top, "modelOddsTable")
@@ -1859,7 +1869,7 @@ function renderPausedGamePickStats(allTime, current){
 
 const note = document.getElementById("gamePickNote")
 note.style.display = ""
-note.innerHTML = `<b>Bet advice is paused.</b> The current model${current ? ` (${current.model_version})` : ""} forecasts about as well as the betting market but hasn't shown an edge over it, so these picks are tracked, not bet.`
+note.innerHTML = "<b>We're not suggesting bets right now.</b> Our picks are about as good as Vegas's, but over four seasons they weren't better, so these are picks to follow, not bets."
 
 const stat = (value, label, sub) =>
 `<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`
@@ -1867,20 +1877,21 @@ const stat = (value, label, sub) =>
 const el = document.getElementById("gamePickStats")
 const n = current ? Number(current.model_vs_market_n) || 0 : 0
 if(!n){
-el.innerHTML = stat("-", "Picks Right", "no resolved games yet") + stat(0, "Games Tracked", current ? `model ${current.model_version}` : "")
+el.innerHTML = stat("-", "Our picks right", "no finished games yet")
 }else{
-const small = n < 100 ? " · too few games to judge yet" : ""
+const ours = Math.round(Number(current.model_pick_accuracy) * n)
+const vegas = Math.round(Number(current.market_pick_accuracy) * n)
+const early = n < 100 ? "still early" : `${srPct(current.model_pick_accuracy)} of games`
 el.innerHTML =
-stat(fmtPct1(current.model_pick_accuracy), "Picks Right", `market ${fmtPct1(current.market_pick_accuracy)} on the same games`) +
-stat(Number(current.model_brier).toFixed(3), "Forecast Error", `market ${Number(current.market_brier).toFixed(3)} · lower is better`) +
-stat(n, "Games Tracked", `model ${current.model_version}${small}`)
+stat(`${ours} of ${n}`, "Our picks right", early) +
+stat(`${vegas} of ${n}`, "Vegas's picks right", "same games")
 }
 
 const record = document.getElementById("gamePickBetRecord")
 const bets = Number(allTime.n_bets_advised) || 0
 if(bets){
 const units = Number(allTime.total_profit_units)
-record.innerHTML = `Betting record before the pause: ${bets} bets, ${fmtPct1(allTime.win_rate_on_advised_bets)} won against ${fmtPct1(allTime.odds_implied_win_rate)} implied by their odds, ${units >= 0 ? "+" : ""}${units.toFixed(2)}u (${(Number(allTime.roi) * 100).toFixed(1)}% ROI).`
+record.innerHTML = `Before we stopped suggesting bets, our bets won ${allTime.bets_won} of ${bets} and ${units >= 0 ? "made" : "lost"} ${Math.abs(units).toFixed(1)} units.`
 }else{
 record.innerHTML = ""
 }
@@ -1901,83 +1912,18 @@ const s = summary[0]
 const stat = (value, label, sub) =>
 `<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`
 
-// Quant-analytics item #6 follow-up: tracking is scoped to whether a real
-// bet was ADVISED (a real Kelly edge actually cleared - see
-// game_predictions.advise_bets), not the model's own above_threshold
-// confidence gate, and the headline number is real money won/lost, not
-// pick accuracy. "-" (same convention as beatClosingLine below) until
-// n_bets_advised clears 0.
-const hasBets = s.n_bets_advised && Number(s.n_bets_advised) > 0
-
-const winRate = hasBets
-? (Number(s.win_rate_on_advised_bets) * 100).toFixed(1) + "%"
-: "-"
-
-// Quant-analytics item #5: win rate's real CI - informational only, no
-// significance flag here (a win/loss count alone can't tell a good -150
-// favorite bet apart from a bad one the real profit already prices in -
-// see evaluation.mean_significance's own docstring). roi_p_value below is
-// the correctly-posed test for whether the P&L is real.
-// What these same bets were priced to win (evaluation.odds_implied_win_rate).
-// Most advised bets are underdogs, so a win rate in the 30s can be right
-// on track - this is the number it has to be read against, and beating it
-// is what makes money. Shown first because it changes what the headline
-// number means; the CI follows on its own line.
-const oddsImplied = hasBets && s.odds_implied_win_rate !== undefined && s.odds_implied_win_rate !== ""
-? `odds implied ${(Number(s.odds_implied_win_rate) * 100).toFixed(1)}%`
-: ""
-const winRateSub = hasBets
-? [oddsImplied, ciLabel(s.win_rate_on_advised_bets_ci_low, s.win_rate_on_advised_bets_ci_high)].filter(Boolean).join("<br>")
-: ""
-
-// Units, not dollars - the standard bankroll-agnostic sports-betting
-// convention (config.UNIT_SIZE_FRACTION of bankroll per unit). "u" suffix
-// matches how bettors actually write this ("+12.4u").
-const pnl = hasBets
-? (Number(s.total_profit_units) >= 0 ? "+" : "") + Number(s.total_profit_units).toFixed(2) + "u"
-: "-"
-
-const pnlColor = hasBets
-? (Number(s.total_profit_units) >= 0 ? "var(--success)" : "var(--danger)")
-: "inherit"
-
-// Quant-analytics item #5: the real test for "is this P&L distinguishable
-// from breaking even" - a one-sample t-test on each advised bet's real
-// profit (evaluation.mean_significance), not a win-rate coin-flip test.
-const pnlSub = hasBets ? significanceLabel(s.roi_p_value) : ""
-
-// Quant-analytics item #6, slice 2 - "beat the closing line," the
-// item's literal stated goal. "-" until n_beat_closing_line_compared
-// clears 0, i.e. until real ESPN market odds have actually been
-// logged/backfilled for resolved games. Unchanged by the bet-P&L pivot
-// above - a genuinely separate "are we better forecasters than the
-// market" question, not what's being replaced.
-const hasClosingLineData = s.beat_closing_line_rate && s.n_beat_closing_line_compared > 0
-const beatClosingLine = hasClosingLineData
-? (Number(s.beat_closing_line_rate) * 100).toFixed(1) + "%"
-: "-"
-
-// Quant-analytics item #5: THE real answer to "n=12, 33% - is that
-// evidence of an edge, or noise" - a real Wilson CI plus a real exact
-// binomial test against a null of 0.5 (a well-posed coin-flip null here,
-// see game_evaluation._beat_closing_line_rate's own docstring).
-const beatClosingLineSub = hasClosingLineData
-? [ciLabel(s.beat_closing_line_rate_ci_low, s.beat_closing_line_rate_ci_high), significanceLabel(s.beat_closing_line_rate_p_value)]
-.filter(Boolean).join(" · ")
-: ""
-
-// Streak is DAYS, not bets (2026-08-25 - "the streak should be days...
-// if the cumulative bets made money that day" - see
-// game_evaluation._bet_pnl_metrics' own docstring): a day with several
-// advised bets counts for at most one real streak step either way,
-// scored on that day's TOTAL profit, not any single bet in isolation.
+// While bet advice is on, the headline is the bet record in plain terms:
+// bets won, money made or lost, and the win rate those odds called for.
+const bets = Number(s.n_bets_advised) || 0
+if(!bets){
+el.innerHTML = stat("-", "Bets won", "no bets settled yet")
+return
+}
+const units = Number(s.total_profit_units)
 el.innerHTML =
-stat(s.current_bet_streak || 0, "Day Streak") +
-stat(s.best_bet_streak || 0, "Best Day Streak") +
-stat(winRate, "Win Rate", winRateSub) +
-stat(s.n_bets_advised || 0, "Bets Tracked") +
-`<div class="streakStat"><div class="value" style="color:${pnlColor}">${pnl}</div><div class="label">P&amp;L</div>${pnlSub ? `<div class="sub">${pnlSub}</div>` : ""}</div>` +
-stat(beatClosingLine, "Beat Closing Line", beatClosingLineSub)
+stat(`${s.bets_won} of ${bets}`, "Bets won", `the odds said about ${srPct(s.odds_implied_win_rate)} would win`) +
+`<div class="streakStat"><div class="value" style="color:${units >= 0 ? "var(--success)" : "var(--danger)"}">${units >= 0 ? "+" : "−"}${Math.abs(units).toFixed(1)}</div><div class="label">Units won or lost</div></div>` +
+stat(s.current_bet_streak || 0, "Winning days in a row")
 
 }
 
@@ -1985,12 +1931,8 @@ function renderTodaysGamePicks(picks, bettingPaused){
 
 const el = document.getElementById("todaysGamePicks")
 
-// Every scheduled game is published now, not just ones a real bet was
-// advised on (see game_predictions.advise_bets) - advised games are
-// highlighted via the "recommended" class below instead of being the
-// only ones shown.
 if(!picks.length){
-el.innerHTML = "No game picks published yet"
+el.innerHTML = "No game picks yet"
 return
 }
 
@@ -2009,38 +1951,32 @@ return
 }
 
 const statusLabels = {
-win: "win",
-loss: "loss",
-not_played: "not played",
-pending: "pending",
+win: "We were right",
+loss: "We were wrong",
+not_played: "Postponed",
+pending: "Not played yet",
 }
 
 el.innerHTML = todays
 .map(p=>{
 
-// The matchup once, with the model's pick bolded, and the market's
-// number for the same team beside the model's - the comparison that
-// matters, now that the model is judged against the market.
-const homePicked = p.predicted_winner === p.home_team
-const matchup = homePicked
-? `${p.away_team} @ <b>${p.home_team}</b>`
-: `<b>${p.away_team}</b> @ ${p.home_team}`
-const market = fmtPct1(p.market_predicted_winner_probability)
-const prob = `${fmtPct1(p.predicted_probability)} ${p.predicted_winner}${market !== "-" ? ` · market ${market}` : ""}`
+const away = teamName(p.away_team, "mlb")
+const home = teamName(p.home_team, "mlb")
+const pick = teamName(p.predicted_winner, "mlb")
+const matchup = p.predicted_winner === p.home_team ? `${away} at <b>${home}</b>` : `<b>${away}</b> at ${home}`
+const vegas = fmtPct1(p.market_predicted_winner_probability) !== "-" ? ` &middot; Vegas ${srPct(p.market_predicted_winner_probability)}` : ""
 
-// bet_units is the real "was a bet advised" signal - 0 (or blank/NaN on
-// an older row) means no bet, any positive number is real units to risk.
+// bet_units > 0 is the "was a bet suggested" signal.
 const betUnits = Number(p.bet_units)
 const betAdvised = betUnits > 0
-
 const betLine = betAdvised
-? `<div class="pickStatus">Bet advised: ${p.bet_team} @ ${p.bet_moneyline} (${betUnits.toFixed(2)}u)</div>`
+? `<div class="pickStatus">Bet ${teamName(p.bet_team, "mlb")} &middot; ${betUnits.toFixed(1)} units</div>`
 : ""
 
 return `
 <div class="pickCard ${p.status}${betAdvised ? " recommended" : ""}">
 <div class="pickName">${matchup}</div>
-<div class="pickProb">${prob}</div>
+<div class="pickProb">We say ${pick} ${srPct(p.predicted_probability)}${vegas}</div>
 <div class="pickStatus">${statusLabels[p.status] || p.status}</div>
 ${betLine}
 </div>
@@ -2057,44 +1993,34 @@ const sorted = picks
 .slice()
 .sort((a,b)=>b.date.localeCompare(a.date) || Number(b.predicted_probability) - Number(a.predicted_probability))
 
-const statusLabels = {
-win: "win",
-loss: "loss",
-not_played: "not played",
-pending: "pending",
+const results = {
+win: "✓ Right",
+loss: "✗ Wrong",
+not_played: "Postponed",
+pending: "Not played yet",
 }
 
-const pct = v =>
-v !== undefined && v !== null && v !== "" && !Number.isNaN(Number(v))
-? (Number(v) * 100).toFixed(1) + "%"
-: "-"
-
-// Real follow-up (2026-08-28 - "we're dumping almost everything data
-// wise into the table, and it all gets jumbled"): trimmed to a curated
-// set of columns, nicely labeled/formatted - not a raw dump of
-// whatever's in game_picks_picks.csv. renderTodaysGamePicks (above)
-// still reads the full row for its own cards, so nothing is removed
-// from the underlying data, just from THIS table's display.
-// One "Bet" cell ("ATL 1.89u, +2.10u") instead of three columns, and only
-// when some row in view actually had a bet - while bet advice is paused,
-// three columns of dashes would just push the useful ones off a phone.
+// A "Bet" column only when a row in view actually had a bet; while bet
+// advice is off, a column of dashes would just crowd the useful ones.
 const shown = sorted.slice(0, 100)
 const anyBets = shown.some(p=>Number(p.bet_units) > 0)
 const betCell = p=>{
 if(!(Number(p.bet_units) > 0)){ return "-" }
-const profit = p.bet_profit_units !== undefined && p.bet_profit_units !== "" && !Number.isNaN(Number(p.bet_profit_units))
-? `, ${Number(p.bet_profit_units) >= 0 ? "+" : ""}${Number(p.bet_profit_units).toFixed(2)}u`
+const units = Number(p.bet_units).toFixed(1)
+const profit = Number(p.bet_profit_units)
+const settled = p.bet_profit_units !== undefined && p.bet_profit_units !== "" && !Number.isNaN(profit)
+? (profit >= 0 ? `, won ${profit.toFixed(1)}` : `, lost ${Math.abs(profit).toFixed(1)}`)
 : ""
-return `${p.bet_team} ${Number(p.bet_units).toFixed(2)}u${profit}`
+return `${teamName(p.bet_team, "mlb")} ${units} units${settled}`
 }
 const formatted = shown.map(p=>{
 const row = {
 "Date": p.date,
-"Game": `${p.away_team} @ ${p.home_team}`,
-"Pick": p.predicted_winner,
-"Model": pct(p.predicted_probability),
-"Market": pct(p.market_predicted_winner_probability),
-"Result": statusLabels[p.status] || p.status,
+"Game": `${teamName(p.away_team, "mlb")} at ${teamName(p.home_team, "mlb")}`,
+"Our pick": teamName(p.predicted_winner, "mlb"),
+"We said": srPct(p.predicted_probability),
+"Vegas said": fmtPct1(p.market_predicted_winner_probability) === "-" ? "-" : srPct(p.market_predicted_winner_probability),
+"Result": results[p.status] || p.status,
 }
 if(anyBets){ row["Bet"] = betCell(p) }
 return row
@@ -2125,14 +2051,12 @@ return
 }
 
 const formatted = rows.map(r=>({
-"Team": r.team,
-"Opponent": r.opponent,
-"Home/Away": r.is_home === "True" || r.is_home === "true" ? "Home" : "Away",
-"Probable Pitcher": r.pitcher_name || "TBD",
-"Throws": r.Throws || "-",
-"PAVE": r.PAVE && r.PAVE !== "" ? Number(r.PAVE).toFixed(3) : "-",
-"PAVE+": r.PAVE_PLUS && r.PAVE_PLUS !== "" ? Number(r.PAVE_PLUS).toFixed(2) : "-",
-"Power A+": r.Power_A_PLUS && r.Power_A_PLUS !== "" ? Number(r.Power_A_PLUS).toFixed(2) : "-",
+"Team": teamName(r.team, "mlb"),
+"Game": `${r.is_home === "True" || r.is_home === "true" ? "vs." : "at"} ${teamName(r.opponent, "mlb")}`,
+"Starting pitcher": r.pitcher_name || "Not announced",
+"Throws": r.Throws === "L" ? "Left" : r.Throws === "R" ? "Right" : "-",
+"Hit rate allowed": r.PAVE && r.PAVE !== "" ? fmtPctRange(r.PAVE) : "-",
+"vs. average pitcher": r.PAVE_PLUS && r.PAVE_PLUS !== "" ? vsAverage(r.PAVE_PLUS) : "-",
 }))
 
 buildTable(

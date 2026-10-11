@@ -37,35 +37,35 @@ href="./style.css">
 </div>
 
 <div class="tabGroup pageTabs">
-<a class="tabButton active" href="./index.html">Today's Summary</a>
+<a class="tabButton active" href="./index.html">Today</a>
 <a class="tabButton" href="./predictive.html">MLB</a>
 <a class="tabButton" href="./nfl.html">NFL</a>
-<a class="tabButton" href="./methodology.html">Methodology</a>
+<a class="tabButton" href="./methodology.html">How it works</a>
 </div>
 
 </div>
 
 <div class="wrap">
   <header>
-    <h1>Today's Summary</h1>
+    <h1>Today</h1>
     <span class="asof" id="asof-badge"></span>
   </header>
-  <p class="subtitle">Today's Beat the Streak picks, MLB Game Picks, and NFL Game Picks at a glance - the same real, currently-live data behind every other tab, distilled to one page. See the <a href="./predictive.html">MLB</a> and <a href="./nfl.html">NFL</a> tabs for the full dashboards, or <a href="./methodology.html">Methodology</a> for how the models work.</p>
+  <p class="subtitle">Our picks for today in one place. The <a href="./predictive.html">MLB</a> and <a href="./nfl.html">NFL</a> pages have the full details, and <a href="./methodology.html">How it works</a> explains the models.</p>
 
   <div class="stat-row" id="stat-row">Loading...</div>
 
   <div class="panel">
-    <div class="panel-head">Today's Beat the Streak Picks</div>
+    <div class="panel-head">Beat the Streak: who gets a hit today</div>
     <div class="picks" id="picks-list">Loading...</div>
   </div>
 
   <div class="panel">
-    <div class="panel-head with-stats"><span>MLB Game Picks</span><span class="stat-line" id="mlb-gp-stat-line"></span></div>
+    <div class="panel-head with-stats"><span>Baseball games</span><span class="stat-line" id="mlb-gp-stat-line"></span></div>
     <div class="picks" id="mlb-gp-list">Loading...</div>
   </div>
 
   <div class="panel">
-    <div class="panel-head with-stats"><span>NFL Game Picks</span><span class="stat-line" id="nfl-gp-stat-line"></span></div>
+    <div class="panel-head with-stats"><span>Football games this week</span><span class="stat-line" id="nfl-gp-stat-line"></span></div>
     <div class="picks" id="nfl-gp-list">Loading...</div>
   </div>
 </div>
@@ -73,6 +73,10 @@ href="./style.css">
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<script src="./teams.js"></script>
+
+<script src="./summary_render.js"></script>
 
 <script src="./today.js"></script>
 
