@@ -4526,6 +4526,18 @@ fetches only."
 
 ## NFL Automated Game Picks (`docs/nfl.html`'s Game Picks tab)
 
+> **Per-category, opponent-adjusted ratings tested (2026-10-11).**
+> `scripts/backtest_nfl_category_ratings.py` rates every team's passing
+> and rushing (EPA per play) and scoring, on offense and defense, with
+> recent games weighted more and all 32 teams' ratings solved together
+> so opponent strength is fully accounted for. Predicting 2019–2025
+> season by season (1,865 games with a moneyline): points alone score
+> Brier 0.2245, pass + rush + points 0.2246, the same without the
+> opponent adjustment 0.2247, and the market 0.2105. Separate categories
+> and the joint opponent adjustment add nothing measurable, and once the
+> market's price is known these ratings point the wrong way (negative
+> coefficient). Not shipped.
+
 A direct structural port of MLB's own Automated Game Picks (above) to
 football, replicated signal-by-signal - not a from-scratch model. Real
 NFL data made this genuinely easier to build than the MLB original in two
