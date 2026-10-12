@@ -1,4 +1,6 @@
 date,rank,name,predicted_probability,combined_probability,actual_hit,status,grade
+2026-10-12,1,Steven Kwan,0.6451691437019391,0.6318802607859326,,pending,speculative
+2026-10-12,2,Chase DeLauter,0.6161861351316622,0.6212241707434116,,pending,speculative
 2026-10-11,1,William Contreras,0.6367504005848919,0.616951825148913,,pending,speculative
 2026-10-11,2,Cooper Pratt,0.6153571717484445,0.6055880011460316,,pending,speculative
 2026-10-10,1,Steven Kwan,0.6407974421863862,0.6362513452338632,1.0,hit,speculative
