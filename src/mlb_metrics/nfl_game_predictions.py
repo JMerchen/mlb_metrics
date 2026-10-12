@@ -39,7 +39,10 @@ NFL_GAME_PREDICTION_COLUMNS = [
     "market_home_win_probability",
     "bet_units", "bet_side", "bet_team", "bet_moneyline", "bet_stake_fraction", "bet_profit_units",
     "home_win_probability_pessimistic", "away_win_probability_pessimistic",
+    "predicted_home_points", "predicted_away_points", "predicted_total", "market_total", "actual_total",
 ]
+
+POINT_PREDICTION_COLUMNS = ["predicted_home_points", "predicted_away_points", "predicted_total"]
 
 NFL_BET_ADVICE_COLUMNS = [
     "date", "game_id", "side", "team", "opponent", "moneyline",
@@ -132,6 +135,7 @@ def select_game_picks(
     kelly_fraction_multiplier: float = config.KELLY_FRACTION_MULTIPLIER,
     min_edge: float = config.KELLY_MIN_EDGE,
     confidence: pd.DataFrame | None = None,
+    point_predictions: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Turn nfl_game_picks.compute_game_win_probabilities' output into a
     week's logged games - direct structural mirror of
@@ -150,7 +154,10 @@ def select_game_picks(
     nfl_team_strength.assemble_team_metrics' output, carrying real
     win_rate_CI_Low/CI_High for game_picks.apply_kelly_uncertainty's
     uncertainty-scaled sizing (reused directly - see that function's own
-    docstring, it's already sport-agnostic)."""
+    docstring, it's already sport-agnostic). `point_predictions` (default
+    None) is nfl_totals.predict_game_points' output; `market_total` comes
+    from `schedule_games_df`'s `total_line` when it carries one.
+    `actual_total` stays empty until resolve_game_predictions fills it."""
     df = win_probabilities.copy()
     favors_home = df["home_win_probability"] >= 0.5
     df["predicted_winner"] = df["home_team"].where(favors_home, df["away_team"])
@@ -229,6 +236,20 @@ def select_game_picks(
 
     picks["bet_profit_units"] = pd.NA
 
+    if point_predictions is not None and not point_predictions.empty:
+        picks = picks.merge(point_predictions[["game_id", *POINT_PREDICTION_COLUMNS]], on="game_id", how="left")
+    else:
+        for column in POINT_PREDICTION_COLUMNS:
+            picks[column] = pd.NA
+    if "total_line" in schedule_games_df.columns:
+        picks = picks.merge(
+            schedule_games_df[["game_id", "total_line"]].rename(columns={"total_line": "market_total"}),
+            on="game_id", how="left",
+        )
+    else:
+        picks["market_total"] = pd.NA
+    picks["actual_total"] = pd.NA
+
     return picks[NFL_GAME_PREDICTION_COLUMNS]
 
 
@@ -286,6 +307,7 @@ def resolve_game_predictions(log_path: str, schedules_df: pd.DataFrame) -> pd.Da
     log.loc[final, "game_played"] = 1
     log.loc[home_won, "actual_winner"] = log.loc[home_won, "home_team"]
     log.loc[away_won, "actual_winner"] = log.loc[away_won, "away_team"]
+    log.loc[final, "actual_total"] = merged.loc[final, "_home_score"] + merged.loc[final, "_away_score"]
 
     # Real units won/lost, only for newly-finalized rows where a real bet
     # was advised (bet_units > 0 - the single "was a bet advised" signal).

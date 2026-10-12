@@ -4526,6 +4526,19 @@ fetches only."
 
 ## NFL Automated Game Picks (`docs/nfl.html`'s Game Picks tab)
 
+> **Predicted point totals (2026-10-12).** Each game now logs a predicted
+> score and total (`nfl_totals.py`): every offense's EPA per play and
+> every defense's EPA allowed per play, plus pace, blended WAVE-style over
+> the last 17, 8 and 4 games (weights 0.2/0.3/0.5) and shrunk toward the
+> league rate, then turned into points by a regression fit on 2017–2025
+> (`config.NFL_TOTALS_COEFFICIENTS`). Graded by
+> `scripts/backtest_nfl_totals.py` on 2,127 games from 2018–2025: the
+> predicted total misses by 10.8 points on average, against 10.4 for the
+> market's closing total and 11.0 for a flat league average. Given the
+> market's number it adds nothing, and leaning over/under with it is right
+> 48–51% of the time. The site shows it next to Vegas's total and tracks
+> both misses; it never becomes a bet.
+
 > **Per-category, opponent-adjusted ratings tested (2026-10-11).**
 > `scripts/backtest_nfl_category_ratings.py` rates every team's passing
 > and rushing (EPA per play) and scoring, on offense and defense, with

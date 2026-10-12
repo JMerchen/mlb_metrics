@@ -67,6 +67,9 @@ def _game_picks_section(
     which groups by `${season}_${week}` for the same reason."""
     columns = GAME_PICK_COLUMNS + (extra_columns or [])
     picks = pd.read_csv(os.path.join(docs_data_dir, f"{prefix}_picks.csv"), parse_dates=["date"])
+    # A CSV written before a column existed (e.g. NFL's predicted_total)
+    # just shows it as empty.
+    picks = picks.reindex(columns=picks.columns.union(columns, sort=False))
     summary = pd.read_csv(os.path.join(docs_data_dir, f"{prefix}_summary.csv"))
     by_version = pd.read_csv(os.path.join(docs_data_dir, f"{prefix}_summary_by_version.csv"))
 
@@ -136,7 +139,8 @@ def build_payload(docs_data_dir: str) -> dict:
         "allQualified": _records(all_q),
         "mlbGamePicks": _game_picks_section(docs_data_dir, "game_picks"),
         "nflGamePicks": _game_picks_section(
-            docs_data_dir, "nfl_game_picks", extra_columns=["season", "week"], group_by_week=True
+            docs_data_dir, "nfl_game_picks", extra_columns=["season", "week", "predicted_total", "market_total"],
+            group_by_week=True
         ),
     }
 

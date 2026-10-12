@@ -3,7 +3,7 @@ const test = require("node:test")
 const assert = require("node:assert/strict")
 global.teamName = require("./teams.js").teamName
 const {
-  srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml,
+  srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, totalPointsText,
 } = require("./summary_render.js")
 
 const text = html => html.replace(/<[^>]+>/g, "").replace(/&middot;/g, "·").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim()
@@ -71,4 +71,15 @@ test("no statistician vocabulary on these panels", () => {
   }
   assert.ok(text(html).includes("Astros · 66% to get a hit"))
   assert.ok(text(html).includes("1 day"))
+})
+
+test("NFL game row: predicted total next to Vegas's; nothing for MLB", () => {
+  const row = text(gamePickRowHtml({
+    home_team: "LA", away_team: "BUF", predicted_winner: "LA", predicted_probability: 0.51,
+    market_predicted_winner_probability: 0.57, bet_units: 0, predicted_total: 51.37, market_total: 54.5,
+  }, "nfl"))
+  assert.equal(row, "Bills at Rams We say Rams 51% · Vegas 57%Total points: we say 51 · Vegas 54.5")
+  assert.equal(text(totalPointsText({ predicted_total: "47.6", market_total: "" })), "Total points: we say 48")
+  assert.equal(totalPointsText({ predicted_total: "" }), "")
+  assert.equal(totalPointsText({}), "")
 })

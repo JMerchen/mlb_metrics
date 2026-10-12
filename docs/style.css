@@ -1182,6 +1182,7 @@ template already relies on these exact names. */
 .game .prob{font-size:13px;color:var(--text-dim);font-variant-numeric:tabular-nums;white-space:nowrap;}
 .game .prob b{color:var(--text);font-weight:600;}
 .game .prob .mkt{opacity:.75;}
+.game .prob .total{display:block;font-size:12px;opacity:.75;}
 /* A confidence range or other detail inside a table cell. */
 td .dim{color:var(--text-dim);font-size:.9em;}
 .bet-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid var(--accent);color:var(--accent);white-space:nowrap;}
