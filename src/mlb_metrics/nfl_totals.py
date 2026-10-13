@@ -13,22 +13,30 @@ the prior season, so week 1 still has a full window):
     def_epa    the same for EPA allowed per play on defense
     off_plays  offensive plays per game (pace), same windows
     def_plays  plays allowed per game
+plus two things about the game itself, both known before kickoff:
+    qb_epa     the listed starting QB's own EPA per dropback over his last
+               config.NFL_TOTALS_QB_GAMES games, shrunk toward a
+               replacement-level rate (a QB with no history is replacement
+               level) - so a backup starting moves the number, which a
+               team-level rating built on the starter's games can't see
+    dome       1 when the game is under a roof (dome, or retractable roof
+               closed); a stadium whose roof isn't announced yet takes its
+               usual setting from earlier games there
 A team's points in a game are then a linear function of its offense and
 the opponent's defense:
     points = const + b1*off_epa + b2*opp_def_epa + b3*off_plays
-             + b4*opp_def_plays + b5*home
+             + b4*opp_def_plays + b5*home + b6*dome + b7*qb_epa
 with the coefficients in config.NFL_TOTALS_COEFFICIENTS, fit by
 scripts/backtest_nfl_totals.py. The game's total is the two teams' sum.
+Temperature and wind help on history but aren't published before the
+game (nflverse leaves them blank for upcoming games), so they're left out.
 
 Plays are dropbacks and designed runs (`pass` or `rush` flagged, kneels and
 spikes dropped) - the same set the category ratings backtest uses.
 
 Validated in scripts/backtest_nfl_totals.py (season by season, refit on
-earlier seasons only) - see that script's docstring for the numbers. In
-short: off by 10.8 points a game on average against the market's 10.4
-and a flat average's 11.0, with nothing the market's number doesn't
-already carry - shown next to Vegas's total, never turned into bet
-advice.
+earlier seasons only) - see that script's docstring for the numbers. Shown
+next to Vegas's total, never turned into bet advice.
 """
 
 import pandas as pd
@@ -39,10 +47,14 @@ from mlb_metrics import config
 # play-by-play is restated in today's codes.
 NFL_TEAM_ALIASES = {"OAK": "LV", "SD": "LAC", "STL": "LA"}
 
-TOTALS_FEATURE_COLUMNS = ["off_epa", "opp_def_epa", "off_plays", "opp_def_plays", "home"]
+TOTALS_FEATURE_COLUMNS = ["off_epa", "opp_def_epa", "off_plays", "opp_def_plays", "home", "dome", "qb_epa"]
 
 PBP_COLUMNS = ["game_id", "season", "week", "season_type", "posteam", "defteam", "home_team",
                 "epa", "pass", "rush", "qb_kneel", "qb_spike"]
+
+QB_PBP_COLUMNS = ["game_id", "season", "week", "season_type", "passer_player_id", "qb_epa", "qb_dropback"]
+
+_ROOFED = {"dome", "closed"}
 
 # Pseudo-games of league-average pace added to each plays-per-game window.
 _PACE_PSEUDO_GAMES = 2.0
@@ -79,6 +91,62 @@ def team_game_epa(pbp: pd.DataFrame, schedules: pd.DataFrame | None = None) -> p
         ])
         games = games.drop(columns="points").merge(scores, on=["game_id", "team"], how="left")
     return games[columns]
+
+
+def qb_game_epa(pbp: pd.DataFrame) -> pd.DataFrame:
+    """One row per (regular-season game, passer): EPA summed over his
+    dropbacks and the dropback count. Columns: game_id, season, week, qb,
+    epa_sum, dropbacks."""
+    columns = ["game_id", "season", "week", "qb", "epa_sum", "dropbacks"]
+    if pbp is None or pbp.empty or not set(QB_PBP_COLUMNS).issubset(pbp.columns):
+        return pd.DataFrame(columns=columns)
+    dropbacks = pbp[
+        (pbp["season_type"] == "REG") & (pbp["qb_dropback"] == 1)
+        & pbp["passer_player_id"].notna() & pbp["qb_epa"].notna()
+    ]
+    return (
+        dropbacks.groupby(["game_id", "season", "week", "passer_player_id"])
+        .agg(epa_sum=("qb_epa", "sum"), dropbacks=("qb_epa", "size"))
+        .reset_index()
+        .rename(columns={"passer_player_id": "qb"})[columns]
+    )
+
+
+def starter_qb_epa(qb_games: pd.DataFrame, qb_ids: pd.Series) -> pd.Series:
+    """Each listed starter's EPA per dropback over his last
+    config.NFL_TOTALS_QB_GAMES games in `qb_games` (pass only earlier
+    games), shrunk toward replacement level (the league rate minus
+    config.NFL_TOTALS_QB_REPLACEMENT_GAP) with
+    config.NFL_TOTALS_QB_SHRINK_DROPBACKS pseudo-dropbacks. A starter with
+    no dropbacks - or no listed starter - is replacement level. NaN for
+    every row when `qb_games` is empty (nothing to rate anyone against)."""
+    if qb_games is None or qb_games.empty:
+        return pd.Series(float("nan"), index=qb_ids.index)
+    replacement = qb_games["epa_sum"].sum() / qb_games["dropbacks"].sum() - config.NFL_TOTALS_QB_REPLACEMENT_GAP
+    shrink = config.NFL_TOTALS_QB_SHRINK_DROPBACKS
+    recent = (
+        qb_games.sort_values(["season", "week"])
+        .groupby("qb").tail(config.NFL_TOTALS_QB_GAMES)
+        .groupby("qb")[["epa_sum", "dropbacks"]].sum()
+    )
+    rating = (recent["epa_sum"] + shrink * replacement) / (recent["dropbacks"] + shrink)
+    return qb_ids.map(rating).fillna(replacement).astype(float)
+
+
+def dome_flags(games: pd.DataFrame, history_schedules: pd.DataFrame | None = None) -> pd.Series:
+    """1.0 for a game under a roof (`roof` dome or closed), 0.0 outdoors
+    or open. A game whose roof is blank (a retractable roof not announced
+    yet) takes the most common setting from earlier games at the same
+    stadium (or home team, without stadium ids); 0.0 with no history."""
+    roof = games["roof"] if "roof" in games.columns else pd.Series(pd.NA, index=games.index)
+    flags = roof.isin(_ROOFED).astype(float).where(roof.notna())
+    if (flags.isna().any() and history_schedules is not None and not history_schedules.empty
+            and "roof" in history_schedules.columns):
+        key = "stadium_id" if "stadium_id" in games.columns and "stadium_id" in history_schedules.columns else "home_team"
+        known = history_schedules[history_schedules["roof"].notna()]
+        usual = known.assign(roofed=known["roof"].isin(_ROOFED).astype(float)).groupby(key)["roofed"].mean().round()
+        flags = flags.fillna(games[key].map(usual))
+    return flags.fillna(0.0)
 
 
 def _blend(rows: pd.DataFrame, value: str, count: str, prior: float, pseudo: float, windows) -> float:
@@ -122,15 +190,27 @@ def wave_ratings(
     return side("team", "off").merge(side("opp", "def"), on="team", how="outer")[columns]
 
 
-def matchup_features(ratings: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
+def matchup_features(
+    ratings: pd.DataFrame,
+    games: pd.DataFrame,
+    qb_games: pd.DataFrame | None = None,
+    history_schedules: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """Two rows per game (home offense, away offense) with
-    TOTALS_FEATURE_COLUMNS. `games` needs game_id, home_team, away_team.
-    A team with no rating (no earlier games) gets NaN features."""
+    TOTALS_FEATURE_COLUMNS. `games` needs game_id, home_team, away_team,
+    and for the game-level features home_qb_id/away_qb_id and roof (plus
+    stadium_id when it has one). A team with no rating (no earlier games)
+    gets NaN features; so does every row's qb_epa without `qb_games`."""
     games = games.assign(home_team=_canonical(games["home_team"]), away_team=_canonical(games["away_team"]))
+    dome = dome_flags(games, history_schedules)
+    no_qb = pd.Series(pd.NA, index=games.index, dtype=object)
     sides = pd.concat([
-        pd.DataFrame({"game_id": games["game_id"], "team": games["home_team"], "opp": games["away_team"], "home": 1.0}),
-        pd.DataFrame({"game_id": games["game_id"], "team": games["away_team"], "opp": games["home_team"], "home": 0.0}),
+        pd.DataFrame({"game_id": games["game_id"], "team": games["home_team"], "opp": games["away_team"], "home": 1.0,
+                      "dome": dome, "starter": games.get("home_qb_id", no_qb)}),
+        pd.DataFrame({"game_id": games["game_id"], "team": games["away_team"], "opp": games["home_team"], "home": 0.0,
+                      "dome": dome, "starter": games.get("away_qb_id", no_qb)}),
     ], ignore_index=True)
+    sides["qb_epa"] = starter_qb_epa(qb_games, sides["starter"])
     offense = ratings[["team", "off_epa", "off_plays"]]
     defense = ratings[["team", "def_epa", "def_plays"]].rename(
         columns={"team": "opp", "def_epa": "opp_def_epa", "def_plays": "opp_def_plays"}
@@ -150,16 +230,20 @@ def predict_team_points(features: pd.DataFrame, coefficients: dict | None = None
 def predict_game_points(
     team_games: pd.DataFrame,
     games: pd.DataFrame,
+    qb_games: pd.DataFrame | None = None,
+    history_schedules: pd.DataFrame | None = None,
     coefficients: dict | None = None,
 ) -> pd.DataFrame:
     """Predicted points for each game in `games` from the earlier games in
-    `team_games` (team_game_epa's output). Columns: game_id,
-    predicted_home_points, predicted_away_points, predicted_total; NaN for
-    a game where either team has no history."""
+    `team_games` (team_game_epa's output) and `qb_games` (qb_game_epa's),
+    with `history_schedules` filling in roofs not announced yet. Columns:
+    game_id, predicted_home_points, predicted_away_points, predicted_total;
+    NaN for a game where either team has no history, or without
+    `qb_games`."""
     columns = ["game_id", "predicted_home_points", "predicted_away_points", "predicted_total"]
     if games is None or games.empty:
         return pd.DataFrame(columns=columns)
-    features = matchup_features(wave_ratings(team_games), games)
+    features = matchup_features(wave_ratings(team_games), games, qb_games, history_schedules)
     features["points"] = predict_team_points(features, coefficients)
     home = features[features["home"] == 1.0][["game_id", "points"]].rename(columns={"points": "predicted_home_points"})
     away = features[features["home"] == 0.0][["game_id", "points"]].rename(columns={"points": "predicted_away_points"})

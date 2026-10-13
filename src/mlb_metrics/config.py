@@ -2740,13 +2740,20 @@ NFL_TOTALS_WINDOWS = [
     (4, 0.50),
 ]
 NFL_TOTALS_SHRINK_PLAYS = 300.0
+# The listed starting QB's own EPA per dropback: his last 16 games, shrunk
+# with 150 pseudo-dropbacks toward replacement level (league rate - 0.10).
+NFL_TOTALS_QB_GAMES = 16
+NFL_TOTALS_QB_SHRINK_DROPBACKS = 150.0
+NFL_TOTALS_QB_REPLACEMENT_GAP = 0.10
 NFL_TOTALS_COEFFICIENTS = {
-    "const": 4.05,
-    "off_epa": 42.7,
-    "opp_def_epa": 17.9,
-    "off_plays": 0.07,
-    "opp_def_plays": 0.20,
-    "home": 1.65,
+    "const": 4.80,
+    "off_epa": 17.6,
+    "opp_def_epa": 18.8,
+    "off_plays": 0.052,
+    "opp_def_plays": 0.196,
+    "home": 1.67,
+    "dome": 1.55,
+    "qb_epa": 19.1,
 }
 
 # Walk-forward CV / final-holdout sizing for

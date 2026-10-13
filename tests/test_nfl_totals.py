@@ -3,7 +3,7 @@ import math
 import pandas as pd
 import pytest
 
-from mlb_metrics import nfl_totals
+from mlb_metrics import config, nfl_totals
 
 
 def _play(game_id, week, offense, defense, home_team, epa, kind="pass", **flags):
@@ -71,19 +71,26 @@ def test_wave_ratings_shrinks_a_small_sample_toward_the_league_rate():
     assert shrunk.loc["KC", "off_epa"] == pytest.approx(0.1)
 
 
+def _qb_game(week, qb, epa_sum, dropbacks):
+    return {"game_id": f"g{week}", "season": 2025, "week": week, "qb": qb, "epa_sum": epa_sum, "dropbacks": dropbacks}
+
+
 def test_predict_game_points_adds_both_sides_into_the_total():
     history = pd.DataFrame([
         _team_game(1, "KC", "DEN", 10.0, 50), _team_game(1, "DEN", "KC", -10.0, 50, home=0.0),
     ])
-    games = pd.DataFrame([{"game_id": "w2", "home_team": "KC", "away_team": "DEN"}])
+    qb_games = pd.DataFrame([_qb_game(1, "mahomes", 15.0, 40), _qb_game(1, "nix", -5.0, 40)])
+    games = pd.DataFrame([{"game_id": "w2", "home_team": "KC", "away_team": "DEN",
+                           "home_qb_id": "mahomes", "away_qb_id": "nix", "roof": "dome"}])
     coefficients = {"const": 20.0, "off_epa": 10.0, "opp_def_epa": 5.0, "off_plays": 0.0,
-                    "opp_def_plays": 0.0, "home": 2.0}
+                    "opp_def_plays": 0.0, "home": 2.0, "dome": 1.0, "qb_epa": 4.0}
     ratings = nfl_totals.wave_ratings(history).set_index("team")
+    qbs = nfl_totals.starter_qb_epa(qb_games, pd.Series(["mahomes", "nix"]))
 
-    out = nfl_totals.predict_game_points(history, games, coefficients).iloc[0]
+    out = nfl_totals.predict_game_points(history, games, qb_games, coefficients=coefficients).iloc[0]
 
-    home = 20 + 10 * ratings.loc["KC", "off_epa"] + 5 * ratings.loc["DEN", "def_epa"] + 2
-    away = 20 + 10 * ratings.loc["DEN", "off_epa"] + 5 * ratings.loc["KC", "def_epa"]
+    home = 20 + 10 * ratings.loc["KC", "off_epa"] + 5 * ratings.loc["DEN", "def_epa"] + 2 + 1 + 4 * qbs[0]
+    away = 20 + 10 * ratings.loc["DEN", "off_epa"] + 5 * ratings.loc["KC", "def_epa"] + 1 + 4 * qbs[1]
     assert out["predicted_home_points"] == pytest.approx(home)
     assert out["predicted_away_points"] == pytest.approx(away)
     assert out["predicted_total"] == pytest.approx(home + away)
@@ -95,3 +102,41 @@ def test_predict_game_points_is_empty_for_a_team_with_no_history():
     games = pd.DataFrame([{"game_id": "w2", "home_team": "KC", "away_team": "NYJ"}])
     out = nfl_totals.predict_game_points(history, games).iloc[0]
     assert math.isnan(out["predicted_total"])
+
+
+def test_starter_qb_epa_shrinks_toward_replacement_and_rates_unknowns_as_replacement(monkeypatch):
+    monkeypatch.setattr(config, "NFL_TOTALS_QB_SHRINK_DROPBACKS", 100.0)
+    monkeypatch.setattr(config, "NFL_TOTALS_QB_REPLACEMENT_GAP", 0.10)
+    monkeypatch.setattr(config, "NFL_TOTALS_QB_GAMES", 2)
+    # league rate (10 - 10 + 30) / 300 = 0.1, so replacement level is 0.0
+    qb_games = pd.DataFrame([
+        _qb_game(1, "starter", 10.0, 100), _qb_game(2, "starter", -10.0, 100), _qb_game(3, "starter", 30.0, 100),
+    ])
+
+    rating = nfl_totals.starter_qb_epa(qb_games, pd.Series(["starter", "rookie", None]))
+
+    # last two games only: (−10 + 30) / (200 + 100 pseudo-dropbacks at 0.0)
+    assert rating[0] == pytest.approx(20.0 / 300.0)
+    assert rating[1] == pytest.approx(0.0) and rating[2] == pytest.approx(0.0)
+    assert nfl_totals.starter_qb_epa(pd.DataFrame(), pd.Series(["starter"])).isna().all()
+
+
+def test_qb_game_epa_counts_regular_season_dropbacks_per_passer():
+    pbp = pd.DataFrame([
+        {"game_id": "g1", "season": 2025, "week": 1, "season_type": "REG", "passer_player_id": "a", "qb_epa": 0.5, "qb_dropback": 1},
+        {"game_id": "g1", "season": 2025, "week": 1, "season_type": "REG", "passer_player_id": "a", "qb_epa": -0.1, "qb_dropback": 1},
+        {"game_id": "g1", "season": 2025, "week": 1, "season_type": "REG", "passer_player_id": "a", "qb_epa": 2.0, "qb_dropback": 0},
+        {"game_id": "p1", "season": 2025, "week": 20, "season_type": "POST", "passer_player_id": "a", "qb_epa": 9.0, "qb_dropback": 1},
+    ])
+    games = nfl_totals.qb_game_epa(pbp)
+    assert len(games) == 1
+    assert games.iloc[0]["epa_sum"] == pytest.approx(0.4) and games.iloc[0]["dropbacks"] == 2
+
+
+def test_dome_flags_uses_the_announced_roof_else_the_stadiums_usual_setting():
+    games = pd.DataFrame({"home_team": ["ATL", "ATL", "GB", "NYJ"], "stadium_id": ["ATL97", "ATL97", "GNB00", "NYC01"],
+                          "roof": ["open", None, "outdoors", None]})
+    history = pd.DataFrame({"home_team": ["ATL", "ATL", "ATL"], "stadium_id": ["ATL97"] * 3,
+                            "roof": ["closed", "closed", "open"]})
+    assert nfl_totals.dome_flags(games, history).tolist() == [0.0, 1.0, 0.0, 0.0]
+    assert nfl_totals.dome_flags(games.drop(columns="roof")).tolist() == [0.0] * 4

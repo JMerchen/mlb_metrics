@@ -15,19 +15,24 @@ the over/under side the prediction leans to wins, by size of disagreement
 (52.4% breaks even at -110). Ends with the coefficients fit on every
 season, for config.NFL_TOTALS_COEFFICIENTS.
 
-RESULT (2026-10-12, 2,127 games 2018-2025 with a closing total):
-    predicted total   MAE 10.80 points
+RESULT (2026-10-13, 2,127 games 2018-2025 with a closing total):
+    predicted total   MAE 10.64 points
     market total      MAE 10.39
     flat average      MAE 11.00
-The prediction beats a flat average but trails the market every season
-but one, and adds nothing beyond it (actual ~ 1.06 x market - 0.10 x
-predicted, p = 0.28 on the prediction). Leaning over/under with it is
-right 48-51% of the time at every size of disagreement - a coin flip.
-Window and shrinkage sweep: these windows (last 17/8/4 games at
-0.2/0.3/0.5, 300 pseudo-plays) were best; a single 17-game window scored
-10.87, two-season windows 10.90, heavier shrinkage (1,500 plays) 11.08.
-Shown on the site next to Vegas's number as a read on the matchup, never
-turned into bet advice.
+The first version (team EPA and pace only) missed by 10.80. What closed
+part of the gap: the listed starting QB's own EPA per dropback (a backup
+starting is invisible to team ratings built on the starter's games) and
+whether the game is under a roof. Tested and NOT helping: points
+scored/allowed, success rate, early-down EPA, separate pass/rush EPA,
+neutral-situation pass rate, drives per game, red-zone TD rate,
+turnovers, a season-to-date league scoring level, gradient boosting on
+all of them. Temperature and wind help on history (10.57 with the QB
+term) but aren't published before kickoff, so they can't be used live.
+Two seasons of QB history instead of one: 10.63, not worth it.
+Given the market's total the prediction still adds nothing (coefficient
+0.01, p = 0.90); over/under leans are right 50-51% overall, 55.5% on the
+236 games where it disagrees with the market by 5+ points - within noise
+of break-even. Shown next to Vegas's number, never turned into bets.
 
 Usage:
     python scripts/backtest_nfl_totals.py
@@ -53,25 +58,31 @@ SCORED_SEASONS = range(2018, 2026)
 def load():
     schedules = pd.concat([pd.read_parquet(os.path.join(RAW_DIR, f"schedules_{s}.parquet")) for s in SEASONS])
     schedules = schedules[schedules["game_type"] == "REG"]
-    team_games = pd.concat(
-        [nfl_totals.team_game_epa(pd.read_parquet(os.path.join(RAW_DIR, f"pbp_{s}.parquet"), columns=nfl_totals.PBP_COLUMNS),
-                                  schedules[schedules["season"] == s])
-         for s in SEASONS],
-        ignore_index=True,
-    )
-    return team_games, schedules
+    team_games, qb_games = [], []
+    for season in SEASONS:
+        pbp = pd.read_parquet(
+            os.path.join(RAW_DIR, f"pbp_{season}.parquet"),
+            columns=sorted(set(nfl_totals.PBP_COLUMNS) | set(nfl_totals.QB_PBP_COLUMNS)),
+        )
+        team_games.append(nfl_totals.team_game_epa(pbp, schedules[schedules["season"] == season]))
+        qb_games.append(nfl_totals.qb_game_epa(pbp))
+    return pd.concat(team_games, ignore_index=True), pd.concat(qb_games, ignore_index=True), schedules
 
 
-def weekly_features(team_games: pd.DataFrame, schedules: pd.DataFrame) -> pd.DataFrame:
+def weekly_features(team_games: pd.DataFrame, qb_games: pd.DataFrame, schedules: pd.DataFrame) -> pd.DataFrame:
     """Features for every team-game from FIRST_FIT_SEASON on, each built
-    only from the prior season and the current season's earlier weeks."""
+    only from the prior season and the current season's earlier weeks -
+    the history the live pipeline has. Starting QBs are the ones the
+    schedule lists, as before kickoff."""
+    def before(df, season, week):
+        return df[(df["season"] == season - 1) | ((df["season"] == season) & (df["week"] < week))]
+
     frames = []
     for (season, week), games in schedules[schedules["season"] >= FIRST_FIT_SEASON].groupby(["season", "week"]):
-        history = team_games[
-            (team_games["season"] == season - 1)
-            | ((team_games["season"] == season) & (team_games["week"] < week))
-        ]
-        features = nfl_totals.matchup_features(nfl_totals.wave_ratings(history), games)
+        features = nfl_totals.matchup_features(
+            nfl_totals.wave_ratings(before(team_games, season, week)), games,
+            before(qb_games, season, week), before(schedules, season, week),
+        )
         features["season"] = season
         frames.append(features)
     features = pd.concat(frames, ignore_index=True)
@@ -83,8 +94,8 @@ def fit(rows: pd.DataFrame):
 
 
 def main():
-    team_games, schedules = load()
-    features = weekly_features(team_games, schedules).dropna(subset=nfl_totals.TOTALS_FEATURE_COLUMNS + ["points"])
+    team_games, qb_games, schedules = load()
+    features = weekly_features(team_games, qb_games, schedules).dropna(subset=nfl_totals.TOTALS_FEATURE_COLUMNS + ["points"])
 
     scored = []
     for season in SCORED_SEASONS:
