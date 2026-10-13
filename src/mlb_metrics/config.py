@@ -2729,6 +2729,33 @@ NFL_GAME_PICK_CALIBRATION_MODEL_PATH = "data/models/nfl_game_pick_calibration_mo
 # already-logged history" discipline as MLB's own model_version bumps.
 NFL_GAME_PICK_MODEL_VERSION = "v2"
 
+# Predicted points per game (nfl_totals.py): WAVE-style offense and defense
+# EPA per play and pace, blended over games-back windows and shrunk toward
+# the league rate. Points = const + coefficients x features, fit on
+# 2017-2025 by scripts/backtest_nfl_totals.py (see its docstring for how
+# the totals compare with the market's).
+NFL_TOTALS_WINDOWS = [
+    (17, 0.20),
+    (8, 0.30),
+    (4, 0.50),
+]
+NFL_TOTALS_SHRINK_PLAYS = 300.0
+# The listed starting QB's own EPA per dropback: his last 16 games, shrunk
+# with 150 pseudo-dropbacks toward replacement level (league rate - 0.10).
+NFL_TOTALS_QB_GAMES = 16
+NFL_TOTALS_QB_SHRINK_DROPBACKS = 150.0
+NFL_TOTALS_QB_REPLACEMENT_GAP = 0.10
+NFL_TOTALS_COEFFICIENTS = {
+    "const": 4.80,
+    "off_epa": 17.6,
+    "opp_def_epa": 18.8,
+    "off_plays": 0.052,
+    "opp_def_plays": 0.196,
+    "home": 1.67,
+    "dome": 1.55,
+    "qb_epa": 19.1,
+}
+
 # Walk-forward CV / final-holdout sizing for
 # scripts/train_nfl_game_pick_calibration.py - same role as
 # ML_FINAL_HOLDOUT_DATES/GAME_PICK_ML_WALK_FORWARD_MIN_TRAIN_DATES/

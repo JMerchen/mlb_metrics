@@ -86,6 +86,15 @@ const direction = units >= 0 ? "up" : "down"
 return `Our bets: won <b>${won} of ${bets}</b>, ${direction} ${Math.abs(units).toFixed(1)} units.`
 }
 
+// NFL: "Total points: we say 48 · Vegas 47.5". Empty when there is no
+// predicted total (every MLB game, NFL games before totals existed).
+function totalPointsText(g){
+const ours = srNum(g.predicted_total)
+if(ours === null){ return "" }
+const vegas = srNum(g.market_total)
+return `Total points: we say ${Math.round(ours)}${vegas !== null ? `&nbsp;&middot; Vegas ${vegas}` : ""}`
+}
+
 // One game: "Rays at Yankees", our pick and our chance next to Vegas's.
 function gamePickRowHtml(g, sport){
 const homePicked = g.predicted_winner === g.home_team
@@ -94,6 +103,7 @@ const home = srEsc(srTeam(g.home_team, sport))
 const pick = srEsc(srTeam(g.predicted_winner, sport))
 const vegas = srNum(g.market_predicted_winner_probability)
 const units = srNum(g.bet_units) || 0
+const total = totalPointsText(g)
 const bet = units > 0
 ? `<span class="bet-badge">Bet ${srEsc(srTeam(g.bet_team, sport))}&nbsp;&middot; ${units.toFixed(1)} units</span>` : ""
 return `<div class="game">
@@ -101,7 +111,7 @@ return `<div class="game">
 <span class="${homePicked ? "" : "winner"}">${away}</span> at
 <span class="${homePicked ? "winner" : ""}">${home}</span>
 </div>
-<span class="prob">We say <b>${pick} ${srPct(g.predicted_probability)}</b>${vegas !== null ? `<span class="mkt">&nbsp;&middot; Vegas ${srPct(vegas)}</span>` : ""}</span>
+<span class="prob">We say <b>${pick} ${srPct(g.predicted_probability)}</b>${vegas !== null ? `<span class="mkt">&nbsp;&middot; Vegas ${srPct(vegas)}</span>` : ""}${total ? `<span class="total">${total}</span>` : ""}</span>
 ${bet}
 </div>`
 }
@@ -115,6 +125,6 @@ return picks.map(g => gamePickRowHtml(g, sport)).join("")
 
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
-srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, gamePicksListHtml,
+srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, gamePicksListHtml, totalPointsText,
 }
 }

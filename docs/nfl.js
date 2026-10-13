@@ -545,6 +545,10 @@ html += `<div class="streakStat"><div class="value" style="color:${units >= 0 ? 
 }else{
 html += stat("-", "Bets won", "no bets settled yet")
 }
+const totals = Number(s.points_total_n) || 0
+if(totals){
+html += stat(`${Number(s.points_total_mae).toFixed(1)} pts`, "Our point totals missed by", `on average over ${totals} games &middot; Vegas missed by ${Number(s.market_points_total_mae).toFixed(1)}`)
+}
 el.innerHTML = html
 
 }
@@ -599,6 +603,7 @@ return `
 <div class="pickCard ${p.status}${betAdvised ? " recommended" : ""}">
 <div class="pickName">${matchup}</div>
 <div class="pickProb">We say ${pick} ${pct0(p.predicted_probability)}${vegas ? ` &middot; Vegas ${vegas}` : ""}</div>
+${totalPointsText(p) ? `<div class="pickProb">${totalPointsText(p)}</div>` : ""}
 <div class="pickStatus">${statusLabels[p.status] || p.status}</div>
 ${betLine}
 </div>
@@ -625,6 +630,7 @@ const pct0 = v=>v !== undefined && v !== null && v !== "" && !Number.isNaN(Numbe
 
 const shown = sorted.slice(0, 100)
 const anyBets = shown.some(p=>Number(p.bet_units) > 0)
+const anyTotals = shown.some(p=>p.predicted_total !== undefined && p.predicted_total !== "")
 const betCell = p=>{
 if(!(Number(p.bet_units) > 0)){ return "-" }
 const profit = Number(p.bet_profit_units)
@@ -642,6 +648,12 @@ const row = {
 "We said": pct0(p.predicted_probability),
 "Vegas said": pct0(p.market_predicted_winner_probability),
 "Result": results[p.status] || p.status,
+}
+if(anyTotals){
+const num = v=>v !== undefined && v !== "" && !Number.isNaN(Number(v)) ? Number(v) : null
+row["Total: we said"] = num(p.predicted_total) === null ? "-" : Math.round(num(p.predicted_total))
+row["Total: Vegas"] = num(p.market_total) === null ? "-" : num(p.market_total)
+row["Total: actual"] = num(p.actual_total) === null ? "-" : num(p.actual_total)
 }
 if(anyBets){ row["Bet"] = betCell(p) }
 return row

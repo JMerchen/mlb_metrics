@@ -310,3 +310,51 @@ def test_resolve_game_predictions_leaves_profit_null_for_a_non_advised_resolved_
     resolved = nfl_game_predictions.resolve_game_predictions(log_path, schedule)
 
     assert pd.isna(resolved.iloc[0]["bet_profit_units"])
+
+
+def test_select_game_picks_carries_predicted_points_and_market_total():
+    win_probs = _win_probabilities([
+        {"game_id": "g1", "season": 2025, "week": 8, "home_team": "KC", "away_team": "DEN", "home_win_probability": 0.6},
+        {"game_id": "g2", "season": 2025, "week": 8, "home_team": "SF", "away_team": "LA", "home_win_probability": 0.5},
+    ])
+    schedule = _schedule([
+        {"game_id": "g1", "gameday": "2025-10-26", "total_line": 44.5},
+        {"game_id": "g2", "gameday": "2025-10-26", "total_line": None},
+    ])
+    points = pd.DataFrame([{"game_id": "g1", "predicted_home_points": 24.0, "predicted_away_points": 19.5,
+                            "predicted_total": 43.5}])
+
+    picks = nfl_game_predictions.select_game_picks(win_probs, schedule, point_predictions=points)
+
+    g1 = picks[picks["game_id"] == "g1"].iloc[0]
+    assert (g1["predicted_home_points"], g1["predicted_away_points"], g1["predicted_total"]) == (24.0, 19.5, 43.5)
+    assert g1["market_total"] == 44.5
+    assert pd.isna(g1["actual_total"])
+    g2 = picks[picks["game_id"] == "g2"].iloc[0]
+    assert pd.isna(g2["predicted_total"]) and pd.isna(g2["market_total"])
+
+
+def test_select_game_picks_without_points_or_total_line_leaves_them_empty():
+    win_probs = _win_probabilities([
+        {"game_id": "g1", "season": 2025, "week": 8, "home_team": "KC", "away_team": "DEN", "home_win_probability": 0.6},
+    ])
+    picks = nfl_game_predictions.select_game_picks(win_probs, _schedule([{"game_id": "g1", "gameday": "2025-10-26"}]))
+    assert list(picks.columns) == nfl_game_predictions.NFL_GAME_PREDICTION_COLUMNS
+    assert picks[["predicted_total", "market_total", "actual_total"]].isna().all().all()
+
+
+def test_resolve_game_predictions_fills_the_actual_total_even_on_older_rows(tmp_path):
+    # _resolved_pick predates the points columns, like rows logged before them.
+    log_path = str(tmp_path / "nfl_game_predictions.csv")
+    nfl_game_predictions.append_game_predictions(
+        pd.DataFrame([_resolved_pick("g1", "KC", "DEN"), _resolved_pick("g2", "SF", "LA")]), log_path
+    )
+    schedule = _schedule([
+        {"game_id": "g1", "gameday": "2025-10-26", "home_score": 24, "away_score": 17},
+        {"game_id": "g2", "gameday": "2025-10-26", "home_score": None, "away_score": None},
+    ])
+
+    resolved = nfl_game_predictions.resolve_game_predictions(log_path, schedule).set_index("game_id")
+
+    assert resolved.loc["g1", "actual_total"] == 41
+    assert pd.isna(resolved.loc["g2", "actual_total"])

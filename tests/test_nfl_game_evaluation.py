@@ -271,3 +271,31 @@ def test_build_game_picks_export_picks_out_includes_market_column():
 
     assert "market_home_win_probability" in picks.columns
     assert "market_predicted_winner_probability" in picks.columns
+
+
+def test_build_game_picks_export_points_columns_and_total_miss_next_to_the_market():
+    predictions = _predictions()
+    points = {
+        "g1": (24.0, 20.0, 44.0, 47.5, 41.0),   # we miss by 3, market by 6.5
+        "g2": (21.0, 22.0, 43.0, 44.0, 50.0),   # we miss by 7, market by 6
+        "g3": (25.0, 18.0, 43.0, None, 40.0),   # no market total: left out of the comparison
+        "g4": (20.0, 20.0, 40.0, 41.0, None),   # pending: left out
+    }
+    for column, i in (("predicted_home_points", 0), ("predicted_away_points", 1), ("predicted_total", 2),
+                      ("market_total", 3), ("actual_total", 4)):
+        predictions[column] = predictions["game_id"].map(lambda g: points.get(g, (None,) * 5)[i])
+
+    picks, summary = nfl_game_evaluation.build_game_picks_export(predictions)
+
+    row = summary.iloc[0]
+    assert row["points_total_n"] == 2
+    assert row["points_total_mae"] == pytest.approx(5.0)
+    assert row["market_points_total_mae"] == pytest.approx(6.25)
+    g1 = picks.set_index("game_id").loc["g1"]
+    assert (g1["predicted_home_points"], g1["predicted_away_points"], g1["market_total"]) == (24.0, 20.0, 47.5)
+
+
+def test_build_game_picks_export_log_without_points_columns_still_exports():
+    picks, summary = nfl_game_evaluation.build_game_picks_export(_predictions())
+    assert picks["predicted_total"].isna().all()
+    assert summary.iloc[0]["points_total_n"] == 0

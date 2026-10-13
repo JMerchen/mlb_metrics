@@ -13,6 +13,8 @@ import pandas as pd
 
 from mlb_metrics import evaluation
 
+POINTS_COLUMNS = ["predicted_home_points", "predicted_away_points", "predicted_total", "market_total", "actual_total"]
+
 
 def _classify_outcome(df: pd.DataFrame) -> pd.Series:
     """Per-pick outcome: "pending" (game_played unknown yet), "not_played"
@@ -73,12 +75,15 @@ def build_game_picks_export(
         home_favored, 1 - picks["market_home_win_probability"]
     )
 
+    # Logs written before predicted points existed lack those columns.
+    picks = picks.reindex(columns=picks.columns.union(POINTS_COLUMNS, sort=False))
     picks_out = picks[
         [
             "date", "season", "week", "game_id", "home_team", "away_team", "predicted_winner", "predicted_loser",
             "predicted_probability", "above_threshold", "status", "market_home_win_probability",
             "market_predicted_winner_probability",
             "bet_units", "bet_side", "bet_team", "bet_moneyline", "bet_profit_units",
+            *POINTS_COLUMNS,
         ]
     ].sort_values("date", ascending=False).reset_index(drop=True)
 
@@ -112,10 +117,29 @@ def build_game_picks_export(
                 "beat_closing_line_rate_ci_high": beat_closing_line_rate_ci_high,
                 "beat_closing_line_rate_p_value": beat_closing_line_rate_p_value,
                 **evaluation.model_vs_market(picks),
+                **points_total_metrics(picks),
             }
         ]
     )
     return picks_out, summary
+
+
+def points_total_metrics(picks: pd.DataFrame) -> dict:
+    """How far the predicted point total landed from the real one, next to
+    the market's total, on the same played games (those with a predicted,
+    a market and an actual total). Average absolute miss in points; NaN
+    (and n 0) when no game qualifies."""
+    columns = ["predicted_total", "market_total", "actual_total"]
+    if picks.empty or not set(columns).issubset(picks.columns):
+        return {"points_total_n": 0, "points_total_mae": float("nan"), "market_points_total_mae": float("nan")}
+    totals = picks[columns].apply(pd.to_numeric, errors="coerce").dropna()
+    if totals.empty:
+        return {"points_total_n": 0, "points_total_mae": float("nan"), "market_points_total_mae": float("nan")}
+    return {
+        "points_total_n": int(len(totals)),
+        "points_total_mae": float((totals["predicted_total"] - totals["actual_total"]).abs().mean()),
+        "market_points_total_mae": float((totals["market_total"] - totals["actual_total"]).abs().mean()),
+    }
 
 
 def _bet_pnl_metrics(picks: pd.DataFrame):
