@@ -1,4 +1,6 @@
 date,rank,name,predicted_probability,combined_probability,actual_hit,status,grade
+2026-10-15,1,Steven Kwan,0.6451691437019391,0.6266904759849597,,pending,speculative
+2026-10-15,2,Chase DeLauter,0.6161861351316622,0.5873106480393955,,pending,speculative
 2026-10-13,1,Jo Adell,0.621740155984615,0.6246585008274983,,pending,speculative
 2026-10-13,2,Steven Kwan,0.6451691437019391,0.6244663849367419,,pending,speculative
 2026-10-12,1,Steven Kwan,0.6451691437019391,0.6318802607859326,,pending,speculative
