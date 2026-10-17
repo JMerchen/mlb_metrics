@@ -3,7 +3,7 @@ const test = require("node:test")
 const assert = require("node:assert/strict")
 global.teamName = require("./teams.js").teamName
 const {
-  srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, totalPointsText,
+  srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, totalPointsText, teamEpaHtml,
 } = require("./summary_render.js")
 
 const text = html => html.replace(/<[^>]+>/g, "").replace(/&middot;/g, "·").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim()
@@ -82,4 +82,16 @@ test("NFL game row: predicted total next to Vegas's; nothing for MLB", () => {
   assert.equal(text(totalPointsText({ predicted_total: "47.6", market_total: "" })), "Total points: we say 48")
   assert.equal(totalPointsText({ predicted_total: "" }), "")
   assert.equal(totalPointsText({}), "")
+})
+
+test("NFL EPA table: both teams, offense and defense with league rank; empty without ratings", () => {
+  const html = teamEpaHtml({
+    away_team: "SEA", home_team: "DEN",
+    away_off_epa: 0.081, away_off_rank: 6, away_def_epa: -0.034, away_def_rank: 10,
+    home_off_epa: "-0.02", home_off_rank: "21", home_def_epa: "0.05", home_def_rank: "28",
+  }, "nfl")
+  assert.equal(text(html.replace(/<\/t[dh]>/g, " ")), "EPA per play Offense Defense Seahawks +0.08 6th −0.03 10th Broncos −0.02 21st +0.05 28th")
+  assert.ok(text(teamEpaHtml({ away_team: "SEA", home_team: "DEN", away_off_epa: -0.004, home_off_epa: 0.003 }, "nfl")).includes("Seahawks0.00"))
+  assert.equal(teamEpaHtml({ away_team: "SEA", home_team: "DEN" }, "nfl"), "")
+  assert.equal(teamEpaHtml({ away_team: "SEA", home_team: "DEN", home_off_epa: "", away_def_epa: "" }, "nfl"), "")
 })

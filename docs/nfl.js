@@ -604,6 +604,7 @@ return `
 <div class="pickName">${matchup}</div>
 <div class="pickProb">We say ${pick} ${pct0(p.predicted_probability)}${vegas ? ` &middot; Vegas ${vegas}` : ""}</div>
 ${totalPointsText(p) ? `<div class="pickProb">${totalPointsText(p)}</div>` : ""}
+${teamEpaHtml(p, "nfl")}
 <div class="pickStatus">${statusLabels[p.status] || p.status}</div>
 ${betLine}
 </div>

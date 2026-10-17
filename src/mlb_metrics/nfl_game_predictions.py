@@ -31,7 +31,7 @@ import os
 
 import pandas as pd
 
-from mlb_metrics import config, game_picks, kelly, market_odds
+from mlb_metrics import config, game_picks, kelly, market_odds, nfl_totals
 
 NFL_GAME_PREDICTION_COLUMNS = [
     "date", "season", "week", "game_id", "home_team", "away_team", "predicted_winner",
@@ -40,6 +40,7 @@ NFL_GAME_PREDICTION_COLUMNS = [
     "bet_units", "bet_side", "bet_team", "bet_moneyline", "bet_stake_fraction", "bet_profit_units",
     "home_win_probability_pessimistic", "away_win_probability_pessimistic",
     "predicted_home_points", "predicted_away_points", "predicted_total", "market_total", "actual_total",
+    *nfl_totals.EPA_DISPLAY_COLUMNS,
 ]
 
 POINT_PREDICTION_COLUMNS = ["predicted_home_points", "predicted_away_points", "predicted_total"]
@@ -236,10 +237,11 @@ def select_game_picks(
 
     picks["bet_profit_units"] = pd.NA
 
+    carried = POINT_PREDICTION_COLUMNS + nfl_totals.EPA_DISPLAY_COLUMNS
     if point_predictions is not None and not point_predictions.empty:
-        picks = picks.merge(point_predictions[["game_id", *POINT_PREDICTION_COLUMNS]], on="game_id", how="left")
+        picks = picks.merge(point_predictions.reindex(columns=["game_id", *carried]), on="game_id", how="left")
     else:
-        for column in POINT_PREDICTION_COLUMNS:
+        for column in carried:
             picks[column] = pd.NA
     if "total_line" in schedule_games_df.columns:
         picks = picks.merge(
@@ -268,6 +270,20 @@ def append_game_predictions(picks: pd.DataFrame, log_path: str) -> pd.DataFrame:
     else:
         combined = picks
 
+    # The first-logged row for a game stays, except that display-only
+    # columns it predates (team EPA added 2026-10-17) are filled in from a
+    # re-run, so a week already logged still gets them.
+    if os.path.exists(log_path):
+        fresh = picks.drop_duplicates(subset=["game_id", "metric"]).set_index(["game_id", "metric"])
+        for column in nfl_totals.EPA_DISPLAY_COLUMNS:
+            if column not in fresh.columns:
+                continue
+            if column not in combined.columns:
+                combined[column] = pd.NA
+            keys = pd.MultiIndex.from_frame(combined[["game_id", "metric"]])
+            combined[column] = combined[column].astype(object).where(
+                combined[column].notna(), pd.Series(fresh[column].reindex(keys).to_numpy(), index=combined.index)
+            )
     combined = combined.drop_duplicates(subset=["game_id", "metric"], keep="last")
     combined = combined.sort_values(["date", "game_id"]).reset_index(drop=True)
     combined.to_csv(log_path, index=False)
