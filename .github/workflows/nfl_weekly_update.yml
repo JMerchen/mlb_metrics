@@ -17,6 +17,12 @@ on:
   # 6 of 7 days a week would waste exactly that.
   schedule:
     - cron: "17 13 * * 2"
+    # Friday 22:17 UTC (3:17 PM Arizona): teams post final injury
+    # designations Friday afternoon, after Tuesday's run. This run
+    # rebuilds the player props with them for games still to be played
+    # and replaces those games' pending prop picks (nfl_pipeline's props
+    # step); game picks already logged for the week are kept as they are.
+    - cron: "17 22 * * 5"
   workflow_dispatch:
     inputs:
       season:
@@ -80,7 +86,7 @@ jobs:
           # pick) - `git add` on a path that doesn't exist yet fails the
           # whole step under `bash -e`, so guard each one, the same way
           # consensus_rankings_update.yml's own commit step already does.
-          for f in data/predictions/nfl_prop_predictions.csv docs/data/nfl_player_props_results.csv; do
+          for f in data/predictions/nfl_prop_predictions.csv docs/data/nfl_player_props_results.csv docs/data/nfl_team_units.csv; do
             [ -f "$f" ] && git add "$f"
           done
 

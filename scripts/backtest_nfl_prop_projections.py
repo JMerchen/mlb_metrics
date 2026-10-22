@@ -31,9 +31,36 @@ it: for target week W of season S, history is every regular-season week
 strictly before (S, W), including all of S-1. A player's actual result
 in week W is read only to score him, never to build a feature.
 
+--availability checks the injury adjustment
+(nfl_prop_projections.apply_teammate_availability): with each week's
+pre-game injury report, how often players it boosts beat their
+unadjusted projection, by size of boost, against everyone else. RESULT
+(2026-10-22; players who took a target/carry that week):
+
+                       boost >15%: over-rate (n)   no boost: over-rate (n)
+    2024 Receptions        0.752 (133)                 0.498 (2847)
+    2024 Receiving Yards   0.647 (133)                 0.456 (2847)
+    2024 Rushing Yards     0.683 (63)                  0.504 (1214)
+    2025 Receptions        0.606 (137)                 0.476 (2870)
+    2025 Receiving Yards   0.577 (137)                 0.434 (2870)
+    2025 Rushing Yards     0.647 (34)                  0.496 (1249)
+
+Boosts of 5-15% land in between (0.48-0.64). Sizing: with the full
+proportional handoff, the stat actually realized was 0.59-0.72 of the
+predicted bump in both seasons, hence
+config.NFL_PROP_VACATED_USAGE_STRENGTH = 0.65. Mean
+absolute error does NOT improve - yardage is right-skewed, so raising a
+projection toward the higher mean moves it away from the median MAE
+rewards - which is why the over-rate, the question a prop poses, is the
+measure here. Also tested and not shipped: scaling receivers' yards per
+target by the starting QB's yards per attempt vs the team's recent QBs
+(direction flipped between 2024 and 2025), and cutting a QB's passing
+projection when his receivers are out (no consistent drop).
+
 Usage:
     PYTHONPATH=src python3 scripts/backtest_nfl_prop_projections.py
     PYTHONPATH=src python3 scripts/backtest_nfl_prop_projections.py --sweep
+    PYTHONPATH=src python3 scripts/backtest_nfl_prop_projections.py --availability --target-season 2024
 """
 
 import argparse
@@ -325,6 +352,51 @@ def run(seasons, target_season, weeks, min_games):
     return pd.concat(frames, ignore_index=True)
 
 
+def load_injuries(seasons):
+    frames = []
+    for season in seasons:
+        path = os.path.join(RAW_DIR, f"injuries_{season}.parquet")
+        if os.path.exists(path):
+            frames.append(pd.read_parquet(path))
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def availability_check(seasons, target_season, weeks, min_games):
+    """Over-rate against the unadjusted projection, by size of the
+    injury boost (see the module docstring's --availability result)."""
+    weekly = load_weekly(seasons)
+    injuries = load_injuries(seasons)
+    rows = []
+    for week in weeks:
+        is_before = (weekly["season"] < target_season) | ((weekly["season"] == target_season) & (weekly["week"] < week))
+        history = weekly[is_before]
+        actual = weekly[(weekly["season"] == target_season) & (weekly["week"] == week)]
+        if history.empty or actual.empty:
+            continue
+        opponents = actual[["team", "opponent_team"]].drop_duplicates().rename(columns={"opponent_team": "opponent"})
+        report = injuries[(injuries["season"] == target_season) & (injuries["week"] == week)] if not injuries.empty else None
+        projected = nfl_prop_projections.project_player_stats(history, opponents, injuries_df=report)
+        projected = projected[projected["opponent"].notna() & ~projected["unavailable"] & (projected["games"] >= min_games)]
+        result = actual[["player_id", "receptions", "receiving_yards", "rushing_yards", "targets", "carries"]].rename(
+            columns={"targets": "actual_targets", "carries": "actual_carries"}
+        )
+        rows.append(projected.drop(columns=["targets", "carries"], errors="ignore").merge(result, on="player_id"))
+    scored = pd.concat(rows, ignore_index=True)
+
+    for category, actual_col, projection_col, attempts, bump in (
+        ("Receptions", "receptions", "projected_receptions", "actual_targets", "target_bump"),
+        ("Receiving Yards", "receiving_yards", "projected_receiving_yards", "actual_targets", "target_bump"),
+        ("Rushing Yards", "rushing_yards", "projected_rushing_yards", "actual_carries", "carry_bump"),
+    ):
+        played = scored[scored[attempts] > 0].copy()
+        unadjusted = played[projection_col] / played[bump]
+        played["went_over"] = played[actual_col] > unadjusted
+        played["boost"] = pd.cut(played[bump] - 1, [-1, 0.0001, 0.05, 0.15, 10], labels=["none", "0-5%", "5-15%", ">15%"])
+        summary = played.groupby("boost", observed=True).agg(n=("went_over", "size"), over_rate=("went_over", "mean"))
+        print(f"\n{category}, {target_season} weeks {weeks[0]}-{weeks[-1]}:")
+        print(summary.round(3).to_string())
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--seasons", type=int, nargs="+", default=[2024, 2025])
@@ -337,9 +409,15 @@ def main():
         "--game-script", action="store_true",
         help="score the model with and without the game-script volume adjustment on identical history",
     )
+    parser.add_argument("--availability", action="store_true", help="check the injury (teammate availability) adjustment")
     args = parser.parse_args()
 
     weeks = list(range(args.first_week, args.last_week + 1))
+
+    if args.availability:
+        seasons = sorted(set(args.seasons) | {args.target_season - 1, args.target_season})
+        availability_check(seasons, args.target_season, weeks, args.min_games)
+        return
 
     if args.game_script:
         for enabled in (False, True):

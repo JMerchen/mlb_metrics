@@ -2009,7 +2009,17 @@ NFL_PROP_MIN_USAGE = {
 # in the log, v3's directional hit rate on the receiving categories was
 # 0.5067 and 0.5028 - a coin flip - so pooling v3 and v4 results would
 # actively hide the change rather than merely blur it.
-NFL_PROP_MODEL_VERSION = "v4"
+#
+# Bumped to v5 (2026-10-22): injury-aware projections - teammates ruled
+# Out/Doubtful leave their target/carry share to the active players
+# (nfl_prop_projections.apply_teammate_availability), and players ruled
+# out are off the board.
+NFL_PROP_MODEL_VERSION = "v5"
+# Share of a newly-out teammate's target/carry share handed to the active
+# players in his position group (WR/TE together, RBs), split in
+# proportion to their own share. 1.0 is a full proportional handoff;
+# 2024 and 2025 replays both put the realized effect at 0.59-0.72 of it.
+NFL_PROP_VACATED_USAGE_STRENGTH = 0.65
 
 # Minimum share of their own team's real season snaps a player must have
 # taken THIS season to appear on the props board at all
@@ -2745,6 +2755,10 @@ NFL_TOTALS_SHRINK_PLAYS = 300.0
 NFL_TOTALS_QB_GAMES = 16
 NFL_TOTALS_QB_SHRINK_DROPBACKS = 150.0
 NFL_TOTALS_QB_REPLACEMENT_GAP = 0.10
+
+# Team unit ratings (nfl_units.py): pseudo-plays of league-average EPA
+# added to each window of a unit's targets / runs / dropbacks.
+NFL_UNIT_SHRINK_PLAYS = 150.0
 NFL_TOTALS_COEFFICIENTS = {
     "const": 4.80,
     "off_epa": 17.6,

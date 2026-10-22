@@ -15,9 +15,10 @@ player_name: "Player", team: "Team", opponent: "Opponent", position: "Pos",
 category: "Stat", direction: "Lean", player_rate: "His average",
 projection: "Our projection", opponent_allowed_rate: "Opponent allows",
 league_rate: "League average", ratio: "Opponent vs. average", games: "Games",
+context_note: "Teammates out",
 }
 const PLAYER_PROPS_COLUMNS = [
-"rank", "game", "player_name", "team", "opponent", "position", "category", "direction",
+"rank", "game", "player_name", "team", "opponent", "position", "category", "direction", "context_note",
 "player_rate", "projection", "opponent_allowed_rate", "league_rate", "ratio", "games",
 ]
 
@@ -46,6 +47,11 @@ const PLAYER_PROPS_COLUMNS = [
 // per-play ratio the projection model feeds this column is unclipped, so
 // the number now means what it says.
 function formatPlayerPropsValue(column, value){
+// Empty for most players (no teammate ruled out), and absent from boards
+// written before injuries were used.
+if(column === "context_note"){
+return value === undefined || value === null ? "" : value
+}
 // Passing Yards and Sacks carry no projection (nfl_prop_projections
 // models receiving and rushing only), so those cells arrive EMPTY from
 // the CSV. Number("") is 0, not NaN - the same real JS quirk this
@@ -100,25 +106,36 @@ return data.slice(0, topN === undefined ? 10 : topN)
 return data.filter(row=>row.game === game)
 }
 
-function buildPlayerPropsTable(data, id){
+// `units` (optional, nfl_units.js's unitsByTeam output) adds a column
+// with the team units each pick leans on - "His QB+ 112 · Opp Pass D+ 95"
+// - which the Team units tab explains.
+function buildPlayerPropsTable(data, id, units){
 const el = document.getElementById(id)
 if(!data.length){ el.innerHTML = "No player props data yet - this board updates weekly."; return }
+const showUnits = units && Object.keys(units).length && typeof propUnitContext === "function"
 let html = "<table><tr>"
-PLAYER_PROPS_COLUMNS.forEach(c=>{ html += `<th>${PLAYER_PROPS_COLUMN_LABELS[c] || c}</th>` })
+// The units column sits right after the lean it explains.
+PLAYER_PROPS_COLUMNS.forEach(c=>{
+html += `<th>${PLAYER_PROPS_COLUMN_LABELS[c] || c}</th>`
+if(showUnits && c === "direction"){ html += "<th>Units behind it</th>" }
+})
 html += "</tr>"
 data.forEach(row=>{
 html += "<tr>"
-PLAYER_PROPS_COLUMNS.forEach(c=>{ html += `<td>${formatPlayerPropsValue(c, row[c])}</td>` })
+PLAYER_PROPS_COLUMNS.forEach(c=>{
+html += `<td>${formatPlayerPropsValue(c, row[c])}</td>`
+if(showUnits && c === "direction"){ html += `<td style="white-space:nowrap">${propUnitContext(row, units) || "-"}</td>` }
+})
 html += "</tr>"
 })
 html += "</table>"
 el.innerHTML = html
 }
 
-function buildPlayerPropsSection(data, selectId, tableId){
+function buildPlayerPropsSection(data, selectId, tableId, units){
 const select = document.getElementById(selectId)
 const render = ()=> buildPlayerPropsTable(
-filterPlayerProps(data, select ? select.value : PLAYER_PROPS_ALL_GAMES), tableId
+filterPlayerProps(data, select ? select.value : PLAYER_PROPS_ALL_GAMES), tableId, units
 )
 if(select){
 const games = playerPropsGames(data)

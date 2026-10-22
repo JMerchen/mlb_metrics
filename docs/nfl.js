@@ -65,7 +65,7 @@ const DRAFT_ASSISTANT_STORAGE_KEY = "nflDraftAssistant.v1"
 let myDraftRoster = [] // [{player_id, player_display_name, position}]
 let myDraftConsidering = [] // [{player_id, player_display_name, position}] - players being weighed for the CURRENT pick, not yet drafted
 
-const NFL_TABS = ["preseason", "gamepicks", "draftboard", "playerprops"]
+const NFL_TABS = ["preseason", "gamepicks", "teamunits", "draftboard", "playerprops"]
 
 // Which tab the page opens on: a "#gamepicks"-style link wins; otherwise
 // Game Picks during the season (September through February) and
@@ -89,6 +89,7 @@ document.getElementById("preseasonSection").style.display = tab === "preseason" 
 document.getElementById("gamePicksSection").style.display = tab === "gamepicks" ? "" : "none"
 document.getElementById("draftBoardSection").style.display = tab === "draftboard" ? "" : "none"
 document.getElementById("playerPropsSection").style.display = tab === "playerprops" ? "" : "none"
+document.getElementById("teamUnitsSection").style.display = tab === "teamunits" ? "" : "none"
 }
 
 function selectBestballPosition(position){
@@ -689,10 +690,36 @@ buildConsensusTable([], "nflDraftBoardTable")
 // from a consensus board's own "multiple sources agree on one rank"
 // output, so it isn't forced through consensus_board.js's
 // buildConsensusTable.
+let nflTeamUnits = []
+let nflTeamUnitsSort = "team"
+
+function renderNflTeamUnits(){
+const el = document.getElementById("nflTeamUnitsTable")
+el.innerHTML = unitsTableHtml(nflTeamUnits, nflTeamUnitsSort)
+el.querySelectorAll("th[data-units-sort]").forEach(th=>{
+th.onclick = ()=>{ nflTeamUnitsSort = th.dataset.unitsSort; renderNflTeamUnits() }
+})
+}
+
+async function loadNflTeamUnits(){
+try{
+nflTeamUnits = await loadCSV("./data/nfl_team_units.csv")
+}catch(e){
+console.log("no nfl_team_units.csv yet", e)
+nflTeamUnits = []
+}
+const week = nflTeamUnits.length ? nflTeamUnits[0].week : ""
+const asOf = document.getElementById("nflTeamUnitsWeek")
+if(asOf){ asOf.textContent = week ? `Going into week ${week}.` : "" }
+renderNflTeamUnits()
+}
+
 async function loadNflPlayerProps(){
+// Team units first, so each prop row can show the units behind it.
+await loadNflTeamUnits()
 try{
 const props = await loadCSV("./data/nfl_player_props.csv")
-buildPlayerPropsSection(props, "nflPlayerPropsGame", "nflPlayerPropsTable")
+buildPlayerPropsSection(props, "nflPlayerPropsGame", "nflPlayerPropsTable", unitsByTeam(nflTeamUnits))
 }catch(e){
 console.log("no nfl_player_props.csv yet", e)
 buildPlayerPropsSection([], "nflPlayerPropsGame", "nflPlayerPropsTable")

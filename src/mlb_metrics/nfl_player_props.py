@@ -294,7 +294,8 @@ def compute_position_defense_rolling_rates(weekly_df: pd.DataFrame, stat_col: st
 
 
 def _skill_category_edges(
-    weekly_df: pd.DataFrame, current_week_schedule_df: pd.DataFrame, weight: float
+    weekly_df: pd.DataFrame, current_week_schedule_df: pd.DataFrame, weight: float,
+    injuries_df: pd.DataFrame = None,
 ) -> pd.DataFrame:
     """Receptions/Receiving Yards/Rushing Yards - all three come from ONE
     real call to nfl_rush_rec.compute_skill_rolling_stats (it already
@@ -321,7 +322,7 @@ def _skill_category_edges(
     players = players.merge(opponents, on="team", how="left")
 
     projections = nfl_prop_projections.project_player_stats(
-        weekly_df, opponents, latest_team, schedule_df=current_week_schedule_df
+        weekly_df, opponents, latest_team, schedule_df=current_week_schedule_df, injuries_df=injuries_df
     )
     defense_rates = nfl_prop_projections.compute_opponent_multipliers(
         nfl_prop_projections.compute_position_defense_per_play_rates(weekly_df),
@@ -343,7 +344,7 @@ def _skill_category_edges(
          "yards_allowed_per_carry", "yards_per_carry", "per carry"),
     ]
 
-    projection_columns = ["player_id", "projected_targets", "projected_carries"] + [
+    projection_columns = ["player_id", "projected_targets", "projected_carries", "context_note"] + [
         spec[2] for spec in category_specs
     ]
 
@@ -385,7 +386,7 @@ def _skill_category_edges(
         frames.append(rows[[
             "player_id", "player_name", "team", "position", "opponent", "games",
             "category", "player_rate", "projection", "projected_targets", "projected_carries",
-            "opponent_allowed_rate", "league_rate", "rate_basis", "ratio",
+            "opponent_allowed_rate", "league_rate", "rate_basis", "ratio", "context_note",
         ]])
 
     return pd.concat(frames, ignore_index=True)
@@ -579,6 +580,7 @@ def build_prop_edges(
     weight: float = None,
     snap_share: pd.DataFrame = None,
     min_snap_share: float = None,
+    injuries_df: pd.DataFrame = None,
 ) -> pd.DataFrame:
     """One real row per (player, category) across all 5 real categories
     (Receptions, Receiving Yards, Rushing Yards, Passing Yards, Sacks):
@@ -609,19 +611,27 @@ def build_prop_edges(
     Omitting `snap_share` (the default) skips this filter entirely, and
     so does passing a real EMPTY frame - which is the honest behavior at
     real week 1, when no current-season snaps exist yet for anyone and
-    filtering on them would empty the whole board rather than narrow it."""
+    filtering on them would empty the whole board rather than narrow it.
+
+    `injuries_df` (this week's injury report): players listed Out or
+    Doubtful are dropped from every category, and the skill projections
+    hand their work to active teammates (a `context_note` says so) - see
+    nfl_prop_projections.apply_teammate_availability."""
     weight = config.NFL_PROP_MATCHUP_WEIGHT if weight is None else weight
     min_snap_share = config.NFL_PROP_MIN_SNAP_SHARE if min_snap_share is None else min_snap_share
 
     edges = pd.concat(
         [
-            _skill_category_edges(weekly_df, current_week_schedule_df, weight),
+            _skill_category_edges(weekly_df, current_week_schedule_df, weight, injuries_df),
             _passing_category_edges(weekly_df, current_week_schedule_df, weight),
             _sacks_category_edges(weekly_df, current_week_schedule_df, weight),
         ],
         ignore_index=True,
     )
     edges = attach_game_labels(edges, current_week_schedule_df)
+    out = nfl_prop_projections.unavailable_players(injuries_df)
+    if out:
+        edges = edges[~edges["player_id"].isin(out)].reset_index(drop=True)
 
     if snap_share is None or snap_share.empty:
         if snap_share is not None:

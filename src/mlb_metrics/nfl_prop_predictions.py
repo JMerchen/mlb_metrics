@@ -80,6 +80,25 @@ def select_prop_picks(
     return picks.reindex(columns=PROP_PREDICTION_COLUMNS)
 
 
+def drop_pending_picks(log_path: str, season: int, week: int, teams: set) -> None:
+    """Removes this week's still-unresolved picks for players on `teams`
+    (the teams whose games haven't been played), so a re-run later in the
+    week - with the final injury report - replaces them instead of
+    leaving picks it no longer makes alongside the new ones. Resolved
+    picks, and picks for games already played, are never touched."""
+    if not os.path.exists(log_path) or not teams:
+        return
+    log = pd.read_csv(log_path)
+    if log.empty:
+        return
+    pending = (
+        (log["season"] == season) & (log["week"] == week)
+        & log["hit"].isna() & log["team"].isin(teams)
+    )
+    if pending.any():
+        log[~pending].to_csv(log_path, index=False)
+
+
 def append_prop_predictions(picks: pd.DataFrame, log_path: str) -> pd.DataFrame:
     """Appends `picks` to the real prop log at `log_path`, deduping on
     (season, week, player_id, category) with the NEWEST row winning -

@@ -5333,6 +5333,24 @@ minutes for no real new signal most days.
 
 ## NFL Player Props (`nfl_player_props.py`)
 
+> **Injury-aware props and team units (2026-10-22, model v5).** Players
+> listed Out or Doubtful on the week's injury report are off the board,
+> and a teammate newly ruled out (he played the team's last game) hands
+> his target share to the active WR/TE group, or his carries and targets
+> to the active RBs, at 0.65 of a proportional handoff
+> (`nfl_prop_projections.apply_teammate_availability`). The board says
+> so in a "Teammates out" column. Replayed on 2024–2025
+> (`scripts/backtest_nfl_prop_projections.py --availability`), players
+> boosted more than 15% beat their unadjusted projection 58–75% of the
+> time against 43–50% for everyone else. Scaling receivers by the
+> starting QB, and QBs by which receivers are out, showed no consistent
+> effect and isn't used. The NFL workflow now also runs Friday afternoon,
+> after final injury designations, refreshing props and pending prop
+> picks for games not yet played. The NFL page's Team units tab
+> (`nfl_units.py`) rates QB+, Receiving+, Rushing+, Pass D+ and Run D+ on
+> a 100-is-average scale, and each prop row shows the units its lean
+> rests on.
+
 Real, direct user request (2026-09-16): "Puka Nacua was targeted in
 almost half of his routes run in week 1, so if he goes against a
 defense that's weak against the pass, he'd be a good target to choose
