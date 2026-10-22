@@ -202,3 +202,18 @@ def test_summarize_prop_results_with_no_log_yet_is_empty_not_a_crash(tmp_path):
     result = nfl_prop_predictions.summarize_prop_results(str(tmp_path / "nothing_here.csv"))
 
     assert result.empty
+
+
+def test_drop_pending_picks_clears_only_unresolved_picks_for_teams_still_to_play(tmp_path):
+    log_path = str(tmp_path / "nfl_prop_predictions.csv")
+    pd.DataFrame([
+        {"season": 2026, "week": 7, "player_id": "a", "team": "KC", "category": "Receptions", "hit": None},
+        {"season": 2026, "week": 7, "player_id": "b", "team": "DEN", "category": "Receptions", "hit": None},
+        {"season": 2026, "week": 7, "player_id": "c", "team": "KC", "category": "Rushing Yards", "hit": 1.0},
+        {"season": 2026, "week": 6, "player_id": "d", "team": "KC", "category": "Receptions", "hit": None},
+    ]).to_csv(log_path, index=False)
+
+    nfl_prop_predictions.drop_pending_picks(log_path, 2026, 7, {"KC"})
+
+    left = pd.read_csv(log_path)
+    assert sorted(left["player_id"]) == ["b", "c", "d"]

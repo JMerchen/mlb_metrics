@@ -17,6 +17,12 @@ on:
   # 6 of 7 days a week would waste exactly that.
   schedule:
     - cron: "17 13 * * 2"
+    # Friday 22:17 UTC (3:17 PM Arizona): teams post final injury
+    # designations Friday afternoon, after Tuesday's run. This run
+    # rebuilds the player props with them for games still to be played
+    # and replaces those games' pending prop picks (nfl_pipeline's props
+    # step); game picks already logged for the week are kept as they are.
+    - cron: "17 22 * * 5"
   workflow_dispatch:
     inputs:
       season:

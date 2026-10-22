@@ -137,7 +137,93 @@ PROJECTION_OUTPUT_COLUMNS = [
     "target_volume_multiplier", "carry_volume_multiplier",
     "projected_targets", "projected_carries",
     "projected_receptions", "projected_receiving_yards", "projected_rushing_yards",
+    "target_bump", "carry_bump", "context_note", "unavailable",
 ]
+
+# Injury report statuses that take a player off the board.
+UNAVAILABLE_STATUSES = ("Out", "Doubtful")
+
+
+def unavailable_players(injuries_df: pd.DataFrame) -> set:
+    """Player ids (gsis) listed Out or Doubtful on `injuries_df`, this
+    week's injury report."""
+    if injuries_df is None or injuries_df.empty or "report_status" not in injuries_df.columns:
+        return set()
+    return set(injuries_df.loc[injuries_df["report_status"].isin(UNAVAILABLE_STATUSES), "gsis_id"].dropna())
+
+
+def apply_teammate_availability(
+    players: pd.DataFrame,
+    weekly_df: pd.DataFrame,
+    unavailable: set,
+    strength: float = None,
+) -> pd.DataFrame:
+    """Hands the work of teammates ruled out to the players still active.
+
+    User request (2026-10-22): a receiver's outlook should change when
+    the receivers around him are hurt. A player listed Out/Doubtful who
+    played in his team's most recent game leaves his target share (WR/TE
+    together, RBs separately) and, for a running back, his carry share
+    behind; the active players in that
+    group split it in proportion to their own share, scaled by `strength`
+    (config.NFL_PROP_VACATED_USAGE_STRENGTH). Someone already out last
+    week left nothing new to split - his teammates' recent shares were
+    earned without him, so counting him again double-counts.
+
+    Measured on 2024 and 2025 (scripts/backtest_nfl_prop_projections.py
+    --availability): players this boosts by more than 15% beat their
+    unadjusted projection 58-75% of the time across categories, against
+    43-50% for everyone else; the full proportional bump overshoots, and
+    ~0.65 of it matches what actually happened in both seasons.
+
+    Adds target_bump / carry_bump (1.0 = unchanged), a plain-language
+    context_note ("+18% targets with Puka Nacua out"), and `unavailable`;
+    scales the projected volume and stat lines by the bumps."""
+    strength = config.NFL_PROP_VACATED_USAGE_STRENGTH if strength is None else strength
+    players = players.copy()
+    players["unavailable"] = players["player_id"].isin(unavailable)
+    players["target_bump"] = 1.0
+    players["carry_bump"] = 1.0
+    players["context_note"] = ""
+    if not unavailable or players.empty:
+        return players
+
+    skill = _skill_rows(weekly_df)
+    latest = skill[skill.groupby("team")["season"].transform("max") == skill["season"]]
+    latest = latest[latest.groupby("team")["week"].transform("max") == latest["week"]]
+    played_last = set(latest.loc[(latest[RECEIVING_ATTEMPT_COLUMN].fillna(0) + latest[RUSHING_ATTEMPT_COLUMN].fillna(0)) > 0, "player_id"])
+    names = (
+        weekly_df.sort_values(["season", "week"]).drop_duplicates("player_id", keep="last")
+        .set_index("player_id")["player_display_name"]
+        if "player_display_name" in weekly_df.columns else pd.Series(dtype=object)
+    )
+
+    players["_group"] = players["position"].replace({"TE": "WR"})
+    newly_out = players["unavailable"] & players["player_id"].isin(played_last)
+    notes = {pid: [] for pid in players["player_id"]}
+    for share, bump, label in (("target_share", "target_bump", "targets"), ("carry_share", "carry_bump", "carries")):
+        for (team, group), rows in players.groupby(["team", "_group"]):
+            # Carries move between running backs only: a receiver's few
+            # handoffs leave nothing a teammate receiver inherits.
+            if share == "carry_share" and group != "RB":
+                continue
+            gone = rows[newly_out.loc[rows.index] & (rows[share] > 0)]
+            active = rows[~rows["unavailable"]]
+            vacated, kept = gone[share].sum(), active[share].sum()
+            if vacated <= 0 or kept <= 0:
+                continue
+            factor = 1 + strength * vacated / kept
+            players.loc[active.index, bump] = players.loc[active.index, bump] * factor
+            who = " and ".join(str(names.get(pid, pid)) for pid in gone["player_id"])
+            for pid in active["player_id"]:
+                notes[pid].append(f"+{(factor - 1) * 100:.0f}% {label} with {who} out")
+
+    players["context_note"] = players["player_id"].map(lambda pid: "; ".join(notes[pid]))
+    for column in ("projected_targets", "projected_receptions", "projected_receiving_yards"):
+        players[column] = players[column] * players["target_bump"]
+    for column in ("projected_carries", "projected_rushing_yards"):
+        players[column] = players[column] * players["carry_bump"]
+    return players.drop(columns="_group")
 
 
 def _recency_weights(ranked: pd.Series, windows) -> pd.Series:
@@ -598,9 +684,13 @@ def project_player_stats(
     opponents_df: pd.DataFrame,
     latest_team_df: pd.DataFrame = None,
     schedule_df: pd.DataFrame = None,
+    injuries_df: pd.DataFrame = None,
 ) -> pd.DataFrame:
     """Projected receptions, receiving yards, and rushing yards for every
     skill player with an upcoming opponent.
+
+    `injuries_df` (this week's injury report) hands the work of teammates
+    ruled out to the active players - see apply_teammate_availability.
 
     `opponents_df` is `nfl_matchup.team_opponents`' own output (team ->
     opponent for the week being projected). `latest_team_df` optionally
@@ -672,7 +762,7 @@ def project_player_stats(
     players["projected_rushing_yards"] = (
         players["projected_carries"] * players["yards_per_carry"] * players["ypc_multiplier"]
     )
-    return players
+    return apply_teammate_availability(players, weekly_df, unavailable_players(injuries_df))
 
 
 def compute_team_pass_volume(weekly_df: pd.DataFrame) -> pd.DataFrame:

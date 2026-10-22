@@ -94,6 +94,13 @@ def test_write_nfl_game_picks_export_writes_three_csvs(tmp_path):
     assert (output_dir / "nfl_game_picks_summary_by_version.csv").exists()
 
 
+@pytest.fixture(autouse=True)
+def _no_live_injury_fetch(monkeypatch):
+    """The injury report is fetched outside TABLE_FETCHERS; keep every
+    test here off the network (an empty report is a valid week)."""
+    monkeypatch.setattr(nfl_pipeline, "INJURY_FETCHER", lambda seasons: pd.DataFrame())
+
+
 def test_run_end_to_end_with_synthetic_fetchers(tmp_path, monkeypatch):
     # A real, small 4-team round-robin across two seasons (mirrors
     # test_nfl_team_strength.py's own fixture pattern) - 2025 fully

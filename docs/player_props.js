@@ -15,9 +15,10 @@ player_name: "Player", team: "Team", opponent: "Opponent", position: "Pos",
 category: "Stat", direction: "Lean", player_rate: "His average",
 projection: "Our projection", opponent_allowed_rate: "Opponent allows",
 league_rate: "League average", ratio: "Opponent vs. average", games: "Games",
+context_note: "Teammates out",
 }
 const PLAYER_PROPS_COLUMNS = [
-"rank", "game", "player_name", "team", "opponent", "position", "category", "direction",
+"rank", "game", "player_name", "team", "opponent", "position", "category", "direction", "context_note",
 "player_rate", "projection", "opponent_allowed_rate", "league_rate", "ratio", "games",
 ]
 
@@ -46,6 +47,11 @@ const PLAYER_PROPS_COLUMNS = [
 // per-play ratio the projection model feeds this column is unclipped, so
 // the number now means what it says.
 function formatPlayerPropsValue(column, value){
+// Empty for most players (no teammate ruled out), and absent from boards
+// written before injuries were used.
+if(column === "context_note"){
+return value === undefined || value === null ? "" : value
+}
 // Passing Yards and Sacks carry no projection (nfl_prop_projections
 // models receiving and rushing only), so those cells arrive EMPTY from
 // the CSV. Number("") is 0, not NaN - the same real JS quirk this

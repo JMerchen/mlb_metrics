@@ -212,3 +212,9 @@ test("POSITION_FLOOR_STATS: the requested tabs and stats", () => {
     assert.deepEqual(keys(tab), ["tackles", "sacks", "def_interceptions"])
   })
 })
+
+test("formatPlayerPropsValue: teammate note passes through, blank when absent", () => {
+  assert.equal(formatPlayerPropsValue("context_note", "+18% targets with Puka Nacua out"), "+18% targets with Puka Nacua out")
+  assert.equal(formatPlayerPropsValue("context_note", undefined), "")
+  assert.equal(formatPlayerPropsValue("context_note", ""), "")
+})

@@ -418,3 +418,79 @@ def test_game_script_is_disabled_by_default_and_is_a_no_op():
         without["projected_targets"].iloc[0]
     )
     assert with_extreme["target_volume_multiplier"].iloc[0] == pytest.approx(1.0)
+
+
+def _availability_players():
+    # One team: WR1 (30% of targets), WR2 (20%), TE (10%), RB1 (70% of carries), RB2 (30%).
+    return pd.DataFrame([
+        {"player_id": "wr1", "team": "LA", "position": "WR", "target_share": 0.30, "carry_share": 0.0},
+        {"player_id": "wr2", "team": "LA", "position": "WR", "target_share": 0.20, "carry_share": 0.0},
+        {"player_id": "te1", "team": "LA", "position": "TE", "target_share": 0.10, "carry_share": 0.0},
+        {"player_id": "rb1", "team": "LA", "position": "RB", "target_share": 0.08, "carry_share": 0.70},
+        {"player_id": "rb2", "team": "LA", "position": "RB", "target_share": 0.04, "carry_share": 0.30},
+    ]).assign(projected_targets=lambda d: d["target_share"] * 35, projected_receptions=lambda d: d["target_share"] * 23,
+              projected_receiving_yards=lambda d: d["target_share"] * 260, projected_carries=lambda d: d["carry_share"] * 25,
+              projected_rushing_yards=lambda d: d["carry_share"] * 105)
+
+
+def _last_week(played):
+    return pd.DataFrame([
+        {"player_id": pid, "player_display_name": pid.upper(), "team": "LA", "position": pos, "season": 2026, "week": 6,
+         "season_type": "REG", "targets": 5, "carries": 3 if pos == "RB" else 0, "receptions": 3,
+         "receiving_yards": 40, "rushing_yards": 10 if pos == "RB" else 0}
+        for pid, pos in played
+    ])
+
+
+def test_teammate_availability_hands_a_newly_out_receivers_targets_to_active_teammates():
+    players = _availability_players()
+    weekly = _last_week([("wr1", "WR"), ("wr2", "WR"), ("te1", "TE"), ("rb1", "RB"), ("rb2", "RB")])
+
+    out = nfl_prop_projections.apply_teammate_availability(players, weekly, {"wr1"}, strength=0.5).set_index("player_id")
+
+    # WR1's 0.30 goes to the WR/TE group still active (0.20 + 0.10), half-strength: 1 + 0.5 * 0.30 / 0.30
+    assert out.loc["wr2", "target_bump"] == pytest.approx(1.5)
+    assert out.loc["te1", "target_bump"] == pytest.approx(1.5)
+    assert out.loc["wr2", "projected_receiving_yards"] == pytest.approx(0.20 * 260 * 1.5)
+    assert out.loc["wr2", "context_note"] == "+50% targets with WR1 out"
+    # Running backs are their own group; their projections don't move.
+    assert out.loc["rb1", "target_bump"] == 1.0 and out.loc["rb1", "context_note"] == ""
+    assert out.loc["wr1", "unavailable"] and not out.loc["wr2", "unavailable"]
+
+
+def test_teammate_availability_moves_carries_between_running_backs_only():
+    players = _availability_players()
+    players.loc[players["player_id"] == "wr1", "carry_share"] = 0.10   # a receiver with a few handoffs
+    players.loc[players["player_id"] == "wr2", "carry_share"] = 0.02
+    weekly = _last_week([("wr1", "WR"), ("wr2", "WR"), ("te1", "TE"), ("rb1", "RB"), ("rb2", "RB")])
+
+    out = nfl_prop_projections.apply_teammate_availability(players, weekly, {"wr1"}, strength=0.65).set_index("player_id")
+    assert out.loc["wr2", "carry_bump"] == 1.0
+    assert "carries" not in out.loc["wr2", "context_note"]
+
+    out = nfl_prop_projections.apply_teammate_availability(players, weekly, {"rb1"}, strength=0.65).set_index("player_id")
+    assert out.loc["rb2", "carry_bump"] == pytest.approx(1 + 0.65 * 0.70 / 0.30)
+
+
+def test_teammate_availability_ignores_a_player_already_out_last_week():
+    # RB1 didn't play last week: RB2's recent share was already earned without him.
+    players = _availability_players()
+    weekly = _last_week([("wr1", "WR"), ("wr2", "WR"), ("te1", "TE"), ("rb2", "RB")])
+
+    out = nfl_prop_projections.apply_teammate_availability(players, weekly, {"rb1"}, strength=0.65).set_index("player_id")
+
+    assert out.loc["rb2", "carry_bump"] == 1.0
+    assert out.loc["rb1", "unavailable"]
+
+
+def test_teammate_availability_with_no_report_changes_nothing():
+    players = _availability_players()
+    out = nfl_prop_projections.apply_teammate_availability(players, _last_week([("wr1", "WR")]), set())
+    assert (out["target_bump"] == 1.0).all() and (out["carry_bump"] == 1.0).all()
+    assert out["projected_receiving_yards"].tolist() == players["projected_receiving_yards"].tolist()
+
+
+def test_unavailable_players_are_the_out_and_doubtful_ones():
+    report = pd.DataFrame({"gsis_id": ["a", "b", "c", None], "report_status": ["Out", "Doubtful", "Questionable", "Out"]})
+    assert nfl_prop_projections.unavailable_players(report) == {"a", "b"}
+    assert nfl_prop_projections.unavailable_players(None) == set()

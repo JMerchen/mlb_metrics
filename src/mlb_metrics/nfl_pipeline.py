@@ -63,6 +63,11 @@ TABLE_FETCHERS = [
 ]
 TABLES = [table for table, _ in TABLE_FETCHERS]
 
+# This week's injury report is fetched on its own rather than as a
+# TABLE_FETCHERS table: those are history, filtered to weeks before the
+# one being predicted, and the report that matters is the current week's.
+INJURY_FETCHER = nfl_data.fetch_injuries
+
 
 def determine_predictable_week(schedules_df: pd.DataFrame, season: int) -> int | None:
     """The earliest real REG week in `season` with at least one game
@@ -77,6 +82,24 @@ def determine_predictable_week(schedules_df: pd.DataFrame, season: int) -> int |
     if unplayed.empty:
         return None
     return int(unplayed["week"].min())
+
+
+def _this_week_injury_report(raw_dir: str, season: int, week: int) -> pd.DataFrame:
+    """This week's injury report (regular season), fetched fresh and
+    persisted; the last persisted copy if the fetch fails, and an empty
+    frame if there is none - props then simply run without it."""
+    try:
+        injuries = INJURY_FETCHER([season])
+        nfl_data.persist_table(injuries, raw_dir, "injuries", season)
+    except Exception as exc:
+        print(f"WARNING: failed to fetch the {season} injury report ({exc}); using the last persisted copy.")
+        injuries = nfl_data.load_persisted_table(raw_dir, "injuries", season)
+    if injuries is None or injuries.empty or "week" not in injuries.columns:
+        return pd.DataFrame()
+    report = injuries[injuries["week"] == week]
+    if "game_type" in report.columns:
+        report = report[report["game_type"] == "REG"]
+    return report
 
 
 def _build_market_probabilities(this_week_games: pd.DataFrame) -> pd.DataFrame:
@@ -262,8 +285,16 @@ def run(
             snap_share = nfl_player_props.compute_current_season_snap_share(
                 history.get("snap_counts", pd.DataFrame()), history["rosters_weekly"], season
             )
+            # Props are built for games not played yet only, with this
+            # week's injury report: a re-run later in the week (the Friday
+            # run, after final injury designations) refreshes the board and
+            # the pending picks for games still to come, and leaves a
+            # Thursday game that's already been played alone.
+            unplayed = schedules.loc[this_week_games.index, "home_score"].isna()
+            props_games = this_week_games[unplayed]
+            injury_report = _this_week_injury_report(raw_dir, season, week)
             props_edges = nfl_player_props.build_prop_edges(
-                history["weekly"], this_week_games, snap_share=snap_share
+                history["weekly"], props_games, snap_share=snap_share, injuries_df=injury_report
             )
             top_props = nfl_player_props.write_prop_bets_csv(
                 props_edges, os.path.join(output_dir, "nfl_player_props.csv")
@@ -290,6 +321,8 @@ def run(
             )
 
             prop_picks = nfl_prop_predictions.select_prop_picks(top_props, season, week)
+            playing = set(props_games["home_team"]) | set(props_games["away_team"])
+            nfl_prop_predictions.drop_pending_picks(prop_predictions_log_path, season, week, playing)
             nfl_prop_predictions.append_prop_predictions(prop_picks, prop_predictions_log_path)
 
             probs = nfl_game_picks.compute_game_win_probabilities(

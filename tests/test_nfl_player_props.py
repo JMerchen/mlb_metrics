@@ -156,7 +156,7 @@ def test_build_prop_edges_covers_all_five_categories():
     assert set(edges.columns) == {
         "player_id", "player_name", "team", "position", "opponent", "games",
         "category", "player_rate", "projection", "projected_targets", "projected_carries",
-        "opponent_allowed_rate", "league_rate", "rate_basis", "ratio", "game",
+        "opponent_allowed_rate", "league_rate", "rate_basis", "ratio", "game", "context_note",
     }
     # Every row knows its matchup, so the board can be filtered to one
     # game (see attach_game_labels / build_prop_board).
@@ -800,3 +800,21 @@ def test_write_prop_bets_csv_returns_only_the_top_ten_for_pick_logging(tmp_path)
     assert len(returned) == 10
     assert len(written) > 10           # the site gets the wide board ...
     assert list(returned["rank"]) == list(range(1, 11))   # ... the log gets ten.
+
+
+def test_build_prop_edges_drops_ruled_out_players_and_notes_the_teammate_boost():
+    rows = []
+    rows += _multi_week_skill_rows("wr1", "WR One", "SF", "SEA", "WR", range(1, 6), receptions=7, receiving_yards=90, targets=10)
+    rows += _multi_week_skill_rows("wr2", "WR Two", "SF", "SEA", "WR", range(1, 6), receptions=4, receiving_yards=50, targets=6)
+    weekly_df = pd.DataFrame(rows)
+    schedule = pd.DataFrame([{"home_team": "SF", "away_team": "SEA"}])
+    report = pd.DataFrame([{"gsis_id": "wr1", "team": "SF", "report_status": "Out"}])
+
+    edges = nfl_player_props.build_prop_edges(weekly_df, schedule, injuries_df=report)
+    without = nfl_player_props.build_prop_edges(weekly_df, schedule)
+
+    assert "wr1" not in set(edges["player_id"])
+    wr2 = edges[(edges["player_id"] == "wr2") & (edges["category"] == "Receiving Yards")].iloc[0]
+    before = without[(without["player_id"] == "wr2") & (without["category"] == "Receiving Yards")].iloc[0]
+    assert wr2["projection"] > before["projection"]
+    assert "targets with" in wr2["context_note"] and "out" in wr2["context_note"]
