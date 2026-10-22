@@ -419,8 +419,12 @@ def apply_ml_model(
     proba = pd.Series(model.predict_proba(X)[:, 1], index=X.index)
 
     result = win_probabilities.copy()
-    real_rows = result["game_id"].map(complete).fillna(False)
-    result.loc[real_rows, "home_win_probability"] = result.loc[real_rows, "game_id"].map(proba)
+    real_rows = result["game_id"].map(complete).fillna(False).astype(bool)
+    # Mapped over every row, then kept only where the features were
+    # complete: pandas 3.1 refuses to write an empty selection's
+    # string-typed result into the float column.
+    ml_probability = result["game_id"].map(proba).astype(float)
+    result["home_win_probability"] = ml_probability.where(real_rows, result["home_win_probability"])
     return result
 
 

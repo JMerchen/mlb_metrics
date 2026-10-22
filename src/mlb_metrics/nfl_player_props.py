@@ -704,8 +704,10 @@ def top_prop_bets(
     )
 
     qualified = edges_df[edges_df["games"] >= min_games].copy()
-    qualified["min_usage"] = qualified["category"].map(config.NFL_PROP_MIN_USAGE)
-    qualified = qualified[qualified["player_rate"] >= qualified["min_usage"]]
+    # astype(float): mapping an empty string column stays string-typed,
+    # which pandas 3.1 won't compare with numbers.
+    qualified["min_usage"] = qualified["category"].map(config.NFL_PROP_MIN_USAGE).astype(float)
+    qualified = qualified[qualified["player_rate"].astype(float) >= qualified["min_usage"]]
     qualified = qualified.dropna(subset=["opponent"])
 
     # The board's confidence signal, per category:
@@ -804,8 +806,9 @@ def top_prop_bets(
             0.0,
         ),
         index=qualified.index,
+        dtype=float,
     )
-    qualified["confidence_signal"] = projection_gap.fillna(ratio_gap)
+    qualified["confidence_signal"] = projection_gap.astype(float).fillna(ratio_gap)
 
     # Over/Under follows whichever signal that category actually used: a
     # projection above the baseline is an Over, and where there is no
