@@ -1249,3 +1249,76 @@ td,th{padding:7px 8px;font-size:12px;}
 .game .prob{white-space:normal;}
 
 }
+
+
+/* ---- NFL player props: lean chart and cards (docs/prop_cards.js) ----
+   Over/under is a diverging pair - blue / orange, checked with the dataviz
+   palette validator against --bg-card - with a neutral grey midpoint. Text
+   never takes the series colour; every coloured mark has a word beside it. */
+:root{
+--prop-over:#3987e5;
+--prop-under:#d95926;
+--prop-mid:#383835;
+--prop-other:#5b6270;
+}
+.propControls{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;margin:0 0 14px;font-size:14px;}
+.propViewSwitch{display:inline-flex;gap:6px;margin-left:auto;}
+.propViewSwitch .tabButton{padding:6px 14px;}
+
+.leanChart{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px 10px;margin:0 0 16px;}
+.leanAxis{display:grid;grid-template-columns:minmax(120px,32%) 1fr 92px;gap:10px;font-size:11px;color:var(--text-dim);margin-bottom:4px;}
+.leanAxisScale{display:flex;justify-content:space-between;white-space:nowrap;}
+.leanRow{display:grid;grid-template-columns:minmax(120px,32%) 1fr 92px;align-items:center;gap:10px;padding:5px 0;color:var(--text);text-decoration:none;border-radius:var(--radius-sm);}
+.leanRow:hover,.leanRow:focus-visible{background:var(--bg-hover);outline:none;}
+.leanName{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.leanStat{color:var(--text-dim);font-size:12px;}
+.leanTrack,.whyMeter{position:relative;height:12px;}
+.leanMid{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--border-strong);}
+.leanBar{position:absolute;top:0;bottom:0;}
+.leanOver{background:var(--prop-over);border-radius:0 4px 4px 0;}
+.leanUnder{background:var(--prop-under);border-radius:4px 0 0 4px;}
+.leanValue{font-size:12px;color:var(--text-dim);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+
+.propCards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;}
+.propCard{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px 12px;scroll-margin-top:16px;}
+.propCard:target{border-color:var(--border-strong);box-shadow:0 0 0 2px var(--border-strong);}
+.propCardHead{display:flex;align-items:baseline;gap:8px;}
+.propRank{color:var(--text-dim);font-size:12px;font-variant-numeric:tabular-nums;}
+.propWho{flex:1;min-width:0;font-size:15px;}
+.propMeta{display:block;color:var(--text-dim);font-size:12px;font-weight:400;}
+.propLean{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--text);border:1px solid var(--border-strong);border-radius:999px;padding:2px 10px 2px 8px;white-space:nowrap;}
+.propLean i{width:8px;height:8px;border-radius:50%;display:inline-block;}
+.propLeanOver i{background:var(--prop-over);}
+.propLeanUnder i{background:var(--prop-under);}
+.propStat{color:var(--text-dim);font-size:12px;margin-top:8px;}
+.propHeadline{margin:2px 0 6px;font-size:14px;line-height:1.4;}
+.propHeadline b{font-size:18px;}
+.propStrip{display:block;width:100%;height:auto;margin:-4px 0 0;}
+.propStrip .stripAverage{stroke:var(--text-dim);stroke-width:1;opacity:.6;}
+.propStrip .stripProjection{stroke-width:2;stroke-dasharray:5 4;}
+.propStrip .stripProjectionOver{stroke:var(--prop-over);}
+.propStrip .stripProjectionUnder{stroke:var(--prop-under);}
+.propStrip .dotOver{fill:var(--prop-over);stroke:var(--bg-card);stroke-width:2;}
+.propStrip .dotUnder{fill:var(--prop-under);stroke:var(--bg-card);stroke-width:2;}
+.propStrip .dotOther{fill:var(--prop-other);stroke:var(--bg-card);stroke-width:2;}
+.propStrip .stripDot{cursor:default;outline:none;}
+.propStrip .stripDot:hover circle:last-child,.propStrip .stripDot:focus circle:last-child{r:6;}
+.propStrip .stripTick{fill:var(--text-dim);font-size:10px;font-family:var(--font);}
+.propCleared{margin:2px 0 8px;font-size:13px;color:var(--text-dim);}
+.propCleared b{color:var(--text);font-weight:600;}
+.propKey{display:inline-flex;align-items:center;gap:5px;margin-left:6px;font-size:11px;}
+.propKey i{display:inline-block;width:16px;height:0;margin-left:6px;}
+.propKey .keyProjection{border-top:2px dashed;}
+.propKey .keyOver{border-color:var(--prop-over);}
+.propKey .keyUnder{border-color:var(--prop-under);}
+.propKey .keyAverage{border-top:1px solid var(--text-dim);}
+.propWhy{list-style:none;margin:0;padding:8px 0 0;border-top:1px solid var(--border);display:grid;gap:6px;}
+.propWhy li{display:grid;grid-template-columns:56px 1fr;gap:10px;align-items:center;font-size:12.5px;line-height:1.35;}
+.propWhy li > span:only-child{grid-column:2;}
+.whyMeter{height:8px;}
+@media (max-width:700px){
+.leanRow{grid-template-columns:minmax(96px,38%) 1fr 74px;gap:6px;}
+.leanAxis{grid-template-columns:minmax(96px,38%) 1fr 74px;gap:6px;}
+.leanAxisScale span:nth-child(2){display:none;}
+.propViewSwitch{margin-left:0;}
+}

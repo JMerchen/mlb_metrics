@@ -574,6 +574,34 @@ def attach_game_labels(edges_df: pd.DataFrame, current_week_schedule_df: pd.Data
     return labelled.merge(by_team, on="team", how="left")
 
 
+RECENT_GAMES_SHOWN = 8
+
+
+def attach_recent_games(edges_df: pd.DataFrame, weekly_df: pd.DataFrame, n_games: int = RECENT_GAMES_SHOWN) -> pd.DataFrame:
+    """Adds each row's game log for its own stat - the player's last
+    `n_games` regular-season games in `weekly_df`, oldest first - as `recent_values`
+    ("45, 80, 12") and `recent_weeks` ("2026 W4, 2026 W5, 2026 W6"), so the
+    board can draw how he has actually done against the line it leans on."""
+    edges = edges_df.copy()
+    edges["recent_values"] = ""
+    edges["recent_weeks"] = ""
+    if edges.empty or weekly_df is None or weekly_df.empty:
+        return edges
+    ordered = weekly_df.sort_values(["season", "week"])
+    if "season_type" in ordered.columns:
+        ordered = ordered[ordered["season_type"] == "REG"]
+    by_player = {pid: rows.tail(n_games) for pid, rows in ordered[ordered["player_id"].isin(edges["player_id"])].groupby("player_id")}
+    for index, row in edges.iterrows():
+        games = by_player.get(row["player_id"])
+        column = PROP_CATEGORY_STAT_COLUMNS.get(row["category"])
+        if games is None or column not in games.columns:
+            continue
+        values = games[column].fillna(0)
+        edges.at[index, "recent_values"] = ", ".join(f"{v:g}" for v in values)
+        edges.at[index, "recent_weeks"] = ", ".join(f"{s} W{w}" for s, w in zip(games["season"], games["week"]))
+    return edges
+
+
 def build_prop_edges(
     weekly_df: pd.DataFrame,
     current_week_schedule_df: pd.DataFrame,
@@ -629,6 +657,7 @@ def build_prop_edges(
         ignore_index=True,
     )
     edges = attach_game_labels(edges, current_week_schedule_df)
+    edges = attach_recent_games(edges, weekly_df)
     out = nfl_prop_projections.unavailable_players(injuries_df)
     if out:
         edges = edges[~edges["player_id"].isin(out)].reset_index(drop=True)
