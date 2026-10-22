@@ -18,10 +18,15 @@ Team units are blended over each team's last 17, 8 and 4 games
 and shrunk toward the league rate by config.NFL_UNIT_SHRINK_PLAYS
 pseudo-plays, so two big games don't make a unit elite.
 
-The "+" scale: 100 + 10 x (standard deviations from the 32-team average),
-flipped for defenses so fewer points allowed scores higher. So 110 is one
-standard deviation better than average (roughly top 5-6), 120 is two
-(elite), 90 and 80 the same below.
+The "+" scale: 100 + 30 x (standard deviations from the 32-team average,
+config.NFL_UNIT_PLUS_POINTS_PER_SD), flipped for defenses so fewer points
+allowed scores higher. So 130 is one standard deviation better than
+average (roughly top 5-6), 160 is two (elite), 70 and 40 the same below.
+
+The page also lays the units out by this week's matchups (docs/nfl_units.js):
+a passing differential, the average of QB+ and Receiving+ minus the
+opponent's Pass D+, and a rushing one, Rushing+ minus the opponent's Run
+D+ - higher is a friendlier matchup for the offense.
 
 Receiving+ and QB+ overlap - throws to receivers are also the QB's throws
 - so a great QB lifts his receivers' number too; QB+ is his own across
@@ -83,12 +88,12 @@ def unit_game_epa(pbp: pd.DataFrame) -> pd.DataFrame:
 
 
 def _plus(values: pd.Series, direction: float) -> pd.Series:
-    """100 + 10 x standard deviations from the mean, `direction` -1 for
-    a defense (less allowed is better)."""
+    """100 + config.NFL_UNIT_PLUS_POINTS_PER_SD x standard deviations from
+    the mean, `direction` -1 for a defense (less allowed is better)."""
     spread = values.std()
     if not spread or pd.isna(spread):
         return pd.Series(100.0, index=values.index)
-    return 100 + 10 * direction * (values - values.mean()) / spread
+    return 100 + config.NFL_UNIT_PLUS_POINTS_PER_SD * direction * (values - values.mean()) / spread
 
 
 def team_unit_ratings(

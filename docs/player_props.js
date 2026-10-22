@@ -109,18 +109,51 @@ return data.filter(row=>row.game === game)
 // `units` (optional, nfl_units.js's unitsByTeam output) adds a column
 // with the team units each pick leans on - "His QB+ 112 · Opp Pass D+ 95"
 // - which the Team units tab explains.
+function _propSortValue(value){
+if(value === undefined || value === null || value === ""){ return null }
+const n = Number(value)
+return Number.isNaN(n) ? String(value) : n
+}
+
+// Rows sorted by `key`, blanks last either way. Numbers compare as
+// numbers (so "9.5" sits below "10.2"), everything else alphabetically.
+function sortPlayerProps(rows, key, ascending){
+if(!key){ return rows.slice() }
+return rows.slice().sort((a, b)=>{
+const x = _propSortValue(a[key]), y = _propSortValue(b[key])
+if(x === null || y === null){ return x === null ? (y === null ? 0 : 1) : -1 }
+const order = typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y))
+return ascending ? order : -order
+})
+}
+
+// A first click on a number column shows the biggest first, except rank
+// (#1 first) - and text reads A to Z; clicking the same column again flips it.
+function nextPlayerPropsSort(current, key, rows){
+if(current && current.key === key){ return {key, ascending: !current.ascending} }
+const numeric = rows.some(r=>typeof _propSortValue(r[key]) === "number")
+return {key, ascending: key === "rank" || !numeric}
+}
+
+// Sort state per table, so a game switch keeps the column you sorted by.
+const playerPropsSortState = {}
+
 function buildPlayerPropsTable(data, id, units){
 const el = document.getElementById(id)
 if(!data.length){ el.innerHTML = "No player props data yet - this board updates weekly."; return }
 const showUnits = units && Object.keys(units).length && typeof propUnitContext === "function"
+const sort = playerPropsSortState[id]
+const rows = sort ? sortPlayerProps(data, sort.key, sort.ascending) : data
 let html = "<table><tr>"
 // The units column sits right after the lean it explains.
 PLAYER_PROPS_COLUMNS.forEach(c=>{
-html += `<th>${PLAYER_PROPS_COLUMN_LABELS[c] || c}</th>`
+const marker = sort && sort.key === c ? (sort.ascending ? " ▲" : " ▼") : ""
+const label = PLAYER_PROPS_COLUMN_LABELS[c] || c
+html += `<th data-props-sort="${c}" style="cursor:pointer" title="Sort by ${label}">${label}${marker}</th>`
 if(showUnits && c === "direction"){ html += "<th>Units behind it</th>" }
 })
 html += "</tr>"
-data.forEach(row=>{
+rows.forEach(row=>{
 html += "<tr>"
 PLAYER_PROPS_COLUMNS.forEach(c=>{
 html += `<td>${formatPlayerPropsValue(c, row[c])}</td>`
@@ -130,6 +163,14 @@ html += "</tr>"
 })
 html += "</table>"
 el.innerHTML = html
+if(el.querySelectorAll){
+el.querySelectorAll("th[data-props-sort]").forEach(th=>{
+th.onclick = ()=>{
+playerPropsSortState[id] = nextPlayerPropsSort(playerPropsSortState[id], th.dataset.propsSort, data)
+buildPlayerPropsTable(data, id, units)
+}
+})
+}
 }
 
 function buildPlayerPropsSection(data, selectId, tableId, units){
@@ -321,6 +362,8 @@ render()
 
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
+sortPlayerProps,
+nextPlayerPropsSort,
 formatPlayerPropsValue,
 playerPropsGames,
 filterPlayerProps,

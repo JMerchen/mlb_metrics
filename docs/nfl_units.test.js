@@ -20,8 +20,6 @@ test("units table: nicknames, opponent or bye, whole numbers, colour bands", () 
   assert.equal(text(html).split(" Bills")[0], "Team ▼ QB QB+ Receiving+ Rushing+ Pass D+ Run D+")
   assert.ok(text(html).includes("Bills bye Josh Allen 118 115 110 90 -"))
   assert.ok(text(html).includes("Chiefs vs Broncos Patrick Mahomes 112 104 96 108 88"))
-  assert.equal(unitCellClass("110"), "unitStrong")
-  assert.equal(unitCellClass(90), "unitWeak")
   assert.equal(unitCellClass("100"), "")
   assert.equal(unitsTableHtml([], "team"), "Team unit ratings appear after the next weekly update.")
 })
@@ -41,4 +39,34 @@ test("prop rows: the units each category leans on", () => {
   assert.equal(propUnitContext({ category: "Rushing Yards", team: "KC", opponent: "BUF" }, units), "His Rushing+ 96")
   assert.equal(propUnitContext({ category: "Receiving Yards", team: "NYJ", opponent: "MIA" }, units), "")
   assert.equal(propUnitContext({ category: "Receiving Yards", team: "KC", opponent: "DEN" }, null), "")
+})
+
+test("colour bands follow 30 points per standard deviation", () => {
+  assert.equal(unitCellClass("130"), "unitStrong")
+  assert.equal(unitCellClass("129"), "")
+  assert.equal(unitCellClass(70), "unitWeak")
+})
+
+test("matchup differentials: passing is the QB/Receiving average minus the opponent's Pass D+", () => {
+  const { matchupDifferentials, matchupTableHtml } = require("./nfl_units.js")
+  const rows = [
+    { team: "SF", opponent: "ATL", qb_plus: "117", receiving_plus: "111", rushing_plus: "111", pass_defense_plus: "98", run_defense_plus: "112" },
+    { team: "ATL", opponent: "SF", qb_plus: "99", receiving_plus: "100", rushing_plus: "116", pass_defense_plus: "102", run_defense_plus: "101" },
+    { team: "BUF", opponent: "", qb_plus: "111", receiving_plus: "115", rushing_plus: "115", pass_defense_plus: "90", run_defense_plus: "96" },
+  ]
+  const passing = matchupDifferentials(rows, "passing")
+  // the user's example: (117 + 111) / 2 - 102 = 12
+  assert.deepEqual(passing[0], { team: "SF", opponent: "ATL", offense: 114, defense: 102, differential: 12 })
+  assert.equal(passing[1].team, "ATL")
+  assert.equal(passing[1].differential, 99.5 - 98)
+  assert.equal(passing[2].team, "BUF")            // bye: no opponent, no differential, listed last
+  assert.equal(passing[2].differential, null)
+
+  const rushing = matchupDifferentials(rows, "rushing")
+  assert.deepEqual(rushing.map(r => [r.team, r.differential]), [["ATL", 4], ["SF", 10]].sort((a, b) => b[1] - a[1]).concat([["BUF", null]]))
+
+  const html = text(matchupTableHtml(rows, "passing"))
+  assert.ok(html.startsWith("Offense Opponent Differential QB/Receiving avg Opp Pass D+ 49ers Falcons +12 114 102"))
+  assert.ok(html.includes("Falcons 49ers +1.5 99.5 98"))
+  assert.ok(html.includes("Bills bye - 113 -"))
 })
