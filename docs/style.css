@@ -1192,7 +1192,9 @@ template already relies on these exact names. */
 .unitsTable td:nth-child(-n+2),.unitsTable th:nth-child(-n+2){text-align:left;}
 .unitsTable .unitOpp{color:var(--text-dim);font-size:12px;}
 .unitsTable td:first-child,.unitsTable th:first-child{position:sticky;left:0;z-index:1;background:var(--bg-card);}
-#nflTeamUnitsTable,#nflPassingMatchupsTable,#nflRushingMatchupsTable{padding-left:0;padding-right:0;}
+#nflTeamUnitsTable,#nflUnitByes{padding-left:0;padding-right:0;}
+.matchupCard .epaTable td.unitStrong{color:var(--success);font-weight:600;}
+.matchupCard .epaTable td.unitWeak{color:var(--danger);font-weight:600;}
 .unitsTable td.unitStrong{color:var(--success);font-weight:600;}
 .unitsTable td.unitWeak{color:var(--danger);font-weight:600;}
 /* A confidence range or other detail inside a table cell. */

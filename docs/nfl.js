@@ -694,10 +694,10 @@ let nflTeamUnits = []
 let nflTeamUnitsSort = "team"
 
 function renderNflTeamUnits(){
-document.getElementById("nflPassingMatchupsTable").innerHTML =
-matchupTableHtml(nflTeamUnits, "passing") || "Matchups appear after the next weekly update."
-document.getElementById("nflRushingMatchupsTable").innerHTML =
-matchupTableHtml(nflTeamUnits, "rushing") || "Matchups appear after the next weekly update."
+document.getElementById("nflUnitMatchups").innerHTML =
+matchupCardsHtml(nflTeamUnits) || "Matchups appear after the next weekly update."
+document.getElementById("nflUnitByes").innerHTML =
+nflTeamUnits.length ? byeTableHtml(nflTeamUnits) : ""
 const el = document.getElementById("nflTeamUnitsTable")
 el.innerHTML = unitsTableHtml(nflTeamUnits, nflTeamUnitsSort)
 el.querySelectorAll("th[data-units-sort]").forEach(th=>{

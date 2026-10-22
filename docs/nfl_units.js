@@ -116,18 +116,55 @@ if(value === null){ return "" }
 return value >= UNIT_POINTS_PER_SD ? "unitStrong" : value <= -UNIT_POINTS_PER_SD ? "unitWeak" : ""
 }
 
-function matchupTableHtml(rows, kind){
-if(!rows || !rows.length){ return "" }
-const spec = MATCHUP_KINDS[kind]
-const fmt = n => n === null ? "-" : (Number.isInteger(n) ? String(n) : n.toFixed(1))
-const body = matchupDifferentials(rows, kind).map(m=>{
-const diff = m.differential === null ? "-" : `${m.differential > 0 ? "+" : m.differential < 0 ? "−" : ""}${fmt(Math.abs(m.differential))}`
-const opponent = m.opponent ? unitTeamName(m.opponent) : "bye"
-// Differential right after the matchup, so it's on screen on a phone.
-return `<tr><td>${unitTeamName(m.team)}</td><td>${opponent}</td>`
-+ `<td class="${differentialCellClass(m.differential)}">${diff}</td><td>${fmt(m.offense)}</td><td>${fmt(m.defense)}</td></tr>`
-}).join("")
-return `<table class="unitsTable"><tr><th>Offense</th><th>Opponent</th><th>Differential</th><th>${spec.offenseLabel}</th><th>${spec.defenseLabel}</th></tr>${body}</table>`
+function formatDifferential(value){
+if(value === null){ return "-" }
+const shown = Number.isInteger(value) ? String(Math.abs(value)) : Math.abs(value).toFixed(1)
+return `${value > 0 ? "+" : value < 0 ? "−" : ""}${shown}`
+}
+
+// One entry per game this week: its two teams (away first when the file
+// says who's home) with each team's passing and rushing differential.
+// Ordered by the most lopsided matchup in the game first.
+function matchupGames(rows){
+const passing = {}, rushing = {}
+matchupDifferentials(rows, "passing").forEach(m=>{ passing[m.team] = m.differential })
+matchupDifferentials(rows, "rushing").forEach(m=>{ rushing[m.team] = m.differential })
+const byTeam = unitsByTeam(rows)
+const seen = new Set()
+const games = []
+;(rows || []).forEach(r=>{
+if(!r.opponent || seen.has(r.team) || !byTeam[r.opponent]){ return }
+seen.add(r.team); seen.add(r.opponent)
+const other = byTeam[r.opponent]
+const known = unitNum(r.home) !== null
+let away = r, home = other
+if(known ? unitNum(r.home) === 1 : unitTeamName(r.team) > unitTeamName(other.team)){ away = other; home = r }
+const side = t=>({ team: t.team, passing: passing[t.team] ?? null, rushing: rushing[t.team] ?? null })
+games.push({ title: `${unitTeamName(away.team)} ${known ? "at" : "vs"} ${unitTeamName(home.team)}`, teams: [side(away), side(home)] })
+})
+const biggest = g=>Math.max(...g.teams.flatMap(t=>[t.passing, t.rushing]).filter(v=>v !== null).map(Math.abs), -Infinity)
+return games.sort((a, b)=>biggest(b) - biggest(a))
+}
+
+function matchupCardsHtml(rows){
+const games = matchupGames(rows)
+if(!games.length){ return "" }
+return games.map(g=>`<div class="pickCard matchupCard">
+<div class="pickName">${g.title}</div>
+<table class="epaTable"><thead><tr><th></th><th>Passing differential</th><th>Rushing differential</th></tr></thead>
+<tbody>${g.teams.map(t=>`<tr><td>${unitTeamName(t.team)}</td>`
++ `<td class="${differentialCellClass(t.passing)}">${formatDifferential(t.passing)}</td>`
++ `<td class="${differentialCellClass(t.rushing)}">${formatDifferential(t.rushing)}</td></tr>`).join("")}</tbody>
+</table>
+</div>`).join("")
+}
+
+// Teams without a game this week.
+function byeTableHtml(rows){
+const byes = (rows || []).filter(r=>!r.opponent).sort((a, b)=>unitTeamName(a.team).localeCompare(unitTeamName(b.team)))
+if(!byes.length){ return "No teams on bye this week." }
+return `<table class="unitsTable"><tr><th>Team</th><th>QB</th></tr>${
+byes.map(r=>`<tr><td>${unitTeamName(r.team)}</td><td>${r.qb_name || "-"}</td></tr>`).join("")}</table>`
 }
 
 function unitsByTeam(rows){
@@ -139,6 +176,6 @@ return byTeam
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 UNIT_COLUMNS, unitsTableHtml, sortUnitRows, unitCellClass, propUnitContext, unitsByTeam,
-matchupDifferentials, matchupTableHtml, differentialCellClass,
+matchupDifferentials, matchupGames, matchupCardsHtml, byeTableHtml, differentialCellClass, formatDifferential,
 }
 }

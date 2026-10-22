@@ -48,7 +48,7 @@ test("colour bands follow 30 points per standard deviation", () => {
 })
 
 test("matchup differentials: passing is the QB/Receiving average minus the opponent's Pass D+", () => {
-  const { matchupDifferentials, matchupTableHtml } = require("./nfl_units.js")
+  const { matchupDifferentials } = require("./nfl_units.js")
   const rows = [
     { team: "SF", opponent: "ATL", qb_plus: "117", receiving_plus: "111", rushing_plus: "111", pass_defense_plus: "98", run_defense_plus: "112" },
     { team: "ATL", opponent: "SF", qb_plus: "99", receiving_plus: "100", rushing_plus: "116", pass_defense_plus: "102", run_defense_plus: "101" },
@@ -65,8 +65,35 @@ test("matchup differentials: passing is the QB/Receiving average minus the oppon
   const rushing = matchupDifferentials(rows, "rushing")
   assert.deepEqual(rushing.map(r => [r.team, r.differential]), [["ATL", 4], ["SF", 10]].sort((a, b) => b[1] - a[1]).concat([["BUF", null]]))
 
-  const html = text(matchupTableHtml(rows, "passing"))
-  assert.ok(html.startsWith("Offense Opponent Differential QB/Receiving avg Opp Pass D+ 49ers Falcons +12 114 102"))
-  assert.ok(html.includes("Falcons 49ers +1.5 99.5 98"))
-  assert.ok(html.includes("Bills bye - 113 -"))
+})
+
+test("matchup cards: one per game, away team first, both differentials; byes in their own table", () => {
+  const { matchupGames, matchupCardsHtml, byeTableHtml } = require("./nfl_units.js")
+  const rows = [
+    { team: "DET", opponent: "GB", home: "1", qb_plus: "146", receiving_plus: "146", rushing_plus: "105", pass_defense_plus: "57", run_defense_plus: "51" },
+    { team: "GB", opponent: "DET", home: "0", qb_plus: "125", receiving_plus: "124", rushing_plus: "55", pass_defense_plus: "126", run_defense_plus: "32" },
+    { team: "SF", opponent: "ATL", home: "0", qb_plus: "151", receiving_plus: "133", rushing_plus: "133", pass_defense_plus: "93", run_defense_plus: "136" },
+    { team: "ATL", opponent: "SF", home: "1", qb_plus: "97", receiving_plus: "101", rushing_plus: "149", pass_defense_plus: "105", run_defense_plus: "103" },
+    { team: "BUF", opponent: "", home: "", qb_name: "Josh Allen", qb_plus: "132" },
+    { team: "JAX", opponent: "", home: "", qb_name: "Trevor Lawrence", qb_plus: "130" },
+  ]
+  const games = matchupGames(rows)
+  assert.deepEqual(games.map(g => g.title), ["Packers at Lions", "49ers at Falcons"])   // +73 rushing makes DET-GB the most lopsided
+  assert.deepEqual(games[0].teams, [
+    { team: "GB", passing: 124.5 - 57, rushing: 55 - 51 },
+    { team: "DET", passing: 146 - 126, rushing: 105 - 32 },
+  ])
+  const html = text(matchupCardsHtml(rows).replace(/<\/t[dh]>/g, " "))
+  assert.ok(html.startsWith("Packers at Lions Passing differential Rushing differential Packers +67.5 +4 Lions +20 +73"))
+  assert.equal(text(byeTableHtml(rows).replace(/<\/t[dh]>/g, " ")), "Team QB Bills Josh Allen Jaguars Trevor Lawrence")
+  assert.equal(byeTableHtml(rows.slice(0, 4)), "No teams on bye this week.")
+})
+
+test("matchup cards without a home flag (older file): alphabetical, 'vs'", () => {
+  const { matchupGames } = require("./nfl_units.js")
+  const rows = [
+    { team: "DET", opponent: "GB", rushing_plus: "105", run_defense_plus: "51" },
+    { team: "GB", opponent: "DET", rushing_plus: "55", run_defense_plus: "32" },
+  ]
+  assert.equal(matchupGames(rows)[0].title, "Lions vs Packers")
 })
