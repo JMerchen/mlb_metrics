@@ -218,3 +218,29 @@ test("formatPlayerPropsValue: teammate note passes through, blank when absent", 
   assert.equal(formatPlayerPropsValue("context_note", undefined), "")
   assert.equal(formatPlayerPropsValue("context_note", ""), "")
 })
+
+test("sortPlayerProps: numbers as numbers, text A-Z, blanks last both ways", () => {
+  const { sortPlayerProps } = require("./player_props.js")
+  const rows = [
+    { player_name: "Mike Evans", projection: "63.4" },
+    { player_name: "Brandin Cooks", projection: "9.5" },
+    { player_name: "Patrick Mahomes", projection: "" },
+    { player_name: "George Kittle", projection: "72.3" },
+  ]
+  assert.deepEqual(sortPlayerProps(rows, "projection", false).map(r => r.player_name),
+    ["George Kittle", "Mike Evans", "Brandin Cooks", "Patrick Mahomes"])
+  assert.deepEqual(sortPlayerProps(rows, "projection", true).map(r => r.player_name),
+    ["Brandin Cooks", "Mike Evans", "George Kittle", "Patrick Mahomes"])
+  assert.deepEqual(sortPlayerProps(rows, "player_name", true).map(r => r.player_name),
+    ["Brandin Cooks", "George Kittle", "Mike Evans", "Patrick Mahomes"])
+  assert.equal(rows[0].player_name, "Mike Evans")   // the input is left alone
+})
+
+test("nextPlayerPropsSort: biggest first for numbers, #1 first for rank, A-Z for text, then flips", () => {
+  const { nextPlayerPropsSort } = require("./player_props.js")
+  const rows = [{ rank: "1", projection: "20.5", player_name: "A" }]
+  assert.deepEqual(nextPlayerPropsSort(undefined, "projection", rows), { key: "projection", ascending: false })
+  assert.deepEqual(nextPlayerPropsSort(undefined, "rank", rows), { key: "rank", ascending: true })
+  assert.deepEqual(nextPlayerPropsSort(undefined, "player_name", rows), { key: "player_name", ascending: true })
+  assert.deepEqual(nextPlayerPropsSort({ key: "projection", ascending: false }, "projection", rows), { key: "projection", ascending: true })
+})
