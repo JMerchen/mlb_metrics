@@ -173,11 +173,15 @@ buildPlayerPropsTable(data, id, units)
 }
 }
 
-function buildPlayerPropsSection(data, selectId, tableId, units){
+// `onRender` (optional) gets the same filtered rows the table shows, so
+// another view of them - nfl.js's cards - follows the game picker too.
+function buildPlayerPropsSection(data, selectId, tableId, units, onRender){
 const select = document.getElementById(selectId)
-const render = ()=> buildPlayerPropsTable(
-filterPlayerProps(data, select ? select.value : PLAYER_PROPS_ALL_GAMES), tableId, units
-)
+const render = ()=>{
+const rows = filterPlayerProps(data, select ? select.value : PLAYER_PROPS_ALL_GAMES)
+buildPlayerPropsTable(rows, tableId, units)
+if(onRender){ onRender(rows) }
+}
 if(select){
 const games = playerPropsGames(data)
 select.innerHTML = [PLAYER_PROPS_ALL_GAMES].concat(games)

@@ -220,7 +220,7 @@ PAGE_JS_PATCHERS = {
 # and by the MLB/NFL tabs.
 VERBATIM_JS = [
     "teams.js", "summary_render.js",
-    "dfs_solver.js", "nfl_draft_assistant.js", "consensus_board.js", "player_props.js", "nfl_units.js",
+    "dfs_solver.js", "nfl_draft_assistant.js", "consensus_board.js", "player_props.js", "nfl_units.js", "prop_cards.js",
 ]
 
 

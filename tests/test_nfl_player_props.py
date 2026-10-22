@@ -157,6 +157,7 @@ def test_build_prop_edges_covers_all_five_categories():
         "player_id", "player_name", "team", "position", "opponent", "games",
         "category", "player_rate", "projection", "projected_targets", "projected_carries",
         "opponent_allowed_rate", "league_rate", "rate_basis", "ratio", "game", "context_note",
+        "recent_values", "recent_weeks",
     }
     # Every row knows its matchup, so the board can be filtered to one
     # game (see attach_game_labels / build_prop_board).
@@ -818,3 +819,22 @@ def test_build_prop_edges_drops_ruled_out_players_and_notes_the_teammate_boost()
     before = without[(without["player_id"] == "wr2") & (without["category"] == "Receiving Yards")].iloc[0]
     assert wr2["projection"] > before["projection"]
     assert "targets with" in wr2["context_note"] and "out" in wr2["context_note"]
+
+
+def test_attach_recent_games_logs_each_rows_own_stat_oldest_first():
+    rows = []
+    for week, yards in zip(range(1, 11), [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]):
+        rows += _multi_week_skill_rows("wr1", "WR One", "SF", "SEA", "WR", [week], receptions=week % 3, receiving_yards=yards)
+    weekly_df = pd.DataFrame(rows)
+    edges = pd.DataFrame([
+        {"player_id": "wr1", "category": "Receiving Yards"},
+        {"player_id": "wr1", "category": "Receptions"},
+        {"player_id": "nobody", "category": "Receptions"},
+    ])
+
+    out = nfl_player_props.attach_recent_games(edges, weekly_df, n_games=3)
+
+    assert out.loc[0, "recent_values"] == "80, 90, 100"
+    assert out.loc[0, "recent_weeks"] == "2025 W8, 2025 W9, 2025 W10"
+    assert out.loc[1, "recent_values"] == "2, 0, 1"
+    assert out.loc[2, "recent_values"] == ""

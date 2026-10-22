@@ -297,14 +297,25 @@ Loading...
 Player props: the best matchups this week
 </h3>
 
-<p class="sectionIntro">Players with the friendliest matchups for receptions, receiving yards, rushing yards, passing yards and sacks, based on their recent games and how much their opponent gives up. We don't check these against sportsbook lines, so treat them as places to look, not sure bets. Updates weekly. Click a column heading to sort.</p>
+<p class="sectionIntro">Players with the friendliest matchups for receptions, receiving yards, rushing yards, passing yards and sacks, based on their recent games and how much their opponent gives up. We don't check these against sportsbook lines, so treat them as places to look, not sure bets. Updates weekly. The chart shows how far each projection sits from the player's own average; each card shows his recent games against our number and why we lean the way we do. Prefer a grid? Switch to the table.</p>
 
-<p style="margin:0 0 8px 0">
-<label for="nflPlayerPropsGame" style="font-size:0.9em">Game:</label>
-<select id="nflPlayerPropsGame" style="margin-left:6px"></select>
-</p>
+<div class="propControls">
+<label for="nflPlayerPropsGame">Game:</label>
+<select id="nflPlayerPropsGame"></select>
+<span class="propViewSwitch">
+<button class="tabButton active" data-prop-view="cards" onclick="selectNflPropView('cards')">Cards</button>
+<button class="tabButton" data-prop-view="table" onclick="selectNflPropView('table')">Table</button>
+</span>
+</div>
 
-<div class="scrollbox" id="nflPlayerPropsTable">
+<div id="nflPropCardsView">
+<div id="nflPropLean"></div>
+<div class="propCards" id="nflPropCards">
+Loading...
+</div>
+</div>
+
+<div class="scrollbox" id="nflPlayerPropsTable" style="display:none">
 Loading...
 </div>
 
@@ -339,6 +350,8 @@ Loading...
 <script src="./summary_render.js"></script>
 
 <script src="./nfl_units.js"></script>
+
+<script src="./prop_cards.js"></script>
 
 <script src="./nfl.js"></script>
 

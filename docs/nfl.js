@@ -726,15 +726,31 @@ if(asOf){ asOf.textContent = week ? `Going into week ${week}.` : "" }
 renderNflTeamUnits()
 }
 
+// Cards (the default) or the sortable table, same rows either way.
+function selectNflPropView(view){
+document.querySelectorAll(".propViewSwitch .tabButton").forEach(btn=>{
+btn.classList.toggle("active", btn.dataset.propView === view)
+})
+document.getElementById("nflPropCardsView").style.display = view === "cards" ? "" : "none"
+document.getElementById("nflPlayerPropsTable").style.display = view === "table" ? "" : "none"
+}
+
 async function loadNflPlayerProps(){
 // Team units first, so each prop row can show the units behind it.
 await loadNflTeamUnits()
 try{
 const props = await loadCSV("./data/nfl_player_props.csv")
-buildPlayerPropsSection(props, "nflPlayerPropsGame", "nflPlayerPropsTable", unitsByTeam(nflTeamUnits))
+const units = unitsByTeam(nflTeamUnits)
+buildPlayerPropsSection(props, "nflPlayerPropsGame", "nflPlayerPropsTable", units, rows=>{
+document.getElementById("nflPropLean").innerHTML = leanChartHtml(rows)
+document.getElementById("nflPropCards").innerHTML = propCardsHtml(rows, units)
+})
 }catch(e){
 console.log("no nfl_player_props.csv yet", e)
-buildPlayerPropsSection([], "nflPlayerPropsGame", "nflPlayerPropsTable")
+buildPlayerPropsSection([], "nflPlayerPropsGame", "nflPlayerPropsTable", null, ()=>{
+document.getElementById("nflPropLean").innerHTML = ""
+document.getElementById("nflPropCards").innerHTML = propCardsHtml([], null)
+})
 }
 try{
 const floors = await loadCSV("./data/nfl_position_floors.csv")
