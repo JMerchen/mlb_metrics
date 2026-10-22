@@ -1183,6 +1183,11 @@ template already relies on these exact names. */
 .game .prob b{color:var(--text);font-weight:600;}
 .game .prob .mkt{opacity:.75;}
 .game .prob .total{display:block;font-size:12px;opacity:.75;}
+.epaTable{width:100%;margin:6px 0 4px;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums;}
+.epaTable th,.epaTable td{padding:2px 4px 2px 0;text-align:right;border:none;background:none;text-transform:none;letter-spacing:0;font-weight:400;}
+.epaTable th:first-child,.epaTable td:first-child{text-align:left;}
+.epaTable th{color:var(--text-dim);font-size:11px;}
+.epaTable .epaRank{color:var(--text-dim);font-size:11px;}
 /* A confidence range or other detail inside a table cell. */
 td .dim{color:var(--text-dim);font-size:.9em;}
 .bet-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid var(--accent);color:var(--accent);white-space:nowrap;}

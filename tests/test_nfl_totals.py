@@ -140,3 +140,22 @@ def test_dome_flags_uses_the_announced_roof_else_the_stadiums_usual_setting():
                             "roof": ["closed", "closed", "open"]})
     assert nfl_totals.dome_flags(games, history).tolist() == [0.0, 1.0, 0.0, 0.0]
     assert nfl_totals.dome_flags(games.drop(columns="roof")).tolist() == [0.0] * 4
+
+
+def test_predict_game_points_carries_each_sides_epa_and_league_rank():
+    history = pd.DataFrame([
+        _team_game(1, "KC", "DEN", 20.0, 50), _team_game(1, "DEN", "KC", -10.0, 50, home=0.0),
+        _team_game(1, "BUF", "NYJ", 5.0, 50), _team_game(1, "NYJ", "BUF", 0.0, 50, home=0.0),
+    ])
+    qb_games = pd.DataFrame([_qb_game(1, "a", 1.0, 30)])
+    games = pd.DataFrame([{"game_id": "w2", "home_team": "KC", "away_team": "NYJ", "home_qb_id": "a", "away_qb_id": "b"}])
+    ratings = nfl_totals.wave_ratings(history).set_index("team")
+
+    out = nfl_totals.predict_game_points(history, games, qb_games).iloc[0]
+
+    assert out["home_off_epa"] == pytest.approx(ratings.loc["KC", "off_epa"])
+    assert out["away_def_epa"] == pytest.approx(ratings.loc["NYJ", "def_epa"])
+    assert out["home_off_rank"] == 1     # KC gained the most per play
+    assert out["home_def_rank"] == 1     # and DEN's -10 means KC allowed the least
+    assert out["away_off_rank"] == 3     # NYJ: 0.0 per play, behind KC and BUF
+    assert out["away_def_rank"] == 3     # NYJ allowed BUF's 5.0, more than KC and BUF allowed

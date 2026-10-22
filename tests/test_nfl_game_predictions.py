@@ -358,3 +358,18 @@ def test_resolve_game_predictions_fills_the_actual_total_even_on_older_rows(tmp_
 
     assert resolved.loc["g1", "actual_total"] == 41
     assert pd.isna(resolved.loc["g2", "actual_total"])
+
+
+def test_append_game_predictions_rerun_fills_team_epa_but_keeps_the_logged_prediction(tmp_path):
+    log_path = str(tmp_path / "nfl_game_predictions.csv")
+    first = pd.DataFrame([{**_resolved_pick("g1", "KC", "DEN"), "predicted_probability": 0.65}])
+    nfl_game_predictions.append_game_predictions(first, log_path)
+
+    rerun = pd.DataFrame([{**_resolved_pick("g1", "KC", "DEN"), "predicted_probability": 0.80,
+                           "home_off_epa": 0.12, "home_off_rank": 3.0, "away_def_epa": -0.05, "away_def_rank": 8.0}])
+    combined = nfl_game_predictions.append_game_predictions(rerun, log_path)
+
+    assert len(combined) == 1
+    row = combined.iloc[0]
+    assert row["predicted_probability"] == 0.65           # first-logged prediction stands
+    assert float(row["home_off_epa"]) == 0.12 and float(row["away_def_rank"]) == 8.0

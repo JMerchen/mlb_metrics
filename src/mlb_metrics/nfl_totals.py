@@ -218,6 +218,21 @@ def matchup_features(
     return sides.merge(offense, on="team", how="left").merge(defense, on="opp", how="left")
 
 
+EPA_DISPLAY_COLUMNS = [
+    "home_off_epa", "home_off_rank", "home_def_epa", "home_def_rank",
+    "away_off_epa", "away_off_rank", "away_def_epa", "away_def_rank",
+]
+
+
+def ranked_ratings(ratings: pd.DataFrame) -> pd.DataFrame:
+    """wave_ratings' output with league ranks: off_rank 1 = most EPA per
+    play gained, def_rank 1 = least EPA per play allowed."""
+    ranked = ratings.copy()
+    ranked["off_rank"] = ranked["off_epa"].rank(ascending=False, method="min")
+    ranked["def_rank"] = ranked["def_epa"].rank(ascending=True, method="min")
+    return ranked
+
+
 def predict_team_points(features: pd.DataFrame, coefficients: dict | None = None) -> pd.Series:
     """Linear points prediction for rows carrying TOTALS_FEATURE_COLUMNS."""
     coefficients = config.NFL_TOTALS_COEFFICIENTS if coefficients is None else coefficients
@@ -239,14 +254,25 @@ def predict_game_points(
     with `history_schedules` filling in roofs not announced yet. Columns:
     game_id, predicted_home_points, predicted_away_points, predicted_total;
     NaN for a game where either team has no history, or without
-    `qb_games`."""
-    columns = ["game_id", "predicted_home_points", "predicted_away_points", "predicted_total"]
+    `qb_games`. Also each side's offense and defense EPA per play and
+    league rank (EPA_DISPLAY_COLUMNS), for showing on the game card."""
+    columns = ["game_id", "predicted_home_points", "predicted_away_points", "predicted_total", *EPA_DISPLAY_COLUMNS]
     if games is None or games.empty:
         return pd.DataFrame(columns=columns)
-    features = matchup_features(wave_ratings(team_games), games, qb_games, history_schedules)
+    ratings = wave_ratings(team_games)
+    features = matchup_features(ratings, games, qb_games, history_schedules)
     features["points"] = predict_team_points(features, coefficients)
     home = features[features["home"] == 1.0][["game_id", "points"]].rename(columns={"points": "predicted_home_points"})
     away = features[features["home"] == 0.0][["game_id", "points"]].rename(columns={"points": "predicted_away_points"})
     out = home.merge(away, on="game_id")
     out["predicted_total"] = out["predicted_home_points"] + out["predicted_away_points"]
+    # Each side's own ratings, for showing next to the prediction.
+    ranked = ranked_ratings(ratings)[["team", "off_epa", "off_rank", "def_epa", "def_rank"]]
+    sides = games[["game_id"]].assign(home=_canonical(games["home_team"]), away=_canonical(games["away_team"]))
+    for side in ("home", "away"):
+        sides = sides.merge(
+            ranked.rename(columns={"team": side, **{c: f"{side}_{c}" for c in ranked.columns if c != "team"}}),
+            on=side, how="left",
+        )
+    out = out.merge(sides.drop(columns=["home", "away"]), on="game_id", how="left")
     return out[columns]

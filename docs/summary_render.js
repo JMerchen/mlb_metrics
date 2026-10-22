@@ -95,6 +95,34 @@ const vegas = srNum(g.market_total)
 return `Total points: we say ${Math.round(ours)}${vegas !== null ? `&nbsp;&middot; Vegas ${vegas}` : ""}`
 }
 
+// 3 -> "3rd"
+function srOrdinal(n){
+const v = n % 100
+const suffix = v >= 11 && v <= 13 ? "th" : ({1: "st", 2: "nd", 3: "rd"}[n % 10] || "th")
+return `${n}${suffix}`
+}
+
+// NFL: each team's offense EPA per play gained and defense EPA per play
+// allowed, with league rank (1st = best on both). Empty without ratings.
+function teamEpaHtml(g, sport){
+const sides = ["away", "home"].map(side => ({
+team: srTeam(g[`${side}_team`], sport),
+off: srNum(g[`${side}_off_epa`]), offRank: srNum(g[`${side}_off_rank`]),
+def: srNum(g[`${side}_def_epa`]), defRank: srNum(g[`${side}_def_rank`]),
+}))
+if(sides.every(s => s.off === null && s.def === null)){ return "" }
+const signed = value => {
+const shown = Math.abs(value).toFixed(2)
+return shown === "0.00" ? shown : `${value > 0 ? "+" : "−"}${shown}`
+}
+const cell = (value, rank) => value === null ? "-"
+: `${signed(value)}${rank !== null ? ` <span class="epaRank">${srOrdinal(Math.round(rank))}</span>` : ""}`
+return `<table class="epaTable">
+<thead><tr><th>EPA per play</th><th>Offense</th><th>Defense</th></tr></thead>
+<tbody>${sides.map(s => `<tr><td>${srEsc(s.team)}</td><td>${cell(s.off, s.offRank)}</td><td>${cell(s.def, s.defRank)}</td></tr>`).join("")}</tbody>
+</table>`
+}
+
 // One game: "Rays at Yankees", our pick and our chance next to Vegas's.
 function gamePickRowHtml(g, sport){
 const homePicked = g.predicted_winner === g.home_team
@@ -126,5 +154,6 @@ return picks.map(g => gamePickRowHtml(g, sport)).join("")
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, gamePicksListHtml, totalPointsText,
+teamEpaHtml,
 }
 }

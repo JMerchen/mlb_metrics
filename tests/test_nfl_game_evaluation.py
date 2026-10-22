@@ -299,3 +299,12 @@ def test_build_game_picks_export_log_without_points_columns_still_exports():
     picks, summary = nfl_game_evaluation.build_game_picks_export(_predictions())
     assert picks["predicted_total"].isna().all()
     assert summary.iloc[0]["points_total_n"] == 0
+
+
+def test_build_game_picks_export_carries_team_epa_columns():
+    predictions = _predictions()
+    predictions["home_off_epa"] = 0.1
+    predictions["away_def_rank"] = 4.0
+    picks, _ = nfl_game_evaluation.build_game_picks_export(predictions)
+    assert (picks["home_off_epa"] == 0.1).all() and (picks["away_def_rank"] == 4.0).all()
+    assert picks["home_def_epa"].isna().all()

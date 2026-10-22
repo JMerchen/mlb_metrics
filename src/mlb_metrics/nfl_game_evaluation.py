@@ -11,9 +11,10 @@ itself" non-goal), so there is no pre-existing schema to migrate from.
 
 import pandas as pd
 
-from mlb_metrics import evaluation
+from mlb_metrics import evaluation, nfl_totals
 
 POINTS_COLUMNS = ["predicted_home_points", "predicted_away_points", "predicted_total", "market_total", "actual_total"]
+DISPLAY_COLUMNS = POINTS_COLUMNS + nfl_totals.EPA_DISPLAY_COLUMNS
 
 
 def _classify_outcome(df: pd.DataFrame) -> pd.Series:
@@ -76,14 +77,14 @@ def build_game_picks_export(
     )
 
     # Logs written before predicted points existed lack those columns.
-    picks = picks.reindex(columns=picks.columns.union(POINTS_COLUMNS, sort=False))
+    picks = picks.reindex(columns=picks.columns.union(DISPLAY_COLUMNS, sort=False))
     picks_out = picks[
         [
             "date", "season", "week", "game_id", "home_team", "away_team", "predicted_winner", "predicted_loser",
             "predicted_probability", "above_threshold", "status", "market_home_win_probability",
             "market_predicted_winner_probability",
             "bet_units", "bet_side", "bet_team", "bet_moneyline", "bet_profit_units",
-            *POINTS_COLUMNS,
+            *DISPLAY_COLUMNS,
         ]
     ].sort_values("date", ascending=False).reset_index(drop=True)
 
