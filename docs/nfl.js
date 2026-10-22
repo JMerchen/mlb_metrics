@@ -694,16 +694,24 @@ let nflTeamUnits = []
 let nflTeamUnitsSort = "team"
 
 function renderNflTeamUnits(){
+const recency = document.getElementById("nflUnitsRecency")
+const sos = document.getElementById("nflUnitsSos")
+const rows = unitsView(nflTeamUnits, unitsViewKey(recency && recency.checked, sos && sos.checked))
 document.getElementById("nflUnitMatchups").innerHTML =
-matchupCardsHtml(nflTeamUnits) || "Matchups appear after the next weekly update."
+matchupCardsHtml(rows) || "Matchups appear after the next weekly update."
 document.getElementById("nflUnitByes").innerHTML =
-nflTeamUnits.length ? byeTableHtml(nflTeamUnits) : ""
+rows.length ? byeTableHtml(rows) : ""
 const el = document.getElementById("nflTeamUnitsTable")
-el.innerHTML = unitsTableHtml(nflTeamUnits, nflTeamUnitsSort)
+el.innerHTML = unitsTableHtml(rows, nflTeamUnitsSort)
 el.querySelectorAll("th[data-units-sort]").forEach(th=>{
 th.onclick = ()=>{ nflTeamUnitsSort = th.dataset.unitsSort; renderNflTeamUnits() }
 })
 }
+
+;["nflUnitsRecency", "nflUnitsSos"].forEach(id=>{
+const box = document.getElementById(id)
+if(box){ box.onchange = ()=>renderNflTeamUnits() }
+})
 
 async function loadNflTeamUnits(){
 try{

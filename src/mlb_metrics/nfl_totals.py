@@ -52,7 +52,8 @@ TOTALS_FEATURE_COLUMNS = ["off_epa", "opp_def_epa", "off_plays", "opp_def_plays"
 PBP_COLUMNS = ["game_id", "season", "week", "season_type", "posteam", "defteam", "home_team",
                 "epa", "pass", "rush", "qb_kneel", "qb_spike"]
 
-QB_PBP_COLUMNS = ["game_id", "season", "week", "season_type", "passer_player_id", "qb_epa", "qb_dropback"]
+QB_PBP_COLUMNS = ["game_id", "season", "week", "season_type", "posteam", "defteam",
+                  "passer_player_id", "qb_epa", "qb_dropback"]
 
 _ROOFED = {"dome", "closed"}
 
@@ -95,9 +96,10 @@ def team_game_epa(pbp: pd.DataFrame, schedules: pd.DataFrame | None = None) -> p
 
 def qb_game_epa(pbp: pd.DataFrame) -> pd.DataFrame:
     """One row per (regular-season game, passer): EPA summed over his
-    dropbacks and the dropback count. Columns: game_id, season, week, qb,
-    epa_sum, dropbacks."""
-    columns = ["game_id", "season", "week", "qb", "epa_sum", "dropbacks"]
+    dropbacks and the dropback count, with his team and the defense he
+    faced. Columns: game_id, season, week, qb, team, opp, epa_sum,
+    dropbacks."""
+    columns = ["game_id", "season", "week", "qb", "team", "opp", "epa_sum", "dropbacks"]
     if pbp is None or pbp.empty or not set(QB_PBP_COLUMNS).issubset(pbp.columns):
         return pd.DataFrame(columns=columns)
     dropbacks = pbp[
@@ -105,10 +107,10 @@ def qb_game_epa(pbp: pd.DataFrame) -> pd.DataFrame:
         & pbp["passer_player_id"].notna() & pbp["qb_epa"].notna()
     ]
     return (
-        dropbacks.groupby(["game_id", "season", "week", "passer_player_id"])
+        dropbacks.groupby(["game_id", "season", "week", "passer_player_id", "posteam", "defteam"])
         .agg(epa_sum=("qb_epa", "sum"), dropbacks=("qb_epa", "size"))
         .reset_index()
-        .rename(columns={"passer_player_id": "qb"})[columns]
+        .rename(columns={"passer_player_id": "qb", "posteam": "team", "defteam": "opp"})[columns]
     )
 
 

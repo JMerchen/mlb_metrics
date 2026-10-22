@@ -97,3 +97,16 @@ test("matchup cards without a home flag (older file): alphabetical, 'vs'", () =>
   ]
   assert.equal(matchupGames(rows)[0].title, "Lions vs Packers")
 })
+
+test("units views: the toggles pick which numbers fill the unit columns", () => {
+  const { unitsViewKey, unitsView } = require("./nfl_units.js")
+  assert.equal(unitsViewKey(false, false), "season")
+  assert.equal(unitsViewKey(true, false), "recency")
+  assert.equal(unitsViewKey(false, true), "season_sos")
+  assert.equal(unitsViewKey(true, true), "recency_sos")
+  const rows = [{ team: "KC", qb_plus: "127", qb_plus_season: "127", qb_plus_recency: "140", qb_plus_season_sos: "120",
+                  qb_plus_recency_sos: "133", rushing_plus: "141" }]
+  assert.equal(unitsView(rows, "recency_sos")[0].qb_plus, "133")
+  assert.equal(unitsView(rows, "season_sos")[0].rushing_plus, "141")   // no view column: unchanged
+  assert.equal(rows[0].qb_plus, "127")                                  // input left alone
+})
