@@ -123,7 +123,12 @@ Loading...
 Team units
 </h3>
 
-<p class="sectionIntro">How strong each team's units are, on a scale where 100 is league average and higher is always stronger (like OPS+ or ERA+). Every 30 points is about one standard deviation: 130 is top-six territory, 160 is elite, 70 and 40 the same distance below. Each number is points added (or allowed) per play from the team's recent games, the latest weighted most. QB+ is the QB listed to start this week, so a backup starting shows up here. Tap a column to sort. <span id="nflTeamUnitsWeek"></span></p>
+<p class="sectionIntro">How strong each team's units are, on a scale where 100 is league average and higher is always stronger (like OPS+ or ERA+). Every 30 points is about one standard deviation: 130 is top-six territory, 160 is elite, 70 and 40 the same distance below. Each number is points added (or allowed) per play. By default it's this season's games, each counted equally; the switches below weight recent games more (reaching back into last season) or adjust for the strength of the opponents each unit has faced. QB+ is the QB listed to start this week, so a backup starting shows up here. Tap a column to sort. <span id="nflTeamUnitsWeek"></span></p>
+
+<div class="unitToggles">
+<label><input type="checkbox" id="nflUnitsRecency"> Weight recent games more</label>
+<label><input type="checkbox" id="nflUnitsSos"> Adjust for strength of schedule</label>
+</div>
 
 <div
 class="scrollbox"

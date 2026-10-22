@@ -167,6 +167,27 @@ return `<table class="unitsTable"><tr><th>Team</th><th>QB</th></tr>${
 byes.map(r=>`<tr><td>${unitTeamName(r.team)}</td><td>${r.qb_name || "-"}</td></tr>`).join("")}</table>`
 }
 
+// The four views nfl_units.py writes (`qb_plus_season`, `qb_plus_recency`,
+// `qb_plus_season_sos`, `qb_plus_recency_sos`, ...), picked by the two
+// toggles. Season grading, no schedule adjustment, is the default.
+function unitsViewKey(recency, sos){
+return `${recency ? "recency" : "season"}${sos ? "_sos" : ""}`
+}
+
+// Rows with the chosen view's numbers in the plain unit columns, so the
+// table, the matchups and everything else read them unchanged. A file
+// without the view columns (written before they existed) passes through.
+function unitsView(rows, view){
+return (rows || []).map(r=>{
+const out = Object.assign({}, r)
+UNIT_COLUMNS.forEach(([key])=>{
+const value = r[`${key}_${view}`]
+if(value !== undefined){ out[key] = value }
+})
+return out
+})
+}
+
 function unitsByTeam(rows){
 const byTeam = {}
 ;(rows || []).forEach(r=>{ byTeam[r.team] = r })
@@ -177,5 +198,6 @@ if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 UNIT_COLUMNS, unitsTableHtml, sortUnitRows, unitCellClass, propUnitContext, unitsByTeam,
 matchupDifferentials, matchupGames, matchupCardsHtml, byeTableHtml, differentialCellClass, formatDifferential,
+unitsViewKey, unitsView,
 }
 }

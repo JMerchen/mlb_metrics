@@ -123,10 +123,10 @@ def test_starter_qb_epa_shrinks_toward_replacement_and_rates_unknowns_as_replace
 
 def test_qb_game_epa_counts_regular_season_dropbacks_per_passer():
     pbp = pd.DataFrame([
-        {"game_id": "g1", "season": 2025, "week": 1, "season_type": "REG", "passer_player_id": "a", "qb_epa": 0.5, "qb_dropback": 1},
-        {"game_id": "g1", "season": 2025, "week": 1, "season_type": "REG", "passer_player_id": "a", "qb_epa": -0.1, "qb_dropback": 1},
-        {"game_id": "g1", "season": 2025, "week": 1, "season_type": "REG", "passer_player_id": "a", "qb_epa": 2.0, "qb_dropback": 0},
-        {"game_id": "p1", "season": 2025, "week": 20, "season_type": "POST", "passer_player_id": "a", "qb_epa": 9.0, "qb_dropback": 1},
+        {"game_id": "g1", "season": 2025, "week": 1, "season_type": "REG", "posteam": "KC", "defteam": "DEN", "passer_player_id": "a", "qb_epa": 0.5, "qb_dropback": 1},
+        {"game_id": "g1", "season": 2025, "week": 1, "season_type": "REG", "posteam": "KC", "defteam": "DEN", "passer_player_id": "a", "qb_epa": -0.1, "qb_dropback": 1},
+        {"game_id": "g1", "season": 2025, "week": 1, "season_type": "REG", "posteam": "KC", "defteam": "DEN", "passer_player_id": "a", "qb_epa": 2.0, "qb_dropback": 0},
+        {"game_id": "p1", "season": 2025, "week": 20, "season_type": "POST", "posteam": "KC", "defteam": "DEN", "passer_player_id": "a", "qb_epa": 9.0, "qb_dropback": 1},
     ])
     games = nfl_totals.qb_game_epa(pbp)
     assert len(games) == 1
