@@ -75,5 +75,6 @@ def test_listed_starters_fill_byes_from_each_teams_latest_game():
     ])
     listed = nfl_units.listed_starters(week, history).set_index("team")
     assert listed.loc["KC", "opponent"] == "DEN" and listed.loc["DEN", "qb_name"] == "Bo Nix"
+    assert listed.loc["KC", "home"] == 1.0 and listed.loc["DEN", "home"] == 0.0 and pd.isna(listed.loc["BUF", "home"])
     assert listed.loc["BUF", "qb_name"] == "Mitchell Trubisky" and pd.isna(listed.loc["BUF", "opponent"])
     assert listed.loc["LV", "qb_name"] == "Kirk Cousins"   # OAK in week 5 is the same franchise, latest wins

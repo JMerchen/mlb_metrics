@@ -49,7 +49,7 @@ UNIT_PBP_COLUMNS = [
 
 UNIT_COLUMNS = ["qb_plus", "receiving_plus", "rushing_plus", "pass_defense_plus", "run_defense_plus"]
 OUTPUT_COLUMNS = [
-    "team", "opponent", "qb_name", *UNIT_COLUMNS,
+    "team", "opponent", "home", "qb_name", *UNIT_COLUMNS,
     "qb_epa", "receiving_epa", "rushing_epa", "pass_defense_epa", "run_defense_epa",
 ]
 
@@ -103,8 +103,8 @@ def team_unit_ratings(
 ) -> pd.DataFrame:
     """Every team's unit ratings from earlier games. `unit_games` is
     unit_game_epa's output, `qb_games` nfl_totals.qb_game_epa's, and
-    `starters` one row per team (team, opponent, qb_id, qb_name - the
-    listed starter for its next game, blank opponent on a bye). Columns:
+    `starters` one row per team (team, opponent, home, qb_id, qb_name -
+    the listed starter for its next game; home 1/0, both blank on a bye). Columns:
     OUTPUT_COLUMNS, best Receiving+ first is left to the page."""
     if unit_games is None or unit_games.empty:
         return pd.DataFrame(columns=OUTPUT_COLUMNS)
@@ -117,7 +117,7 @@ def team_unit_ratings(
                 own, num, den, prior, config.NFL_UNIT_SHRINK_PLAYS, config.NFL_TOTALS_WINDOWS
             )
     ratings = pd.DataFrame(list(rows.values()))
-    ratings = ratings.merge(starters[["team", "opponent", "qb_id", "qb_name"]], on="team", how="left")
+    ratings = ratings.merge(starters.reindex(columns=["team", "opponent", "home", "qb_id", "qb_name"]), on="team", how="left")
     ratings["qb_epa"] = nfl_totals.starter_qb_epa(qb_games, ratings["qb_id"])
     ratings["qb_plus"] = _plus(ratings["qb_epa"], 1.0)
     for unit, _, _, _, direction in _TEAM_UNITS:
@@ -131,7 +131,7 @@ def listed_starters(week_games: pd.DataFrame, history_schedules: pd.DataFrame | 
     opponent, from `week_games` (home/away_team, home/away_qb_id,
     home/away_qb_name). A team not in `week_games` (a bye) gets the QB
     listed for its latest game in `history_schedules`, and no opponent."""
-    columns = ["team", "opponent", "qb_id", "qb_name"]
+    columns = ["team", "opponent", "home", "qb_id", "qb_name"]
 
     def sides(games: pd.DataFrame) -> pd.DataFrame:
         if games is None or games.empty:
@@ -141,6 +141,7 @@ def listed_starters(week_games: pd.DataFrame, history_schedules: pd.DataFrame | 
             frames.append(pd.DataFrame({
                 "team": nfl_totals._canonical(games[f"{side}_team"]),
                 "opponent": nfl_totals._canonical(games[f"{other}_team"]),
+                "home": 1.0 if side == "home" else 0.0,
                 "qb_id": games.get(f"{side}_qb_id"), "qb_name": games.get(f"{side}_qb_name"),
                 "season": games.get("season"), "week": games.get("week"),
             }))
@@ -149,6 +150,6 @@ def listed_starters(week_games: pd.DataFrame, history_schedules: pd.DataFrame | 
     listed = sides(week_games)
     if history_schedules is not None and not history_schedules.empty:
         past = sides(history_schedules).sort_values(["season", "week"]).drop_duplicates("team", keep="last")
-        byes = past[~past["team"].isin(listed["team"])].assign(opponent=pd.NA)
+        byes = past[~past["team"].isin(listed["team"])].assign(opponent=pd.NA, home=pd.NA)
         listed = pd.concat([listed, byes], ignore_index=True)
     return listed.drop_duplicates("team")[columns].reset_index(drop=True)
