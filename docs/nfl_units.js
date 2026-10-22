@@ -21,11 +21,14 @@ function unitTeamName(code){
 return typeof teamName === "function" ? teamName(code, "nfl") : (code || "")
 }
 
-// 110+ is about a standard deviation better than average, 90- worse.
+// 30 points is one standard deviation (nfl_units.py): 130+ is about one
+// better than average, 70- one worse.
+const UNIT_POINTS_PER_SD = 30
+
 function unitCellClass(value){
 const n = unitNum(value)
 if(n === null){ return "" }
-return n >= 110 ? "unitStrong" : n <= 90 ? "unitWeak" : ""
+return n >= 100 + UNIT_POINTS_PER_SD ? "unitStrong" : n <= 100 - UNIT_POINTS_PER_SD ? "unitWeak" : ""
 }
 
 function sortUnitRows(rows, key){
@@ -78,6 +81,55 @@ return n === null ? null : `${label} ${Math.round(n)}`
 return parts.join(" · ")
 }
 
+// This week's matchups, one row per team with an opponent (byes listed
+// last, no differential):
+//   passing  (QB+ + Receiving+) / 2 - the opponent's Pass D+
+//   rushing  Rushing+ - the opponent's Run D+
+// Higher is a friendlier matchup for the offense.
+const MATCHUP_KINDS = {
+passing: { offense: r => (unitNum(r.qb_plus) === null || unitNum(r.receiving_plus) === null)
+? null : (unitNum(r.qb_plus) + unitNum(r.receiving_plus)) / 2,
+defense: "pass_defense_plus", offenseLabel: "QB/Receiving avg", defenseLabel: "Opp Pass D+" },
+rushing: { offense: r => unitNum(r.rushing_plus),
+defense: "run_defense_plus", offenseLabel: "Rushing+", defenseLabel: "Opp Run D+" },
+}
+
+function matchupDifferentials(rows, kind){
+const spec = MATCHUP_KINDS[kind]
+const byTeam = unitsByTeam(rows)
+const out = (rows || []).map(r=>{
+const opponent = r.opponent ? byTeam[r.opponent] : null
+const offense = spec.offense(r)
+const defense = opponent ? unitNum(opponent[spec.defense]) : null
+return {
+team: r.team, opponent: r.opponent || "", offense, defense,
+differential: offense === null || defense === null ? null : offense - defense,
+}
+})
+return out.sort((a, b)=>(b.differential ?? -Infinity) - (a.differential ?? -Infinity)
+|| unitTeamName(a.team).localeCompare(unitTeamName(b.team)))
+}
+
+// Same colour bands as the units: a gap of a standard deviation or more.
+function differentialCellClass(value){
+if(value === null){ return "" }
+return value >= UNIT_POINTS_PER_SD ? "unitStrong" : value <= -UNIT_POINTS_PER_SD ? "unitWeak" : ""
+}
+
+function matchupTableHtml(rows, kind){
+if(!rows || !rows.length){ return "" }
+const spec = MATCHUP_KINDS[kind]
+const fmt = n => n === null ? "-" : (Number.isInteger(n) ? String(n) : n.toFixed(1))
+const body = matchupDifferentials(rows, kind).map(m=>{
+const diff = m.differential === null ? "-" : `${m.differential > 0 ? "+" : m.differential < 0 ? "−" : ""}${fmt(Math.abs(m.differential))}`
+const opponent = m.opponent ? unitTeamName(m.opponent) : "bye"
+// Differential right after the matchup, so it's on screen on a phone.
+return `<tr><td>${unitTeamName(m.team)}</td><td>${opponent}</td>`
++ `<td class="${differentialCellClass(m.differential)}">${diff}</td><td>${fmt(m.offense)}</td><td>${fmt(m.defense)}</td></tr>`
+}).join("")
+return `<table class="unitsTable"><tr><th>Offense</th><th>Opponent</th><th>Differential</th><th>${spec.offenseLabel}</th><th>${spec.defenseLabel}</th></tr>${body}</table>`
+}
+
 function unitsByTeam(rows){
 const byTeam = {}
 ;(rows || []).forEach(r=>{ byTeam[r.team] = r })
@@ -85,5 +137,8 @@ return byTeam
 }
 
 if (typeof module !== "undefined" && module.exports) {
-module.exports = { UNIT_COLUMNS, unitsTableHtml, sortUnitRows, unitCellClass, propUnitContext, unitsByTeam }
+module.exports = {
+UNIT_COLUMNS, unitsTableHtml, sortUnitRows, unitCellClass, propUnitContext, unitsByTeam,
+matchupDifferentials, matchupTableHtml, differentialCellClass,
+}
 }

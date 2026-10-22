@@ -56,6 +56,7 @@ def test_team_unit_ratings_put_average_at_100_and_flip_defenses(monkeypatch):
     ratings = nfl_units.team_unit_ratings(games, qb_games, starters).set_index("team")
 
     assert ratings["receiving_plus"].mean() == pytest.approx(100, abs=0.5)
+    assert ratings["receiving_plus"].std() == pytest.approx(config.NFL_UNIT_PLUS_POINTS_PER_SD, abs=1)
     assert ratings.loc["KC", "receiving_plus"] > 100 > ratings.loc["DEN", "receiving_plus"]
     # KC's offense put up the most per dropback against DEN, so DEN's pass defense rates worst
     assert ratings.loc["DEN", "pass_defense_plus"] == ratings["pass_defense_plus"].min()

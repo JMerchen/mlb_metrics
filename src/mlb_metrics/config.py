@@ -2759,6 +2759,10 @@ NFL_TOTALS_QB_REPLACEMENT_GAP = 0.10
 # Team unit ratings (nfl_units.py): pseudo-plays of league-average EPA
 # added to each window of a unit's targets / runs / dropbacks.
 NFL_UNIT_SHRINK_PLAYS = 150.0
+# Points on the "+" scale per standard deviation across the 32 teams:
+# 130 is one SD above average, 160 two. 30 rather than 10 (user request,
+# 2026-10-22) so whole numbers separate teams more finely.
+NFL_UNIT_PLUS_POINTS_PER_SD = 30.0
 NFL_TOTALS_COEFFICIENTS = {
     "const": 4.80,
     "off_epa": 17.6,
