@@ -2745,6 +2745,10 @@ NFL_TOTALS_SHRINK_PLAYS = 300.0
 NFL_TOTALS_QB_GAMES = 16
 NFL_TOTALS_QB_SHRINK_DROPBACKS = 150.0
 NFL_TOTALS_QB_REPLACEMENT_GAP = 0.10
+
+# Team unit ratings (nfl_units.py): pseudo-plays of league-average EPA
+# added to each window of a unit's targets / runs / dropbacks.
+NFL_UNIT_SHRINK_PLAYS = 150.0
 NFL_TOTALS_COEFFICIENTS = {
     "const": 4.80,
     "off_epa": 17.6,

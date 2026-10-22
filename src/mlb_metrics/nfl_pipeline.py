@@ -43,7 +43,7 @@ import pandas as pd
 
 from mlb_metrics import (
     config, market_odds, nfl_data, nfl_game_evaluation, nfl_game_picks, nfl_game_predictions,
-    nfl_player_props, nfl_position_floors, nfl_prop_predictions, nfl_team_strength, nfl_totals,
+    nfl_player_props, nfl_position_floors, nfl_prop_predictions, nfl_team_strength, nfl_totals, nfl_units,
 )
 
 NFL_GAME_PREDICTIONS_LOG_PATH = "data/predictions/nfl_game_predictions.csv"
@@ -232,7 +232,7 @@ def run(
                 (schedules["season"] == season) & (schedules["game_type"] == "REG") & (schedules["week"] == week)
             ][["game_id", "season", "week", "home_team", "away_team", "home_qb_id", "away_qb_id",
                "gameday", "home_moneyline", "away_moneyline"]]
-            for column in ("total_line", "roof", "stadium_id"):
+            for column in ("total_line", "roof", "stadium_id", "home_qb_name", "away_qb_name"):
                 if column in schedules.columns:
                     this_week_games[column] = schedules.loc[this_week_games.index, column]
 
@@ -327,6 +327,18 @@ def run(
                 qb_games=nfl_totals.qb_game_epa(history_pbp),
                 history_schedules=history["schedules"],
             )
+            # Team unit ratings (QB+, Receiving+, ...) for the NFL page's
+            # Team units tab, from the same no-lookahead history.
+            units = nfl_units.team_unit_ratings(
+                nfl_units.unit_game_epa(history_pbp),
+                nfl_totals.qb_game_epa(history_pbp),
+                nfl_units.listed_starters(this_week_games, history["schedules"]),
+            )
+            if not units.empty:
+                units.insert(0, "week", week)
+                units.insert(0, "season", season)
+                units.to_csv(os.path.join(output_dir, "nfl_team_units.csv"), index=False)
+
             picks = nfl_game_predictions.select_game_picks(
                 probs, this_week_games, market_probabilities=market, confidence=master,
                 point_predictions=points,

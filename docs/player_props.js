@@ -100,25 +100,36 @@ return data.slice(0, topN === undefined ? 10 : topN)
 return data.filter(row=>row.game === game)
 }
 
-function buildPlayerPropsTable(data, id){
+// `units` (optional, nfl_units.js's unitsByTeam output) adds a column
+// with the team units each pick leans on - "His QB+ 112 · Opp Pass D+ 95"
+// - which the Team units tab explains.
+function buildPlayerPropsTable(data, id, units){
 const el = document.getElementById(id)
 if(!data.length){ el.innerHTML = "No player props data yet - this board updates weekly."; return }
+const showUnits = units && Object.keys(units).length && typeof propUnitContext === "function"
 let html = "<table><tr>"
-PLAYER_PROPS_COLUMNS.forEach(c=>{ html += `<th>${PLAYER_PROPS_COLUMN_LABELS[c] || c}</th>` })
+// The units column sits right after the lean it explains.
+PLAYER_PROPS_COLUMNS.forEach(c=>{
+html += `<th>${PLAYER_PROPS_COLUMN_LABELS[c] || c}</th>`
+if(showUnits && c === "direction"){ html += "<th>Units behind it</th>" }
+})
 html += "</tr>"
 data.forEach(row=>{
 html += "<tr>"
-PLAYER_PROPS_COLUMNS.forEach(c=>{ html += `<td>${formatPlayerPropsValue(c, row[c])}</td>` })
+PLAYER_PROPS_COLUMNS.forEach(c=>{
+html += `<td>${formatPlayerPropsValue(c, row[c])}</td>`
+if(showUnits && c === "direction"){ html += `<td style="white-space:nowrap">${propUnitContext(row, units) || "-"}</td>` }
+})
 html += "</tr>"
 })
 html += "</table>"
 el.innerHTML = html
 }
 
-function buildPlayerPropsSection(data, selectId, tableId){
+function buildPlayerPropsSection(data, selectId, tableId, units){
 const select = document.getElementById(selectId)
 const render = ()=> buildPlayerPropsTable(
-filterPlayerProps(data, select ? select.value : PLAYER_PROPS_ALL_GAMES), tableId
+filterPlayerProps(data, select ? select.value : PLAYER_PROPS_ALL_GAMES), tableId, units
 )
 if(select){
 const games = playerPropsGames(data)

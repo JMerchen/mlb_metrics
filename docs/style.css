@@ -1188,6 +1188,13 @@ template already relies on these exact names. */
 .epaTable th:first-child,.epaTable td:first-child{text-align:left;}
 .epaTable th{color:var(--text-dim);font-size:11px;}
 .epaTable .epaRank{color:var(--text-dim);font-size:11px;}
+.unitsTable td,.unitsTable th{text-align:right;font-variant-numeric:tabular-nums;}
+.unitsTable td:nth-child(-n+2),.unitsTable th:nth-child(-n+2){text-align:left;}
+.unitsTable .unitOpp{color:var(--text-dim);font-size:12px;}
+.unitsTable td:first-child,.unitsTable th:first-child{position:sticky;left:0;z-index:1;background:var(--bg-card);}
+#nflTeamUnitsTable{padding-left:0;padding-right:0;}
+.unitsTable td.unitStrong{color:var(--success);font-weight:600;}
+.unitsTable td.unitWeak{color:var(--danger);font-weight:600;}
 /* A confidence range or other detail inside a table cell. */
 td .dim{color:var(--text-dim);font-size:.9em;}
 .bet-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid var(--accent);color:var(--accent);white-space:nowrap;}

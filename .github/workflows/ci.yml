@@ -39,6 +39,9 @@ jobs:
       - name: Run summary_render.js unit tests
         run: node --test docs/summary_render.test.js
 
+      - name: Run nfl_units.js unit tests
+        run: node --test docs/nfl_units.test.js
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

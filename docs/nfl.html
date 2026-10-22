@@ -68,6 +68,7 @@ this block isn't in the shared stylesheet. */
 <div class="tabGroup" id="nflTabs">
 <button class="tabButton active" data-nfl-tab="preseason" onclick="selectNflTab('preseason')">Fantasy draft</button>
 <button class="tabButton" data-nfl-tab="gamepicks" onclick="selectNflTab('gamepicks')">Game picks</button>
+<button class="tabButton" data-nfl-tab="teamunits" onclick="selectNflTab('teamunits')">Team units</button>
 <button class="tabButton" data-nfl-tab="draftboard" onclick="selectNflTab('draftboard')">College prospects</button>
 <button class="tabButton" data-nfl-tab="playerprops" onclick="selectNflTab('playerprops')">Player props</button>
 </div>
@@ -109,6 +110,24 @@ Recent results
 <div
 class="scrollbox"
 id="nflGamePickHistoryTable">
+
+Loading...
+
+</div>
+
+</div>
+
+<div id="teamUnitsSection" style="display:none">
+
+<h3>
+Team units
+</h3>
+
+<p class="sectionIntro">How strong each team's units are, on a scale where 100 is league average and higher is always stronger (like OPS+ or ERA+). Every 10 points is about one standard deviation: 110 is top-six territory, 120 is elite, 90 and 80 the same distance below. Each number is points added (or allowed) per play from the team's recent games, the latest weighted most. QB+ is the QB listed to start this week, so a backup starting shows up here. Tap a column to sort. <span id="nflTeamUnitsWeek"></span></p>
+
+<div
+class="scrollbox"
+id="nflTeamUnitsTable">
 
 Loading...
 
@@ -289,6 +308,8 @@ Loading...
 <script src="./teams.js"></script>
 
 <script src="./summary_render.js"></script>
+
+<script src="./nfl_units.js"></script>
 
 <script src="./nfl.js"></script>
 
