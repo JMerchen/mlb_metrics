@@ -1,4 +1,4 @@
-consensus_rank,rank,CNG,player_name,College  ▲▼,Pos  ▲▼,Ht,Wt,Cls,Bio,source_url,consensus_score,sources_ranked_by,source_ranks
+consensus_rank,rank,CNG,player_name,College,Pos,Ht,Wt,Cls,Bio,source_url,consensus_score,sources_ranked_by,source_ranks
 1,1,--,Jeremiah Smith,Ohio State,WR,"6'3""",223,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,1.0,1,{'DraftTek': 1.0}
 2,2,--,Colin Simmons,Texas,EDGE,"6'3""",240,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,2.0,1,{'DraftTek': 2.0}
 3,3,--,Leonard Moore,Notre Dame,CB,"6'1""",195,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,3.0,1,{'DraftTek': 3.0}
