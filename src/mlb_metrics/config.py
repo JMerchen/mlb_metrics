@@ -12,20 +12,36 @@ metrics (e.g. WAVE weights recent data highest, PAVE weights it lowest) -
 this reflects the original hand-tuning, not a design decision made here.
 """
 
-from datetime import date
+import json
+import os
+from datetime import date, timedelta
 
-# 2026 MLB season boundaries used for the full-season Statcast pull.
-SEASON_START = date(2026, 3, 25)
-SEASON_END = date(2026, 10, 10)
-# Last day of the regular season (the 2026 Statcast pull's last game_type
-# "R" date). MLB's Beat the Streak is a regular-season contest, so the
-# tracker stops picking after this and its record covers only games up to
-# it; the site then shows the season as over (2026-10-23 fix - picks had
-# carried on into the playoffs, where they couldn't be graded once the
-# Statcast pull stopped at SEASON_END, and froze on 2026-10-15 once no
-# hitter had played recently enough to qualify). Update with SEASON_START
-# each year.
-REGULAR_SEASON_END = date(2026, 9, 27)
+# MLB season boundaries. data/season_dates.json holds the current season's
+# regular-season dates; the daily workflow refreshes it from the MLB Stats
+# API (scripts/update_season_dates.py), switching to the new season on its
+# Opening Day, so these roll over each year without a code change. The
+# literals are the fallback when the file is missing.
+SEASON_DATES_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "data", "season_dates.json")
+
+
+def _season_dates(path=SEASON_DATES_PATH):
+    try:
+        with open(path) as f:
+            raw = json.load(f)
+        return date.fromisoformat(raw["regular_season_start"]), date.fromisoformat(raw["regular_season_end"])
+    except (OSError, KeyError, ValueError):
+        return date(2026, 3, 25), date(2026, 9, 27)
+
+
+# SEASON_START/SEASON_END bound the full-season Statcast pull, which runs
+# 13 days past the regular season (2026's Mar 25 - Oct 10 window).
+# REGULAR_SEASON_END is the last regular-season day: MLB's Beat the Streak
+# is a regular-season contest, so the tracker stops picking after it and
+# its record covers only games up to it; the site then shows the season as
+# over (2026-10-23 fix - picks had carried on into the playoffs, where they
+# couldn't be graded once the Statcast pull stopped at SEASON_END).
+SEASON_START, REGULAR_SEASON_END = _season_dates()
+SEASON_END = REGULAR_SEASON_END + timedelta(days=13)
 
 # Resilience for data.fetch_statcast_range, added 2026-09-16 after a
 # real, confirmed production failure: the entire daily pipeline died on

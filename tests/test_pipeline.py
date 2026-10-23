@@ -701,6 +701,10 @@ def test_beat_the_streak_export_stops_at_the_regular_season_and_flags_season_ove
     assert picks["date"].max() == "2026-09-27"            # the playoff pick is left out
     assert bool(summary.loc[0, "season_over"]) is True
     assert summary.loc[0, "season_end"] == "2026-09-27"
+    assert picks["key_mlbam"].tolist() == [1, 1]          # for the headshots
+    progression = pd.read_csv(tmp_path / "beat_the_streak_progression.csv")
+    assert progression["date"].tolist() == ["2026-09-26", "2026-09-27"]
+    assert progression["streak"].tolist() == [1, 2]
 
     pipeline.write_beat_the_streak_export(str(log_path), str(tmp_path), datetime.date(2026, 9, 27))
     assert bool(pd.read_csv(tmp_path / "beat_the_streak_summary.csv").loc[0, "season_over"]) is False

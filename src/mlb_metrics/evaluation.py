@@ -416,7 +416,9 @@ def build_beat_the_streak_export(
     CSV covering both views without ambiguity about which row is which."""
     picks = graded_daily_picks(predictions, metric, max_picks, min_probability, model_version).copy()
     picks["status"] = _classify_outcome(picks)
-    picks = picks[["date", "rank", "name", "predicted_probability", "combined_probability", "actual_hit", "status", "grade"]]
+    # key_mlbam (when logged) lets the dashboard show each pick's headshot.
+    id_cols = ["key_mlbam"] if "key_mlbam" in picks.columns else []
+    picks = picks[["date", "rank", "name"] + id_cols + ["predicted_probability", "combined_probability", "actual_hit", "status", "grade"]]
 
     # graded_daily_picks already includes every rank<=max_picks candidate
     # regardless of grade, so a date can only be missing from `picks` here

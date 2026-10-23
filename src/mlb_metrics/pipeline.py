@@ -208,8 +208,14 @@ def write_beat_the_streak_export(predictions_log_path: str, output_dir: str, as_
         frame["season_over"] = season_over
         frame["season_end"] = config.REGULAR_SEASON_END.isoformat()
 
+    # The streak after each resolved day, for the season-long streak chart.
+    progression = evaluation.streak_progression(
+        log, max_picks=config.DAILY_PICK_MAX, min_probability=config.DAILY_PICK_MIN_PROBABILITY
+    )
+
     os.makedirs(output_dir, exist_ok=True)
     picks.to_csv(os.path.join(output_dir, "beat_the_streak_picks.csv"), index=False)
+    progression.to_csv(os.path.join(output_dir, "beat_the_streak_progression.csv"), index=False, date_format="%Y-%m-%d")
     summary.to_csv(os.path.join(output_dir, "beat_the_streak_summary.csv"), index=False)
     by_version_summary.to_csv(os.path.join(output_dir, "beat_the_streak_summary_by_version.csv"), index=False)
 

@@ -240,6 +240,7 @@ def test_build_probable_pitchers_table_matches_announced_starter():
     assert row["team"] == "NYY"
     assert row["opponent"] == "BOS"
     assert row["pitcher_name"] == "Gerrit Cole"
+    assert row["key_mlbam"] == 501
     assert row["PAVE_PLUS"] == pytest.approx(0.8)
     assert row["Power_A_PLUS"] == pytest.approx(0.75)
 

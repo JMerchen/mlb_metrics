@@ -75,6 +75,8 @@ Beat the Streak
 
 <div id="ourPicksSection">
 
+<div id="btsSeasonNote"></div>
+
 <div
 class="streakStats"
 id="streakStats">
@@ -83,12 +85,14 @@ Loading...
 
 </div>
 
-<h3>
+<div id="streakChart"></div>
+
+<h3 id="btsTodayHeading">
 Today
 </h3>
 
 <div
-class="todaysPicks"
+class="playerPicks"
 id="todaysPicks">
 
 Loading...
@@ -96,24 +100,24 @@ Loading...
 </div>
 
 <h3>
-Recent results
+Day by day
 </h3>
 
-<div
-class="scrollbox"
-id="streakHistoryTable">
+<div id="streakHistoryTable">
 
 Loading...
 
 </div>
 
+<button class="showMore" id="streakHistoryMore" style="display:none">Show more days</button>
+
 </div>
 
 <div id="hitStreaksSection" style="display:none;">
 
-<div
-class="scrollbox"
-id="hitStreaksTable">
+<p class="sectionIntro">Hitters with the longest active runs of games with a hit.</p>
+
+<div id="hitStreaksTable">
 
 Loading...
 
@@ -123,9 +127,9 @@ Loading...
 
 <div id="modelOddsSection" style="display:none;">
 
-<div
-class="scrollbox"
-id="modelOddsTable">
+<p class="sectionIntro">The hitters our model gives the best chance of a hit in today's games.</p>
+
+<div id="modelOddsTable">
 
 Loading...
 
@@ -139,38 +143,29 @@ Loading...
 Look up a player
 </h2>
 
-<select id="playerType">
+<p class="sectionIntro">Start typing a name. Bars show where a player ranks among regular players, from worst (left) to best (right).</p>
 
-<option value="wave">
+<div class="lookupControls">
 
-Hitter
+<select id="playerType" aria-label="Hitter or pitcher">
 
-</option>
+<option value="wave">Hitter</option>
 
-<option value="pave">
-
-Pitcher
-
-</option>
+<option value="pave">Pitcher</option>
 
 </select>
 
 <input
 id="playerSearch"
 placeholder="Search player"
-onkeydown="if(event.key==='Enter'){searchPlayer()}">
-
-<button onclick="searchPlayer()">
-
-Search
-
-</button>
-
-<div id="playerChoices">
+autocomplete="off"
+aria-label="Search player">
 
 </div>
 
-<br>
+<div id="playerChoices" class="playerChoices">
+
+</div>
 
 <div id="playerResult">
 
@@ -182,9 +177,9 @@ Search
 Today's starting pitchers
 </h2>
 
-<div
-class="scrollbox"
-id="probablePitchersTable">
+<p class="sectionIntro">Each game's probable starters, and how often hitters get a hit off them.</p>
+
+<div id="probablePitchersTable">
 
 Loading...
 
@@ -217,12 +212,12 @@ class="secondaryLine"
 id="gamePickBetRecord">
 </p>
 
-<h3>
+<h3 id="gameTodayHeading">
 Today
 </h3>
 
 <div
-class="todaysPicks"
+class="gameCards"
 id="todaysGamePicks">
 
 Loading...
@@ -230,12 +225,17 @@ Loading...
 </div>
 
 <h3>
+How our picks have done
+</h3>
+
+<div class="vizPair" id="gamePickCharts">
+</div>
+
+<h3>
 Recent results
 </h3>
 
-<div
-class="scrollbox"
-id="gamePickHistoryTable">
+<div id="gamePickHistoryTable">
 
 Loading...
 
@@ -244,19 +244,16 @@ Loading...
 <hr>
 
 <h2>
-Team profiles
+Teams
 </h2>
 
-<p class="sectionIntro">Pick a team to see its profile, or two to compare them.</p>
+<p class="sectionIntro">Every team ranked by our overall rating. Pick a team to see its profile below; pick a second to compare the two.</p>
 
-<div
-id="teamButtons">
+<div id="powerRankings">
 
 Loading...
 
 </div>
-
-<br>
 
 <div
 id="teamResult">
@@ -275,9 +272,7 @@ Select a team
 Hitters most likely to get a hit
 </h2>
 
-<div
-class="scrollbox"
-id="waveTable">
+<div id="waveTable">
 
 Loading...
 
@@ -291,9 +286,7 @@ Loading...
 Pitchers giving up the most hits
 </h2>
 
-<div
-class="scrollbox"
-id="paveTable">
+<div id="paveTable">
 
 Loading...
 
@@ -310,6 +303,8 @@ Loading...
 <script src="./teams.js"></script>
 
 <script src="./summary_render.js"></script>
+
+<script src="./mlb_render.js"></script>
 
 <script src="./app.js"></script>
 
