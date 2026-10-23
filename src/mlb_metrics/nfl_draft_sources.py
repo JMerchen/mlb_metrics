@@ -235,6 +235,8 @@ def fetch_drafttek_big_board(season: int = None, pages: int = 1, url: str = None
         rank_col = "Rank" if "Rank" in table.columns else "Rk"
         name_col = "Prospect" if "Prospect" in table.columns else "Name"
         page_result = table.rename(columns={rank_col: "rank", name_col: "player_name"}).copy()
+        # The 2027 board's headers carry sort arrows ("College  ▲▼").
+        page_result.columns = [re.sub(r"[\s▲▼]+$", "", str(c)) for c in page_result.columns]
         page_result["source_url"] = page_url
         frames.append(page_result)
 
