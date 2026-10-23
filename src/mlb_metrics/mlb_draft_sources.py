@@ -37,6 +37,61 @@ _REQUEST_HEADERS = {
 }
 
 
+def next_draft_year(today: datetime.date | None = None) -> int:
+    """The MLB draft these prospects are for. The draft is held in mid
+    July, so from August on the next one is the following year's - the
+    calendar year (used until 2026-10-23) asked for a class already drafted."""
+    today = today or datetime.date.today()
+    return today.year + 1 if today.month >= 8 else today.year
+
+
+def fetch_mlb_pipeline_draft_prospects(season: int = None, url: str = None) -> pd.DataFrame:
+    """MLB Pipeline's draft prospect rankings from MLB's own Stats API
+    (`/api/v1/draft/prospects/{year}`) - a JSON feed rather than a
+    scraped page, added 2026-10-23 because both web sources above have
+    returned 403 to GitHub's runners since this board was built, so it
+    had never produced a ranking. Prospects without a rank (the feed
+    lists every draft-eligible player, ranked or not) are left out, as
+    are high-school players: this is the college board. Empty on any
+    failure, like every source here."""
+    season = next_draft_year() if season is None else season
+    url = url or f"https://statsapi.mlb.com/api/v1/draft/prospects/{season}"
+    try:
+        import requests
+
+        response = requests.get(url, timeout=30, headers=_REQUEST_HEADERS)
+        response.raise_for_status()
+        prospects = response.json().get("prospects", [])
+    except Exception as exc:
+        print(f"[mlb_draft_sources] MLB Pipeline fetch failed: {exc}")
+        return _empty()
+
+    rows = []
+    for prospect in prospects:
+        rank = prospect.get("rank")
+        person = prospect.get("person") or {}
+        school = prospect.get("school") or {}
+        name = person.get("fullName") or prospect.get("fullName")
+        school_class = str(school.get("schoolClass") or "")
+        if not rank or not name or school_class.upper().startswith("HS"):
+            continue
+        rows.append({
+            "rank": rank,
+            "player_name": name,
+            "School": school.get("name"),
+            "Pos": (person.get("primaryPosition") or {}).get("abbreviation"),
+            "Class": school_class or None,
+        })
+    if not rows:
+        print(f"[mlb_draft_sources] MLB Pipeline: {len(prospects)} prospects for {season}, none ranked college players yet.")
+        return _empty()
+    result = pd.DataFrame(rows)
+    result["rank"] = pd.to_numeric(result["rank"], errors="coerce")
+    result = result.dropna(subset=["rank"]).sort_values("rank").reset_index(drop=True)
+    result["source_url"] = url
+    return result
+
+
 def _empty() -> pd.DataFrame:
     return pd.DataFrame(columns=["rank", "player_name"])
 
@@ -61,7 +116,7 @@ def fetch_baseball_america_college_draft(season: int = None) -> pd.DataFrame:
     prospect_sources.fetch_baseball_america_prospects (and the same real
     subscription-paywall caveat: this may only return a real partial
     list)."""
-    season = datetime.date.today().year if season is None else season
+    season = next_draft_year() if season is None else season
     url = f"https://www.baseballamerica.com/rankings/{season}-top-college-draft-prospects/"
     try:
         import requests
@@ -98,7 +153,7 @@ def fetch_d1baseball_college_draft(url: str = None, season: int = None) -> pd.Da
     passing the current one (from config or a caller) without touching
     this function's own logic, rather than requiring a code change every
     time the site republishes at a new path."""
-    season = datetime.date.today().year if season is None else season
+    season = next_draft_year() if season is None else season
     url = url or f"https://d1baseball.com/prospects/{season}-mlb-draft-top-100-college-prospects/"
     try:
         import requests
@@ -127,6 +182,7 @@ def fetch_d1baseball_college_draft(url: str = None, season: int = None) -> pd.Da
 
 
 SOURCE_FETCHERS = {
+    "MLB Pipeline": fetch_mlb_pipeline_draft_prospects,
     "Baseball America": fetch_baseball_america_college_draft,
     "D1Baseball": fetch_d1baseball_college_draft,
 }

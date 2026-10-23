@@ -132,3 +132,46 @@ def test_fetch_all_sources_isolates_one_sources_failure_from_the_others(monkeypa
 
     assert list(results["Working"]["player_name"]) == ["Real Player"]
     assert results["Broken"].empty
+
+
+def test_mlb_next_draft_year_rolls_over_after_the_july_draft():
+    import datetime
+    assert mlb_draft_sources.next_draft_year(datetime.date(2026, 7, 15)) == 2026
+    assert mlb_draft_sources.next_draft_year(datetime.date(2026, 8, 1)) == 2027
+    assert mlb_draft_sources.next_draft_year(datetime.date(2026, 10, 23)) == 2027
+
+
+def test_fetch_mlb_pipeline_draft_prospects_keeps_ranked_college_players(monkeypatch):
+    payload = {"prospects": [
+        {"rank": 2, "person": {"fullName": "Roch Cholowsky", "primaryPosition": {"abbreviation": "SS"}},
+         "school": {"name": "UCLA", "schoolClass": "4YR JR"}},
+        {"rank": 1, "person": {"fullName": "A High Schooler"}, "school": {"name": "Some HS", "schoolClass": "HS SR"}},
+        {"rank": None, "person": {"fullName": "Unranked Guy"}, "school": {"name": "LSU", "schoolClass": "4YR SR"}},
+        {"rank": 5, "person": {"fullName": "Jake Clemente"}, "school": {"name": "Arizona", "schoolClass": "4YR SO"}},
+    ]}
+    seen = []
+
+    def _get(url, timeout=None, headers=None):
+        seen.append(url)
+        return types.SimpleNamespace(raise_for_status=lambda: None, json=lambda: payload)
+
+    monkeypatch.setitem(sys.modules, "requests", types.SimpleNamespace(get=_get))
+    board = mlb_draft_sources.fetch_mlb_pipeline_draft_prospects(season=2027)
+
+    assert seen == ["https://statsapi.mlb.com/api/v1/draft/prospects/2027"]
+    assert board["player_name"].tolist() == ["Roch Cholowsky", "Jake Clemente"]
+    assert board["rank"].tolist() == [2, 5]
+    assert board.loc[0, "School"] == "UCLA" and board.loc[0, "Pos"] == "SS"
+
+
+def test_fetch_mlb_pipeline_draft_prospects_is_empty_on_failure_or_no_ranks(monkeypatch):
+    def _raise(url, timeout=None, headers=None):
+        raise RuntimeError("blocked")
+
+    monkeypatch.setitem(sys.modules, "requests", types.SimpleNamespace(get=_raise))
+    assert mlb_draft_sources.fetch_mlb_pipeline_draft_prospects(season=2027).empty
+
+    unranked = {"prospects": [{"rank": None, "person": {"fullName": "X"}, "school": {"schoolClass": "4YR JR"}}]}
+    monkeypatch.setitem(sys.modules, "requests", types.SimpleNamespace(
+        get=lambda url, timeout=None, headers=None: types.SimpleNamespace(raise_for_status=lambda: None, json=lambda: unranked)))
+    assert mlb_draft_sources.fetch_mlb_pipeline_draft_prospects(season=2027).empty

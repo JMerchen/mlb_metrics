@@ -353,7 +353,8 @@ def test_run_nfl_draft_board_clears_a_stale_board(tmp_path, monkeypatch):
 
 
 def test_fetch_drafttek_big_board_strips_sort_arrows_from_headers(monkeypatch):
-    table = pd.DataFrame({"Rank": [1], "Prospect": ["Jeremiah Smith"], "College  ▲▼": ["Ohio State"], "Pos  ▲▼": ["WR"]})
+    table = pd.DataFrame({"Rank": [1], "Prospect": ["Jeremiah Smith"], "College  ▲▼": ["Ohio State"], "Pos  ▲▼": ["WR"],
+                          "Bio": ["Bio"]})
 
     def _get(url, timeout=None, headers=None):
         return types.SimpleNamespace(content=b"<html></html>", raise_for_status=lambda: None)
@@ -363,3 +364,4 @@ def test_fetch_drafttek_big_board_strips_sort_arrows_from_headers(monkeypatch):
     board = nfl_draft_sources.fetch_drafttek_big_board(season=2027)
     assert {"College", "Pos"}.issubset(board.columns)
     assert board.loc[0, "College"] == "Ohio State"
+    assert "Bio" not in board.columns
