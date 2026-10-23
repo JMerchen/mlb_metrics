@@ -88,7 +88,7 @@ consensus_rank,rank,player_name,team,position,highest_level,age,eta,fv,source_ur
 87,49.0,Enddy Azocar,Baltimore Orioles,OF,A+,19,2028,50+,https://www.justbaseball.com/prospects/top-100-mlb-prospects/,78.0,2,"{'MLB Pipeline': 99.0, 'Just Baseball': 49.0, 'FanGraphs': None}"
 88,55.0,Jamie Arnold,Athletics,LHP,AA,22,2027,50,https://www.mlb.com/prospects/stats/top-prospects,78.0,2,"{'MLB Pipeline': 55.0, 'Just Baseball': 93.0, 'FanGraphs': None}"
 89,46.0,Eduardo Tait,MIN,C,A+,19.5,2029,50,https://blogs.fangraphs.com/2026-top-100-prospects/,78.33333333333333,1,"{'MLB Pipeline': None, 'Just Baseball': None, 'FanGraphs': 46.0}"
-90,57.0,Joshua Báez,,,,23,,,https://www.mlb.com/prospects/stats/top-prospects,78.33333333333333,1,"{'MLB Pipeline': 57.0, 'Just Baseball': None, 'FanGraphs': None}"
+90,57.0,Joshua Baez,,,,23,,,https://www.mlb.com/prospects/stats/top-prospects,78.33333333333333,1,"{'MLB Pipeline': 57.0, 'Just Baseball': None, 'FanGraphs': None}"
 91,60.0,Felnin Celesten,SEA,SS,A+,21,2029,50,https://www.mlb.com/prospects/stats/top-prospects,79.33333333333333,2,"{'MLB Pipeline': 60.0, 'Just Baseball': None, 'FanGraphs': 86.0}"
 92,49.0,George Lombard Jr.,NYY,SS,AA,20.7,2027,50,https://blogs.fangraphs.com/2026-top-100-prospects/,79.33333333333333,1,"{'MLB Pipeline': None, 'Just Baseball': None, 'FanGraphs': 49.0}"
 93,57.0,Franklin Primera,Boston Red Sox,C,A,19,2029,50+,https://www.justbaseball.com/prospects/top-100-mlb-prospects/,80.0,1,"{'MLB Pipeline': None, 'Just Baseball': 57.0, 'FanGraphs': None}"

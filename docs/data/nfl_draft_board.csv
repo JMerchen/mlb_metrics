@@ -1,150 +1,150 @@
-consensus_rank,rank,CNG,player_name,College,Pos,Ht,Wt,Cls,Bio,source_url,consensus_score,sources_ranked_by,source_ranks
-1,1,--,Jeremiah Smith,Ohio State,WR,"6'3""",223,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,1.0,1,{'DraftTek': 1.0}
-2,2,--,Colin Simmons,Texas,EDGE,"6'3""",240,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,2.0,1,{'DraftTek': 2.0}
-3,3,--,Leonard Moore,Notre Dame,CB,"6'1""",195,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,3.0,1,{'DraftTek': 3.0}
-4,4,▲ +13,Drew Mestemaker,Oklahoma State,QB,"6'4""",211,RSO,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,4.0,1,{'DraftTek': 4.0}
-5,5,▲ +2,Charlie Becker,Indiana,WR,"6'3""",209,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,5.0,1,{'DraftTek': 5.0}
-6,6,▲ +6,Darian Mensah,Miami (FL),QB,"6'3""",205,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,6.0,1,{'DraftTek': 6.0}
-7,7,▼ -2,Trevor Goosby,Texas,OT,"6'7""",312,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,7.0,1,{'DraftTek': 7.0}
-8,8,--,K.J. Bolden,Georgia,S,"6'0""",185,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,8.0,1,{'DraftTek': 8.0}
-9,9,--,Ellis Robinson IV,Georgia,CB,"6'0""",180,RSO,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,9.0,1,{'DraftTek': 9.0}
-10,10,▼ -1,Jordan Seaton,LSU,OT,"6'5""",330,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,10.0,1,{'DraftTek': 10.0}
-11,11,--,Chris Cole,Georgia,OLB,"6'3""",235,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,11.0,1,{'DraftTek': 11.0}
-12,12,--,Ashton Hampton,Clemson,CB,"6'1""",200,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,12.0,1,{'DraftTek': 12.0}
-13,13,▲ +10,Trinidad Chambliss,Ole Miss,QB,"6'0""",200,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,13.0,1,{'DraftTek': 13.0}
-14,14,--,Jadan Baugh,Florida,RB,"6'1""",230,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,14.0,1,{'DraftTek': 14.0}
-15,15,▲ +1,Will Echoles,Ole Miss,DL3T,"6'3""",310,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,15.0,1,{'DraftTek': 15.0}
-16,16,▼ -12,Arch Manning,Texas,QB,"6'4""",219,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,16.0,1,{'DraftTek': 16.0}
-17,17,▼ -7,Cam Coleman,Texas,WR,"6'3""",201,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,17.0,1,{'DraftTek': 17.0}
-18,18,--,Dylan Stewart,South Carolina,EDGE,"6'5""",245,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,18.0,1,{'DraftTek': 18.0}
-19,19,--,Kelley Jones,Mississippi State,CB,"6'3""",195,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,19.0,1,{'DraftTek': 19.0}
-20,20,--,Matayo Uiagalelei,Oregon,EDGE,"6'4""",272,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,20.0,1,{'DraftTek': 20.0}
-21,21,▲ +6,A.J. Holmes Jr.,Texas Tech,DL3T,"6'2""",300,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,21.0,1,{'DraftTek': 21.0}
-22,22,--,Kenyatta Jackson Jr.,Ohio State,EDGE,"6'5""",265,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,22.0,1,{'DraftTek': 22.0}
-23,23,▼ -5,A'Mauri Washington,Oregon,DL1T,"6'3""",330,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,23.0,1,{'DraftTek': 23.0}
-24,24,--,C.J. Carr,Notre Dame,QB,"6'2""",210,RSO,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,24.0,1,{'DraftTek': 24.0}
-25,25,--,Jamari Johnson,Oregon,TE,"6'5""",257,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,25.0,1,{'DraftTek': 25.0}
-26,26,▲ +2,Yhonzae Pierre,Alabama,EDGE,"6'3""",248,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,26.0,1,{'DraftTek': 26.0}
-27,27,▼ -6,Ahmad Moten Sr.,Miami (FL),DL3T,"6'3""",300,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,27.0,1,{'DraftTek': 27.0}
-28,28,--,Dante Moore,Oregon,QB,"6'3""",206,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,28.0,1,{'DraftTek': 28.0}
-29,29,▲ +3,Kade Pieper,Iowa,OG,"6'3""",300,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,29.0,1,{'DraftTek': 29.0}
-30,30,▲ +23,Greg Johnson,Minnesota,OG,"6'5""",325,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,30.0,1,{'DraftTek': 30.0}
-31,31,--,Damon Wilson II,Miami (FL),EDGE,"6'4""",250,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,31.0,1,{'DraftTek': 31.0}
-32,32,▼ -3,Trey'Dez Green,LSU,TE,"6'6""",240,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,32.0,1,{'DraftTek': 32.0}
-33,33,--,Trevor Lauck,Iowa,OT,"6'5""",310,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,33.0,1,{'DraftTek': 33.0}
-34,34,▲ +5,Cayden Green,Missouri,OT,"6'5""",324,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,34.0,1,{'DraftTek': 34.0}
-35,35,▼ -5,Will Heldt,Clemson,EDGE,"6'5""",260,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,35.0,1,{'DraftTek': 35.0}
-36,36,--,Nick Marsh,Indiana,WR,"6'3""",203,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,36.0,1,{'DraftTek': 36.0}
-37,37,--,Tae Johnson,Notre Dame,S,"6'2""",195,RSO,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,37.0,1,{'DraftTek': 37.0}
-38,38,--,Reed Harris,Arizona State,WR,"6'4""",217,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,38.0,1,{'DraftTek': 38.0}
-39,39,▲ +3,Carter Smith,Indiana,OT,"6'5""",313,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,39.0,1,{'DraftTek': 39.0}
-40,40,--,Ryan Wingo,Texas,WR,"6'2""",214,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,40.0,1,{'DraftTek': 40.0}
-41,41,--,Omarion Miller,Arizona State,WR,"6'2""",210,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,41.0,1,{'DraftTek': 41.0}
-42,42,▼ -11,Julian Sayin,Ohio State,QB,"6'1""",208,RSO,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,42.0,1,{'DraftTek': 42.0}
-43,43,--,David Stone,Oklahoma,DL3T,"6'3""",310,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,43.0,1,{'DraftTek': 43.0}
-44,44,--,Bryant Wesco Jr.,Clemson,WR,"6'2""",190,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,44.0,1,{'DraftTek': 44.0}
-45,45,▲ +12,Kewan Lacy,Ole Miss,RB,"5'10""",210,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,45.0,1,{'DraftTek': 45.0}
-46,46,--,Justin Scott,Miami (FL),DL3T,"6'3""",304,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,46.0,1,{'DraftTek': 46.0}
-47,47,--,Quincy Rhodes Jr.,Arkansas,EDGE,"6'5""",275,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,47.0,1,{'DraftTek': 47.0}
-48,48,▲ +30,K.J. Duff,Rutgers,WR,"6'5""",219,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,48.0,1,{'DraftTek': 48.0}
-49,49,▼ -5,Melvin Siani,Texas,OT,"6'6""",313,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,49.0,1,{'DraftTek': 49.0}
-50,50,--,John Henry Daley,Michigan,EDGE,"6'4""",255,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,50.0,1,{'DraftTek': 50.0}
-51,51,--,LaNorris Sellers,South Carolina,QB,"6'3""",240,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,51.0,1,{'DraftTek': 51.0}
-52,52,--,Boubacar Traore,Notre Dame,EDGE,"6'4""",250,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,52.0,1,{'DraftTek': 52.0}
-53,53,--,Princewill Umanmielen,LSU,EDGE,"6'4""",245,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,53.0,1,{'DraftTek': 53.0}
-54,54,▲ +10,Jordan Ross,LSU,EDGE,"6'4""",245,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,54.0,1,{'DraftTek': 54.0}
-55,55,▲ +19,Koi Perich,Oregon,S,"6'1""",200,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,55.0,1,{'DraftTek': 55.0}
-56,56,--,Samson Okunlola,Miami (FL),OG,"6'6""",330,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,56.0,1,{'DraftTek': 56.0}
-57,57,--,Zabien Brown,Alabama,CB,"6'0""",192,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,57.0,1,{'DraftTek': 57.0}
-58,58,▼ -11,Austin Siereveld,Ohio State,OG,"6'5""",325,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,58.0,1,{'DraftTek': 58.0}
-59,59,▲ +3,Devan Thompkins,Alabama,DL3T,"6'5""",300,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,59.0,1,{'DraftTek': 59.0}
-60,60,--,Sammy Brown,Clemson,ILB,"6'2""",235,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,60.0,1,{'DraftTek': 60.0}
-61,61,--,Clev Lubin,Louisville,EDGE,"6'3""",255,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,61.0,1,{'DraftTek': 61.0}
-62,62,--,Wyatt Young,Oklahoma State,WR,"6'0""",195,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,62.0,1,{'DraftTek': 62.0}
-63,63,▲ +207,Austin Simmons,Missouri,QB,"6'4""",215,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,63.0,1,{'DraftTek': 63.0}
-64,64,--,Jacarrius Peak,South Carolina,OT,"6'4""",308,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,64.0,1,{'DraftTek': 64.0}
-65,65,--,Luke Reynolds,Virginia Tech,TE,"6'4""",250,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,65.0,1,{'DraftTek': 65.0}
-66,66,--,Ryan Coleman-Williams,Alabama,WR,"6'0""",178,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,66.0,1,{'DraftTek': 66.0}
-67,67,▲ +8,Bear Alexander,Oregon,DL3T,"6'3""",302,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,67.0,1,{'DraftTek': 67.0}
-68,68,--,Rasheem Biles,Texas,OLB,"6'1""",220,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,68.0,1,{'DraftTek': 68.0}
-69,69,--,Kyngstonn Viliamu-Asa,Notre Dame,ILB,"6'3""",230,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,69.0,1,{'DraftTek': 69.0}
-70,70,--,Ty Benefield,LSU,S,"6'2""",204,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,70.0,1,{'DraftTek': 70.0}
-71,72,--,Corey Myrick,Clemson,S,"6'2""",200,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,72.0,1,{'DraftTek': 72.0}
-72,73,--,Jayden Maiava,USC,QB,"6'4""",230,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,73.0,1,{'DraftTek': 73.0}
-73,74,▼ -31,Jelani McDonald,Texas,S,"6'2""",199,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,74.0,1,{'DraftTek': 74.0}
-74,75,--,O.J. Frederique Jr.,Miami (FL),CB,"6'0""",185,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,75.0,1,{'DraftTek': 75.0}
-75,76,--,Iapani Laloulu,Oregon,OC,"6'2""",329,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,76.0,1,{'DraftTek': 76.0}
-76,77,▲ +24,Tavion Gadson,Kentucky,DL3T,"6'5""",298,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,77.0,1,{'DraftTek': 77.0}
-77,78,--,Kingston Lopa,California,S,"6'5""",210,RSO,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,78.0,1,{'DraftTek': 78.0}
-78,79,▼ -10,Ahmad Hardy,Missouri,RB,"5'9""",210,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,79.0,1,{'DraftTek': 79.0}
-79,80,--,P.J. Williams,SMU,OT,"6'5""",313,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,80.0,1,{'DraftTek': 80.0}
-80,81,--,Isaac Brown,Louisville,RB,"5'9""",190,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,81.0,1,{'DraftTek': 81.0}
-81,82,▲ +48,Xavier Gilliam,Tennessee,DL3T,"6'2""",305,RSO,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,82.0,1,{'DraftTek': 82.0}
-82,83,--,Jayden Jackson,Oklahoma,DL1T,"6'2""",322,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,83.0,1,{'DraftTek': 83.0}
-83,84,▲ +7,Sam Leavitt,LSU,QB,"6'2""",205,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,84.0,1,{'DraftTek': 84.0}
-84,85,--,Suntarine Perkins,Ole Miss,OLB,"6'1""",220,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,85.0,1,{'DraftTek': 85.0}
-85,86,--,Jyaire Hill,Michigan,CB,"6'1""",190,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,86.0,1,{'DraftTek': 86.0}
-86,87,--,Mario Craver,Texas A&M,WRS,"5'9""",165,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,87.0,1,{'DraftTek': 87.0}
-87,88,--,Terrance Carter Jr.,Texas Tech,TE,"6'2""",245,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,88.0,1,{'DraftTek': 88.0}
-88,89,NEW,Jide Abasiri,USC,DL5T,"6'5""",280,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,89.0,1,{'DraftTek': 89.0}
-89,90,--,Lance Heard,Kentucky,OT,"6'5""",330,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,90.0,1,{'DraftTek': 90.0}
-90,91,--,Jackson Bennee,Utah,S,"6'0""",190,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,91.0,1,{'DraftTek': 91.0}
-91,92,--,Anthonie Knapp,Notre Dame,OG,"6'4""",300,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,92.0,1,{'DraftTek': 92.0}
-92,93,--,Junior Sherrill,Vanderbilt,WR,"5'11""",203,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,93.0,1,{'DraftTek': 93.0}
-93,94,--,Wendell Gregory,Kansas State,EDGE,"6'3""",245,RSO,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,94.0,1,{'DraftTek': 94.0}
-94,95,▲ +8,Peter Clarke,Temple,TE,"6'6""",272,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,95.0,1,{'DraftTek': 95.0}
-95,96,--,Teitum Tuioti,Oregon,EDGE,"6'2""",263,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,96.0,1,{'DraftTek': 96.0}
-96,97,--,Bray Hubbard,Alabama,S,"6'2""",213,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,97.0,1,{'DraftTek': 97.0}
-97,98,--,Jamari Sharpe,Indiana,CB,"6'1""",187,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,98.0,1,{'DraftTek': 98.0}
-98,99,--,Luke Montgomery,Ohio State,OG,"6'4""",312,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,99.0,1,{'DraftTek': 99.0}
-99,100,▲ +5,Braelin Moore,LSU,OC,"6'2""",300,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,100.0,1,{'DraftTek': 100.0}
-100,101,--,Chris Peal,Syracuse,CB,"6'1""",200,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,101.0,1,{'DraftTek': 101.0}
-101,102,--,Zach Lutmer,Iowa,S,"6'0""",205,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,102.0,1,{'DraftTek': 102.0}
-102,103,--,Drew Azzopardi,Washington,OT,"6'6""",315,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,103.0,1,{'DraftTek': 103.0}
-103,104,--,Evan Tengesdahl,Cincinnati,OG,"6'3""",320,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,104.0,1,{'DraftTek': 104.0}
-104,105,--,Ben Roberts,Texas Tech,ILB,"6'3""",240,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,105.0,1,{'DraftTek': 105.0}
-105,106,--,Whit Weeks,LSU,ILB,"6'2""",225,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,106.0,1,{'DraftTek': 106.0}
-106,107,--,Taylor Wein,Oklahoma,DL5T,"6'4""",276,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,107.0,1,{'DraftTek': 107.0}
-107,108,--,Brandon Baker,Texas,OG,"6'4""",308,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,108.0,1,{'DraftTek': 108.0}
-108,109,--,Jaylen McClain,Ohio State,S,"6'0""",201,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,109.0,1,{'DraftTek': 109.0}
-109,110,▲ +19,Mark Fletcher Jr.,Miami (FL),RB,"6'1""",225,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,110.0,1,{'DraftTek': 110.0}
-110,111,--,Anto Saka,Texas A&M,EDGE,"6'3""",255,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,111.0,1,{'DraftTek': 111.0}
-111,112,▼ -61,Christian Alliegro,Ohio State,ILB,"6'4""",240,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,112.0,1,{'DraftTek': 112.0}
-112,113,--,Keon Sabb,Alabama,S,"6'1""",204,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,113.0,1,{'DraftTek': 113.0}
-113,114,--,Drake Lindsey,Minnesota,QB,"6'4""",230,RSO,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,114.0,1,{'DraftTek': 114.0}
-114,115,--,Jermaine Mathews Jr.,Ohio State,CB,"5'11""",190,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,115.0,1,{'DraftTek': 115.0}
-115,116,--,Hollywood Smothers,Texas,RB,"5'11""",195,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,116.0,1,{'DraftTek': 116.0}
-116,117,▲ +22,Tyrique Tucker,Indiana,DL3T,"6'0""",302,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,117.0,1,{'DraftTek': 117.0}
-117,118,--,Eli Bowen,Oklahoma,CBN,"5'9""",183,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,118.0,1,{'DraftTek': 118.0}
-118,119,▲ +16,Amare Ferrell,Indiana,S,"6'2""",202,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,119.0,1,{'DraftTek': 119.0}
-119,120,--,Deuce Alexander,Ole Miss,WR,"6'0""",180,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,120.0,1,{'DraftTek': 120.0}
-120,121,▼ -24,Justice Haynes,Georgia Tech,RB,"5'10""",210,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,121.0,1,{'DraftTek': 121.0}
-121,122,--,Benjamin Brahmer,Penn State,TE,"6'6""",255,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,122.0,1,{'DraftTek': 122.0}
-122,123,--,Francis Brewu,Notre Dame,DL5T,"6'2""",280,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,123.0,1,{'DraftTek': 123.0}
-123,124,--,Ezra Christensen,Colorado,DL5T,"6'2""",280,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,124.0,1,{'DraftTek': 124.0}
-124,125,--,L.J. Martin,BYU,RB,"6'2""",220,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,125.0,1,{'DraftTek': 125.0}
-125,126,--,John Nestor,Minnesota,CB,"6'0""",205,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,126.0,1,{'DraftTek': 126.0}
-126,127,▲ +9,Andrew Rappleyea,Penn State,TE,"6'4""",242,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,127.0,1,{'DraftTek': 127.0}
-127,128,--,Brice Pollock,Texas Tech,CB,"6'0""",195,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,128.0,1,{'DraftTek': 128.0}
-128,129,--,Adam Trick,Texas Tech,EDGE,"6'4""",249,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,129.0,1,{'DraftTek': 129.0}
-129,130,--,D.J. McKinney,Notre Dame,CB,"6'2""",180,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,130.0,1,{'DraftTek': 130.0}
-130,131,▲ +9,Isaiah Sategna III,Oklahoma,WRS,"5'10""",182,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,131.0,1,{'DraftTek': 131.0}
-131,132,--,Mario Landino,Indiana,DL5T,"6'4""",284,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,132.0,1,{'DraftTek': 132.0}
-132,133,--,Elijah Paige,USC,OT,"6'7""",320,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,133.0,1,{'DraftTek': 133.0}
-133,134,▼ -26,Nate Frazier,Georgia,RB,"5'10""",205,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,134.0,1,{'DraftTek': 134.0}
-134,135,--,Nyck Harbor,South Carolina,WR,"6'5""",235,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,135.0,1,{'DraftTek': 135.0}
-135,136,▲ +22,Ethan O'Connor,Miami (FL),CB,"6'1""",180,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,136.0,1,{'DraftTek': 136.0}
-136,137,--,Payton Pierce,Ohio State,OLB,"6'1""",223,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,137.0,1,{'DraftTek': 137.0}
-137,138,--,Mateen Ibirogba,Texas Tech,DL3T,"6'3""",296,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,138.0,1,{'DraftTek': 138.0}
-138,139,--,Carson Hinzman,Ohio State,OC,"6'4""",300,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,139.0,1,{'DraftTek': 139.0}
-139,140,▲ +29,DeSean Bishop,Tennessee,RB,"5'9""",208,RJR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,140.0,1,{'DraftTek': 140.0}
-140,141,--,Kip Lewis,Oklahoma,OLB,"6'1""",227,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,141.0,1,{'DraftTek': 141.0}
-141,142,▲ +45,Mike Matthews,Tennessee,WR,"6'1""",200,JR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,142.0,1,{'DraftTek': 142.0}
-142,143,--,Drayk Bowen,Notre Dame,ILB,"6'2""",235,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,143.0,1,{'DraftTek': 143.0}
-143,144,▲ +36,Earl Little Jr.,Ohio State,S,"6'1""",199,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,144.0,1,{'DraftTek': 144.0}
-144,145,--,Blake Frazier,Michigan,OT,"6'5""",295,RSO,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,145.0,1,{'DraftTek': 145.0}
-145,146,--,Andrew Sprague,Michigan,OT,"6'7""",315,RSO,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,146.0,1,{'DraftTek': 146.0}
-146,147,--,Peyton Bowen,Oklahoma,S,"6'0""",201,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,147.0,1,{'DraftTek': 147.0}
-147,148,--,Raylen Wilson,Georgia,ILB,"6'1""",235,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,148.0,1,{'DraftTek': 148.0}
-148,149,--,Christian Gray,Notre Dame,CB,"6'0""",190,SR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,149.0,1,{'DraftTek': 149.0}
-149,150,--,McKale Boley,Virginia,OG,"6'4""",316,RSR,Bio,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,150.0,1,{'DraftTek': 150.0}
+consensus_rank,rank,CNG,player_name,College,Pos,Ht,Wt,Cls,source_url,consensus_score,sources_ranked_by,source_ranks
+1,1,--,Jeremiah Smith,Ohio State,WR,"6'3""",223,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,1.0,1,{'DraftTek': 1.0}
+2,2,--,Colin Simmons,Texas,EDGE,"6'3""",240,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,2.0,1,{'DraftTek': 2.0}
+3,3,--,Leonard Moore,Notre Dame,CB,"6'1""",195,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,3.0,1,{'DraftTek': 3.0}
+4,4,▲ +13,Drew Mestemaker,Oklahoma State,QB,"6'4""",211,RSO,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,4.0,1,{'DraftTek': 4.0}
+5,5,▲ +2,Charlie Becker,Indiana,WR,"6'3""",209,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,5.0,1,{'DraftTek': 5.0}
+6,6,▲ +6,Darian Mensah,Miami (FL),QB,"6'3""",205,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,6.0,1,{'DraftTek': 6.0}
+7,7,▼ -2,Trevor Goosby,Texas,OT,"6'7""",312,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,7.0,1,{'DraftTek': 7.0}
+8,8,--,K.J. Bolden,Georgia,S,"6'0""",185,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,8.0,1,{'DraftTek': 8.0}
+9,9,--,Ellis Robinson IV,Georgia,CB,"6'0""",180,RSO,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,9.0,1,{'DraftTek': 9.0}
+10,10,▼ -1,Jordan Seaton,LSU,OT,"6'5""",330,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,10.0,1,{'DraftTek': 10.0}
+11,11,--,Chris Cole,Georgia,OLB,"6'3""",235,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,11.0,1,{'DraftTek': 11.0}
+12,12,--,Ashton Hampton,Clemson,CB,"6'1""",200,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,12.0,1,{'DraftTek': 12.0}
+13,13,▲ +10,Trinidad Chambliss,Ole Miss,QB,"6'0""",200,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,13.0,1,{'DraftTek': 13.0}
+14,14,--,Jadan Baugh,Florida,RB,"6'1""",230,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,14.0,1,{'DraftTek': 14.0}
+15,15,▲ +1,Will Echoles,Ole Miss,DL3T,"6'3""",310,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,15.0,1,{'DraftTek': 15.0}
+16,16,▼ -12,Arch Manning,Texas,QB,"6'4""",219,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,16.0,1,{'DraftTek': 16.0}
+17,17,▼ -7,Cam Coleman,Texas,WR,"6'3""",201,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,17.0,1,{'DraftTek': 17.0}
+18,18,--,Dylan Stewart,South Carolina,EDGE,"6'5""",245,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,18.0,1,{'DraftTek': 18.0}
+19,19,--,Kelley Jones,Mississippi State,CB,"6'3""",195,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,19.0,1,{'DraftTek': 19.0}
+20,20,--,Matayo Uiagalelei,Oregon,EDGE,"6'4""",272,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,20.0,1,{'DraftTek': 20.0}
+21,21,▲ +6,A.J. Holmes Jr.,Texas Tech,DL3T,"6'2""",300,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,21.0,1,{'DraftTek': 21.0}
+22,22,--,Kenyatta Jackson Jr.,Ohio State,EDGE,"6'5""",265,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,22.0,1,{'DraftTek': 22.0}
+23,23,▼ -5,A'Mauri Washington,Oregon,DL1T,"6'3""",330,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,23.0,1,{'DraftTek': 23.0}
+24,24,--,C.J. Carr,Notre Dame,QB,"6'2""",210,RSO,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,24.0,1,{'DraftTek': 24.0}
+25,25,--,Jamari Johnson,Oregon,TE,"6'5""",257,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,25.0,1,{'DraftTek': 25.0}
+26,26,▲ +2,Yhonzae Pierre,Alabama,EDGE,"6'3""",248,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,26.0,1,{'DraftTek': 26.0}
+27,27,▼ -6,Ahmad Moten Sr.,Miami (FL),DL3T,"6'3""",300,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,27.0,1,{'DraftTek': 27.0}
+28,28,--,Dante Moore,Oregon,QB,"6'3""",206,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,28.0,1,{'DraftTek': 28.0}
+29,29,▲ +3,Kade Pieper,Iowa,OG,"6'3""",300,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,29.0,1,{'DraftTek': 29.0}
+30,30,▲ +23,Greg Johnson,Minnesota,OG,"6'5""",325,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,30.0,1,{'DraftTek': 30.0}
+31,31,--,Damon Wilson II,Miami (FL),EDGE,"6'4""",250,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,31.0,1,{'DraftTek': 31.0}
+32,32,▼ -3,Trey'Dez Green,LSU,TE,"6'6""",240,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,32.0,1,{'DraftTek': 32.0}
+33,33,--,Trevor Lauck,Iowa,OT,"6'5""",310,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,33.0,1,{'DraftTek': 33.0}
+34,34,▲ +5,Cayden Green,Missouri,OT,"6'5""",324,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,34.0,1,{'DraftTek': 34.0}
+35,35,▼ -5,Will Heldt,Clemson,EDGE,"6'5""",260,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,35.0,1,{'DraftTek': 35.0}
+36,36,--,Nick Marsh,Indiana,WR,"6'3""",203,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,36.0,1,{'DraftTek': 36.0}
+37,37,--,Tae Johnson,Notre Dame,S,"6'2""",195,RSO,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,37.0,1,{'DraftTek': 37.0}
+38,38,--,Reed Harris,Arizona State,WR,"6'4""",217,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,38.0,1,{'DraftTek': 38.0}
+39,39,▲ +3,Carter Smith,Indiana,OT,"6'5""",313,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,39.0,1,{'DraftTek': 39.0}
+40,40,--,Ryan Wingo,Texas,WR,"6'2""",214,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,40.0,1,{'DraftTek': 40.0}
+41,41,--,Omarion Miller,Arizona State,WR,"6'2""",210,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,41.0,1,{'DraftTek': 41.0}
+42,42,▼ -11,Julian Sayin,Ohio State,QB,"6'1""",208,RSO,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,42.0,1,{'DraftTek': 42.0}
+43,43,--,David Stone,Oklahoma,DL3T,"6'3""",310,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,43.0,1,{'DraftTek': 43.0}
+44,44,--,Bryant Wesco Jr.,Clemson,WR,"6'2""",190,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,44.0,1,{'DraftTek': 44.0}
+45,45,▲ +12,Kewan Lacy,Ole Miss,RB,"5'10""",210,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,45.0,1,{'DraftTek': 45.0}
+46,46,--,Justin Scott,Miami (FL),DL3T,"6'3""",304,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,46.0,1,{'DraftTek': 46.0}
+47,47,--,Quincy Rhodes Jr.,Arkansas,EDGE,"6'5""",275,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,47.0,1,{'DraftTek': 47.0}
+48,48,▲ +30,K.J. Duff,Rutgers,WR,"6'5""",219,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,48.0,1,{'DraftTek': 48.0}
+49,49,▼ -5,Melvin Siani,Texas,OT,"6'6""",313,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,49.0,1,{'DraftTek': 49.0}
+50,50,--,John Henry Daley,Michigan,EDGE,"6'4""",255,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,50.0,1,{'DraftTek': 50.0}
+51,51,--,LaNorris Sellers,South Carolina,QB,"6'3""",240,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,51.0,1,{'DraftTek': 51.0}
+52,52,--,Boubacar Traore,Notre Dame,EDGE,"6'4""",250,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,52.0,1,{'DraftTek': 52.0}
+53,53,--,Princewill Umanmielen,LSU,EDGE,"6'4""",245,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,53.0,1,{'DraftTek': 53.0}
+54,54,▲ +10,Jordan Ross,LSU,EDGE,"6'4""",245,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,54.0,1,{'DraftTek': 54.0}
+55,55,▲ +19,Koi Perich,Oregon,S,"6'1""",200,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,55.0,1,{'DraftTek': 55.0}
+56,56,--,Samson Okunlola,Miami (FL),OG,"6'6""",330,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,56.0,1,{'DraftTek': 56.0}
+57,57,--,Zabien Brown,Alabama,CB,"6'0""",192,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,57.0,1,{'DraftTek': 57.0}
+58,58,▼ -11,Austin Siereveld,Ohio State,OG,"6'5""",325,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,58.0,1,{'DraftTek': 58.0}
+59,59,▲ +3,Devan Thompkins,Alabama,DL3T,"6'5""",300,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,59.0,1,{'DraftTek': 59.0}
+60,60,--,Sammy Brown,Clemson,ILB,"6'2""",235,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,60.0,1,{'DraftTek': 60.0}
+61,61,--,Clev Lubin,Louisville,EDGE,"6'3""",255,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,61.0,1,{'DraftTek': 61.0}
+62,62,--,Wyatt Young,Oklahoma State,WR,"6'0""",195,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,62.0,1,{'DraftTek': 62.0}
+63,63,▲ +207,Austin Simmons,Missouri,QB,"6'4""",215,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,63.0,1,{'DraftTek': 63.0}
+64,64,--,Jacarrius Peak,South Carolina,OT,"6'4""",308,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,64.0,1,{'DraftTek': 64.0}
+65,65,--,Luke Reynolds,Virginia Tech,TE,"6'4""",250,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,65.0,1,{'DraftTek': 65.0}
+66,66,--,Ryan Coleman-Williams,Alabama,WR,"6'0""",178,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,66.0,1,{'DraftTek': 66.0}
+67,67,▲ +8,Bear Alexander,Oregon,DL3T,"6'3""",302,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,67.0,1,{'DraftTek': 67.0}
+68,68,--,Rasheem Biles,Texas,OLB,"6'1""",220,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,68.0,1,{'DraftTek': 68.0}
+69,69,--,Kyngstonn Viliamu-Asa,Notre Dame,ILB,"6'3""",230,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,69.0,1,{'DraftTek': 69.0}
+70,70,--,Ty Benefield,LSU,S,"6'2""",204,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,70.0,1,{'DraftTek': 70.0}
+71,72,--,Corey Myrick,Clemson,S,"6'2""",200,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,72.0,1,{'DraftTek': 72.0}
+72,73,--,Jayden Maiava,USC,QB,"6'4""",230,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,73.0,1,{'DraftTek': 73.0}
+73,74,▼ -31,Jelani McDonald,Texas,S,"6'2""",199,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,74.0,1,{'DraftTek': 74.0}
+74,75,--,O.J. Frederique Jr.,Miami (FL),CB,"6'0""",185,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,75.0,1,{'DraftTek': 75.0}
+75,76,--,Iapani Laloulu,Oregon,OC,"6'2""",329,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,76.0,1,{'DraftTek': 76.0}
+76,77,▲ +24,Tavion Gadson,Kentucky,DL3T,"6'5""",298,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,77.0,1,{'DraftTek': 77.0}
+77,78,--,Kingston Lopa,California,S,"6'5""",210,RSO,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,78.0,1,{'DraftTek': 78.0}
+78,79,▼ -10,Ahmad Hardy,Missouri,RB,"5'9""",210,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,79.0,1,{'DraftTek': 79.0}
+79,80,--,P.J. Williams,SMU,OT,"6'5""",313,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,80.0,1,{'DraftTek': 80.0}
+80,81,--,Isaac Brown,Louisville,RB,"5'9""",190,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,81.0,1,{'DraftTek': 81.0}
+81,82,▲ +48,Xavier Gilliam,Tennessee,DL3T,"6'2""",305,RSO,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,82.0,1,{'DraftTek': 82.0}
+82,83,--,Jayden Jackson,Oklahoma,DL1T,"6'2""",322,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,83.0,1,{'DraftTek': 83.0}
+83,84,▲ +7,Sam Leavitt,LSU,QB,"6'2""",205,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,84.0,1,{'DraftTek': 84.0}
+84,85,--,Suntarine Perkins,Ole Miss,OLB,"6'1""",220,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,85.0,1,{'DraftTek': 85.0}
+85,86,--,Jyaire Hill,Michigan,CB,"6'1""",190,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,86.0,1,{'DraftTek': 86.0}
+86,87,--,Mario Craver,Texas A&M,WRS,"5'9""",165,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,87.0,1,{'DraftTek': 87.0}
+87,88,--,Terrance Carter Jr.,Texas Tech,TE,"6'2""",245,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,88.0,1,{'DraftTek': 88.0}
+88,89,NEW,Jide Abasiri,USC,DL5T,"6'5""",280,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,89.0,1,{'DraftTek': 89.0}
+89,90,--,Lance Heard,Kentucky,OT,"6'5""",330,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,90.0,1,{'DraftTek': 90.0}
+90,91,--,Jackson Bennee,Utah,S,"6'0""",190,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,91.0,1,{'DraftTek': 91.0}
+91,92,--,Anthonie Knapp,Notre Dame,OG,"6'4""",300,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,92.0,1,{'DraftTek': 92.0}
+92,93,--,Junior Sherrill,Vanderbilt,WR,"5'11""",203,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,93.0,1,{'DraftTek': 93.0}
+93,94,--,Wendell Gregory,Kansas State,EDGE,"6'3""",245,RSO,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,94.0,1,{'DraftTek': 94.0}
+94,95,▲ +8,Peter Clarke,Temple,TE,"6'6""",272,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,95.0,1,{'DraftTek': 95.0}
+95,96,--,Teitum Tuioti,Oregon,EDGE,"6'2""",263,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,96.0,1,{'DraftTek': 96.0}
+96,97,--,Bray Hubbard,Alabama,S,"6'2""",213,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,97.0,1,{'DraftTek': 97.0}
+97,98,--,Jamari Sharpe,Indiana,CB,"6'1""",187,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,98.0,1,{'DraftTek': 98.0}
+98,99,--,Luke Montgomery,Ohio State,OG,"6'4""",312,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,99.0,1,{'DraftTek': 99.0}
+99,100,▲ +5,Braelin Moore,LSU,OC,"6'2""",300,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,100.0,1,{'DraftTek': 100.0}
+100,101,--,Chris Peal,Syracuse,CB,"6'1""",200,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,101.0,1,{'DraftTek': 101.0}
+101,102,--,Zach Lutmer,Iowa,S,"6'0""",205,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,102.0,1,{'DraftTek': 102.0}
+102,103,--,Drew Azzopardi,Washington,OT,"6'6""",315,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,103.0,1,{'DraftTek': 103.0}
+103,104,--,Evan Tengesdahl,Cincinnati,OG,"6'3""",320,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,104.0,1,{'DraftTek': 104.0}
+104,105,--,Ben Roberts,Texas Tech,ILB,"6'3""",240,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,105.0,1,{'DraftTek': 105.0}
+105,106,--,Whit Weeks,LSU,ILB,"6'2""",225,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,106.0,1,{'DraftTek': 106.0}
+106,107,--,Taylor Wein,Oklahoma,DL5T,"6'4""",276,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,107.0,1,{'DraftTek': 107.0}
+107,108,--,Brandon Baker,Texas,OG,"6'4""",308,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,108.0,1,{'DraftTek': 108.0}
+108,109,--,Jaylen McClain,Ohio State,S,"6'0""",201,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,109.0,1,{'DraftTek': 109.0}
+109,110,▲ +19,Mark Fletcher Jr.,Miami (FL),RB,"6'1""",225,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,110.0,1,{'DraftTek': 110.0}
+110,111,--,Anto Saka,Texas A&M,EDGE,"6'3""",255,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,111.0,1,{'DraftTek': 111.0}
+111,112,▼ -61,Christian Alliegro,Ohio State,ILB,"6'4""",240,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,112.0,1,{'DraftTek': 112.0}
+112,113,--,Keon Sabb,Alabama,S,"6'1""",204,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,113.0,1,{'DraftTek': 113.0}
+113,114,--,Drake Lindsey,Minnesota,QB,"6'4""",230,RSO,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,114.0,1,{'DraftTek': 114.0}
+114,115,--,Jermaine Mathews Jr.,Ohio State,CB,"5'11""",190,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,115.0,1,{'DraftTek': 115.0}
+115,116,--,Hollywood Smothers,Texas,RB,"5'11""",195,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,116.0,1,{'DraftTek': 116.0}
+116,117,▲ +22,Tyrique Tucker,Indiana,DL3T,"6'0""",302,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,117.0,1,{'DraftTek': 117.0}
+117,118,--,Eli Bowen,Oklahoma,CBN,"5'9""",183,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,118.0,1,{'DraftTek': 118.0}
+118,119,▲ +16,Amare Ferrell,Indiana,S,"6'2""",202,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,119.0,1,{'DraftTek': 119.0}
+119,120,--,Deuce Alexander,Ole Miss,WR,"6'0""",180,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,120.0,1,{'DraftTek': 120.0}
+120,121,▼ -24,Justice Haynes,Georgia Tech,RB,"5'10""",210,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,121.0,1,{'DraftTek': 121.0}
+121,122,--,Benjamin Brahmer,Penn State,TE,"6'6""",255,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,122.0,1,{'DraftTek': 122.0}
+122,123,--,Francis Brewu,Notre Dame,DL5T,"6'2""",280,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,123.0,1,{'DraftTek': 123.0}
+123,124,--,Ezra Christensen,Colorado,DL5T,"6'2""",280,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,124.0,1,{'DraftTek': 124.0}
+124,125,--,L.J. Martin,BYU,RB,"6'2""",220,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,125.0,1,{'DraftTek': 125.0}
+125,126,--,John Nestor,Minnesota,CB,"6'0""",205,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,126.0,1,{'DraftTek': 126.0}
+126,127,▲ +9,Andrew Rappleyea,Penn State,TE,"6'4""",242,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,127.0,1,{'DraftTek': 127.0}
+127,128,--,Brice Pollock,Texas Tech,CB,"6'0""",195,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,128.0,1,{'DraftTek': 128.0}
+128,129,--,Adam Trick,Texas Tech,EDGE,"6'4""",249,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,129.0,1,{'DraftTek': 129.0}
+129,130,--,D.J. McKinney,Notre Dame,CB,"6'2""",180,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,130.0,1,{'DraftTek': 130.0}
+130,131,▲ +9,Isaiah Sategna III,Oklahoma,WRS,"5'10""",182,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,131.0,1,{'DraftTek': 131.0}
+131,132,--,Mario Landino,Indiana,DL5T,"6'4""",284,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,132.0,1,{'DraftTek': 132.0}
+132,133,--,Elijah Paige,USC,OT,"6'7""",320,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,133.0,1,{'DraftTek': 133.0}
+133,134,▼ -26,Nate Frazier,Georgia,RB,"5'10""",205,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,134.0,1,{'DraftTek': 134.0}
+134,135,--,Nyck Harbor,South Carolina,WR,"6'5""",235,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,135.0,1,{'DraftTek': 135.0}
+135,136,▲ +22,Ethan O'Connor,Miami (FL),CB,"6'1""",180,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,136.0,1,{'DraftTek': 136.0}
+136,137,--,Payton Pierce,Ohio State,OLB,"6'1""",223,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,137.0,1,{'DraftTek': 137.0}
+137,138,--,Mateen Ibirogba,Texas Tech,DL3T,"6'3""",296,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,138.0,1,{'DraftTek': 138.0}
+138,139,--,Carson Hinzman,Ohio State,OC,"6'4""",300,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,139.0,1,{'DraftTek': 139.0}
+139,140,▲ +29,DeSean Bishop,Tennessee,RB,"5'9""",208,RJR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,140.0,1,{'DraftTek': 140.0}
+140,141,--,Kip Lewis,Oklahoma,OLB,"6'1""",227,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,141.0,1,{'DraftTek': 141.0}
+141,142,▲ +45,Mike Matthews,Tennessee,WR,"6'1""",200,JR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,142.0,1,{'DraftTek': 142.0}
+142,143,--,Drayk Bowen,Notre Dame,ILB,"6'2""",235,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,143.0,1,{'DraftTek': 143.0}
+143,144,▲ +36,Earl Little Jr.,Ohio State,S,"6'1""",199,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,144.0,1,{'DraftTek': 144.0}
+144,145,--,Blake Frazier,Michigan,OT,"6'5""",295,RSO,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,145.0,1,{'DraftTek': 145.0}
+145,146,--,Andrew Sprague,Michigan,OT,"6'7""",315,RSO,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,146.0,1,{'DraftTek': 146.0}
+146,147,--,Peyton Bowen,Oklahoma,S,"6'0""",201,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,147.0,1,{'DraftTek': 147.0}
+147,148,--,Raylen Wilson,Georgia,ILB,"6'1""",235,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,148.0,1,{'DraftTek': 148.0}
+148,149,--,Christian Gray,Notre Dame,CB,"6'0""",190,SR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,149.0,1,{'DraftTek': 149.0}
+149,150,--,McKale Boley,Virginia,OG,"6'4""",316,RSR,https://www.drafttek.com/2027-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-2027-Page-1.asp,150.0,1,{'DraftTek': 150.0}
