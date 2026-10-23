@@ -1561,3 +1561,8 @@ td,th{padding:7px 8px;font-size:12px;}
 @media (max-width:700px){
 .profileGrid{grid-template-columns:1fr;}
 }
+/* Two teams: caps sit just above and below the track so a tie never hides one. */
+.teamCompare .pctRow{padding:9px 0;}
+.teamCompare .pctMarker{width:22px;height:22px;}
+.teamCompare .pctMarker0{transform:translate(-50%,-85%);}
+.teamCompare .pctMarker1{transform:translate(-50%,-15%);}
