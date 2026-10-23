@@ -130,7 +130,7 @@ def baseline_projections(history: pd.DataFrame, opponents: pd.DataFrame) -> pd.D
     """`naive` and `v3_ratio` for every skill player, via the real
     production functions so the comparison indicts the shipped code
     rather than a paraphrase of it."""
-    skill = nfl_rush_rec.compute_skill_rolling_stats(history)
+    skill = nfl_rush_rec.compute_skill_rolling_stats(history, config.NFL_PROP_PRIOR_SEASON_WEIGHT)
     ordered = history.sort_values(["season", "week"], ascending=False)
     latest_team = ordered.groupby("player_id", as_index=False).first()[["player_id", "team"]]
     players = skill.merge(latest_team, on="player_id", how="left").merge(opponents, on="team", how="left")

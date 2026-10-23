@@ -1,3 +1,4 @@
+import os
 import sys
 import types
 
@@ -283,3 +284,69 @@ def test_fetch_all_sources_isolates_one_sources_failure_from_the_others(monkeypa
 
     assert list(results["Working"]["player_name"]) == ["Real Player"]
     assert results["Broken"].empty
+
+
+def test_next_draft_year_rolls_over_after_the_april_draft():
+    import datetime
+    assert nfl_draft_sources.next_draft_year(datetime.date(2026, 10, 23)) == 2027
+    assert nfl_draft_sources.next_draft_year(datetime.date(2027, 3, 1)) == 2027
+    assert nfl_draft_sources.next_draft_year(datetime.date(2027, 4, 30)) == 2027
+    assert nfl_draft_sources.next_draft_year(datetime.date(2027, 5, 1)) == 2028
+
+
+def test_clean_prospect_name_drops_the_school_suffix():
+    assert nfl_draft_sources.clean_prospect_name("Fernando Mendoza (Indiana)") == "Fernando Mendoza"
+    assert nfl_draft_sources.clean_prospect_name("Akheem Mesidor (Miami") == "Akheem Mesidor"
+    assert nfl_draft_sources.clean_prospect_name("Dani Dennis-Sutton ()") == "Dani Dennis-Sutton"
+    assert nfl_draft_sources.clean_prospect_name("Caleb Downs") == "Caleb Downs"
+
+
+def test_current_class_only_drops_already_drafted_players_across_name_spellings():
+    drafted = frozenset({nfl_draft_sources._name_key(n) for n in ["Rueben Bain", "K.C. Concepcion"]})
+    board = pd.DataFrame({"rank": [1, 2, 3, 4, 5], "player_name": [
+        "Rueben Bain Jr. (Miami)", "KC Concepcion", "Arch Manning (Texas)", "Jeremiah Smith (Ohio State)", "Dante Moore"]})
+
+    left = nfl_draft_sources.current_class_only(board, drafted)
+
+    assert left["player_name"].tolist() == ["Arch Manning", "Jeremiah Smith", "Dante Moore"]
+    assert left["rank"].tolist() == [3, 4, 5]
+
+
+def test_current_class_only_skips_a_source_still_on_last_years_class():
+    drafted = frozenset({nfl_draft_sources._name_key(n) for n in ["Fernando Mendoza", "David Bailey", "Arvell Reese"]})
+    board = pd.DataFrame({"rank": [1, 2, 3, 4], "player_name": [
+        "Fernando Mendoza (Indiana)", "David Bailey", "Arvell Reese (Ohio State)", "Isaiah World (Oregon)"]})
+    assert nfl_draft_sources.current_class_only(board, drafted).empty
+
+
+def test_drafttek_defaults_to_the_next_draft_year(monkeypatch):
+    seen = []
+
+    def _get(url, timeout=None, headers=None):
+        seen.append(url)
+        raise RuntimeError("offline")
+
+    monkeypatch.setitem(sys.modules, "requests", _fake_requests_module(_get))
+    monkeypatch.setattr(nfl_draft_sources, "next_draft_year", lambda today=None: 2027)
+    nfl_draft_sources.fetch_drafttek_big_board()
+    assert "2027-NFL-Draft-Big-Board" in seen[0] and "Prospects-2027" in seen[0]
+
+
+def test_run_nfl_draft_board_clears_a_stale_board(tmp_path, monkeypatch):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "run_nfl_draft_board", os.path.join(os.path.dirname(__file__), "..", "scripts", "run_nfl_draft_board.py"))
+    script = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(script)
+    monkeypatch.setattr(nfl_draft_sources, "already_drafted",
+                        lambda draft_year=None: frozenset({"fernando mendoza", "david bailey"}))
+    path = tmp_path / "nfl_draft_board.csv"
+
+    pd.DataFrame({"consensus_rank": [1, 2], "player_name": ["Fernando Mendoza", "David Bailey"]}).to_csv(path, index=False)
+    script.clear_stale_board(str(path))
+    cleared = pd.read_csv(path)
+    assert cleared.empty and list(cleared.columns) == ["consensus_rank", "player_name"]
+
+    pd.DataFrame({"consensus_rank": [1], "player_name": ["Arch Manning"]}).to_csv(path, index=False)
+    script.clear_stale_board(str(path))
+    assert pd.read_csv(path)["player_name"].tolist() == ["Arch Manning"]

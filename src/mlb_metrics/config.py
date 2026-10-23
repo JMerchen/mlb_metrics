@@ -2014,12 +2014,27 @@ NFL_PROP_MIN_USAGE = {
 # Out/Doubtful leave their target/carry share to the active players
 # (nfl_prop_projections.apply_teammate_availability), and players ruled
 # out are off the board.
-NFL_PROP_MODEL_VERSION = "v5"
+#
+# Bumped to v6 (2026-10-23): last season's games count half as much as
+# this season's (NFL_PROP_PRIOR_SEASON_WEIGHT).
+NFL_PROP_MODEL_VERSION = "v6"
 # Share of a newly-out teammate's target/carry share handed to the active
 # players in his position group (WR/TE together, RBs), split in
 # proportion to their own share. 1.0 is a full proportional handoff;
 # 2024 and 2025 replays both put the realized effect at 0.59-0.72 of it.
 NFL_PROP_VACATED_USAGE_STRENGTH = 0.65
+# Weight of a game from before the current season, relative to this
+# season's, in every prop projection's recency weighting
+# (nfl_prop_projections._recency_weights) and the board's "his average"
+# (nfl_rush_rec / nfl_passing rolling stats). User request (2026-10-23):
+# last season should count for less - a player hurt then, or one for whom
+# something clicked, should be judged mostly on this season.
+# Replayed on 2024 and 2025, weeks 2-8 and 9-18 (backtest_nfl_prop_projections),
+# against 1.0 (both seasons alike): at 0.5 the projections' average miss
+# fell 0.50% (better in 14 of 16 season/category/span cells, most in the
+# early weeks), "his average" predicted 0.31% better, and the over/under
+# hit rate held (+0.17 points). 0.75 helped less; 0.35 about the same.
+NFL_PROP_PRIOR_SEASON_WEIGHT = 0.5
 
 # Minimum share of their own team's real season snaps a player must have
 # taken THIS season to appear on the props board at all

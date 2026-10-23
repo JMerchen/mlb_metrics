@@ -494,3 +494,12 @@ def test_unavailable_players_are_the_out_and_doubtful_ones():
     report = pd.DataFrame({"gsis_id": ["a", "b", "c", None], "report_status": ["Out", "Doubtful", "Questionable", "Out"]})
     assert nfl_prop_projections.unavailable_players(report) == {"a", "b"}
     assert nfl_prop_projections.unavailable_players(None) == set()
+
+
+def test_recency_weights_discount_games_from_before_the_latest_season(monkeypatch):
+    monkeypatch.setattr(config, "NFL_PROP_PRIOR_SEASON_WEIGHT", 0.5)
+    ranked = pd.Series([0, 1, 2])
+    seasons = pd.Series([2026, 2026, 2025])
+    weights = nfl_prop_projections._recency_weights(ranked, [(None, 1.0)], seasons)
+    assert weights.tolist() == [1.0, 1.0, 0.5]
+    assert nfl_prop_projections._recency_weights(ranked, [(None, 1.0)]).tolist() == [1.0, 1.0, 1.0]
