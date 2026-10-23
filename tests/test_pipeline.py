@@ -679,3 +679,28 @@ def test_run_resolves_game_picks_across_two_runs(monkeypatch, tmp_path):
     current_row = by_version[by_version["model_version"] == pipeline.config.GAME_PICK_MODEL_VERSION].iloc[0]
     assert current_row["n_bets_advised"] == 1
     assert current_row["bets_won"] == 1
+
+
+def test_beat_the_streak_export_stops_at_the_regular_season_and_flags_season_over(tmp_path, monkeypatch):
+    import datetime
+    from mlb_metrics import config, pipeline
+    monkeypatch.setattr(config, "REGULAR_SEASON_END", datetime.date(2026, 9, 27))
+    rows = []
+    for day, hit in (("2026-09-26", 1.0), ("2026-09-27", 1.0), ("2026-10-12", None)):
+        rows.append({"date": day, "key_mlbam": 1, "name": "Steven Kwan", "rank": 1, "predicted_probability": 0.8,
+                     "metric": "Game_Hit_Probability", "probability": 0.8, "Matchup_Hit_Probability": 0.8,
+                     "Model_Hit_Probability": None, "actual_hit": hit, "at_bats": 4 if hit is not None else None,
+                     "model_version": config.HITTER_MODEL_VERSION})
+    log_path = tmp_path / "predictions.csv"
+    pd.DataFrame(rows).to_csv(log_path, index=False)
+
+    pipeline.write_beat_the_streak_export(str(log_path), str(tmp_path), datetime.date(2026, 10, 23))
+
+    picks = pd.read_csv(tmp_path / "beat_the_streak_picks.csv")
+    summary = pd.read_csv(tmp_path / "beat_the_streak_summary.csv")
+    assert picks["date"].max() == "2026-09-27"            # the playoff pick is left out
+    assert bool(summary.loc[0, "season_over"]) is True
+    assert summary.loc[0, "season_end"] == "2026-09-27"
+
+    pipeline.write_beat_the_streak_export(str(log_path), str(tmp_path), datetime.date(2026, 9, 27))
+    assert bool(pd.read_csv(tmp_path / "beat_the_streak_summary.csv").loc[0, "season_over"]) is False

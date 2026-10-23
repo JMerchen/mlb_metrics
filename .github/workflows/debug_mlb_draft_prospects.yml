@@ -1,0 +1,30 @@
+name: Debug MLB draft prospects feed
+
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: "Draft years to query, space-separated (default 2026 2027)."
+        required: false
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pandas
+
+      - name: Print the feed and the fetcher's reading of it
+        run: |
+          python scripts/debug_mlb_draft_prospects.py ${{ inputs.years }}
