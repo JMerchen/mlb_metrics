@@ -92,6 +92,12 @@ WAVE_TRIALS_PER_GAME = 3.5
 # blows up to 0.9468 on the small-sample rows this constant targets.
 WAVE_SHRINKAGE_STRENGTH = 50.0
 
+# WAVE and CAVE (Game_Hit_Probability): a window a hitter has no at-bats in
+# (hurt, benched, no lefties lately) takes his next-longer window's rate
+# instead of counting as zero - see hitters.blend_windows. Backtested in
+# scripts/backtest_window_carry_forward.py.
+HITTER_WINDOW_CARRY_FORWARD = False
+
 # PAVE (pitcher hits-allowed rate, converted from a per-PA rate to a
 # per-AB rate by excluding walks/HBP only - NOT strikeouts, which are
 # real at-bats; see pitchers.py's module docstring for the real bug this

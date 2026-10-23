@@ -131,7 +131,7 @@ def blend_windows(
     return result, full_counts
 
 
-def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None, carry_forward: bool = False) -> pd.DataFrame:
+def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None, carry_forward: bool | None = None) -> pd.DataFrame:
     """Recency-weighted at-bat hit rate vs L/R pitching, converted to a
     per-game hit probability. Returns key_mlbam, WAVE, WAVE_L, WAVE_R,
     l_at_bat, r_at_bat, probability, probability_L, probability_R,
@@ -161,6 +161,7 @@ def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None, carr
     1-(1-rate)**trials transform (valid, since that transform is
     strictly increasing over [0,1])."""
     strength = config.WAVE_SHRINKAGE_STRENGTH if shrinkage_strength is None else shrinkage_strength
+    carry_forward = config.HITTER_WINDOW_CARRY_FORWARD if carry_forward is None else carry_forward
     league_rate = helpers.is_hit(dt["events"]).sum() / len(dt) if len(dt) else 0.0
     stat_fns = {"hit": lambda df: helpers.is_hit(df["events"])}
     rate_fns = {"rate": lambda agg: helpers.shrink_rate(agg["hit"], agg["n"], league_rate, strength)}
@@ -577,7 +578,7 @@ def compute_plate_discipline(all_pitches: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_game_hit_probability(
-    data_with_game_id: pd.DataFrame, shrinkage_strength: float | None = None, carry_forward: bool = False
+    data_with_game_id: pd.DataFrame, shrinkage_strength: float | None = None, carry_forward: bool | None = None
 ) -> pd.DataFrame:
     """Rate of *games* (not at-bats) with >=1 hit, blended across windows.
     This is the closest existing analog to a Beat-the-Streak pick probability.
@@ -600,6 +601,7 @@ def compute_game_hit_probability(
     of `shrinkage_strength` - see compute_wave's own docstring for the
     same reasoning."""
     strength = config.GAME_HIT_PROB_SHRINKAGE_STRENGTH if shrinkage_strength is None else shrinkage_strength
+    carry_forward = config.HITTER_WINDOW_CARRY_FORWARD if carry_forward is None else carry_forward
     completed = data_with_game_id[data_with_game_id["events"].isin(config.COUNTED_EVENTS)][
         ["game_date", "batter", "events", "game_id"]
     ].copy()
