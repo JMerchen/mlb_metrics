@@ -306,7 +306,7 @@ def _skill_category_edges(
     what that defense allows to opposing WRs, a TE's against opposing
     TEs, never one blanket team-wide number dominated by whichever
     position gets the most real volume league-wide."""
-    skill_rolling = nfl_rush_rec.compute_skill_rolling_stats(weekly_df)
+    skill_rolling = nfl_rush_rec.compute_skill_rolling_stats(weekly_df, config.NFL_PROP_PRIOR_SEASON_WEIGHT)
     names = _latest_player_names(weekly_df)
     opponents = nfl_matchup.team_opponents(current_week_schedule_df)
 
@@ -426,7 +426,7 @@ def _passing_category_edges(
     ordered = weekly_df.sort_values(["season", "week"], ascending=False)
     latest_info = ordered.groupby("player_id", as_index=False).first()[["player_id", "team", "position"]]
 
-    qb_rolling = nfl_passing.compute_qb_rolling_stats(weekly_df)
+    qb_rolling = nfl_passing.compute_qb_rolling_stats(weekly_df, config.NFL_PROP_PRIOR_SEASON_WEIGHT)
     players = qb_rolling.merge(names, on="player_id", how="left").merge(latest_info, on="player_id", how="left")
     players = players.merge(opponents, on="team", how="left")
 

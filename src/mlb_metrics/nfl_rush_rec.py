@@ -47,14 +47,23 @@ def _rank_by_recency(weekly_df: pd.DataFrame) -> pd.DataFrame:
     return ordered.assign(_recency_rank=ordered.groupby("player_id").cumcount())
 
 
-def _window_agg(ranked_df: pd.DataFrame, games_back) -> pd.DataFrame:
+def _window_agg(ranked_df: pd.DataFrame, games_back, prior_season_weight: float = 1.0) -> pd.DataFrame:
+    """Per-player sums of STAT_COLS and the game count over the window.
+    With `prior_season_weight` below 1, each game from before the latest
+    season counts that much (in the sums and the count alike), so the
+    per-game rate leans on this season."""
     window_df = ranked_df if games_back is None else ranked_df[ranked_df["_recency_rank"] < games_back]
-    return window_df.groupby("player_id", as_index=False).agg(
-        games=("game_id", "nunique"), **{col: (col, "sum") for col in STAT_COLS}
-    )
+    if prior_season_weight == 1.0:
+        return window_df.groupby("player_id", as_index=False).agg(
+            games=("game_id", "nunique"), **{col: (col, "sum") for col in STAT_COLS}
+        )
+    latest = ranked_df["season"].max()
+    weight = window_df["season"].lt(latest).map({True: prior_season_weight, False: 1.0})
+    weighted = window_df[STAT_COLS].mul(weight, axis=0).assign(games=weight, player_id=window_df["player_id"])
+    return weighted.groupby("player_id", as_index=False)[["games", *STAT_COLS]].sum()
 
 
-def compute_skill_rolling_stats(weekly_df: pd.DataFrame) -> pd.DataFrame:
+def compute_skill_rolling_stats(weekly_df: pd.DataFrame, prior_season_weight: float = 1.0) -> pd.DataFrame:
     """One row per RB/WR/TE (weekly_df filtered to position in
     SKILL_POSITIONS): per-game rates for each of STAT_COLS (named
     `<col>_per_game`), blended across config.NFL_SKILL_WINDOWS, plus
@@ -69,7 +78,9 @@ def compute_skill_rolling_stats(weekly_df: pd.DataFrame) -> pd.DataFrame:
 
     `weekly_df` may span multiple seasons - windows are purely games-back
     over each player's own rows, season boundaries don't reset or
-    interrupt them."""
+    interrupt them. `prior_season_weight` (default 1.0, all games alike)
+    counts each game from before the latest season at that weight - the
+    props board passes config.NFL_PROP_PRIOR_SEASON_WEIGHT."""
     skill_df = weekly_df[weekly_df["position"].isin(SKILL_POSITIONS)].copy()
     skill_df["fumbles_lost"] = skill_df["rushing_fumbles_lost"] + skill_df["receiving_fumbles_lost"]
     ranked = _rank_by_recency(skill_df)
@@ -78,7 +89,7 @@ def compute_skill_rolling_stats(weekly_df: pd.DataFrame) -> pd.DataFrame:
     full_games = None
 
     for games_back, weight in config.NFL_SKILL_WINDOWS:
-        agg = _window_agg(ranked, games_back)
+        agg = _window_agg(ranked, games_back, prior_season_weight)
         base = agg[["player_id"]]
         for col in STAT_COLS:
             rate = (agg[col] / agg["games"]).where(agg["games"] > 0, 0)
@@ -86,7 +97,8 @@ def compute_skill_rolling_stats(weekly_df: pd.DataFrame) -> pd.DataFrame:
             key = f"{col}_per_game"
             blended[key] = contribution if blended[key] is None else blended[key].add(contribution, fill_value=0)
         if games_back is None:
-            full_games = agg[["player_id", "games"]]
+            # The plain game count, whatever the season weighting.
+            full_games = _window_agg(ranked, None)[["player_id", "games"]]
 
     result = pd.DataFrame(blended)
     result.index.name = "player_id"

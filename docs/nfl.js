@@ -676,7 +676,8 @@ formatted,
 async function loadNflDraftBoard(){
 try{
 const draftBoard = await loadCSV("./data/nfl_draft_board.csv")
-buildConsensusTable(draftBoard, "nflDraftBoardTable")
+buildConsensusTable(draftBoard, "nflDraftBoardTable",
+"The big boards for the next NFL draft haven't been published yet - this board fills in once they are.")
 }catch(e){
 console.log("no nfl_draft_board.csv yet", e)
 buildConsensusTable([], "nflDraftBoardTable")

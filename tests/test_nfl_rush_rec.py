@@ -97,3 +97,26 @@ def test_compute_skill_rolling_stats_min_games_qualifier_count_is_exposed():
 
     assert result.loc["rb1", "games"] == 1
     assert result.loc["rb1", "games"] < config.NFL_SKILL_MIN_GAMES
+
+
+def test_compute_skill_rolling_stats_prior_season_weight_leans_on_this_season(monkeypatch):
+    from mlb_metrics import config
+    monkeypatch.setattr(config, "NFL_SKILL_WINDOWS", [(None, 1.0)])
+    rows = []
+    for season, week, yards in [(2025, 17, 100.0), (2025, 18, 100.0), (2026, 1, 40.0), (2026, 2, 40.0)]:
+        rows.append({"player_id": "wr1", "position": "WR", "season": season, "week": week,
+                     "game_id": f"{season}_{week}", "receiving_yards": yards})
+    weekly = pd.DataFrame(rows)
+    for col in nfl_rush_rec.STAT_COLS:
+        if col not in weekly.columns:
+            weekly[col] = 0.0
+    weekly["rushing_fumbles_lost"] = 0.0
+    weekly["receiving_fumbles_lost"] = 0.0
+
+    equal = nfl_rush_rec.compute_skill_rolling_stats(weekly).iloc[0]
+    halved = nfl_rush_rec.compute_skill_rolling_stats(weekly, prior_season_weight=0.5).iloc[0]
+
+    assert equal["receiving_yards_per_game"] == pytest.approx(70.0)
+    # (100 + 100) * 0.5 + 40 + 40 over 0.5 + 0.5 + 1 + 1 games
+    assert halved["receiving_yards_per_game"] == pytest.approx(180.0 / 3.0)
+    assert halved["games"] == 4   # the plain count

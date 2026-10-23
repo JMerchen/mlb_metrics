@@ -51,7 +51,9 @@ row (no promotion needed), but its name column is called "Prospect", not
 matched as a real fallback too."""
 
 import datetime
+import functools
 import io
+import re
 
 import pandas as pd
 
@@ -64,6 +66,71 @@ _REQUEST_HEADERS = {
 
 def _empty() -> pd.DataFrame:
     return pd.DataFrame(columns=["rank", "player_name"])
+
+
+def next_draft_year(today: datetime.date | None = None) -> int:
+    """The NFL draft these prospects are for. The draft is held in late
+    April, so from May on the next one is the following year's - using
+    the calendar year (as this module did until 2026-10-23) kept serving
+    the class that had already been drafted all autumn."""
+    today = today or datetime.date.today()
+    return today.year + 1 if today.month >= 5 else today.year
+
+
+def clean_prospect_name(name) -> str:
+    """"Fernando Mendoza (Indiana)" -> "Fernando Mendoza": FantasyPros
+    appends the school (sometimes without the closing parenthesis), which
+    kept its rows from matching DraftTek's and listed every player twice."""
+    return re.sub(r"\s*\(.*$", "", str(name)).strip()
+
+
+def _name_key(name) -> str:
+    """Comparison key for names across sources: no school suffix,
+    punctuation, generational suffix, or case."""
+    key = re.sub(r"[^a-z ]", "", clean_prospect_name(name).lower().replace("-", " "))
+    key = re.sub(r"\b(jr|sr|ii|iii|iv|v)\b", "", key)
+    return re.sub(r"\s+", " ", key).strip()
+
+
+@functools.lru_cache(maxsize=None)
+def already_drafted(draft_year: int | None = None, years_back: int = 3) -> frozenset:
+    """Name keys of players picked in the drafts before `draft_year`
+    (nflverse's draft picks). Empty if the picks can't be fetched - then
+    nothing is filtered rather than the board failing."""
+    draft_year = next_draft_year() if draft_year is None else draft_year
+    try:
+        import nflreadpy
+
+        picks = nflreadpy.load_draft_picks(seasons=list(range(draft_year - years_back, draft_year))).to_pandas()
+    except Exception as exc:
+        print(f"[nfl_draft_sources] couldn't load past draft picks ({exc}); not filtering drafted players.")
+        return frozenset()
+    return frozenset(_name_key(n) for n in picks["pfr_player_name"].dropna())
+
+
+# A source where most names were already drafted is still showing last
+# year's class; its leftovers are that class's undrafted players, not
+# prospects, so the whole source sits out.
+STALE_BOARD_DRAFTED_SHARE = 0.5
+
+
+def current_class_only(board: pd.DataFrame, drafted: frozenset) -> pd.DataFrame:
+    """Cleans a source's names and drops anyone already drafted - or the
+    whole source when it is plainly last year's board - so nothing stale
+    reaches the consensus."""
+    if board is None or board.empty or "player_name" not in board.columns:
+        return board
+    board = board.copy()
+    board["player_name"] = board["player_name"].map(clean_prospect_name)
+    keep = ~board["player_name"].map(_name_key).isin(drafted)
+    dropped = int((~keep).sum())
+    if dropped / len(board) > STALE_BOARD_DRAFTED_SHARE:
+        print(f"[nfl_draft_sources] {dropped} of {len(board)} players were already drafted - "
+              f"this source is still on last year's class; skipping it.")
+        return _empty()
+    if dropped:
+        print(f"[nfl_draft_sources] dropped {dropped} of {len(board)} already-drafted players.")
+    return board[keep].reset_index(drop=True)
 
 
 def _first_table_with_columns(tables, required_columns: set) -> pd.DataFrame | None:
@@ -132,7 +199,7 @@ def fetch_drafttek_big_board(season: int = None, pages: int = 1, url: str = None
     real, explicit escape hatch if this real URL pattern ever breaks),
     matching mlb_draft_sources.fetch_d1baseball_college_draft's own
     `url`-override precedent."""
-    season = datetime.date.today().year if season is None else season
+    season = next_draft_year() if season is None else season
     base_url = url or f"https://www.drafttek.com/{season}-NFL-Draft-Big-Board/Top-NFL-Draft-Prospects-{season}-Page-1.asp"
 
     frames = []
@@ -219,9 +286,17 @@ def fetch_fantasypros_big_board(url: str = None) -> pd.DataFrame:
     return result
 
 
+def _current_class(fetch):
+    """A fetcher limited to the class still to be drafted."""
+    def fetcher():
+        return current_class_only(fetch(), already_drafted())
+    fetcher.__name__ = fetch.__name__
+    return fetcher
+
+
 SOURCE_FETCHERS = {
-    "DraftTek": fetch_drafttek_big_board,
-    "FantasyPros": fetch_fantasypros_big_board,
+    "DraftTek": _current_class(fetch_drafttek_big_board),
+    "FantasyPros": _current_class(fetch_fantasypros_big_board),
 }
 
 

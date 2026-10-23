@@ -226,7 +226,7 @@ def apply_teammate_availability(
     return players.drop(columns="_group")
 
 
-def _recency_weights(ranked: pd.Series, windows) -> pd.Series:
+def _recency_weights(ranked: pd.Series, windows, seasons: pd.Series = None) -> pd.Series:
     """Per-row weight from the same (games_back, weight) window structure
     `config.NFL_SKILL_WINDOWS` and friends already use, where `ranked` is
     a 0-based recency rank (0 = most recent game).
@@ -240,6 +240,11 @@ def _recency_weights(ranked: pd.Series, windows) -> pd.Series:
     attempt-weighted, which is what a per-play rate means. With the
     default [(None, 0.20), (8, 0.30), (4, 0.50)] a row's weight decays
     1.00 -> 0.50 -> 0.20 as it ages past the 4- and 8-game marks.
+
+    `seasons` (each row's season) additionally scales every game from
+    before the latest season by config.NFL_PROP_PRIOR_SEASON_WEIGHT (user
+    request, 2026-10-23: a player hurt last year, or one for whom
+    something has clicked, should be judged mostly on this season).
     """
     weights = pd.Series(0.0, index=ranked.index)
     for games_back, weight in windows:
@@ -247,6 +252,8 @@ def _recency_weights(ranked: pd.Series, windows) -> pd.Series:
             weights += weight
         else:
             weights += np.where(ranked < games_back, weight, 0.0)
+    if seasons is not None and len(seasons):
+        weights = weights * np.where(seasons < seasons.max(), config.NFL_PROP_PRIOR_SEASON_WEIGHT, 1.0)
     return weights
 
 
@@ -399,7 +406,7 @@ def compute_team_volume(weekly_df: pd.DataFrame) -> pd.DataFrame:
     )
     ordered = team_week.sort_values(["season", "week"], ascending=False)
     ordered["_recency_rank"] = ordered.groupby("team").cumcount()
-    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_SKILL_WINDOWS)
+    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_SKILL_WINDOWS, ordered["season"])
 
     ordered["_wt_targets"] = ordered["targets"] * ordered["_weight"]
     ordered["_wt_carries"] = ordered["carries"] * ordered["_weight"]
@@ -452,7 +459,7 @@ def compute_player_usage(weekly_df: pd.DataFrame) -> pd.DataFrame:
 
     ordered = scoped.sort_values(["season", "week"], ascending=False)
     ordered["_recency_rank"] = ordered.groupby("player_id").cumcount()
-    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_SKILL_WINDOWS)
+    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_SKILL_WINDOWS, ordered["season"])
 
     ordered["_wt_target_share"] = ordered["_target_share"] * ordered["_weight"]
     ordered["_wt_carry_share"] = ordered["_carry_share"] * ordered["_weight"]
@@ -512,7 +519,7 @@ def compute_player_efficiency(weekly_df: pd.DataFrame) -> pd.DataFrame:
 
     ordered = scoped.sort_values(["season", "week"], ascending=False)
     ordered["_recency_rank"] = ordered.groupby("player_id").cumcount()
-    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_SKILL_WINDOWS)
+    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_SKILL_WINDOWS, ordered["season"])
 
     for column in (RECEIVING_ATTEMPT_COLUMN, "receptions", "receiving_yards", RUSHING_ATTEMPT_COLUMN, "rushing_yards"):
         ordered[f"_wt_{column}"] = ordered[column].fillna(0.0) * ordered["_weight"]
@@ -584,7 +591,7 @@ def compute_position_defense_per_play_rates(weekly_df: pd.DataFrame) -> pd.DataF
 
     ordered = defense_game.sort_values(["season", "week"], ascending=False)
     ordered["_recency_rank"] = ordered.groupby(["opponent_team", "position"]).cumcount()
-    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_DEFENSE_WINDOWS)
+    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_DEFENSE_WINDOWS, ordered["season"])
 
     for column in stat_columns:
         ordered[f"_wt_{column}"] = ordered[column].fillna(0.0) * ordered["_weight"]
@@ -790,7 +797,7 @@ def compute_team_pass_volume(weekly_df: pd.DataFrame) -> pd.DataFrame:
 
     ordered = team_week.sort_values(["season", "week"], ascending=False)
     ordered["_recency_rank"] = ordered.groupby("team").cumcount()
-    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_SKILL_WINDOWS)
+    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_SKILL_WINDOWS, ordered["season"])
     ordered["_wt_attempts"] = ordered["attempts"] * ordered["_weight"]
     ordered["_wt_faced"] = ordered["attempts_faced"] * ordered["_weight"]
 
@@ -828,7 +835,7 @@ def compute_pass_defense_per_play_rates(weekly_df: pd.DataFrame) -> pd.DataFrame
 
     ordered = defense_game.sort_values(["season", "week"], ascending=False)
     ordered["_recency_rank"] = ordered.groupby("team").cumcount()
-    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_DEFENSE_WINDOWS)
+    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_DEFENSE_WINDOWS, ordered["season"])
     for column in ("attempts", "passing_yards", "sacks"):
         ordered[f"_wt_{column}"] = ordered[column].fillna(0.0) * ordered["_weight"]
 
@@ -884,7 +891,7 @@ def project_qb_stats(
 
     ordered = scoped.sort_values(["season", "week"], ascending=False)
     ordered["_recency_rank"] = ordered.groupby("player_id").cumcount()
-    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_QB_WINDOWS)
+    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_QB_WINDOWS, ordered["season"])
     ordered["_wt_share"] = ordered["_attempt_share"] * ordered["_weight"]
     for column in ("attempts", "passing_yards"):
         ordered[f"_wt_{column}"] = ordered[column].fillna(0.0) * ordered["_weight"]
@@ -988,7 +995,7 @@ def compute_sacks_allowed_per_game(weekly_df: pd.DataFrame) -> pd.DataFrame:
     )
     ordered = team_week.sort_values(["season", "week"], ascending=False)
     ordered["_recency_rank"] = ordered.groupby("team").cumcount()
-    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_DEFENSE_WINDOWS)
+    ordered["_weight"] = _recency_weights(ordered["_recency_rank"], config.NFL_DEFENSE_WINDOWS, ordered["season"])
     ordered["_wt_sacks"] = ordered["sacks"].fillna(0.0) * ordered["_weight"]
     ordered["_wt_attempts"] = ordered["attempts"].fillna(0.0) * ordered["_weight"]
 
