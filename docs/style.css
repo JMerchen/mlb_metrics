@@ -1322,3 +1322,242 @@ td,th{padding:7px 8px;font-size:12px;}
 .leanAxisScale span:nth-child(2){display:none;}
 .propViewSwitch{margin-left:0;}
 }
+
+
+/* ---- MLB Picks & stats (docs/mlb_render.js) ----
+   Better / worse than average is the same diverging pair as the NFL props
+   (blue / orange, validated against --bg-card) with a grey midpoint.
+   Pictures sit over a text fallback (initials, team code) that hides once
+   the picture loads. */
+:root{
+--mlb-better:#3987e5;
+--mlb-worse:#d95926;
+--mlb-mid:#5b6270;
+}
+.mlbAvatar,.mlbLogo{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:none;vertical-align:middle;overflow:hidden;}
+.mlbAvatar{border-radius:50%;background:var(--bg-hover);border:1px solid var(--border-strong);color:var(--text-dim);font-weight:700;}
+.mlbAvatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
+.mlbLogo img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;}
+.mlbAvatar.loaded > span,.mlbLogo.loaded > span{visibility:hidden;}
+.mlbLogo > span{font-weight:800;color:var(--text-dim);letter-spacing:-.02em;}
+.mlbAvatar-xs{width:24px;height:24px;font-size:9px;}
+.mlbAvatar-sm{width:34px;height:34px;font-size:11px;}
+.mlbAvatar-md{width:48px;height:48px;font-size:14px;}
+.mlbAvatar-lg{width:68px;height:68px;font-size:18px;}
+.mlbAvatar-xl{width:104px;height:104px;font-size:26px;}
+.mlbLogo-xs{width:16px;height:16px;font-size:6px;}
+.mlbLogo-sm{width:22px;height:22px;font-size:8px;}
+.mlbLogo-md{width:34px;height:34px;font-size:11px;}
+.mlbLogo-lg{width:60px;height:60px;font-size:18px;}
+
+.vizCard{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin:0 0 16px;}
+.vizHead{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;margin-bottom:12px;font-size:14px;}
+.vizSub{font-size:13px;color:var(--text-dim);flex-basis:100%;}
+.vizKey{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px;font-size:12px;color:var(--text-dim);font-weight:400;}
+.vizKey i{display:inline-block;margin-left:8px;}
+.vizKey .keyBar{width:10px;height:10px;border-radius:2px;background:var(--mlb-better);}
+.vizKey .keyReset{width:8px;height:8px;border-radius:50%;background:var(--mlb-worse);}
+.vizKey .keyBetter{width:10px;height:10px;border-radius:2px;background:var(--mlb-better);}
+.vizKey .keyWorse{width:10px;height:10px;border-radius:2px;background:var(--mlb-worse);}
+.vizKey .keyTick{width:2px;height:12px;background:var(--text);}
+.vizKey .keyDot{width:9px;height:9px;border-radius:50%;background:var(--mlb-better);}
+.vizTip{position:absolute;z-index:50;display:none;max-width:280px;background:var(--bg);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:6px 10px;font-size:12.5px;line-height:1.4;color:var(--text);pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.4);}
+.dim{color:var(--text-dim);}
+.srOnly{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
+[data-tip]:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+
+/* Streak chart: one column per day. */
+.streakPlot{position:relative;height:150px;margin:18px 0 0 24px;}
+.streakCols{position:absolute;inset:0;display:flex;align-items:stretch;gap:1px;}
+.streakCol{position:relative;flex:1 1 0;min-width:0;display:flex;align-items:flex-end;outline-offset:0;}
+.streakCol:hover .streakBar{filter:brightness(1.3);}
+.streakBar{position:relative;width:100%;background:var(--mlb-better);border-radius:3px 3px 0 0;}
+.streakLabel{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:3px;font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;}
+.streakCol:last-child .streakLabel{left:auto;right:0;transform:none;}
+.streakReset{position:absolute;left:50%;bottom:-9px;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:var(--mlb-worse);}
+.streakGrid{position:absolute;left:0;right:0;border-top:1px solid var(--border);}
+.streakGrid i{position:absolute;left:-24px;top:-8px;width:18px;text-align:right;font-style:normal;font-size:10px;color:var(--text-dim);}
+.streakTicks{position:relative;height:16px;margin:14px 0 0 24px;}
+.vegasPlot + .streakTicks{margin:6px 34px 0 0;}
+.streakTick{position:absolute;top:0;font-size:11px;color:var(--text-dim);}
+
+/* Beat the Streak pick cards and day log. */
+.playerPicks{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin-bottom:10px;}
+.playerPick{display:flex;gap:14px;align-items:center;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;}
+.playerPickBody{min-width:0;display:grid;gap:4px;justify-items:start;}
+.playerPickName{font-size:17px;font-weight:700;}
+.playerPickTeam{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text-dim);}
+.playerPickChance{font-size:13px;color:var(--text-dim);}
+.playerPickChance b{font-size:20px;color:var(--text);}
+.resultChip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;border:1px solid var(--border-strong);border-radius:999px;padding:2px 10px;color:var(--text);}
+.resultGood{color:var(--success);}
+.resultBad{color:var(--danger);}
+.resultNeutral{color:var(--text-dim);}
+.logList{display:grid;gap:2px;margin-bottom:8px;}
+.logRow{display:grid;grid-template-columns:58px 1fr 92px;align-items:center;gap:10px;padding:6px 10px;border-radius:var(--radius-sm);background:var(--bg-raised);}
+.logDate{font-size:13px;color:var(--text-dim);font-variant-numeric:tabular-nums;}
+.logPicks{display:flex;flex-wrap:wrap;gap:6px 14px;min-width:0;}
+.logPick{display:inline-flex;align-items:center;gap:6px;font-size:13px;min-width:0;}
+.logName{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.logWeak{font-size:10px;color:var(--text-dim);border:1px solid var(--border-strong);border-radius:999px;padding:0 6px;}
+.logEmpty{font-size:13px;color:var(--text-dim);}
+.resultIcon{font-weight:700;font-size:14px;}
+.logStreak{font-size:12px;text-align:right;color:var(--text-dim);font-variant-numeric:tabular-nums;}
+.logStreakReset{color:var(--text);}
+.showMore{margin:4px 0 0;}
+
+/* Ranked lists: hit streaks, best chances, leaderboards. */
+.rankList{display:grid;gap:2px;}
+.rankRow{display:grid;grid-template-columns:20px 34px minmax(0,1fr) minmax(70px,32%) 58px;align-items:center;gap:10px;padding:6px 8px;border-radius:var(--radius-sm);}
+.rankRow:nth-child(odd){background:var(--bg-raised);}
+.rankRow:hover{background:var(--bg-hover);}
+.rankNo{font-size:12px;color:var(--text-dim);text-align:right;font-variant-numeric:tabular-nums;}
+.rankWho{display:grid;min-width:0;}
+.rankWho b{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rankWho small{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-dim);white-space:nowrap;overflow:hidden;}
+.rankValue{font-size:14px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;}
+.pips{display:flex;flex-wrap:wrap;gap:3px;}
+.pips i{width:8px;height:8px;border-radius:50%;background:var(--success);}
+.chanceTrack{position:relative;display:block;height:10px;border-radius:5px;background:var(--bg-hover);}
+.chanceFill{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:var(--mlb-better);}
+.mlbMeter{position:relative;display:block;height:10px;}
+.mlbMeterMid{position:absolute;left:50%;top:-3px;bottom:-3px;width:1px;background:var(--border-strong);}
+.mlbMeterBar{position:absolute;top:0;bottom:0;border-radius:4px;}
+
+/* Percentile rows (team and player profiles). */
+.pctRow{display:grid;grid-template-columns:minmax(110px,38%) minmax(80px,1fr) minmax(64px,auto);align-items:center;gap:12px;padding:5px 0;}
+.pctLabel{font-size:13px;}
+.pctValue{font-size:13px;color:var(--text-dim);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.pctTrack{position:relative;display:block;height:8px;border-radius:4px;background:var(--bg-hover);margin:0 11px;}
+.pctFill{position:absolute;left:0;top:0;bottom:0;border-radius:4px;}
+.pctDot{position:absolute;top:50%;transform:translate(-50%,-50%);width:24px;height:24px;border-radius:50%;background:var(--bg-card);border:2px solid;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;color:var(--text);}
+.pctTrackCompare{height:4px;}
+.pctMid{position:absolute;left:50%;top:-6px;bottom:-6px;width:1px;background:var(--border-strong);}
+.pctMarker{position:absolute;top:50%;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:var(--bg-raised);border:2px solid var(--border-strong);display:flex;align-items:center;justify-content:center;}
+.pctMarker1{border-color:var(--accent);}
+.splitTrack{height:2px;background:var(--border-strong);}
+.splitAvg{position:absolute;top:-7px;width:2px;height:16px;margin-left:-1px;background:var(--text);}
+.splitDot{position:absolute;top:50%;width:12px;height:12px;border-radius:50%;transform:translate(-50%,-50%);border:2px solid var(--bg-card);}
+.profileGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:6px 32px;}
+.profileGroup{margin-bottom:8px;}
+.profileGroupTitle{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-dim);margin:8px 0 4px;padding-bottom:4px;border-bottom:1px solid var(--border);}
+.profileGroupTitle .vizKey{text-transform:none;letter-spacing:0;}
+
+/* Player lookup. */
+.lookupControls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;}
+.lookupControls input{flex:1 1 220px;max-width:360px;}
+.playerChoices{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;}
+.playerChoice{display:inline-flex;align-items:center;gap:8px;padding:4px 12px 4px 4px;border-radius:999px;}
+.playerChoice small{color:var(--text-dim);}
+.playerCardHead{display:flex;gap:18px;align-items:center;margin-bottom:12px;}
+.teamHeadName{font-size:22px;font-weight:700;}
+.teamHeadMeta{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;color:var(--text-dim);margin-top:2px;}
+.factChips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.factChip{font-size:12.5px;border:1px solid var(--border-strong);border-radius:999px;padding:3px 10px;color:var(--text-dim);}
+.factChip b{color:var(--text);}
+
+/* Starting pitcher duels. */
+.duelCards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;}
+.duelCard{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;display:grid;gap:10px;}
+.duelTitle{display:flex;align-items:center;gap:6px;font-weight:700;font-size:14px;}
+.duelTitle span{color:var(--text-dim);font-weight:400;}
+.duelSide{display:flex;gap:12px;align-items:center;}
+.duelWho{display:grid;gap:2px;min-width:0;flex:1;}
+.duelWho small{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-dim);}
+.duelStat{display:grid;gap:6px;font-size:12.5px;color:var(--text-dim);margin-top:2px;}
+.duelStat b{color:var(--text);}
+.duelStat .mlbMeter{width:160px;height:8px;}
+
+/* Game pick cards. */
+.gameCards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-bottom:10px;}
+.gameCard2{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:grid;gap:10px;}
+.gameCardBet{box-shadow:0 0 0 1px var(--accent);}
+.gameTeams{display:flex;align-items:center;gap:8px;}
+.gameTeam{display:flex;align-items:center;gap:8px;flex:1;min-width:0;font-size:15px;color:var(--text-dim);}
+.gameTeam span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.gameHome{justify-content:flex-end;text-align:right;}
+.gamePicked{color:var(--text);font-weight:700;}
+.gameAt{font-size:12px;color:var(--text-dim);}
+.winSplit{position:relative;display:flex;gap:2px;height:26px;margin-top:14px;}
+.winSeg{display:flex;align-items:center;padding:0 8px;background:var(--bg-hover);font-size:12px;color:var(--text-dim);overflow:hidden;}
+.winSeg:first-child{border-radius:6px 0 0 6px;}
+.winSeg:nth-child(2){border-radius:0 6px 6px 0;justify-content:flex-end;}
+.winSegPicked{background:var(--accent);color:var(--on-accent);}
+.winVegas{position:absolute;top:-6px;bottom:-4px;width:2px;margin-left:-1px;background:var(--text);}
+.winVegas i{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-style:normal;font-size:10px;color:var(--text-dim);white-space:nowrap;}
+.gameSay{font-size:13px;color:var(--text-dim);}
+.gameSay b{color:var(--text);}
+.gameFoot{display:flex;flex-wrap:wrap;align-items:center;gap:8px;}
+.gameBet{font-size:12px;font-weight:600;color:var(--accent);}
+.vizPair{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:0 16px;}
+.vegasPlot{position:relative;height:170px;margin-right:34px;}
+.vegasPlot svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible;}
+.vegasLine{fill:none;stroke:var(--mlb-better);stroke-width:2;vector-effect:non-scaling-stroke;stroke-linejoin:round;}
+.vegasZero{stroke:var(--border-strong);stroke-width:1;vector-effect:non-scaling-stroke;}
+.vegasZeroLabel{position:absolute;right:0;transform:translateY(4px);font-size:11px;color:var(--text-dim);}
+.vegasEnd{position:absolute;right:-34px;width:30px;transform:translateY(-50%);font-size:12px;font-weight:700;color:var(--text);}
+.vegasHit{position:absolute;top:0;bottom:0;}
+.vegasDot{position:absolute;display:none;width:10px;height:10px;border-radius:50%;background:var(--mlb-better);border:2px solid var(--bg-card);transform:translate(-50%,-50%);pointer-events:none;}
+.bucketRow{display:grid;grid-template-columns:minmax(110px,34%) 1fr 84px;align-items:center;gap:12px;padding:7px 0;}
+.bucketLabel{font-size:13px;}
+.bucketTrack{height:14px;}
+.bucketTick{position:absolute;top:-4px;bottom:-4px;width:2px;margin-left:-1px;background:var(--text);}
+.bucketValue{font-size:13px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums;}
+.bucketValue small{color:var(--text-dim);font-weight:400;}
+.gameLogRow{grid-template-columns:58px minmax(0,1.4fr) minmax(0,1fr) 24px;}
+.logGame{display:flex;align-items:center;gap:5px;font-size:13px;min-width:0;white-space:nowrap;overflow:hidden;}
+.logPickTeam{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+/* Teams. */
+.powerCols{display:grid;grid-template-columns:1fr 1fr;gap:0 24px;}
+.powerRow{display:grid;grid-template-columns:20px 16px minmax(0,1fr) 38% 46px;align-items:center;gap:8px;width:100%;padding:5px 8px;margin:0;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--text);font:inherit;font-size:13px;text-align:left;cursor:pointer;}
+.powerRow:hover{background:var(--bg-hover);}
+.powerPicked{background:var(--bg-hover);box-shadow:inset 3px 0 0 var(--accent);}
+.powerName{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.powerValue{text-align:right;font-variant-numeric:tabular-nums;color:var(--text-dim);}
+.teamHeads{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;margin-bottom:14px;}
+.teamHead{display:flex;align-items:center;gap:12px;}
+.teamHead + .teamVs + .teamHead .mlbLogo-lg{box-shadow:0 0 0 2px var(--accent);border-radius:50%;}
+.teamVs{color:var(--text-dim);font-size:13px;}
+
+@media (max-width:700px){
+.powerCols{grid-template-columns:1fr;}
+.rankRow{grid-template-columns:18px 34px minmax(0,1fr) 54px 46px;gap:8px;}
+.pctRow{grid-template-columns:minmax(96px,40%) 1fr minmax(56px,auto);gap:8px;}
+.logRow{grid-template-columns:48px 1fr 70px;gap:8px;padding:6px 8px;}
+.gameLogRow{grid-template-columns:48px minmax(0,1fr) 20px;}
+.gameLogRow .logPickTeam{grid-column:2;grid-row:2;}
+.gameLogRow .resultIcon{grid-row:1 / span 2;grid-column:3;}
+.profileGrid{grid-template-columns:1fr;}
+.playerCardHead{gap:12px;}
+.mlbAvatar-xl{width:80px;height:80px;}
+.teamHeadName{font-size:19px;}
+.streakPlot{height:120px;}
+}
+#teamResult{display:block;overflow:visible;}
+.pctScaleRow{padding:0 0 2px;}
+.pctScaleInner{display:flex;justify-content:space-between;margin:0 11px;font-size:10.5px;color:var(--text-dim);}
+.pctPair{display:inline-flex;align-items:center;gap:4px;margin-left:10px;}
+.teamCompare .profileGrid{grid-template-columns:repeat(auto-fit,minmax(440px,1fr));}
+.teamProfile .vizSub{margin:-4px 0 4px;}
+.rankValue{white-space:nowrap;}
+.rankRow{grid-template-columns:20px 34px minmax(0,1fr) minmax(70px,32%) minmax(58px,auto);}
+@media (max-width:700px){
+.teamCompare .profileGrid{grid-template-columns:1fr;}
+.rankRow{grid-template-columns:18px 34px minmax(0,1fr) 54px minmax(46px,auto);}
+.pctPair{margin-left:6px;}
+}
+/* Fixed value columns so every row's track lines up with the scale row. */
+.pctRow{grid-template-columns:minmax(110px,38%) minmax(80px,1fr) 78px;}
+.teamCompare .pctRow{grid-template-columns:minmax(110px,34%) minmax(80px,1fr) 148px;}
+@media (max-width:700px){
+.pctRow{grid-template-columns:minmax(96px,40%) 1fr 66px;}
+.teamCompare .pctRow{grid-template-columns:1fr 132px;row-gap:2px;}
+.teamCompare .pctLabel{grid-column:1 / -1;}
+.teamCompare .pctScaleRow > span:first-child{display:none;}
+.teamVs{display:none;}
+}
+.profileGrid{grid-template-columns:repeat(auto-fit,minmax(400px,1fr));}
+@media (max-width:700px){
+.profileGrid{grid-template-columns:1fr;}
+}

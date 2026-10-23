@@ -19,10 +19,9 @@ claude.ai URL. Ports the real docs/*.js/*.html/*.css almost verbatim
    live) - renamed to an `age`-prefixed set, verified to be the ONLY
    collision across the whole site (checked every id="" and every
    function used from an onclick/oninput attribute for duplicates).
-4. `playerImage`/`teamLogo` (real MLB headshot/logo CDN URLs) are
-   replaced with a local inline-SVG placeholder - an artifact page can't
-   load images from arbitrary external hosts either, so those would
-   otherwise silently 404.
+4. mlb_render.js's headshot/cap URL helpers (real MLB CDN URLs) return
+   "" - an artifact page can't load images from external hosts, so the
+   pictures fall back to initials and team codes instead of 404ing.
 5. `nfl_dfs_solver.js` is NOT ported: grepping the whole docs/ tree finds
    no page that actually loads it (no NFL DFS tab exists in nfl.html
    today - only its own test file references it) - it isn't part of the
@@ -62,20 +61,6 @@ def _load_bts_assistant_module():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
-
-# A generic, local, no-network placeholder - real player photos/team
-# logos come from external CDNs (img.mlbstatic.com, mlbstatic.com) an
-# artifact page can't load. One neutral silhouette works for both use
-# sites (playerImage/teamLogo both just interpolate this into an <img
-# src="...">, see _patch_app_js below).
-PLACEHOLDER_IMAGE = (
-    "data:image/svg+xml;base64,"
-    "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0"
-    "OCA0OCI+PGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iMjQiIGZpbGw9IiMyNjJiMzQiLz48"
-    "Y2lyY2xlIGN4PSIyNCIgY3k9IjE4IiByPSI4IiBmaWxsPSIjNmI2NDU5Ii8+PHBhdGggZD0i"
-    "TTggNDRjMC05IDcuMi0xNiAxNi0xNnMxNiA3IDE2IDE2IiBmaWxsPSIjNmI2NDU5Ii8+PC9z"
-    "dmc+"
-)
 
 
 def _records(df: pd.DataFrame) -> list:
@@ -142,35 +127,19 @@ def _patch_loadcsv(js: str, filename: str) -> str:
 
 
 def _patch_app_js(js: str) -> str:
-    js = _patch_loadcsv(js, "app.js")
-    # playerImage/teamLogo point at real external CDNs (img.mlbstatic.com,
-    # mlbstatic.com) an artifact page can't load - swap both for the
-    # local placeholder. Matches each function's exact real body (the
-    # `return \`https://...\`` line's real interpolation differs between
-    # the two, so patched separately) rather than a loose regex, so this
-    # raises loudly if either function's source ever changes shape.
-    player_image_old = (
-        'function playerImage(id){\n\n'
-        'if(\n!id\n){\n\n'
-        'return ""\n\n'
-        '}\n\n'
-        'return `https://img.mlbstatic.com/mlb-photos/image/upload/w_240,q_auto:best/v1/people/${String(id).trim()}/headshot/67/current`\n\n'
-        '}'
-    )
-    if player_image_old not in js:
-        raise ValueError("app.js: playerImage() body not found where expected - check the real source hasn't changed shape")
-    js = js.replace(player_image_old, f'function playerImage(id){{\nreturn id ? "{PLACEHOLDER_IMAGE}" : "";\n}}')
+    return _patch_loadcsv(js, "app.js")
 
-    start, end = _extract_balanced_function(js, "function teamLogo(team)", "app.js")
-    original = js[start:end]
-    ids_match = re.search(r"const ids = \{.*?\n\}", original, re.S)
-    if not ids_match:
-        raise ValueError("app.js: teamLogo()'s `ids` team-code table not found where expected")
-    new_team_logo = (
-        f"function teamLogo(team){{\n{ids_match.group(0)}\n"
-        f'return ids[String(team).trim().toUpperCase()] ? "{PLACEHOLDER_IMAGE}" : "";\n}}'
-    )
-    js = js[:start] + new_team_logo + js[end:]
+
+def _patch_mlb_render_js(js: str) -> str:
+    """mlb_render.js's headshot/cap URLs point at MLB's CDNs
+    (img.mlbstatic.com, mlbstatic.com), which an artifact page can't load.
+    Both return "" here instead, so every picture falls back to its text
+    (initials, team code) rather than a broken image. Matches each
+    function by its exact signature and raises if either has changed
+    shape."""
+    for signature in ("function mlbHeadshotUrl(id)", "function mlbLogoUrl(team)"):
+        start, end = _extract_balanced_function(js, signature, "mlb_render.js")
+        js = js[:start] + f'{signature}{{\nreturn ""\n}}' + js[end:]
     return js
 
 
@@ -193,6 +162,7 @@ def _patch_age_curves_js(js: str) -> str:
 
 
 PAGE_JS_PATCHERS = {
+    "mlb_render.js": _patch_mlb_render_js,
     "app.js": _patch_app_js,
     "dfs.js": lambda js: _patch_loadcsv(js, "dfs.js"),
     "nfl.js": lambda js: _patch_loadcsv(js, "nfl.js"),

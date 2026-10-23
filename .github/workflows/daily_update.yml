@@ -58,6 +58,10 @@ jobs:
           mkdir -p data/raw
           mkdir -p data/predictions
 
+      - name: Update season dates
+        run: |
+          python scripts/update_season_dates.py || echo "::warning::Kept the existing season dates"
+
       - name: Run model
         run: |
           python scripts/wave.py
@@ -87,7 +91,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add docs/data/ data/raw/ data/predictions/
+          git add docs/data/ data/raw/ data/predictions/ data/season_dates.json
 
           git commit -m "Daily update" || echo "No changes"
 

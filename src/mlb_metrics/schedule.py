@@ -232,4 +232,6 @@ def build_probable_pitchers_table(schedule_df: pd.DataFrame, pave: pd.DataFrame)
         table["name_first"].fillna("") + " " + table["name_last"].fillna("")
     ).str.strip()
 
-    return table[["date", "team", "opponent", "is_home", "pitcher_name"] + pitcher_cols]
+    # The starter's id even when he isn't in `pave`, for his headshot.
+    table["key_mlbam"] = table["probable_pitcher_key_mlbam"]
+    return table[["date", "team", "opponent", "is_home", "key_mlbam", "pitcher_name"] + pitcher_cols]
