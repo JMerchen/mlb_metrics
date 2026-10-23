@@ -31,11 +31,11 @@ not artifact-only. */
 
 <div class="brandRow">
 <svg class="brandMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-<path d="M16 2 A14 14 0 0 0 16 30 Z" fill="#f2a93c"/>
-<path d="M16 2 A14 14 0 0 1 16 30 Z" fill="#4caf6b"/>
-<path d="M10 6 C13 11, 13 21, 10 26" stroke="#0b0d10" stroke-width="1.6" fill="none"/>
-<path d="M19 16 L27 16" stroke="#0b0d10" stroke-width="1.6" fill="none"/>
-<path d="M21 14 L21 18 M23 14 L23 18 M25 14 L25 18" stroke="#0b0d10" stroke-width="1.2" fill="none"/>
+<path d="M16 2 A14 14 0 0 0 16 30 Z" fill="#ffffff"/>
+<path d="M16 2 A14 14 0 0 1 16 30 Z" fill="#8a5230"/>
+<path d="M10 6 C13 11, 13 21, 10 26" stroke="#c8102e" stroke-width="1.5" fill="none"/><path d="M10.9 9 L13.2 8.3 M12.1 13 L14.4 12.6 M12.3 17 L14.6 17.2 M11.7 21 L13.9 21.6" stroke="#c8102e" stroke-width="1" fill="none"/>
+<path d="M19 16 L27 16" stroke="#ffffff" stroke-width="1.6" fill="none"/>
+<path d="M21 14 L21 18 M23 14 L23 18 M25 14 L25 18" stroke="#ffffff" stroke-width="1.2" fill="none"/>
 </svg>
 <h1>Diamond &amp; Gridiron <span class="brandAccent">Metrics</span></h1>
 </div>
@@ -57,21 +57,26 @@ not artifact-only. */
 
 <div class="sportHeader">
 <svg class="sportMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-<circle cx="16" cy="16" r="14" fill="#f2a93c"/>
-<path d="M10 4 C14 10, 14 22, 10 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
-<path d="M22 4 C18 10, 18 22, 22 28" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
+<circle cx="16" cy="16" r="14" fill="#ffffff" stroke="#d9d4c7" stroke-width="1"/>
+<path d="M10 4 C14 10, 14 22, 10 28" stroke="#c8102e" stroke-width="1.6" fill="none"/><path d="M10.6 8.2 L13 7.4 M11.7 12 L14.1 11.5 M12.1 16 L14.6 16 M11.7 20 L14.1 20.5 M10.6 23.8 L13 24.6" stroke="#c8102e" stroke-width="1.1" fill="none"/>
+<path d="M22 4 C18 10, 18 22, 22 28" stroke="#c8102e" stroke-width="1.6" fill="none"/><path d="M21.4 8.2 L19 7.4 M20.3 12 L17.9 11.5 M19.9 16 L17.4 16 M20.3 20 L17.9 20.5 M21.4 23.8 L19 24.6" stroke="#c8102e" stroke-width="1.1" fill="none"/>
 </svg>
 <h2 class="sportHeading">MLB <span class="brandAccent">Metrics</span></h2>
 </div>
 
 <div class="tabGroup" id="mlbSubTabs">
-<button class="tabButton active" data-mlb-sub="predictive" onclick="selectMlbSubpage('predictive')">Predictive Metrics</button>
-<button class="tabButton" data-mlb-sub="dfs" onclick="selectMlbSubpage('dfs')">DFS Rankings</button>
+<button class="tabButton active" data-mlb-sub="predictive" onclick="selectMlbSubpage('predictive')">Picks</button>
+<button class="tabButton" data-mlb-sub="stats" onclick="selectMlbSubpage('stats')">Stats</button>
+<button class="tabButton" data-mlb-sub="dfs" onclick="selectMlbSubpage('dfs')">Fantasy (DFS)</button>
 <button class="tabButton" data-mlb-sub="age-curves" onclick="selectMlbSubpage('age-curves')">Age Curves</button>
 </div>
 
 <div id="mlb-predictive" class="mlbSubpage">
 <!--__INDEX_CONTENT__-->
+</div>
+
+<div id="mlb-stats" class="mlbSubpage" hidden>
+<!--__STATS_CONTENT__-->
 </div>
 
 <div id="mlb-dfs" class="mlbSubpage" hidden>
@@ -88,9 +93,9 @@ not artifact-only. */
 
 <div class="sportHeader">
 <svg class="sportMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
-<path d="M3 16 Q16 4 29 16 Q16 28 3 16 Z" fill="#4caf6b"/>
-<path d="M10.5 16 L21.5 16" stroke="#0b0d10" stroke-width="1.8" fill="none"/>
-<path d="M13.2 13.3 L13.2 18.7 M16 13.3 L16 18.7 M18.8 13.3 L18.8 18.7" stroke="#0b0d10" stroke-width="1.4" fill="none"/>
+<path d="M3 16 Q16 4 29 16 Q16 28 3 16 Z" fill="#8a5230"/>
+<path d="M10.5 16 L21.5 16" stroke="#ffffff" stroke-width="1.8" fill="none"/>
+<path d="M13.2 13.3 L13.2 18.7 M16 13.3 L16 18.7 M18.8 13.3 L18.8 18.7" stroke="#ffffff" stroke-width="1.4" fill="none"/>
 </svg>
 <h2 class="sportHeading">NFL <span class="brandAccent">Metrics</span></h2>
 </div>

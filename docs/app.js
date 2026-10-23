@@ -1,5 +1,7 @@
-// MLB "Picks & stats" page (predictive.html): loads the CSVs and wires
-// the DOM. The rendering itself lives in mlb_render.js.
+// MLB Picks (predictive.html) and Stats (stats.html) pages: loads the CSVs
+// and wires the DOM. The rendering itself lives in mlb_render.js. Each
+// section renders only when its element is on the page, so one script
+// serves both pages (and the full-site artifact, which holds both).
 
 async function loadCSV(path){
 
@@ -229,6 +231,15 @@ document.addEventListener("focusout", hide)
 window.addEventListener("scroll", hide, { passive: true })
 }
 
+function byId(id){
+return document.getElementById(id)
+}
+
+function setHtml(id, html){
+const el = byId(id)
+if(el){ el.innerHTML = html }
+}
+
 // ---- Data ----
 
 let wave = []
@@ -295,6 +306,7 @@ document.getElementById("playerResult").innerHTML = playerCardHtml(player, hitte
 
 function wirePlayerLookup(){
 const input = document.getElementById("playerSearch")
+if(!input){ return }
 input.addEventListener("input", searchPlayer)
 input.addEventListener("keydown", e => {
 if(e.key === "Enter"){
@@ -318,6 +330,7 @@ document.getElementById("playerChoices").innerHTML = ""
 // Open on someone rather than an empty card: the regular hitter (or
 // pitcher) the model likes most.
 function showDefaultPlayer(){
+if(!byId("playerResult")){ return }
 const hitter = document.getElementById("playerType").value === "wave"
 const pool = hitter ? qualifiedHitters : qualifiedPitchers
 const key = hitter ? "Game_Hit_Probability" : "PAVE"
@@ -330,6 +343,7 @@ showPlayer(0)
 // ---- Teams ----
 
 function renderTeams(){
+if(!byId("powerRankings")){ return }
 document.getElementById("powerRankings").innerHTML = powerRankingsHtml(confidence, selectedTeams)
 document.getElementById("teamResult").innerHTML = teamProfileHtml(selectedTeams, confidence)
 }
@@ -348,6 +362,7 @@ renderTeams()
 }
 
 function wireTeams(){
+if(!byId("powerRankings")){ return }
 document.getElementById("powerRankings").addEventListener("click", e => {
 const button = e.target.closest("[data-team]")
 if(!button){ return }
@@ -363,7 +378,6 @@ document.querySelectorAll("#btsTabs .tabButton").forEach(btn=>{
 btn.classList.toggle("active", btn.dataset.view === view)
 })
 document.getElementById("ourPicksSection").style.display = view === "ourPicks" ? "" : "none"
-document.getElementById("hitStreaksSection").style.display = view === "hitStreaks" ? "" : "none"
 document.getElementById("modelOddsSection").style.display = view === "modelOdds" ? "" : "none"
 }
 
@@ -415,6 +429,7 @@ more.onclick = () => renderStreakLog(limit + 30)
 }
 
 async function loadBeatTheStreak(){
+if(!byId("streakStats")){ return }
 const [summary, picks, progression] = await Promise.all([
 loadOptionalCSV("./data/beat_the_streak_summary.csv"),
 loadOptionalCSV("./data/beat_the_streak_picks.csv"),
@@ -505,6 +520,7 @@ el.innerHTML = todays.length ? todays.map(gamePickCardHtml).join("") : "No games
 }
 
 async function loadGamePicks(){
+if(!byId("gamePickStats")){ return }
 const [summary, byVersion, picks] = await Promise.all([
 loadOptionalCSV("./data/game_picks_summary.csv"),
 loadOptionalCSV("./data/game_picks_summary_by_version.csv"),
@@ -522,48 +538,151 @@ document.getElementById("gamePickCharts").innerHTML = versusVegasChartHtml(picks
 document.getElementById("gamePickHistoryTable").innerHTML = gameHistoryHtml(picks, 30)
 }
 
+// ---- Stats page: hitter table ----
+
+let hitterStats = []
+let hitterView = "season"
+let hitterSortKey = "hitChance"
+let hitterLimit = 40
+
+function renderHitterStats(){
+if(!byId("hitterStatsTable")){ return }
+const rows = hitterStatRows(qualifiedHitters, hitterStats, hitterView)
+const more = rows.length > hitterLimit
+? `<button class="showMore" id="hitterStatsMore">Show all ${rows.length} hitters</button>` : ""
+setHtml("hitterStatsTable", hitterStatsTableHtml(rows, hitterSortKey, hitterLimit, hitterView) + more)
+document.querySelectorAll("#hitterViewSwitch [data-hitter-view]").forEach(button => {
+button.classList.toggle("active", button.dataset.hitterView === hitterView)
+})
+}
+
+function wireHitterStats(){
+const el = byId("hitterStatsTable")
+if(!el){ return }
+el.addEventListener("click", e => {
+const head = e.target.closest("[data-sort]")
+if(head){ hitterSortKey = head.dataset.sort; renderHitterStats(); return }
+if(e.target.closest("#hitterStatsMore")){ hitterLimit = Infinity; renderHitterStats() }
+})
+byId("hitterViewSwitch").addEventListener("click", e => {
+const button = e.target.closest("[data-hitter-view]")
+if(button){ hitterView = button.dataset.hitterView; renderHitterStats() }
+})
+}
+
+// The Stats page shows hitter_stats.csv's WAVE and CAVE (which carry a
+// hitter's longer window into a recent one he sat out) and WOPS, so the
+// player card reads the same numbers as the table.
+function useSeasonViews(rows, stats){
+const byKey = {}
+stats.forEach(r => { byKey[playerKey(r.key_mlbam)] = r })
+rows.forEach(p => {
+const s = byKey[playerKey(p.key_mlbam)]
+if(!s){ return }
+p.WAVE = s.WAVE
+p.Game_Hit_Probability = s.CAVE
+p.WOPS = s.WOPS
+})
+}
+
+// ---- Stats page: team schedules ----
+// Picking a team crumples the sheet on show, then unfolds the new one
+// panel by panel (CSS animations in style.css; skipped when the reader
+// prefers reduced motion).
+
+let scheduleGames = []
+let scheduleTeam = ""
+const CRUMPLE_MS = 650
+const UNFOLD_MS = 1400
+let unfoldTimer = null
+
+function prefersReducedMotion(){
+return Boolean(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)
+}
+
+function showSchedule(team){
+const sheet = byId("scheduleSheet")
+if(!sheet){ return }
+scheduleTeam = team
+setHtml("schedulePicker", scheduleTeamPickerHtml([...new Set(scheduleGames.map(g => g.team))], team))
+const unfold = () => {
+sheet.classList.remove("crumpling", "unfolding")
+sheet.innerHTML = scheduleSheetHtml(scheduleGames, team)
+void sheet.offsetWidth
+sheet.classList.add("unfolding")
+// Once open, drop the animation (and its 3D layers) so the sheet is a
+// plain page again.
+clearTimeout(unfoldTimer)
+unfoldTimer = setTimeout(() => sheet.classList.remove("unfolding"), UNFOLD_MS)
+}
+if(sheet.childElementCount && !prefersReducedMotion()){
+sheet.classList.remove("unfolding")
+sheet.classList.add("crumpling")
+setTimeout(unfold, CRUMPLE_MS)
+}else{
+unfold()
+}
+}
+
+function wireSchedules(){
+const picker = byId("schedulePicker")
+if(!picker){ return }
+picker.addEventListener("click", e => {
+const button = e.target.closest("[data-sched-team]")
+if(button && button.dataset.schedTeam !== scheduleTeam){ showSchedule(button.dataset.schedTeam) }
+})
+}
+
 // ---- Everything that needs the player files ----
 
 async function loadAll(){
-const [waveRows, paveRows, confidenceRows, predictions, streaks, probables] = await Promise.all([
+const [waveRows, paveRows, confidenceRows, predictions, streaks, probables, statRows, schedule] = await Promise.all([
 loadOptionalCSV("./data/wave.csv"),
 loadOptionalCSV("./data/pave.csv"),
 loadOptionalCSV("./data/confidence.csv"),
 loadOptionalCSV("./data/hitter_hit_predictions.csv"),
 loadOptionalCSV("./data/hit_streaks.csv"),
-loadOptionalCSV("./data/probable_pitchers.csv"),
+byId("probablePitchersTable") ? loadOptionalCSV("./data/probable_pitchers.csv") : [],
+byId("hitterStatsTable") ? loadOptionalCSV("./data/hitter_stats.csv") : [],
+byId("scheduleSheet") ? loadOptionalCSV("./data/team_schedule.csv") : [],
 ])
 wave = waveRows
 pave = paveRows
 confidence = confidenceRows.sort((a, b) => String(a.team).localeCompare(String(b.team)))
 hitterHitPredictions = predictions
 hitStreaks = streaks
+hitterStats = statRows
+if(hitterStats.length){ useSeasonViews(wave, hitterStats) }
 qualifyPlayers()
 
-document.getElementById("hitStreaksTable").innerHTML = hitStreakListHtml(hitStreaks)
-document.getElementById("modelOddsTable").innerHTML = bestChancesHtml(hitterHitPredictions)
+setHtml("hitStreaksTable", hitStreakListHtml(hitStreaks))
+setHtml("modelOddsTable", bestChancesHtml(hitterHitPredictions))
 
 // Probable starters carry key_mlbam for the headshot; older files
 // without it are matched to pave.csv by name.
 const byName = {}
 pave.forEach(p => { byName[`${p.name_first} ${p.name_last}`] = p.key_mlbam })
-document.getElementById("probablePitchersTable").innerHTML =
-pitcherDuelsHtml(probables.map(r => r.key_mlbam ? r : Object.assign({}, r, { key_mlbam: byName[r.pitcher_name] || "" })))
+setHtml("probablePitchersTable",
+pitcherDuelsHtml(probables.map(r => r.key_mlbam ? r : Object.assign({}, r, { key_mlbam: byName[r.pitcher_name] || "" }))))
 
-document.getElementById("waveTable").innerHTML = hitterLeadersHtml(
-qualifiedHitters.slice().sort((a, b) => Number(b.Game_Hit_Probability) - Number(a.Game_Hit_Probability)))
-document.getElementById("paveTable").innerHTML = pitcherLeadersHtml(
-qualifiedPitchers.slice().sort((a, b) => Number(b.PAVE) - Number(a.PAVE)))
+renderHitterStats()
+setHtml("paveTable", pitcherLeadersHtml(
+qualifiedPitchers.slice().sort((a, b) => Number(b.PAVE) - Number(a.PAVE))))
 
 const top = confidence.reduce((best, r) => !best || Number(r.Confidence) > Number(best.Confidence) ? r : best, null)
 if(top && !selectedTeams.length){ selectedTeams = [top.team] }
 renderTeams()
 showDefaultPlayer()
+
+scheduleGames = schedule
+if(scheduleGames.length){ showSchedule(top && scheduleGames.some(g => g.team === top.team) ? top.team : scheduleGames[0].team) }
 }
 
 installVizTips()
 wirePlayerLookup()
 wireTeams()
+wireHitterStats()
+wireSchedules()
 
 // The pick cards need wave.csv for each player's team, so Beat the
 // Streak renders once the player files are in.

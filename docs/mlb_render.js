@@ -1,5 +1,5 @@
-// MLB "Picks & stats" page (predictive.html): headshots, logos, charts and
-// cards. Pure functions returning HTML strings so node tests can check
+// MLB Picks (predictive.html) and Stats (stats.html) pages: headshots,
+// logos, charts and cards. Pure functions returning HTML strings so node tests can check
 // them; app.js loads the CSVs and does the DOM wiring.
 //
 // Colour: one diverging pair for "better / worse than average" - blue and
@@ -60,9 +60,11 @@ const key = String(id ?? "").trim().replace(/\.0$/, "")
 return key ? `https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_120,q_auto:best/v1/people/${key}/headshot/67/current` : ""
 }
 
-function mlbLogoUrl(team){
+// Caps drawn for a dark background, or for a light one (the paper
+// schedule sheet) with onLight.
+function mlbLogoUrl(team, onLight = false){
 const id = MLB_TEAM_IDS[String(team ?? "").trim().toUpperCase()]
-return id ? `https://www.mlbstatic.com/team-logos/team-cap-on-dark/${id}.svg` : ""
+return id ? `https://www.mlbstatic.com/team-logos/team-cap-on-${onLight ? "light" : "dark"}/${id}.svg` : ""
 }
 
 function mlbInitials(name){
@@ -75,8 +77,8 @@ return `<span class="mlbAvatar mlbAvatar-${size}" aria-hidden="true"><span>${mlb
 url ? `<img src="${url}" alt="" loading="lazy" onload="this.parentNode.classList.add('loaded')" onerror="this.remove()">` : ""}</span>`
 }
 
-function mlbLogo(team, size = "sm"){
-const url = mlbLogoUrl(team)
+function mlbLogo(team, size = "sm", onLight = false){
+const url = mlbLogoUrl(team, onLight)
 return `<span class="mlbLogo mlbLogo-${size}" title="${mlbEsc(mlbTeam(team))}" aria-hidden="true"><span>${mlbEsc(team || "")}</span>${
 url ? `<img src="${url}" alt="" loading="lazy" onload="this.parentNode.classList.add('loaded')" onerror="this.remove()">` : ""}</span>`
 }
@@ -576,8 +578,9 @@ return `<div class="vizCard teamProfile${chosen.length > 1 ? " teamCompare" : ""
 // ---- Player lookup ----
 
 const HITTER_PERCENTILE_STATS = [
-["Game_Hit_Probability", "Chance of a hit in a game", "pct", 1],
-["WAVE", "Hit rate (recent games count more)", "pct1", 1],
+["Game_Hit_Probability", "CAVE (games with a hit)", "pct", 1],
+["WOPS", "WOPS (OPS)", "avg", 1],
+["WAVE", "WAVE (hit rate)", "avg", 1],
 ["xBA", "Expected batting average", "avg", 1],
 ["xwOBA", "Expected wOBA", "avg", 1],
 ["Exit_Velo", "Exit velocity", "mph", 1],
@@ -676,18 +679,6 @@ return matches.map((p, i) => `<button class="playerChoice" data-index="${i}">${m
 
 // ---- Leaderboards ----
 
-function hitterLeadersHtml(rows, limit = 15){
-if(!rows.length){ return "No data" }
-return `<div class="rankList">${rows.slice(0, limit).map((p, i) => {
-const name = `${p.name_first} ${p.name_last}`
-return `<div class="rankRow" data-tip="${mlbEsc(`${name}: ${mlbPct(p.Game_Hit_Probability, 1)} chance of a hit in a game, ${mlbPct(p.WAVE, 1)} hit rate`)}" tabindex="0">
-<span class="rankNo">${i + 1}</span>${mlbAvatar(p.key_mlbam, name, "sm")}
-<span class="rankWho"><b>${mlbEsc(name)}</b><small>${mlbLogo(p.team, "xs")} ${mlbEsc(mlbTeam(p.team))} · hit rate ${mlbPct(p.WAVE, 1)}</small></span>
-${mlbChanceBar(p.Game_Hit_Probability)}<span class="rankValue">${mlbPct(p.Game_Hit_Probability)}</span>
-</div>`
-}).join("")}</div>`
-}
-
 function pitcherLeadersHtml(rows, limit = 15){
 if(!rows.length){ return "No data" }
 return `<div class="rankList">${rows.slice(0, limit).map((p, i) => {
@@ -701,6 +692,168 @@ ${ratio === null ? "<span></span>" : mlbMeter(ratio - 1, false)}<span class="ran
 }).join("")}</div>`
 }
 
+// ---- Stats page: hitter table ----
+// WAVE, CAVE and WOPS are views of a hitter's season, each blended across
+// recent windows (hitter_views.py); "vs. pitchers faced" swaps in the
+// versions that credit hits off tough pitchers more.
+
+// Chance of at least one hit in 3.5 at-bats at a WAVE (an at-bat hit
+// rate): 1 - (1 - WAVE)^3.5.
+const HIT_CHANCE_AT_BATS = 3.5
+
+function hitChanceFromWave(wave){
+const n = mlbNum(wave)
+return n === null ? null : 1 - Math.pow(1 - n, HIT_CHANCE_AT_BATS)
+}
+
+// One row per hitter in `waveRows` (names, team) with hitter_stats.csv's
+// views, in the chosen view ("season" or "faced").
+function hitterStatRows(waveRows, statRows, view = "season"){
+const stats = {}
+;(statRows || []).forEach(r => { stats[String(r.key_mlbam).replace(/\.0$/, "")] = r })
+const suffix = view === "faced" ? "_adj" : ""
+return (waveRows || []).map(p => {
+const s = stats[String(p.key_mlbam).replace(/\.0$/, "")] || {}
+const wave = mlbNum(s[`WAVE${suffix}`]) ?? (view === "faced" ? null : mlbNum(p.WAVE))
+return {
+key_mlbam: p.key_mlbam, name: `${p.name_first} ${p.name_last}`, team: p.team,
+WAVE: wave, hitChance: hitChanceFromWave(wave),
+CAVE: mlbNum(s[`CAVE${suffix}`]) ?? (view === "faced" ? null : mlbNum(p.Game_Hit_Probability)),
+WOPS: mlbNum(s[`WOPS${suffix}`]),
+// The plain season numbers, to show how far the adjustment moved them.
+base: { WAVE: mlbNum(s.WAVE), CAVE: mlbNum(s.CAVE), WOPS: mlbNum(s.WOPS) },
+}
+})
+}
+
+// [key, heading, short heading for phones]
+const HITTER_STAT_COLUMNS = [
+["name", "Player", "Player"],
+["WAVE", "WAVE", "WAVE"],
+["hitChance", "Hit chance (3.5 AB)", "Hit %"],
+["CAVE", "CAVE", "CAVE"],
+["WOPS", "WOPS", "WOPS"],
+]
+
+const HITTER_STAT_TIPS = {
+WAVE: "WAVE: at-bat hit rate, recent games counting more",
+CAVE: "CAVE (Carried Average): share of games with a hit, recent games counting more",
+WOPS: "WOPS: OPS, recent games counting more",
+}
+
+function sortHitterStatRows(rows, key = "hitChance"){
+const sorted = rows.slice()
+if(key === "name"){ return sorted.sort((a, b) => a.name.localeCompare(b.name)) }
+return sorted.sort((a, b) => (b[key] ?? -Infinity) - (a[key] ?? -Infinity) || (b.WAVE ?? 0) - (a.WAVE ?? 0))
+}
+
+function mlbRate(value){
+return value === null || value === undefined ? "-" : value.toFixed(3).replace(/^0/, "")
+}
+
+// "+.004" under an adjusted value: how far "vs. pitchers faced" moved it.
+function adjustmentNote(value, base, format){
+if(value === null || base === null || base === undefined){ return "" }
+const delta = value - base
+const shown = format === "pct" ? `${Math.abs(Math.round(delta * 1000) / 10).toFixed(1)}%` : Math.abs(delta).toFixed(3).replace(/^0/, "")
+if(Number(shown.replace("%", "")) === 0){ return `<small class="adjNote">no change</small>` }
+return `<small class="adjNote">${delta > 0 ? "+" : "−"}${shown}</small>`
+}
+
+function hitterStatsTableHtml(rows, sortKey = "hitChance", limit = 40, view = "season"){
+if(!rows.length){ return "No hitters yet" }
+const faced = view === "faced"
+const head = HITTER_STAT_COLUMNS.map(([key, label, short]) =>
+`<th${key === "name" ? "" : ` class="num"`}${HITTER_STAT_TIPS[key] ? ` data-tip="${mlbEsc(HITTER_STAT_TIPS[key])}"` : ""}><button class="sortHead${sortKey === key ? " sorted" : ""}" data-sort="${key}"><span class="headLong">${label}</span><span class="headShort">${short}</span>${sortKey === key ? " ▼" : ""}</button></th>`).join("")
+const body = sortHitterStatRows(rows, sortKey).slice(0, limit).map((r, i) => `<tr>
+<td><span class="statWho"><span class="rankNo">${i + 1}</span>${mlbAvatar(r.key_mlbam, r.name, "sm")}<span class="rankWho"><b>${mlbEsc(r.name)}</b><small>${mlbLogo(r.team, "xs")} ${mlbEsc(mlbTeam(r.team))}</small></span></span></td>
+<td class="num"><b>${mlbRate(r.WAVE)}</b>${faced ? adjustmentNote(r.WAVE, r.base.WAVE) : ""}</td>
+<td class="num"><span class="statBar">${mlbChanceBar(r.hitChance)}<b>${mlbPct(r.hitChance)}</b></span></td>
+<td class="num"><b>${r.CAVE === null ? "-" : mlbPct(r.CAVE, 1)}</b>${faced ? adjustmentNote(r.CAVE, r.base.CAVE, "pct") : ""}</td>
+<td class="num"><b>${mlbRate(r.WOPS)}</b>${faced ? adjustmentNote(r.WOPS, r.base.WOPS) : ""}</td>
+</tr>`).join("")
+return `<div class="scrollbox statTableBox"><table class="statTable"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
+}
+
+// ---- Stats page: team schedule sheet ----
+
+// Pen colour for a game: green circles for wins, red crosses for losses,
+// from light (won or lost by 1) to deep (by 9 or more).
+const SCHEDULE_DEEPEST_MARGIN = 9
+
+function scheduleInk(result, runDiff){
+const margin = Math.min(SCHEDULE_DEEPEST_MARGIN, Math.max(1, Math.abs(Number(runDiff) || 1)))
+const t = (margin - 1) / (SCHEDULE_DEEPEST_MARGIN - 1)
+const mix = (a, b) => a.map((c, i) => Math.round(c + (b[i] - c) * t))
+const rgb = result === "W" ? mix([112, 192, 132], [8, 110, 46]) : mix([232, 132, 132], [160, 14, 18])
+return `rgb(${rgb.join(",")})`
+}
+
+// Each team's games grouped into its series, in order.
+function scheduleSeries(games, team){
+const series = []
+;(games || []).filter(g => g.team === team)
+.sort((a, b) => (mlbNum(a.game_no) || 0) - (mlbNum(b.game_no) || 0))
+.forEach(g => {
+const n = mlbNum(g.series)
+let current = series[series.length - 1]
+if(!current || current.n !== n){
+current = { n, opponent: g.opponent, home: String(g.home) === "1", games: [] }
+series.push(current)
+}
+current.games.push(g)
+})
+return series
+}
+
+function scheduleGameHtml(g){
+const win = g.result === "W"
+const ink = scheduleInk(g.result, g.run_diff)
+const where = String(g.home) === "1" ? "vs." : "at"
+const score = `${win ? "W" : "L"} ${g.runs_for}-${g.runs_against}`
+const tip = `${mlbShortDate(g.date)} ${where} ${mlbTeam(g.opponent)}: ${score}`
+const mark = win
+? `<ellipse cx="20" cy="20" rx="16.5" ry="15.5" transform="rotate(-12 20 20)" />`
+: `<path d="M7 8 L33 32 M33 7 L8 33" />`
+return `<span class="schedGame" data-tip="${mlbEsc(tip)}" tabindex="0" aria-label="${mlbEsc(tip)}">${mlbLogo(g.opponent, "md", true)}<svg viewBox="0 0 40 40" class="schedMark ${win ? "schedWin" : "schedLoss"}" style="stroke:${ink}" aria-hidden="true">${mark}</svg></span>`
+}
+
+// "Mar 26–28", or "Mar 30–Apr 1" across a month end.
+function seriesDates(first, last){
+const a = mlbShortDate(first), b = mlbShortDate(last)
+if(first === last){ return a }
+return a.split(" ")[0] === b.split(" ")[0] ? `${a}–${b.split(" ")[1]}` : `${a}–${b}`
+}
+
+// The whole season on one sheet: series in order, split into four
+// columns (panels the unfold animation opens one by one).
+function scheduleSheetHtml(games, team){
+const series = scheduleSeries(games, team)
+if(!series.length){ return `<div class="paperEmpty">No games for this team yet</div>` }
+const all = series.flatMap(s => s.games)
+const wins = all.filter(g => g.result === "W").length
+const diff = all.reduce((sum, g) => sum + (mlbNum(g.run_diff) || 0), 0)
+const won = series.filter(s => { const w = s.games.filter(g => g.result === "W").length; return w * 2 > s.games.length }).length
+const lost = series.filter(s => { const w = s.games.filter(g => g.result === "W").length; return w * 2 < s.games.length }).length
+const perColumn = Math.ceil(series.length / 4)
+const columns = [0, 1, 2, 3].map(c => series.slice(c * perColumn, (c + 1) * perColumn))
+const panel = (list, c) => `<div class="paperPanel" style="--panel:${c}">${list.map(s =>
+`<div class="schedSeries"><span class="schedDates">${seriesDates(s.games[0].date, s.games[s.games.length - 1].date)}<small>${s.home ? "home" : "away"}</small></span><span class="schedGames">${s.games.map(scheduleGameHtml).join("")}</span></div>`
+).join("")}</div>`
+return `<div class="paperHead">
+<div class="paperTeam">${mlbLogo(team, "lg", true)}<div><b>${mlbEsc(mlbTeam(team))}</b><small>${wins}-${all.length - wins} · run differential ${diff > 0 ? "+" : diff < 0 ? "−" : ""}${Math.abs(diff)} · won ${won} of ${series.length} series${lost + won < series.length ? `, split ${series.length - won - lost}` : ""}</small></div></div>
+<div class="paperKey"><span>Won by</span>${[1, 5, 9].map(m => `<svg viewBox="0 0 40 40" class="schedMark schedWin" style="stroke:${scheduleInk("W", m)}"><ellipse cx="20" cy="20" rx="16.5" ry="15.5" transform="rotate(-12 20 20)"/></svg><small>${m === 9 ? "9+" : m}</small>`).join("")}
+<span>Lost by</span>${[1, 5, 9].map(m => `<svg viewBox="0 0 40 40" class="schedMark schedLoss" style="stroke:${scheduleInk("L", -m)}"><path d="M7 8 L33 32 M33 7 L8 33"/></svg><small>${m === 9 ? "9+" : m}</small>`).join("")}</div>
+</div>
+<div class="paperPanels">${columns.map(panel).join("")}</div>`
+}
+
+// Team buttons for the schedule.
+function scheduleTeamPickerHtml(teams, selected){
+return (teams || []).slice().sort((a, b) => mlbTeam(a).localeCompare(mlbTeam(b))).map(t =>
+`<button class="schedPick${t === selected ? " schedPicked" : ""}" data-sched-team="${mlbEsc(t)}" title="${mlbEsc(mlbTeam(t))}" aria-pressed="${t === selected}">${mlbLogo(t, "md")}<span>${mlbEsc(t)}</span></button>`).join("")
+}
+
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 mlbHeadshotUrl, mlbLogoUrl, mlbAvatar, mlbLogo, mlbInitials, mlbIndex, mlbOrdinal, mlbShortDate,
@@ -709,6 +862,8 @@ streakChartHtml, btsPickCardsHtml, btsLogHtml, hitStreakListHtml, bestChancesHtm
 pitcherVsAverage, pitcherDuelsHtml,
 gamePickCardHtml, gamesVersusVegas, versusVegasChartHtml, confidenceBucketsHtml, gameHistoryHtml,
 TEAM_PROFILE_GROUPS, teamRank, teamRecord, teamStatText, powerRankingsHtml, teamProfileHtml,
-playerCardHtml, playerSuggestionsHtml, hitterSplitsHtml, hitterLeadersHtml, pitcherLeadersHtml,
+playerCardHtml, playerSuggestionsHtml, hitterSplitsHtml, pitcherLeadersHtml,
+hitChanceFromWave, hitterStatRows, sortHitterStatRows, hitterStatsTableHtml, adjustmentNote,
+scheduleInk, scheduleSeries, scheduleSheetHtml, scheduleTeamPickerHtml,
 }
 }

@@ -115,7 +115,7 @@ def test_build_html_end_to_end_against_real_docs(tmp_path):
         stripped = stripped.replace(marker, "")
     unresolved = [
         marker for marker in [
-            "__STYLE_CSS__", "__METHODOLOGY_STYLE__", "__INDEX_CONTENT__", "__DFS_CONTENT__",
+            "__STYLE_CSS__", "__METHODOLOGY_STYLE__", "__INDEX_CONTENT__", "__STATS_CONTENT__", "__DFS_CONTENT__",
             "__NFL_CONTENT__", "__AGE_CURVES_CONTENT__", "__METHODOLOGY_CONTENT__",
             "__ASSISTANT_CONTENT__", "__PAGE_SCRIPTS__",
         ]
@@ -144,7 +144,7 @@ def test_build_html_end_to_end_against_real_docs(tmp_path):
     # Predictive Metrics/DFS Rankings/Age Curves are nested subpages under
     # the MLB umbrella tab, not their own top-level sections.
     missing_mlb_subpages = [
-        pid for pid in ["mlb-predictive", "mlb-dfs", "mlb-age-curves"]
+        pid for pid in ["mlb-predictive", "mlb-stats", "mlb-dfs", "mlb-age-curves"]
         if f'<div id="{pid}"' not in html
     ]
     assert missing_mlb_subpages == []

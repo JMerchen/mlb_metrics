@@ -80,8 +80,21 @@ def side_window_agg(
     return side_df[cols].groupby("batter", as_index=False).sum()
 
 
-def blend_windows(dt: pd.DataFrame, windows, side: str, stat_fns: dict, rate_fns: dict, column: str = "p_throws"):
+def _window_length(days_back):
+    return float("inf") if days_back is None else days_back
+
+
+def blend_windows(
+    dt: pd.DataFrame, windows, side: str, stat_fns: dict, rate_fns: dict, column: str = "p_throws",
+    carry_forward: bool = False,
+):
     """Blend one or more rate functions across `windows` for one side of `column`.
+
+    `carry_forward`: a batter with no rows in a shorter window (hurt, benched,
+    or no at-bats against that hand lately) takes his rate from the next
+    longer window there, instead of contributing nothing - which counted the
+    missing window as zero and dragged his blend down (Judge's 2026 WAVE read
+    .140 after missing the season's last 11 days).
 
     rate_fns: dict of name -> function(window_agg_df) -> per-batter rate Series.
     Returns (blended_df, full_season_counts) where blended_df has columns
@@ -93,14 +106,19 @@ def blend_windows(dt: pd.DataFrame, windows, side: str, stat_fns: dict, rate_fns
     """
     latest = dt["game_date"].max()
     blended = {name: None for name in rate_fns}
+    previous = {}
     full_counts = None
 
-    for days_back, weight in windows:
+    ordered = sorted(windows, key=lambda w: -_window_length(w[0])) if carry_forward else windows
+    for days_back, weight in ordered:
         agg = side_window_agg(dt, latest, days_back, side, stat_fns, column=column)
         base = agg[["batter"]]
         for name, rate_fn in rate_fns.items():
-            rate = rate_fn(agg).fillna(0)
-            contribution = base.assign(rate=rate.values).set_index("batter")["rate"] * weight
+            rate = base.assign(rate=rate_fn(agg).fillna(0).values).set_index("batter")["rate"]
+            if carry_forward and name in previous:
+                rate = rate.reindex(previous[name].index.union(rate.index)).fillna(previous[name])
+            previous[name] = rate
+            contribution = rate * weight
             blended[name] = (
                 contribution if blended[name] is None else blended[name].add(contribution, fill_value=0)
             )
@@ -113,7 +131,7 @@ def blend_windows(dt: pd.DataFrame, windows, side: str, stat_fns: dict, rate_fns
     return result, full_counts
 
 
-def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None) -> pd.DataFrame:
+def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None, carry_forward: bool | None = None) -> pd.DataFrame:
     """Recency-weighted at-bat hit rate vs L/R pitching, converted to a
     per-game hit probability. Returns key_mlbam, WAVE, WAVE_L, WAVE_R,
     l_at_bat, r_at_bat, probability, probability_L, probability_R,
@@ -143,12 +161,13 @@ def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None) -> p
     1-(1-rate)**trials transform (valid, since that transform is
     strictly increasing over [0,1])."""
     strength = config.WAVE_SHRINKAGE_STRENGTH if shrinkage_strength is None else shrinkage_strength
+    carry_forward = config.HITTER_WINDOW_CARRY_FORWARD if carry_forward is None else carry_forward
     league_rate = helpers.is_hit(dt["events"]).sum() / len(dt) if len(dt) else 0.0
     stat_fns = {"hit": lambda df: helpers.is_hit(df["events"])}
     rate_fns = {"rate": lambda agg: helpers.shrink_rate(agg["hit"], agg["n"], league_rate, strength)}
 
-    r_blended, r_full = blend_windows(dt, config.WAVE_WINDOWS, "R", stat_fns, rate_fns)
-    l_blended, l_full = blend_windows(dt, config.WAVE_WINDOWS, "L", stat_fns, rate_fns)
+    r_blended, r_full = blend_windows(dt, config.WAVE_WINDOWS, "R", stat_fns, rate_fns, carry_forward=carry_forward)
+    l_blended, l_full = blend_windows(dt, config.WAVE_WINDOWS, "L", stat_fns, rate_fns, carry_forward=carry_forward)
 
     # Renamed per-side up front (not just "n") - both r_full/l_full now
     # also carry a raw "hit" column (widened blend_windows return), so
@@ -558,7 +577,9 @@ def compute_plate_discipline(all_pitches: pd.DataFrame) -> pd.DataFrame:
     return result[["key_mlbam", "Whiff_Rate", "Chase_Rate"]]
 
 
-def compute_game_hit_probability(data_with_game_id: pd.DataFrame, shrinkage_strength: float | None = None) -> pd.DataFrame:
+def compute_game_hit_probability(
+    data_with_game_id: pd.DataFrame, shrinkage_strength: float | None = None, carry_forward: bool | None = None
+) -> pd.DataFrame:
     """Rate of *games* (not at-bats) with >=1 hit, blended across windows.
     This is the closest existing analog to a Beat-the-Streak pick probability.
     Returns key_mlbam, Game_Hit_Probability, Game_Hit_Probability_CI_Low,
@@ -580,6 +601,7 @@ def compute_game_hit_probability(data_with_game_id: pd.DataFrame, shrinkage_stre
     of `shrinkage_strength` - see compute_wave's own docstring for the
     same reasoning."""
     strength = config.GAME_HIT_PROB_SHRINKAGE_STRENGTH if shrinkage_strength is None else shrinkage_strength
+    carry_forward = config.HITTER_WINDOW_CARRY_FORWARD if carry_forward is None else carry_forward
     completed = data_with_game_id[data_with_game_id["events"].isin(config.COUNTED_EVENTS)][
         ["game_date", "batter", "events", "game_id"]
     ].copy()
@@ -591,12 +613,22 @@ def compute_game_hit_probability(data_with_game_id: pd.DataFrame, shrinkage_stre
     league_rate = game_hits["had_hit"].sum() / len(game_hits) if len(game_hits) else 0.0
 
     blended = None
+    previous = None
     full_counts = None
-    for days_back, weight in config.GAME_HIT_PROB_WINDOWS:
+    # carry_forward: see blend_windows - a batter with no games in a shorter
+    # window takes his next-longer window's rate there instead of zero.
+    windows = config.GAME_HIT_PROB_WINDOWS
+    if carry_forward:
+        windows = sorted(windows, key=lambda w: -_window_length(w[0]))
+    for days_back, weight in windows:
         window_games = slice_by_days(game_hits, latest, days_back)
         agg = window_games.groupby("batter", as_index=False)[["had_hit", "game"]].sum()
         rate = helpers.shrink_rate(agg["had_hit"], agg["game"], league_rate, strength).fillna(0)
-        contribution = agg[["batter"]].assign(rate=rate.values).set_index("batter")["rate"] * weight
+        rate = agg[["batter"]].assign(rate=rate.values).set_index("batter")["rate"]
+        if carry_forward and previous is not None:
+            rate = rate.reindex(previous.index.union(rate.index)).fillna(previous)
+        previous = rate
+        contribution = rate * weight
         blended = contribution if blended is None else blended.add(contribution, fill_value=0)
         if days_back is None:
             full_counts = agg[["batter", "had_hit", "game"]]

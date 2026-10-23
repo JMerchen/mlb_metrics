@@ -92,6 +92,15 @@ WAVE_TRIALS_PER_GAME = 3.5
 # blows up to 0.9468 on the small-sample rows this constant targets.
 WAVE_SHRINKAGE_STRENGTH = 50.0
 
+# WAVE and CAVE (Game_Hit_Probability): a window a hitter has no at-bats in
+# (hurt, benched, no lefties lately) takes his next-longer window's rate
+# instead of counting as zero - see hitters.blend_windows. Off for the
+# picks: scripts/backtest_window_carry_forward.py found it made the hit
+# model marginally better but the live picks worse (per-pick hit rate
+# 64.0% vs 69.8% over Jul-Sep 2026, not significant). The Stats page's
+# season views turn it on themselves (hitter_views.season_wave_cave).
+HITTER_WINDOW_CARRY_FORWARD = False
+
 # PAVE (pitcher hits-allowed rate, converted from a per-PA rate to a
 # per-AB rate by excluding walks/HBP only - NOT strikeouts, which are
 # real at-bats; see pitchers.py's module docstring for the real bug this
@@ -3235,3 +3244,10 @@ CONSENSUS_UNRANKED_PENALTY_ROWS = 1
 # the RAW name string before normalization (i.e. add the exact raw string
 # one source publishes, mapped to the exact raw string used elsewhere).
 PLAYER_NAME_ALIASES: dict[str, str] = {}
+
+
+# Stats page "vs. pitchers faced" views (hitter_views.py): each pitcher's
+# season hits / on-base / total bases allowed is shrunk toward the league
+# with this many pseudo at-bats (plate appearances, for on-base) before it
+# becomes the bar a hitter's results are measured against.
+PITCHERS_FACED_SHRINK = 100

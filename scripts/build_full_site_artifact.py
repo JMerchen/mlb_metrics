@@ -1,5 +1,5 @@
 """Builds the standalone HTML for the full-site Claude Artifact - the
-whole real docs/ dashboard (Predictive Metrics, Age Curves, DFS Rankings,
+whole real docs/ dashboard (MLB Picks and Stats, Age Curves, DFS Rankings,
 NFL, Methodology) plus the Beat the Streak Assistant chat, all under one
 claude.ai URL. Ports the real docs/*.js/*.html/*.css almost verbatim
 (same code, same tested DFS optimizer) rather than reimplementing:
@@ -137,7 +137,7 @@ def _patch_mlb_render_js(js: str) -> str:
     (initials, team code) rather than a broken image. Matches each
     function by its exact signature and raises if either has changed
     shape."""
-    for signature in ("function mlbHeadshotUrl(id)", "function mlbLogoUrl(team)"):
+    for signature in ("function mlbHeadshotUrl(id)", "function mlbLogoUrl(team, onLight = false)"):
         start, end = _extract_balanced_function(js, signature, "mlb_render.js")
         js = js[:start] + f'{signature}{{\nreturn ""\n}}' + js[end:]
     return js
@@ -195,7 +195,7 @@ VERBATIM_JS = [
 
 
 REAL_SITE_ONLY_NAV_MARKERS = (
-    # The MLB umbrella's own sub-header + Predictive Metrics/DFS/Age
+    # The MLB umbrella's own sub-header + Picks/Stats/DFS/Age
     # Curves subtabs, and NFL's own sub-header - added to the real
     # docs/*.html pages so their own nav mirrors the artifact's MLB/NFL
     # umbrella tabs when browsing the real site directly. The merged
@@ -271,9 +271,10 @@ def build_html(docs_dir: str) -> str:
     # index.html is now the real site's own "Today's Summary" landing page
     # (see docs/today.js) - not part of this build at all, since the
     # artifact already has its own equivalent (the Assistant tab, with a
-    # live chat on top). The Predictive Metrics content this artifact
-    # wants lives at predictive.html now.
+    # live chat on top). The MLB Picks content this artifact
+    # wants lives at predictive.html (and its Stats at stats.html).
     index_content = _extract_page_content(read("predictive.html"), "predictive.html")
+    stats_content = _extract_page_content(read("stats.html"), "stats.html")
     dfs_content = _extract_page_content(read("dfs.html"), "dfs.html")
     nfl_content = _extract_page_content(read("nfl.html"), "nfl.html")
     age_curves_content = _extract_page_content(read("age-curves.html"), "age-curves.html")
@@ -319,6 +320,7 @@ def build_html(docs_dir: str) -> str:
     template = template.replace("/*__STYLE_CSS__*/", style_css)
     template = template.replace("/*__METHODOLOGY_STYLE__*/", methodology_style)
     template = template.replace("<!--__INDEX_CONTENT__-->", index_content)
+    template = template.replace("<!--__STATS_CONTENT__-->", stats_content)
     template = template.replace("<!--__DFS_CONTENT__-->", dfs_content)
     template = template.replace("<!--__NFL_CONTENT__-->", nfl_content)
     template = template.replace("<!--__AGE_CURVES_CONTENT__-->", age_curves_content)
