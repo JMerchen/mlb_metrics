@@ -170,7 +170,7 @@ def compute_outputs(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     }
 
 
-def write_beat_the_streak_export(predictions_log_path: str, output_dir: str) -> None:
+def write_beat_the_streak_export(predictions_log_path: str, output_dir: str, as_of_date=None) -> None:
     """Read the full predictions log and (re)write the CSVs the dashboard's
     Beat the Streak section reads: each day's top DAILY_PICK_MAX candidates,
     ALWAYS shown (see evaluation.graded_daily_picks) with hit/miss/no_game/
@@ -184,10 +184,17 @@ def write_beat_the_streak_export(predictions_log_path: str, output_dir: str) -> 
     (all_time plus config.HITTER_MODEL_VERSION) so a selection-logic
     change's real effect on accuracy is visible without waiting for
     pre-change history to stop dominating the all-time numbers. No-op if
-    nothing's logged yet."""
+    nothing's logged yet.
+
+    Only picks up to config.REGULAR_SEASON_END count - Beat the Streak is a
+    regular-season contest - and the summary carries `season_over` (whether
+    `as_of_date` is past that) and `season_end`, which the Today page and
+    the Assistant tab use to say the season is over instead of showing
+    the last picks as today's."""
     if not os.path.exists(predictions_log_path):
         return
     log = pd.read_csv(predictions_log_path, parse_dates=["date"])
+    log = log[log["date"] <= pd.Timestamp(config.REGULAR_SEASON_END)]
     picks, summary = evaluation.build_beat_the_streak_export(
         log, max_picks=config.DAILY_PICK_MAX, min_probability=config.DAILY_PICK_MIN_PROBABILITY
     )
@@ -196,6 +203,10 @@ def write_beat_the_streak_export(predictions_log_path: str, output_dir: str) -> 
         model_version=config.HITTER_MODEL_VERSION,
     )
     by_version_summary = pd.concat([summary, current_version_summary], ignore_index=True)
+    season_over = as_of_date is not None and as_of_date > config.REGULAR_SEASON_END
+    for frame in (summary, by_version_summary):
+        frame["season_over"] = season_over
+        frame["season_end"] = config.REGULAR_SEASON_END.isoformat()
 
     os.makedirs(output_dir, exist_ok=True)
     picks.to_csv(os.path.join(output_dir, "beat_the_streak_picks.csv"), index=False)
@@ -379,12 +390,15 @@ def run(
 
             write_probable_pitchers_export(schedule_df, outputs["pave"], output_dir)
 
-        game_hit_picks = predictions.select_picks(
-            pick_pool, as_of_date, rank_metric=rank_metric, teams_playing_today=teams_playing_today
-        )
-        predictions.append_predictions(game_hit_picks, predictions_log_path)
+        if as_of_date <= config.REGULAR_SEASON_END:
+            game_hit_picks = predictions.select_picks(
+                pick_pool, as_of_date, rank_metric=rank_metric, teams_playing_today=teams_playing_today
+            )
+            predictions.append_predictions(game_hit_picks, predictions_log_path)
+        else:
+            print(f"Regular season ended {config.REGULAR_SEASON_END} - no Beat the Streak picks until next season.")
 
-        write_beat_the_streak_export(predictions_log_path, output_dir)
+        write_beat_the_streak_export(predictions_log_path, output_dir, as_of_date)
 
         if schedule_games_df is not None and not schedule_games_df.empty:
             # Win probabilities from the model trained on results

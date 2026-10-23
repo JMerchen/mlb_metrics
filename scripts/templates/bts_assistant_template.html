@@ -92,7 +92,9 @@ function renderSummaryPanels(){
   const all = ASSISTANT_DATA.streakSummary[0];
   const top = ASSISTANT_DATA.topLeaders[0];
   document.getElementById('stat-row').innerHTML = streakTilesHtml(all, top);
-  document.getElementById('picks-list').innerHTML = btsPicksHtml(ASSISTANT_DATA.todaysPicks);
+  document.getElementById('picks-list').innerHTML = btsSeasonOver(all)
+    ? btsSeasonOverHtml(all)
+    : btsPicksHtml(ASSISTANT_DATA.todaysPicks);
   for (const [sport, data] of [['mlb', ASSISTANT_DATA.mlbGamePicks], ['nfl', ASSISTANT_DATA.nflGamePicks]]) {
     const listEl = document.getElementById(`${sport}-gp-list`);
     const statEl = document.getElementById(`${sport}-gp-stat-line`);
@@ -106,7 +108,7 @@ function renderSummaryPanels(){
     listEl.innerHTML = gamePicksListHtml(data.upcomingPicks, sport);
   }
   const d = new Date(ASSISTANT_DATA.asOf + 'T12:00:00');
-  document.getElementById('asof-badge').textContent = Number.isNaN(d.getTime())
+  document.getElementById('asof-badge').textContent = btsSeasonOver(all) ? 'MLB season over' : Number.isNaN(d.getTime())
     ? 'Updated ' + ASSISTANT_DATA.asOf
     : 'Updated ' + d.toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'});
 }

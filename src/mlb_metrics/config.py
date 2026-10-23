@@ -17,6 +17,15 @@ from datetime import date
 # 2026 MLB season boundaries used for the full-season Statcast pull.
 SEASON_START = date(2026, 3, 25)
 SEASON_END = date(2026, 10, 10)
+# Last day of the regular season (the 2026 Statcast pull's last game_type
+# "R" date). MLB's Beat the Streak is a regular-season contest, so the
+# tracker stops picking after this and its record covers only games up to
+# it; the site then shows the season as over (2026-10-23 fix - picks had
+# carried on into the playoffs, where they couldn't be graded once the
+# Statcast pull stopped at SEASON_END, and froze on 2026-10-15 once no
+# hitter had played recently enough to qualify). Update with SEASON_START
+# each year.
+REGULAR_SEASON_END = date(2026, 9, 27)
 
 # Resilience for data.fetch_statcast_range, added 2026-09-16 after a
 # real, confirmed production failure: the entire daily pipeline died on

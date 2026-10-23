@@ -95,3 +95,17 @@ test("NFL EPA table: both teams, offense and defense with league rank; empty wit
   assert.equal(teamEpaHtml({ away_team: "SEA", home_team: "DEN" }, "nfl"), "")
   assert.equal(teamEpaHtml({ away_team: "SEA", home_team: "DEN", home_off_epa: "", away_def_epa: "" }, "nfl"), "")
 })
+
+test("Beat the Streak after the regular season: final record, season over, no 'today' picks", () => {
+  const { btsSeasonOver, btsSeasonOverHtml } = require("./summary_render.js")
+  const summary = { current_streak: 1, longest_streak: 10, day_survival_rate: 0.52, n_days_resolved: 100,
+                    season_over: "True", season_end: "2026-09-27" }
+  assert.equal(btsSeasonOver(summary), true)
+  assert.equal(btsSeasonOver({ season_over: "False" }), false)
+  assert.equal(btsSeasonOver({}), false)
+  const tiles = text(streakTilesHtml(summary, { name: "Jeremy Peña", team: "HOU", Game_Hit_Probability: 0.6 }).replace(/<\/div>/g, " "))
+  assert.ok(tiles.includes("Season Over regular season ended Sep 27"))
+  assert.ok(!tiles.includes("Best hitter today"))
+  assert.ok(tiles.includes("at the end of the season"))
+  assert.equal(text(btsSeasonOverHtml(summary)), "The regular season ended Sep 27. Beat the Streak picks return on Opening Day.")
+})

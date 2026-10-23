@@ -143,9 +143,16 @@ loadGamePicksSection('game_picks'),
 loadGamePicksSection('nfl_game_picks', {groupByWeek: true}),
 ])
 
-document.getElementById('asof-badge').textContent = bts.asOf ? 'Updated ' + friendlyDate(bts.asOf) : 'No data yet'
+const seasonOver = btsSeasonOver(bts.summary)
+document.getElementById('asof-badge').textContent = seasonOver
+? 'MLB season over'
+: (bts.asOf ? 'Updated ' + friendlyDate(bts.asOf) : 'No data yet')
 renderStats(bts.summary, bts.topApproach)
+if(seasonOver){
+document.getElementById('picks-list').innerHTML = btsSeasonOverHtml(bts.summary)
+}else{
 renderPicks(bts.todaysPicks)
+}
 renderGamePicks('mlb', mlb)
 renderGamePicks('nfl', nfl)
 

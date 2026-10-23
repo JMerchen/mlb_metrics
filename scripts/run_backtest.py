@@ -10,6 +10,7 @@ Usage:
 """
 
 import argparse
+import datetime
 import os
 import sys
 
@@ -87,7 +88,7 @@ def main():
         completed = data.completed_events(persisted, ["game_date", "batter", "events"])
         predictions.resolve_predictions(args.predictions_log, completed)
 
-    pipeline.write_beat_the_streak_export(args.predictions_log, args.docs_data_dir)
+    pipeline.write_beat_the_streak_export(args.predictions_log, args.docs_data_dir, datetime.date.today())
 
     log = (
         pd.read_csv(args.predictions_log, parse_dates=["date"])

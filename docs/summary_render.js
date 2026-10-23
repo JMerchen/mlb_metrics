@@ -28,19 +28,40 @@ function srTeam(code, sport){
 return typeof teamName === "function" ? teamName(code, sport) : (code || "")
 }
 
-// Top tiles: the Beat the Streak record and today's best hitter.
+// Beat the Streak is a regular-season contest; once it's over the
+// pipeline marks the summary (season_over / season_end).
+function btsSeasonOver(summary){
+return String((summary || {}).season_over).toLowerCase() === "true"
+}
+
+// "2026-09-27" -> "Sep 27"
+function srShortDate(iso){
+const d = new Date(`${iso}T12:00:00`)
+return Number.isNaN(d.getTime()) ? String(iso || "") : d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+}
+
+function btsSeasonOverHtml(summary){
+const ended = summary && summary.season_end ? ` ended ${srEsc(srShortDate(summary.season_end))}` : " is over"
+return `<div class="pick"><span class="name">The regular season${ended}. Beat the Streak picks return on Opening Day.</span></div>`
+}
+
+// Top tiles: the Beat the Streak record and today's best hitter (or,
+// after the regular season, that the season is over).
 function streakTilesHtml(summary, topApproach){
 if(!summary || !Object.keys(summary).length){
 return '<div class="empty-note">No picks tracked yet.</div>'
 }
+const over = btsSeasonOver(summary)
 const current = srNum(summary.current_streak) || 0
 const longest = srNum(summary.longest_streak) || 0
 const days = srNum(summary.n_days_resolved) || 0
 const tiles = [
-{ label: "Hit streak", value: srPlural(current, "day"), sub: "in a row with a hit" },
-{ label: "Best streak", value: srPlural(longest, "day"), sub: "our longest so far" },
+{ label: "Hit streak", value: srPlural(current, "day"), sub: over ? "at the end of the season" : "in a row with a hit" },
+{ label: "Best streak", value: srPlural(longest, "day"), sub: over ? "our longest this season" : "our longest so far" },
 { label: "Days with a hit", value: srPct(summary.day_survival_rate), sub: `over ${srPlural(days, "day")}` },
-topApproach
+over
+? { label: "Season", value: "Over", sub: summary.season_end ? `regular season ended ${srEsc(srShortDate(summary.season_end))}` : "see you on Opening Day" }
+: topApproach
 ? { label: "Best hitter today", value: srEsc(String(topApproach.name).split(" ").pop()),
     sub: `${srEsc(srTeam(topApproach.team, "mlb"))}&nbsp;&middot; ${srPct(topApproach.Game_Hit_Probability)} to get a hit` }
 : { label: "Best hitter today", value: "-", sub: "no games today" },
@@ -154,6 +175,7 @@ return picks.map(g => gamePickRowHtml(g, sport)).join("")
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, gamePicksListHtml, totalPointsText,
+btsSeasonOver, btsSeasonOverHtml,
 teamEpaHtml,
 }
 }
