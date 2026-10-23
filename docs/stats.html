@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8">
+
+<title>Diamond &amp; Gridiron Metrics - MLB Stats</title>
+
+<link
+rel="icon"
+type="image/svg+xml"
+href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTQiIGZpbGw9IiNmZmZmZmYiIHN0cm9rZT0iI2Q5ZDRjNyIgc3Ryb2tlLXdpZHRoPSIxIi8+PHBhdGggZD0iTTEwIDQgQzE0IDEwLCAxNCAyMiwgMTAgMjgiIHN0cm9rZT0iI2M4MTAyZSIgc3Ryb2tlLXdpZHRoPSIxLjYiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNMTAuNiA4LjIgTDEzIDcuNCBNMTEuNyAxMiBMMTQuMSAxMS41IE0xMi4xIDE2IEwxNC42IDE2IE0xMS43IDIwIEwxNC4xIDIwLjUgTTEwLjYgMjMuOCBMMTMgMjQuNiIgc3Ryb2tlPSIjYzgxMDJlIiBzdHJva2Utd2lkdGg9IjEuMSIgZmlsbD0ibm9uZSIvPjxwYXRoIGQ9Ik0yMiA0IEMxOCAxMCwgMTggMjIsIDIyIDI4IiBzdHJva2U9IiNjODEwMmUiIHN0cm9rZS13aWR0aD0iMS42IiBmaWxsPSJub25lIi8+PHBhdGggZD0iTTIxLjQgOC4yIEwxOSA3LjQgTTIwLjMgMTIgTDE3LjkgMTEuNSBNMTkuOSAxNiBMMTcuNCAxNiBNMjAuMyAyMCBMMTcuOSAyMC41IE0yMS40IDIzLjggTDE5IDI0LjYiIHN0cm9rZT0iI2M4MTAyZSIgc3Ryb2tlLXdpZHRoPSIxLjEiIGZpbGw9Im5vbmUiLz48L3N2Zz4=">
+
+<link
+rel="stylesheet"
+href="./style.css">
+
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="siteHeader">
+
+<div class="brandRow">
+<svg class="brandMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+<path d="M16 2 A14 14 0 0 0 16 30 Z" fill="#ffffff"/>
+<path d="M16 2 A14 14 0 0 1 16 30 Z" fill="#8a5230"/>
+<path d="M10 6 C13 11, 13 21, 10 26" stroke="#c8102e" stroke-width="1.5" fill="none"/><path d="M10.9 9 L13.2 8.3 M12.1 13 L14.4 12.6 M12.3 17 L14.6 17.2 M11.7 21 L13.9 21.6" stroke="#c8102e" stroke-width="1" fill="none"/>
+<path d="M19 16 L27 16" stroke="#ffffff" stroke-width="1.6" fill="none"/>
+<path d="M21 14 L21 18 M23 14 L23 18 M25 14 L25 18" stroke="#ffffff" stroke-width="1.2" fill="none"/>
+</svg>
+<h1>Diamond &amp; Gridiron <span class="brandAccent">Metrics</span></h1>
+</div>
+
+<div class="tabGroup pageTabs">
+<a class="tabButton" href="./index.html">Today</a>
+<a class="tabButton active" href="./predictive.html">MLB</a>
+<a class="tabButton" href="./nfl.html">NFL</a>
+<a class="tabButton" href="./methodology.html">How it works</a>
+</div>
+
+</div>
+
+<div class="sportHeader">
+<svg class="sportMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+<circle cx="16" cy="16" r="14" fill="#ffffff" stroke="#d9d4c7" stroke-width="1"/>
+<path d="M10 4 C14 10, 14 22, 10 28" stroke="#c8102e" stroke-width="1.6" fill="none"/><path d="M10.6 8.2 L13 7.4 M11.7 12 L14.1 11.5 M12.1 16 L14.6 16 M11.7 20 L14.1 20.5 M10.6 23.8 L13 24.6" stroke="#c8102e" stroke-width="1.1" fill="none"/>
+<path d="M22 4 C18 10, 18 22, 22 28" stroke="#c8102e" stroke-width="1.6" fill="none"/><path d="M21.4 8.2 L19 7.4 M20.3 12 L17.9 11.5 M19.9 16 L17.4 16 M20.3 20 L17.9 20.5 M21.4 23.8 L19 24.6" stroke="#c8102e" stroke-width="1.1" fill="none"/>
+</svg>
+<h2 class="sportHeading">MLB <span class="brandAccent">Metrics</span></h2>
+</div>
+
+<div class="tabGroup" id="mlbSubTabs">
+<a class="tabButton" href="./predictive.html">Picks</a>
+<a class="tabButton active" href="./stats.html">Stats</a>
+<a class="tabButton" href="./dfs.html">Fantasy (DFS)</a>
+<a class="tabButton" href="./age-curves.html">Age Curves</a>
+<a class="tabButton" href="./prospects.html">Prospects</a>
+</div>
+
+<p class="sectionIntro">What we calculate and what feeds the models: hit rates, WOPS, streaks, pitchers, team ratings and every team's season. Our picks are on the <a href="./predictive.html">Picks</a> page.</p>
+
+<h2>
+Hitters
+</h2>
+
+<p class="sectionIntro"><b>WAVE</b> is a hitter's at-bat hit rate, with recent games counting more. <b>Hit chance</b> is his chance of at least one hit in 3.5 at-bats at that rate. <b>Games with a hit</b> counts his last 10 games with at least one hit (a 1-for-4 and a 4-for-4 count the same). <b>WOPS</b> is our gradient-boosted expected OPS for his next game, from his recent form and the starting pitcher he faces. Click a heading to sort.</p>
+
+<div id="hitterStatsTable">
+
+Loading...
+
+</div>
+
+<hr>
+
+<h2>
+Longest hit streaks
+</h2>
+
+<p class="sectionIntro">Hitters with the longest active runs of games with a hit.</p>
+
+<div id="hitStreaksTable">
+
+Loading...
+
+</div>
+
+<hr>
+
+<h2>
+Look up a player
+</h2>
+
+<p class="sectionIntro">Start typing a name. Bars show where a player ranks among regular players, from worst (left) to best (right).</p>
+
+<div class="lookupControls">
+
+<select id="playerType" aria-label="Hitter or pitcher">
+
+<option value="wave">Hitter</option>
+
+<option value="pave">Pitcher</option>
+
+</select>
+
+<input
+id="playerSearch"
+placeholder="Search player"
+autocomplete="off"
+aria-label="Search player">
+
+</div>
+
+<div id="playerChoices" class="playerChoices">
+
+</div>
+
+<div id="playerResult">
+
+</div>
+
+<hr>
+
+<h2>
+Today's starting pitchers
+</h2>
+
+<p class="sectionIntro">Each game's probable starters, and how often hitters get a hit off them.</p>
+
+<div id="probablePitchersTable">
+
+Loading...
+
+</div>
+
+<hr>
+
+<h2>
+Team schedules
+</h2>
+
+<p class="sectionIntro">Every team's season, series by series. A green circle is a win and a red cross a loss; the darker the ink, the bigger the margin. Pick a team to unfold its schedule.</p>
+
+<div class="schedPicker" id="schedulePicker">
+
+Loading...
+
+</div>
+
+<div class="paperStage">
+<div class="paperSheet" id="scheduleSheet"></div>
+</div>
+
+<hr>
+
+<h2>
+Teams
+</h2>
+
+<p class="sectionIntro">Every team ranked by our overall rating. Pick a team to see its profile below; pick a second to compare the two.</p>
+
+<div id="powerRankings">
+
+Loading...
+
+</div>
+
+<div
+id="teamResult">
+
+Select a team
+
+</div>
+
+<hr>
+
+<h2>
+Pitchers giving up the most hits
+</h2>
+
+<div id="paveTable">
+
+Loading...
+
+</div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<script src="./teams.js"></script>
+
+<script src="./summary_render.js"></script>
+
+<script src="./mlb_render.js"></script>
+
+<script src="./app.js"></script>
+
+</body>
+
+</html>

@@ -3235,3 +3235,14 @@ CONSENSUS_UNRANKED_PENALTY_ROWS = 1
 # the RAW name string before normalization (i.e. add the exact raw string
 # one source publishes, mapped to the exact raw string used elsewhere).
 PLAYER_NAME_ALIASES: dict[str, str] = {}
+
+
+# WOPS (wops.py): a gradient-boosted expected OPS for a hitter's next game
+# from his recent form and the opposing starter. Rates are shrunk toward the
+# league rate with this many pseudo plate appearances (batters faced, for
+# pitchers) before they become model features.
+WOPS_SHRINK_PA = 40
+WOPS_MODEL_PATH = "data/models/wops_model.joblib"
+# The Stats page's "games with a hit" column: of a hitter's last this-many
+# games, how many had at least one hit.
+GAMES_WITH_HIT_WINDOW = 10

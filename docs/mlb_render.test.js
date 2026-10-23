@@ -156,3 +156,43 @@ test("player card: lower-is-better stats flip, today's chance and streak, pitch 
   assert.ok(card.includes("Other / unclassified 70%"))
   assert.ok(card.includes("Allows 76% fewer hits than average"))
 })
+
+test("hitter table: hit chance at 3.5 at-bats, games with a hit, WOPS, sortable", () => {
+  assert.equal(r.hitChanceFromWave("0.25").toFixed(4), (1 - Math.pow(0.75, 3.5)).toFixed(4))
+  assert.equal(r.hitChanceFromWave(""), null)
+  const rows = r.hitterStatRows(
+    [{ key_mlbam: "1", name_first: "Steven", name_last: "Kwan", team: "CLE", WAVE: "0.24" },
+     { key_mlbam: "2", name_first: "Yordan", name_last: "Álvarez", team: "HOU", WAVE: "0.23" }],
+    [{ key_mlbam: "1.0", WOPS: "0.781", games_with_hit: "6", games_recent: "10", wops_starter: "Jacob Misiorowski", wops_opponent: "MIL" },
+     { key_mlbam: "2", WOPS: "0.963", games_with_hit: "10", games_recent: "10", wops_starter: "", wops_opponent: "" }],
+  )
+  assert.equal(rows[0].hitGameRate, 0.6)
+  assert.deepEqual(r.sortHitterStatRows(rows).map(x => x.name), ["Steven Kwan", "Yordan Álvarez"])
+  assert.deepEqual(r.sortHitterStatRows(rows, "WOPS").map(x => x.name), ["Yordan Álvarez", "Steven Kwan"])
+  const html = r.hitterStatsTableHtml(rows, "WOPS")
+  assert.ok(html.includes('data-sort="WOPS">') && html.includes("WOPS</span> ▼"))
+  assert.ok(text(html).includes("10/10") && text(html).includes(".963") && text(html).includes("vs. Jacob Misiorowski"))
+  assert.equal((html.match(/<i class="on">/g) || []).length, 16)
+  assert.ok(html.includes("Expected OPS next game vs. an average starter"))
+})
+
+test("schedule: series in order, ink deepens with the margin, four panels", () => {
+  const game = (n, series, opponent, home, result, diff) => ({ team: "SD", game_no: String(n), series: String(series), opponent, home: String(home),
+    result, run_diff: String(diff), runs_for: result === "W" ? "5" : "2", runs_against: result === "W" ? "4" : "11", date: `2026-04-0${n}` })
+  const games = [game(1, 1, "DET", 1, "W", 1), game(2, 1, "DET", 1, "L", -9), game(3, 2, "SF", 0, "W", 12), { team: "LAD", game_no: "1", series: "1" }]
+  const series = r.scheduleSeries(games, "SD")
+  assert.deepEqual(series.map(s => [s.opponent, s.home, s.games.length]), [["DET", true, 2], ["SF", false, 1]])
+  assert.equal(r.scheduleInk("W", 1), "rgb(112,192,132)")
+  assert.equal(r.scheduleInk("W", 12), r.scheduleInk("W", 9))
+  assert.equal(r.scheduleInk("L", -9), "rgb(160,14,18)")
+  const sheet = r.scheduleSheetHtml(games, "SD")
+  assert.equal((sheet.match(/class="paperPanel"/g) || []).length, 4)
+  assert.equal((sheet.match(/class="schedGame"/g) || []).length, 3)
+  assert.ok(sheet.includes("Apr 1 vs. Tigers: W 5-4") && sheet.includes("Apr 3 at Giants: W 5-4"))
+  assert.ok(text(sheet).includes("2-1 · run differential +4 · won 1 of 2 series, split 1"))
+  assert.ok(sheet.includes("Apr 1–2"))
+  assert.ok(sheet.includes("team-cap-on-light"))
+  assert.ok(r.scheduleSheetHtml(games, "NYY").includes("No games for this team yet"))
+  const picker = r.scheduleTeamPickerHtml(["SD", "LAD"], "SD")
+  assert.ok(picker.indexOf("LAD") < picker.indexOf('"SD"') && picker.includes('class="schedPick schedPicked" data-sched-team="SD"'))
+})

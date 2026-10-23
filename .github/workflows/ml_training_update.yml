@@ -51,6 +51,10 @@ jobs:
         run: |
           python scripts/train_hitter_hit_model.py
 
+      - name: Train WOPS model
+        run: |
+          python scripts/train_wops_model.py
+
       - name: Train game-pick win-probability model
         run: |
           python scripts/train_game_pick_model.py
