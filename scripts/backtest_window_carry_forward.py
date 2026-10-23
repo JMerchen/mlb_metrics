@@ -15,8 +15,27 @@ next:
     config.HITTER_MODEL_SHORTLIST_SIZE, ranked by Matchup_Approach), and by
     CAVE alone.
 
-RESULT (2026-10-23, 2026 May 1 - Sep 27, 150 dates, tested Jul-Sep):
-see the commit that switched config.HITTER_WINDOW_CARRY_FORWARD on.
+RESULT (2026-10-23; features for 147 dates, May 1 - Sep 27 2026; models
+refit monthly and tested on 86 days, Jul - Sep, 24,400 hitter-games):
+
+                      original   carry-forward
+    log loss            0.6731      0.6720
+    Brier score         0.2401      0.2396
+    ROC AUC             0.5825      0.5866
+    live rule, top pick hit          68.6%    67.4%
+    live rule, both of top two hit   52.3%    45.3%
+    live rule, per-pick hit rate     69.8%    64.0%
+    BTS-style best streak / resets   12 / 44   8 / 50
+
+The model alone gets marginally better, but the live picks get worse: the
+two variants pick different hitters on 55% of days, and only the original's
+pair both hit on 13 days against 7 the other way (sign test p = 0.26, a
+bootstrap 95% interval on the both-hit difference of -17 to +2 points).
+Not significant, but every pick measure points the same way, so the switch
+stays off. Counting an empty window as zero seems to work as a "has he
+shown it lately" filter the picks benefit from. The Stats page still shows
+the carried-forward views (hitter_views.season_wave_cave), where they
+describe the season rather than choose picks.
 
 Usage:
     python scripts/backtest_window_carry_forward.py [--start 2026-05-01] [--end 2026-09-27] [--workers 3]

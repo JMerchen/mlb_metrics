@@ -94,8 +94,11 @@ WAVE_SHRINKAGE_STRENGTH = 50.0
 
 # WAVE and CAVE (Game_Hit_Probability): a window a hitter has no at-bats in
 # (hurt, benched, no lefties lately) takes his next-longer window's rate
-# instead of counting as zero - see hitters.blend_windows. Backtested in
-# scripts/backtest_window_carry_forward.py.
+# instead of counting as zero - see hitters.blend_windows. Off for the
+# picks: scripts/backtest_window_carry_forward.py found it made the hit
+# model marginally better but the live picks worse (per-pick hit rate
+# 64.0% vs 69.8% over Jul-Sep 2026, not significant). The Stats page's
+# season views turn it on themselves (hitter_views.season_wave_cave).
 HITTER_WINDOW_CARRY_FORWARD = False
 
 # PAVE (pitcher hits-allowed rate, converted from a per-PA rate to a
