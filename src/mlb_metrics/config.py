@@ -3237,12 +3237,8 @@ CONSENSUS_UNRANKED_PENALTY_ROWS = 1
 PLAYER_NAME_ALIASES: dict[str, str] = {}
 
 
-# WOPS (wops.py): a gradient-boosted expected OPS for a hitter's next game
-# from his recent form and the opposing starter. Rates are shrunk toward the
-# league rate with this many pseudo plate appearances (batters faced, for
-# pitchers) before they become model features.
-WOPS_SHRINK_PA = 40
-WOPS_MODEL_PATH = "data/models/wops_model.joblib"
-# The Stats page's "games with a hit" column: of a hitter's last this-many
-# games, how many had at least one hit.
-GAMES_WITH_HIT_WINDOW = 10
+# Stats page "vs. pitchers faced" views (hitter_views.py): each pitcher's
+# season hits / on-base / total bases allowed is shrunk toward the league
+# with this many pseudo at-bats (plate appearances, for on-base) before it
+# becomes the bar a hitter's results are measured against.
+PITCHERS_FACED_SHRINK = 100

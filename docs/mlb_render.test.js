@@ -157,23 +157,29 @@ test("player card: lower-is-better stats flip, today's chance and streak, pitch 
   assert.ok(card.includes("Allows 76% fewer hits than average"))
 })
 
-test("hitter table: hit chance at 3.5 at-bats, games with a hit, WOPS, sortable", () => {
+test("hitter table: WAVE, hit chance at 3.5 at-bats, CAVE, WOPS; season or vs. pitchers faced; sortable", () => {
   assert.equal(r.hitChanceFromWave("0.25").toFixed(4), (1 - Math.pow(0.75, 3.5)).toFixed(4))
   assert.equal(r.hitChanceFromWave(""), null)
-  const rows = r.hitterStatRows(
-    [{ key_mlbam: "1", name_first: "Steven", name_last: "Kwan", team: "CLE", WAVE: "0.24" },
-     { key_mlbam: "2", name_first: "Yordan", name_last: "Álvarez", team: "HOU", WAVE: "0.23" }],
-    [{ key_mlbam: "1.0", WOPS: "0.781", games_with_hit: "6", games_recent: "10", wops_starter: "Jacob Misiorowski", wops_opponent: "MIL" },
-     { key_mlbam: "2", WOPS: "0.963", games_with_hit: "10", games_recent: "10", wops_starter: "", wops_opponent: "" }],
-  )
-  assert.equal(rows[0].hitGameRate, 0.6)
-  assert.deepEqual(r.sortHitterStatRows(rows).map(x => x.name), ["Steven Kwan", "Yordan Álvarez"])
-  assert.deepEqual(r.sortHitterStatRows(rows, "WOPS").map(x => x.name), ["Yordan Álvarez", "Steven Kwan"])
-  const html = r.hitterStatsTableHtml(rows, "WOPS")
-  assert.ok(html.includes('data-sort="WOPS">') && html.includes("WOPS</span> ▼"))
-  assert.ok(text(html).includes("10/10") && text(html).includes(".963") && text(html).includes("vs. Jacob Misiorowski"))
-  assert.equal((html.match(/<i class="on">/g) || []).length, 16)
-  assert.ok(html.includes("Expected OPS next game vs. an average starter"))
+  const wave = [{ key_mlbam: "1", name_first: "Steven", name_last: "Kwan", team: "CLE", WAVE: "0.24", Game_Hit_Probability: "0.6" },
+    { key_mlbam: "2", name_first: "Yordan", name_last: "Álvarez", team: "HOU", WAVE: "0.23", Game_Hit_Probability: "0.6" }]
+  const stats = [
+    { key_mlbam: "1.0", WAVE: "0.259", WAVE_adj: "0.262", CAVE: "0.636", CAVE_adj: "0.643", WOPS: "0.795", WOPS_adj: "0.802" },
+    { key_mlbam: "2", WAVE: "0.240", WAVE_adj: "0.236", CAVE: "0.622", CAVE_adj: "0.618", WOPS: "0.943", WOPS_adj: "0.930" },
+  ]
+  const season = r.hitterStatRows(wave, stats)
+  assert.deepEqual([season[0].WAVE, season[0].CAVE, season[0].WOPS], [0.259, 0.636, 0.795])
+  const faced = r.hitterStatRows(wave, stats, "faced")
+  assert.deepEqual([faced[1].WAVE, faced[1].CAVE, faced[1].WOPS], [0.236, 0.618, 0.930])
+  assert.deepEqual(r.sortHitterStatRows(season).map(x => x.name), ["Steven Kwan", "Yordan Álvarez"])
+  assert.deepEqual(r.sortHitterStatRows(season, "WOPS").map(x => x.name), ["Yordan Álvarez", "Steven Kwan"])
+  const plain = text(r.hitterStatsTableHtml(season, "WOPS"))
+  assert.ok(plain.includes("Astros .240") && plain.includes("62.2%") && plain.includes(".943"))
+  assert.ok(!plain.includes("+.") && !plain.includes("−."))
+  const adjusted = text(r.hitterStatsTableHtml(faced, "WOPS", 40, "faced"))
+  assert.ok(adjusted.includes(".930−.013"))
+  assert.ok(adjusted.includes(".262+.003"))
+  assert.ok(adjusted.includes("64.3%+0.7%"))
+  assert.ok(r.hitterStatsTableHtml(season).includes("CAVE (Carried Average): share of games with a hit"))
 })
 
 test("schedule: series in order, ink deepens with the margin, four panels", () => {

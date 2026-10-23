@@ -68,7 +68,12 @@ href="./style.css">
 Hitters
 </h2>
 
-<p class="sectionIntro"><b>WAVE</b> is a hitter's at-bat hit rate, with recent games counting more. <b>Hit chance</b> is his chance of at least one hit in 3.5 at-bats at that rate. <b>Games with a hit</b> counts his last 10 games with at least one hit (a 1-for-4 and a 4-for-4 count the same). <b>WOPS</b> is our gradient-boosted expected OPS for his next game, from his recent form and the starting pitcher he faces. Click a heading to sort.</p>
+<p class="sectionIntro">Three views of each hitter's season, each blending the full season with his last 81, 30 and 10 days so recent games count more. <b>WAVE</b> is his batting average (hits per at-bat), and <b>hit chance</b> his chance of at least one hit in 3.5 at-bats at that rate. <b>CAVE</b> (Carried Average) is the share of his games with at least one hit - a 1-for-4 and a 4-for-4 count the same. <b>WOPS</b> is his OPS. <b>vs. pitchers faced</b> credits hits off tough pitchers more and soft ones less, based on what every pitcher he faced allowed all season. Click a heading to sort.</p>
+
+<div class="tabGroup hitterViewSwitch" id="hitterViewSwitch">
+<button class="tabButton active" data-hitter-view="season">Season</button>
+<button class="tabButton" data-hitter-view="faced">vs. pitchers faced</button>
+</div>
 
 <div id="hitterStatsTable">
 

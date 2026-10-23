@@ -70,7 +70,7 @@ jobs:
         run: |
           python scripts/build_dfs_rankings.py
 
-      - name: Build hitter stats (WOPS, games with a hit)
+      - name: Build hitter stats (CAVE, WOPS, vs. pitchers faced)
         run: |
           python scripts/build_hitter_stats.py
 

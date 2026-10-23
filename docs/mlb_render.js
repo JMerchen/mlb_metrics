@@ -578,8 +578,9 @@ return `<div class="vizCard teamProfile${chosen.length > 1 ? " teamCompare" : ""
 // ---- Player lookup ----
 
 const HITTER_PERCENTILE_STATS = [
-["Game_Hit_Probability", "Chance of a hit in a game", "pct", 1],
-["WAVE", "Hit rate (recent games count more)", "pct1", 1],
+["Game_Hit_Probability", "CAVE (games with a hit)", "pct", 1],
+["WOPS", "WOPS (OPS)", "avg", 1],
+["WAVE", "WAVE (hit rate)", "avg", 1],
 ["xBA", "Expected batting average", "avg", 1],
 ["xwOBA", "Expected wOBA", "avg", 1],
 ["Exit_Velo", "Exit velocity", "mph", 1],
@@ -692,8 +693,11 @@ ${ratio === null ? "<span></span>" : mlbMeter(ratio - 1, false)}<span class="ran
 }
 
 // ---- Stats page: hitter table ----
+// WAVE, CAVE and WOPS are views of a hitter's season, each blended across
+// recent windows (hitter_views.py); "vs. pitchers faced" swaps in the
+// versions that credit hits off tough pitchers more.
 
-// Chance of at least one hit in 3.5 at-bats at his WAVE (an at-bat hit
+// Chance of at least one hit in 3.5 at-bats at a WAVE (an at-bat hit
 // rate): 1 - (1 - WAVE)^3.5.
 const HIT_CHANCE_AT_BATS = 3.5
 
@@ -702,18 +706,22 @@ const n = mlbNum(wave)
 return n === null ? null : 1 - Math.pow(1 - n, HIT_CHANCE_AT_BATS)
 }
 
-// One row per hitter: wave.csv joined with hitter_stats.csv by key_mlbam.
-function hitterStatRows(waveRows, statRows){
+// One row per hitter in `waveRows` (names, team) with hitter_stats.csv's
+// views, in the chosen view ("season" or "faced").
+function hitterStatRows(waveRows, statRows, view = "season"){
 const stats = {}
 ;(statRows || []).forEach(r => { stats[String(r.key_mlbam).replace(/\.0$/, "")] = r })
+const suffix = view === "faced" ? "_adj" : ""
 return (waveRows || []).map(p => {
 const s = stats[String(p.key_mlbam).replace(/\.0$/, "")] || {}
-const games = mlbNum(s.games_recent), withHit = mlbNum(s.games_with_hit)
+const wave = mlbNum(s[`WAVE${suffix}`]) ?? (view === "faced" ? null : mlbNum(p.WAVE))
 return {
 key_mlbam: p.key_mlbam, name: `${p.name_first} ${p.name_last}`, team: p.team,
-WAVE: mlbNum(p.WAVE), hitChance: hitChanceFromWave(p.WAVE),
-gamesWithHit: withHit, gamesRecent: games, hitGameRate: games ? withHit / games : null,
-WOPS: mlbNum(s.WOPS), wopsOpponent: s.wops_opponent || "", wopsStarter: s.wops_starter || "",
+WAVE: wave, hitChance: hitChanceFromWave(wave),
+CAVE: mlbNum(s[`CAVE${suffix}`]) ?? (view === "faced" ? null : mlbNum(p.Game_Hit_Probability)),
+WOPS: mlbNum(s[`WOPS${suffix}`]),
+// The plain season numbers, to show how far the adjustment moved them.
+base: { WAVE: mlbNum(s.WAVE), CAVE: mlbNum(s.CAVE), WOPS: mlbNum(s.WOPS) },
 }
 })
 }
@@ -723,9 +731,15 @@ const HITTER_STAT_COLUMNS = [
 ["name", "Player", "Player"],
 ["WAVE", "WAVE", "WAVE"],
 ["hitChance", "Hit chance (3.5 AB)", "Hit %"],
-["hitGameRate", "Games with a hit", "Games"],
+["CAVE", "CAVE", "CAVE"],
 ["WOPS", "WOPS", "WOPS"],
 ]
+
+const HITTER_STAT_TIPS = {
+WAVE: "WAVE: at-bat hit rate, recent games counting more",
+CAVE: "CAVE (Carried Average): share of games with a hit, recent games counting more",
+WOPS: "WOPS: OPS, recent games counting more",
+}
 
 function sortHitterStatRows(rows, key = "hitChance"){
 const sorted = rows.slice()
@@ -733,26 +747,31 @@ if(key === "name"){ return sorted.sort((a, b) => a.name.localeCompare(b.name)) }
 return sorted.sort((a, b) => (b[key] ?? -Infinity) - (a[key] ?? -Infinity) || (b.WAVE ?? 0) - (a.WAVE ?? 0))
 }
 
-// Ten pips, filled for each recent game with a hit.
-function hitGamePips(withHit, games){
-if(withHit === null || !games){ return "" }
-return `<span class="gamePips" aria-hidden="true">${Array.from({ length: games }, (_, i) => `<i${i < withHit ? ` class="on"` : ""}></i>`).join("")}</span>`
+function mlbRate(value){
+return value === null || value === undefined ? "-" : value.toFixed(3).replace(/^0/, "")
 }
 
-function hitterStatsTableHtml(rows, sortKey = "hitChance", limit = 40){
+// "+.004" under an adjusted value: how far "vs. pitchers faced" moved it.
+function adjustmentNote(value, base, format){
+if(value === null || base === null || base === undefined){ return "" }
+const delta = value - base
+const shown = format === "pct" ? `${Math.abs(Math.round(delta * 1000) / 10).toFixed(1)}%` : Math.abs(delta).toFixed(3).replace(/^0/, "")
+if(Number(shown.replace("%", "")) === 0){ return `<small class="adjNote">no change</small>` }
+return `<small class="adjNote">${delta > 0 ? "+" : "−"}${shown}</small>`
+}
+
+function hitterStatsTableHtml(rows, sortKey = "hitChance", limit = 40, view = "season"){
 if(!rows.length){ return "No hitters yet" }
+const faced = view === "faced"
 const head = HITTER_STAT_COLUMNS.map(([key, label, short]) =>
-`<th${key === "name" ? "" : ` class="num"`}><button class="sortHead${sortKey === key ? " sorted" : ""}" data-sort="${key}"><span class="headLong">${label}</span><span class="headShort">${short}</span>${sortKey === key ? " ▼" : ""}</button></th>`).join("")
-const body = sortHitterStatRows(rows, sortKey).slice(0, limit).map((r, i) => {
-const wopsTip = r.WOPS === null ? "" : `Expected OPS next game${r.wopsStarter ? ` vs. ${r.wopsStarter}` : r.wopsOpponent ? ` vs. the ${mlbTeam(r.wopsOpponent)}` : " vs. an average starter"}`
-return `<tr>
+`<th${key === "name" ? "" : ` class="num"`}${HITTER_STAT_TIPS[key] ? ` data-tip="${mlbEsc(HITTER_STAT_TIPS[key])}"` : ""}><button class="sortHead${sortKey === key ? " sorted" : ""}" data-sort="${key}"><span class="headLong">${label}</span><span class="headShort">${short}</span>${sortKey === key ? " ▼" : ""}</button></th>`).join("")
+const body = sortHitterStatRows(rows, sortKey).slice(0, limit).map((r, i) => `<tr>
 <td><span class="statWho"><span class="rankNo">${i + 1}</span>${mlbAvatar(r.key_mlbam, r.name, "sm")}<span class="rankWho"><b>${mlbEsc(r.name)}</b><small>${mlbLogo(r.team, "xs")} ${mlbEsc(mlbTeam(r.team))}</small></span></span></td>
-<td class="num">${r.WAVE === null ? "-" : r.WAVE.toFixed(3).replace(/^0/, "")}</td>
+<td class="num"><b>${mlbRate(r.WAVE)}</b>${faced ? adjustmentNote(r.WAVE, r.base.WAVE) : ""}</td>
 <td class="num"><span class="statBar">${mlbChanceBar(r.hitChance)}<b>${mlbPct(r.hitChance)}</b></span></td>
-<td class="num" data-tip="${mlbEsc(r.gamesRecent ? `A hit in ${r.gamesWithHit} of his last ${r.gamesRecent} games` : "No recent games")}"><span class="statBar">${hitGamePips(r.gamesWithHit, r.gamesRecent)}<b>${r.gamesRecent ? `${r.gamesWithHit}/${r.gamesRecent}` : "-"}</b></span></td>
-<td class="num"${wopsTip ? ` data-tip="${mlbEsc(wopsTip)}"` : ""}><b>${r.WOPS === null ? "-" : r.WOPS.toFixed(3).replace(/^0/, "")}</b>${r.wopsStarter ? `<small class="wopsVs">vs. ${mlbEsc(r.wopsStarter)}</small>` : ""}</td>
-</tr>`
-}).join("")
+<td class="num"><b>${r.CAVE === null ? "-" : mlbPct(r.CAVE, 1)}</b>${faced ? adjustmentNote(r.CAVE, r.base.CAVE, "pct") : ""}</td>
+<td class="num"><b>${mlbRate(r.WOPS)}</b>${faced ? adjustmentNote(r.WOPS, r.base.WOPS) : ""}</td>
+</tr>`).join("")
 return `<div class="scrollbox statTableBox"><table class="statTable"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
 }
 
@@ -844,7 +863,7 @@ pitcherVsAverage, pitcherDuelsHtml,
 gamePickCardHtml, gamesVersusVegas, versusVegasChartHtml, confidenceBucketsHtml, gameHistoryHtml,
 TEAM_PROFILE_GROUPS, teamRank, teamRecord, teamStatText, powerRankingsHtml, teamProfileHtml,
 playerCardHtml, playerSuggestionsHtml, hitterSplitsHtml, pitcherLeadersHtml,
-hitChanceFromWave, hitterStatRows, sortHitterStatRows, hitterStatsTableHtml,
+hitChanceFromWave, hitterStatRows, sortHitterStatRows, hitterStatsTableHtml, adjustmentNote,
 scheduleInk, scheduleSeries, scheduleSheetHtml, scheduleTeamPickerHtml,
 }
 }

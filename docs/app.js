@@ -540,15 +540,20 @@ document.getElementById("gamePickHistoryTable").innerHTML = gameHistoryHtml(pick
 
 // ---- Stats page: hitter table ----
 
-let hitterRows = []
+let hitterStats = []
+let hitterView = "season"
 let hitterSortKey = "hitChance"
 let hitterLimit = 40
 
 function renderHitterStats(){
 if(!byId("hitterStatsTable")){ return }
-const more = hitterRows.length > hitterLimit
-? `<button class="showMore" id="hitterStatsMore">Show all ${hitterRows.length} hitters</button>` : ""
-setHtml("hitterStatsTable", hitterStatsTableHtml(hitterRows, hitterSortKey, hitterLimit) + more)
+const rows = hitterStatRows(qualifiedHitters, hitterStats, hitterView)
+const more = rows.length > hitterLimit
+? `<button class="showMore" id="hitterStatsMore">Show all ${rows.length} hitters</button>` : ""
+setHtml("hitterStatsTable", hitterStatsTableHtml(rows, hitterSortKey, hitterLimit, hitterView) + more)
+document.querySelectorAll("#hitterViewSwitch [data-hitter-view]").forEach(button => {
+button.classList.toggle("active", button.dataset.hitterView === hitterView)
+})
 }
 
 function wireHitterStats(){
@@ -557,7 +562,26 @@ if(!el){ return }
 el.addEventListener("click", e => {
 const head = e.target.closest("[data-sort]")
 if(head){ hitterSortKey = head.dataset.sort; renderHitterStats(); return }
-if(e.target.closest("#hitterStatsMore")){ hitterLimit = hitterRows.length; renderHitterStats() }
+if(e.target.closest("#hitterStatsMore")){ hitterLimit = Infinity; renderHitterStats() }
+})
+byId("hitterViewSwitch").addEventListener("click", e => {
+const button = e.target.closest("[data-hitter-view]")
+if(button){ hitterView = button.dataset.hitterView; renderHitterStats() }
+})
+}
+
+// The Stats page shows hitter_stats.csv's WAVE and CAVE (which carry a
+// hitter's longer window into a recent one he sat out) and WOPS, so the
+// player card reads the same numbers as the table.
+function useSeasonViews(rows, stats){
+const byKey = {}
+stats.forEach(r => { byKey[playerKey(r.key_mlbam)] = r })
+rows.forEach(p => {
+const s = byKey[playerKey(p.key_mlbam)]
+if(!s){ return }
+p.WAVE = s.WAVE
+p.Game_Hit_Probability = s.CAVE
+p.WOPS = s.WOPS
 })
 }
 
@@ -612,7 +636,7 @@ if(button && button.dataset.schedTeam !== scheduleTeam){ showSchedule(button.dat
 // ---- Everything that needs the player files ----
 
 async function loadAll(){
-const [waveRows, paveRows, confidenceRows, predictions, streaks, probables, hitterStats, schedule] = await Promise.all([
+const [waveRows, paveRows, confidenceRows, predictions, streaks, probables, statRows, schedule] = await Promise.all([
 loadOptionalCSV("./data/wave.csv"),
 loadOptionalCSV("./data/pave.csv"),
 loadOptionalCSV("./data/confidence.csv"),
@@ -627,6 +651,8 @@ pave = paveRows
 confidence = confidenceRows.sort((a, b) => String(a.team).localeCompare(String(b.team)))
 hitterHitPredictions = predictions
 hitStreaks = streaks
+hitterStats = statRows
+if(hitterStats.length){ useSeasonViews(wave, hitterStats) }
 qualifyPlayers()
 
 setHtml("hitStreaksTable", hitStreakListHtml(hitStreaks))
@@ -639,7 +665,6 @@ pave.forEach(p => { byName[`${p.name_first} ${p.name_last}`] = p.key_mlbam })
 setHtml("probablePitchersTable",
 pitcherDuelsHtml(probables.map(r => r.key_mlbam ? r : Object.assign({}, r, { key_mlbam: byName[r.pitcher_name] || "" }))))
 
-hitterRows = hitterStatRows(qualifiedHitters, hitterStats)
 renderHitterStats()
 setHtml("paveTable", pitcherLeadersHtml(
 qualifiedPitchers.slice().sort((a, b) => Number(b.PAVE) - Number(a.PAVE))))

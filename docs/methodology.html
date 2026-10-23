@@ -233,6 +233,16 @@ the shared engine behind WAVE, WTB/WHOPS, pitch-family rates,
 plate-discipline rates, and batted-ball-quality signals - each computes a
 rate per <code>config.WAVE_WINDOWS</code> window, split by opposing
 throwing hand, then blends by fixed weight.</p>
+<p>The Stats page shows three such views of a hitter's season: <b>WAVE</b>
+(hits per at-bat), <b>CAVE</b> - Carried Average - (the share of games
+with at least one hit) and <b>WOPS</b> (OPS: on-base per plate appearance
+plus total bases per at-bat), each blending the full season with the last
+81, 30 and 10 days. A window a hitter has no at-bats in, because he was
+hurt or benched, carries his next-longer window rather than counting as
+zero. Their <b>vs. pitchers faced</b> versions compare what he did with
+what a league-average hitter would have done against the same pitchers
+(each pitcher's season hits, on-base and total bases allowed, shrunk
+toward the league), so hits off tough pitching count for more.</p>
 <a class="methodLink" href="https://en.wikipedia.org/wiki/Moving_average" target="_blank" rel="noopener">Learn more &rarr;</a>
 </div>
 
@@ -311,15 +321,6 @@ gains on bigger datasets.</p>
 selection above - it's the one that actually won and shipped for HR9
 projection (beating the KNN baseline, see below), while logistic
 regression/Ridge have won the others so far.</p>
-<p>It also powers <b>WOPS</b> on the Stats page: two gradient-boosted
-regressors, one for on-base per plate appearance and one for total bases
-per at-bat, whose sum is a hitter's expected OPS for his next game. Their
-inputs are his OBP and SLG over his last 7, 15 and 30 games and the
-season, the opposing starter's OBP and SLG allowed over his last 5 starts
-and the season (all shrunk toward league average), the platoon matchup
-and home field. Fit on 2021-2025 and tested on every 2026 game, WOPS was
-the only predictor that beat simply guessing the league average, ahead of
-a hitter's season OPS and his last-30-games OPS.</p>
 <a class="methodLink" href="https://en.wikipedia.org/wiki/Gradient_boosting" target="_blank" rel="noopener">Learn more &rarr;</a>
 </div>
 

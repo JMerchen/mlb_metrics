@@ -1579,10 +1579,9 @@ td,th{padding:7px 8px;font-size:12px;}
 .statWho{display:grid;grid-template-columns:20px 34px minmax(0,1fr);align-items:center;gap:10px;}
 .statBar{display:inline-grid;grid-template-columns:72px 40px;align-items:center;gap:8px;}
 .statBar b{font-weight:600;text-align:right;}
-.gamePips{display:inline-flex;gap:2px;justify-content:flex-end;}
-.gamePips i{width:5px;height:12px;border-radius:2px;background:var(--bg-hover);}
-.gamePips i.on{background:var(--success);}
-.wopsVs{display:block;font-size:11px;color:var(--text-dim);white-space:nowrap;}
+.statTable td.num b{font-weight:600;}
+.adjNote{display:block;font-size:10.5px;color:var(--text-dim);font-variant-numeric:tabular-nums;}
+.hitterViewSwitch{margin:0 0 12px;}
 
 /* ---- MLB Stats page: team schedules on a paper sheet ----
    Wins are circled and losses crossed out in pen; the ink deepens with
@@ -1673,7 +1672,6 @@ background:linear-gradient(90deg,rgba(0,0,0,.06),transparent 8%,transparent 92%,
 .statTable td,.statTable th{padding:8px 5px;}
 .statWho{grid-template-columns:16px minmax(0,1fr);gap:6px;}
 .statWho .mlbAvatar{display:none;}
-.statTable .chanceTrack,.statTable .gamePips{display:none;}
+.statTable .chanceTrack{display:none;}
 .statBar{grid-template-columns:auto;}
-.wopsVs{display:none;}
 }

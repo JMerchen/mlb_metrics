@@ -293,7 +293,13 @@ def run(
     # them reach the metrics.
     df = df[df["game_date"] < pd.Timestamp(as_of_date)].copy()
 
-    outputs = compute_outputs(df)
+    # The metrics (WAVE, CAVE, PAVE, team ratings) describe the regular
+    # season. The pull runs past it into the playoffs, and after the
+    # season those rows were all most hitters' recent windows held - only
+    # the playoff teams had any - so WAVE and CAVE sank for everyone else.
+    # Resolving picks below still uses every game.
+    regular = df[df["game_type"] == "R"] if "game_type" in df.columns else df
+    outputs = compute_outputs(regular)
 
     os.makedirs(output_dir, exist_ok=True)
     outputs["wave"].to_csv(os.path.join(output_dir, "wave.csv"), index=False)
