@@ -115,7 +115,7 @@ def test_build_html_end_to_end_against_real_docs(tmp_path):
         stripped = stripped.replace(marker, "")
     unresolved = [
         marker for marker in [
-            "__STYLE_CSS__", "__METHODOLOGY_STYLE__", "__INDEX_CONTENT__", "__STATS_CONTENT__", "__DFS_CONTENT__",
+            "__STYLE_CSS__", "__METHODOLOGY_STYLE__", "__INDEX_CONTENT__", "__STATS_CONTENT__",
             "__NFL_CONTENT__", "__AGE_CURVES_CONTENT__", "__METHODOLOGY_CONTENT__",
             "__ASSISTANT_CONTENT__", "__PAGE_SCRIPTS__",
         ]
@@ -141,14 +141,17 @@ def test_build_html_end_to_end_against_real_docs(tmp_path):
     ]
     assert missing_sections == []  # see the note above `in`/`not in` on the full `html` string in assert
 
-    # Predictive Metrics/DFS Rankings/Age Curves are nested subpages under
+    # MLB Picks/Stats/Age Curves are nested subpages under
     # the MLB umbrella tab, not their own top-level sections.
     missing_mlb_subpages = [
-        pid for pid in ["mlb-predictive", "mlb-stats", "mlb-dfs", "mlb-age-curves"]
+        pid for pid in ["mlb-predictive", "mlb-stats", "mlb-age-curves"]
         if f'<div id="{pid}"' not in html
     ]
     assert missing_mlb_subpages == []
 
-    # The real collision this module's docstring documents fixing.
-    for dup_id in ["playerSearch", "playerChoices", "playerResult"]:
-        assert html.count(f'id="{dup_id}"') == 1
+    # Every page shares one DOM here, so no id may appear twice.
+    import collections
+    import re
+
+    ids = collections.Counter(re.findall(r'\sid="([^"]+)"', html))
+    assert [i for i, count in ids.items() if count > 1] == []

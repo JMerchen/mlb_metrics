@@ -21,9 +21,6 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Run dfs_solver.js unit tests
-        run: node --test docs/dfs_solver.test.js
-
       - name: Run nfl_dfs_solver.js unit tests
         run: node --test docs/nfl_dfs_solver.test.js
 
@@ -46,6 +43,12 @@ jobs:
         run: node --test docs/prop_cards.test.js
       - name: Run mlb_render.js unit tests
         run: node --test docs/mlb_render.test.js
+
+      - name: Run nfl_stats.js unit tests
+        run: node --test docs/nfl_stats.test.js
+
+      - name: Run age_render.js unit tests
+        run: node --test docs/age_render.test.js
 
       - name: Install dependencies
         run: |

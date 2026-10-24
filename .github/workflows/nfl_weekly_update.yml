@@ -68,6 +68,14 @@ jobs:
             python scripts/nfl_pipeline.py
           fi
 
+      - name: Build NFL Stats tab data (schedules, team stats, player views)
+        run: |
+          if [ -n "${{ inputs.season }}" ]; then
+            python scripts/build_nfl_stats.py --season "${{ inputs.season }}"
+          else
+            python scripts/build_nfl_stats.py
+          fi
+
       - name: Commit updates
         run: |
           git config user.name "github-actions"
@@ -86,7 +94,7 @@ jobs:
           # pick) - `git add` on a path that doesn't exist yet fails the
           # whole step under `bash -e`, so guard each one, the same way
           # consensus_rankings_update.yml's own commit step already does.
-          for f in data/predictions/nfl_prop_predictions.csv docs/data/nfl_player_props_results.csv docs/data/nfl_team_units.csv; do
+          for f in data/predictions/nfl_prop_predictions.csv docs/data/nfl_player_props_results.csv docs/data/nfl_team_units.csv docs/data/nfl_team_schedule.csv docs/data/nfl_team_stats.csv docs/data/nfl_player_stats.csv; do
             [ -f "$f" ] && git add "$f"
           done
 

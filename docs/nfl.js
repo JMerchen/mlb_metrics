@@ -65,13 +65,14 @@ const DRAFT_ASSISTANT_STORAGE_KEY = "nflDraftAssistant.v1"
 let myDraftRoster = [] // [{player_id, player_display_name, position}]
 let myDraftConsidering = [] // [{player_id, player_display_name, position}] - players being weighed for the CURRENT pick, not yet drafted
 
-const NFL_TABS = ["preseason", "gamepicks", "teamunits", "draftboard", "playerprops"]
+const NFL_TABS = ["preseason", "gamepicks", "stats", "draftboard", "playerprops"]
 
 // Which tab the page opens on: a "#gamepicks"-style link wins; otherwise
 // Game Picks during the season (September through February) and
 // Preseason in the offseason, so the page opens on what's current.
 function nflDefaultTab(date, hash){
-const fromHash = (hash || "").replace("#", "")
+// "#teamunits" links from before the Team units tab became Stats.
+const fromHash = (hash || "").replace("#", "").replace(/^teamunits$/, "stats")
 if(NFL_TABS.includes(fromHash)){ return fromHash }
 const month = date.getMonth() + 1
 return month >= 9 || month <= 2 ? "gamepicks" : "preseason"
@@ -89,7 +90,7 @@ document.getElementById("preseasonSection").style.display = tab === "preseason" 
 document.getElementById("gamePicksSection").style.display = tab === "gamepicks" ? "" : "none"
 document.getElementById("draftBoardSection").style.display = tab === "draftboard" ? "" : "none"
 document.getElementById("playerPropsSection").style.display = tab === "playerprops" ? "" : "none"
-document.getElementById("teamUnitsSection").style.display = tab === "teamunits" ? "" : "none"
+document.getElementById("teamUnitsSection").style.display = tab === "stats" ? "" : "none"
 }
 
 function selectBestballPosition(position){
@@ -762,7 +763,133 @@ buildPositionFloorsSection([], "nflPositionFloorTabs", "nflPositionFloorGame", "
 }
 }
 
+// ---- Stats tab (nfl_stats.js) ----
+// Picking a team crumples the schedule sheet on show and unfolds the new
+// one (CSS animations shared with the MLB Stats page).
+
+let nflScheduleRows = []
+let nflScheduleTeam = ""
+let nflTeamRowsCache = []
+let nflSelectedTeams = []
+let nflPlayers = []
+let nflPlayerPosition = "QB"
+let nflPlayerView = "season"
+let nflPlayerSort = ""
+let nflPlayerMatches = []
+let nflUnfoldTimer = null
+
+function showNflSchedule(team){
+const sheet = document.getElementById("nflScheduleSheet")
+if(!sheet){ return }
+nflScheduleTeam = team
+document.getElementById("nflSchedulePicker").innerHTML =
+nflSchedulePickerHtml([...new Set(nflScheduleRows.map(r => r.team))], team)
+const unfold = () => {
+sheet.classList.remove("crumpling", "unfolding")
+sheet.innerHTML = nflScheduleSheetHtml(nflScheduleRows, team)
+void sheet.offsetWidth
+sheet.classList.add("unfolding")
+clearTimeout(nflUnfoldTimer)
+nflUnfoldTimer = setTimeout(() => sheet.classList.remove("unfolding"), 1400)
+}
+const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+if(sheet.childElementCount && !reduced){
+sheet.classList.remove("unfolding")
+sheet.classList.add("crumpling")
+setTimeout(unfold, 650)
+}else{
+unfold()
+}
+}
+
+function renderNflTeams(){
+document.getElementById("nflPowerRankings").innerHTML = nflPowerRankingsHtml(nflTeamRowsCache, nflSelectedTeams)
+document.getElementById("nflTeamProfile").innerHTML = nflTeamProfileHtml(nflSelectedTeams, nflTeamRowsCache)
+}
+
+function renderNflPlayers(){
+document.querySelectorAll("#nflPlayerPositions [data-position]").forEach(b => b.classList.toggle("active", b.dataset.position === nflPlayerPosition))
+document.querySelectorAll("#nflPlayerView [data-player-view]").forEach(b => b.classList.toggle("active", b.dataset.playerView === nflPlayerView))
+document.getElementById("nflPlayerTable").innerHTML = nflPlayerTableHtml(nflPlayers, nflPlayerPosition, nflPlayerSort, nflPlayerView)
+}
+
+function showNflPlayer(player){
+document.getElementById("nflPlayerResult").innerHTML = player ? nflPlayerCardHtml(player, nflPlayers, nflPlayerView) : ""
+}
+
+function wireNflStats(){
+document.getElementById("nflSchedulePicker").addEventListener("click", e => {
+const button = e.target.closest("[data-sched-team]")
+if(button && button.dataset.schedTeam !== nflScheduleTeam){ showNflSchedule(button.dataset.schedTeam) }
+})
+document.getElementById("nflPowerRankings").addEventListener("click", e => {
+const button = e.target.closest("[data-team]")
+if(!button){ return }
+const team = button.dataset.team
+if(nflSelectedTeams.includes(team) && nflSelectedTeams.length > 1){
+nflSelectedTeams = nflSelectedTeams.filter(t => t !== team)
+}else{
+nflSelectedTeams = nflSelectedTeams.filter(t => t !== team).concat(team).slice(-2)
+}
+renderNflTeams()
+document.getElementById("nflTeamProfile").scrollIntoView({ behavior: "smooth", block: "nearest" })
+})
+document.getElementById("nflPlayerPositions").addEventListener("click", e => {
+const button = e.target.closest("[data-position]")
+if(button){ nflPlayerPosition = button.dataset.position; nflPlayerSort = ""; renderNflPlayers() }
+})
+document.getElementById("nflPlayerView").addEventListener("click", e => {
+const button = e.target.closest("[data-player-view]")
+if(button){ nflPlayerView = button.dataset.playerView; renderNflPlayers() }
+})
+document.getElementById("nflPlayerTable").addEventListener("click", e => {
+const head = e.target.closest("[data-sort]")
+if(head){ nflPlayerSort = head.dataset.sort; renderNflPlayers() }
+})
+const input = document.getElementById("nflPlayerSearch")
+const search = () => {
+const query = input.value.trim().toLowerCase()
+nflPlayerMatches = query ? nflPlayers.filter(p => String(p.player_name).toLowerCase().includes(query)).slice(0, 8) : []
+document.getElementById("nflPlayerChoices").innerHTML = query ? nflPlayerSuggestionsHtml(nflPlayerMatches) : ""
+}
+input.addEventListener("input", search)
+input.addEventListener("keydown", e => {
+if(e.key === "Enter"){ search(); showNflPlayer(nflPlayerMatches[0]); document.getElementById("nflPlayerChoices").innerHTML = "" }
+})
+document.getElementById("nflPlayerChoices").addEventListener("click", e => {
+const button = e.target.closest(".playerChoice")
+if(!button){ return }
+showNflPlayer(nflPlayerMatches[Number(button.dataset.index)])
+document.getElementById("nflPlayerChoices").innerHTML = ""
+})
+}
+
+async function loadNflStats(){
+if(!document.getElementById("nflScheduleSheet")){ return }
+const optional = async path => { try{ return await loadCSV(path) }catch(e){ console.log(`no ${path} yet`, e); return [] } }
+const [schedule, stats, players, units] = await Promise.all([
+optional("./data/nfl_team_schedule.csv"), optional("./data/nfl_team_stats.csv"),
+optional("./data/nfl_player_stats.csv"), optional("./data/nfl_team_units.csv"),
+])
+nflScheduleRows = schedule
+nflTeamRowsCache = nflTeamRows(stats, units)
+nflPlayers = players
+const top = nflTeamRowsCache.slice().sort((a, b) => Number(b.net_epa_play) - Number(a.net_epa_play))[0]
+if(top){ nflSelectedTeams = [top.team] }
+renderNflTeams()
+renderNflPlayers()
+const best = players.filter(p => p.position === "QB").sort((a, b) => Number(b.epa_db) - Number(a.epa_db))[0]
+showNflPlayer(best)
+if(schedule.length){ showNflSchedule(top && schedule.some(r => r.team === top.team) ? top.team : schedule[0].team) }
+else{ document.getElementById("nflSchedulePicker").innerHTML = "Schedules appear after the next weekly update." }
+}
+
+installVizTips()
+wireNflStats()
+
 loadAll()
+
+loadNflStats()
 
 loadNflGamePicks()
 

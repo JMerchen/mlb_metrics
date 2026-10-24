@@ -68,7 +68,7 @@ this block isn't in the shared stylesheet. */
 <div class="tabGroup" id="nflTabs">
 <button class="tabButton active" data-nfl-tab="preseason" onclick="selectNflTab('preseason')">Fantasy draft</button>
 <button class="tabButton" data-nfl-tab="gamepicks" onclick="selectNflTab('gamepicks')">Game picks</button>
-<button class="tabButton" data-nfl-tab="teamunits" onclick="selectNflTab('teamunits')">Team units</button>
+<button class="tabButton" data-nfl-tab="stats" onclick="selectNflTab('stats')">Stats</button>
 <button class="tabButton" data-nfl-tab="draftboard" onclick="selectNflTab('draftboard')">College prospects</button>
 <button class="tabButton" data-nfl-tab="playerprops" onclick="selectNflTab('playerprops')">Player props</button>
 </div>
@@ -118,6 +118,75 @@ Loading...
 </div>
 
 <div id="teamUnitsSection" style="display:none">
+
+<p class="sectionIntro">What we calculate and what feeds the models: every team's season, team ratings and units, and players' season views. Our picks are on the Game picks and Player props tabs.</p>
+
+<h3>
+Team schedules
+</h3>
+
+<p class="sectionIntro">Every team's season, week by week. A green circle is a win and a red cross a loss; the darker the ink, the bigger the margin (three scores or more is the deepest). Pick a team to unfold its schedule.</p>
+
+<div class="schedPicker" id="nflSchedulePicker">
+
+Loading...
+
+</div>
+
+<div class="paperStage">
+<div class="paperSheet" id="nflScheduleSheet"></div>
+</div>
+
+<h3>
+Teams
+</h3>
+
+<p class="sectionIntro">Every team ranked by net EPA per play - points added per play on offense minus points allowed per play on defense. Pick a team to see its profile below; pick a second to compare the two.</p>
+
+<div id="nflPowerRankings">
+
+Loading...
+
+</div>
+
+<div id="nflTeamProfile">
+</div>
+
+<h3>
+Players
+</h3>
+
+<p class="sectionIntro">Each player's season so far, blending all his games with his last 8 and last 4 so recent games count more. <b>vs. defenses faced</b> credits production against tough defenses more and against soft ones less, based on what each defense he faced allowed to his position all season. Click a heading to sort.</p>
+
+<div class="tabGroup" id="nflPlayerPositions">
+<button class="tabButton active" data-position="QB">QB</button>
+<button class="tabButton" data-position="RB">RB</button>
+<button class="tabButton" data-position="WR">WR</button>
+<button class="tabButton" data-position="TE">TE</button>
+</div>
+
+<div class="tabGroup hitterViewSwitch" id="nflPlayerView">
+<button class="tabButton active" data-player-view="season">Season</button>
+<button class="tabButton" data-player-view="faced">vs. defenses faced</button>
+</div>
+
+<div id="nflPlayerTable">
+
+Loading...
+
+</div>
+
+<h3>
+Look up a player
+</h3>
+
+<div class="lookupControls">
+<input id="nflPlayerSearch" placeholder="Search QB, RB, WR or TE" autocomplete="off" aria-label="Search player">
+</div>
+
+<div id="nflPlayerChoices" class="playerChoices"></div>
+
+<div id="nflPlayerResult"></div>
 
 <h3>
 Team units
@@ -352,6 +421,10 @@ Loading...
 <script src="./nfl_units.js"></script>
 
 <script src="./prop_cards.js"></script>
+
+<script src="./mlb_render.js"></script>
+
+<script src="./nfl_stats.js"></script>
 
 <script src="./nfl.js"></script>
 
