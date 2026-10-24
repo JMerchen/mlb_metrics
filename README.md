@@ -3046,6 +3046,8 @@ docstring for the full methodology.
 
 ## DFS Player Rankings (`docs/dfs.html`, `dfs.py`)
 
+> **The DFS page was removed (2026-10-24)**, along with `scripts/build_dfs_rankings.py`, `scripts/build_optimal_lineup.py`, `docs/dfs_solver.js` and their daily steps. The DFS modules below stay: their features and ML models feed the Beat the Streak hit model. This section and the Optimal Lineup one are kept as a record.
+
 A standalone page ranking today's hitters and probable starting pitchers
 by estimated DraftKings Classic MLB fantasy points. Originally a
 **ranked list of good plays, not a salary-cap lineup optimizer** (no

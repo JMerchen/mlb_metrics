@@ -1,13 +1,6 @@
-// Age Curves page - separate from app.js since this page is standalone
-// (see docs/age-curves.html). loadCSV/buildTable are copied from app.js
-// rather than shared, since docs/ has no build step/shared-utils file to
-// import from (see app.js's own docstring-equivalent comments).
-//
-// A separate curve/projection per metric (hitters: AVG/OBP/SLG/OPS;
-// pitchers: K9/BB9/HR9/FIP) - not one blended number - since power, plate
-// discipline, contact rate, and pitching components all age differently
-// (see age_curve.py's module docstring). The metric selector re-renders
-// whichever player is currently selected without re-searching.
+// Age Curves page (age-curves.html): loads the CSVs and wires the DOM; the
+// rendering lives in age_render.js. Search covers hitters and pitchers;
+// the stat chips show whichever set the chosen player has.
 
 async function loadCSV(path){
 const response = await fetch(`${path}?t=${Date.now()}`, {cache:"no-store"})
@@ -16,249 +9,118 @@ const text = await response.text()
 return Papa.parse(text, {header:true, skipEmptyLines:true}).data
 }
 
-function buildTable(data, id, limit=null){
-if(limit){ data = data.slice(0, limit) }
-const el = document.getElementById(id)
-if(!data.length){ el.innerHTML = "No data"; return }
-let html = "<table><tr>"
-Object.keys(data[0]).forEach(k=>{ html += `<th>${k}</th>` })
-html += "</tr>"
-data.forEach(row=>{
-html += "<tr>"
-Object.values(row).forEach(v=>{ html += `<td>${v}</td>` })
-html += "</tr>"
-})
-html += "</table>"
-el.innerHTML = html
+let ageProjections = []
+let ageComparableRows = []
+let ageLeague = []
+let ageHistory = []
+let ageTeams = {}
+let ageMatches = []
+let agePlayerKey = null
+let ageMetricKey = "OPS"
+
+async function ageOptionalCSV(path){
+try{ return await loadCSV(path) }catch(e){ console.log(`no ${path} yet`, e); return [] }
 }
 
-let projections = []
-let comparablesAll = []
-let leagueCurve = []
-let playerHistory = []
-let matches = []
-let selectedKeyMlbam = null
-let selectedMetric = "OPS"
-let chart = null
-
-function currentMetric(){
-return selectedMetric
+function agePlayerRow(key, metric){
+return ageProjections.find(r => String(r.key_mlbam) === String(key) && r.metric === metric)
 }
 
-function selectMetric(metric){
-selectedMetric = metric
-document.querySelectorAll(".tabButton").forEach(btn=>{
-btn.classList.toggle("active", btn.dataset.metric === metric)
-})
-onMetricChange()
+// The stats this player has rows for, in AGE_METRICS order.
+function ageMetricsFor(key){
+const have = new Set(ageProjections.filter(r => String(r.key_mlbam) === String(key)).map(r => r.metric))
+return AGE_METRICS.filter(m => have.has(m[0])).map(m => m[0])
 }
 
-async function loadAll(){
-
-try{
-projections = await loadCSV("./data/age_curve_projections.csv")
-}catch(e){
-console.log("no age_curve_projections.csv yet", e)
+function renderAgeMetricTabs(){
+const metrics = ageMetricsFor(agePlayerKey)
+document.getElementById("ageMetricTabs").innerHTML = metrics.map(k =>
+`<button class="tabButton${k === ageMetricKey ? " active" : ""}" data-age-metric="${k}">${ageMetric(k).label}</button>`).join("")
 }
 
-try{
-comparablesAll = await loadCSV("./data/age_curve_comparables.csv")
-}catch(e){
-console.log("no age_curve_comparables.csv yet", e)
+// Drawn at the card's real width so labels stay legible; a hidden card
+// (the artifact's other tabs) gets a full-width drawing that scales down.
+function ageChartWidth(){
+const width = document.getElementById("ageChart").clientWidth
+return width > 100 ? width - 32 : 720
 }
 
-try{
-leagueCurve = await loadCSV("./data/age_curve_league.csv")
-}catch(e){
-console.log("no age_curve_league.csv yet", e)
-}
-
-try{
-playerHistory = await loadCSV("./data/age_curve_player_history.csv")
-}catch(e){
-console.log("no age_curve_player_history.csv yet", e)
-}
-
-if(!projections.length){
-document.getElementById("playerChoices").innerHTML =
-"No age curve data published yet - this page needs scripts/fetch_lahman.py and scripts/build_age_curves.py to have been run at least once."
-}
-
-}
-
-function onMetricChange(){
-if(selectedKeyMlbam !== null){
-renderPlayer(selectedKeyMlbam)
-}
-}
-
-function searchPlayer(){
-
-const query = document.getElementById("playerSearch").value.trim().toLowerCase()
-const metric = currentMetric()
-
-// One row per (player, metric) in `projections` - dedupe to one entry
-// per player for the choice list regardless of which metric is selected.
-const seen = new Set()
-matches = projections
-.filter(p=>p.metric === metric && (p.name || "").toLowerCase().includes(query))
-.filter(p=>{
-if(seen.has(p.key_mlbam)){ return false }
-seen.add(p.key_mlbam)
-return true
-})
-.slice(0, 10)
-
-const el = document.getElementById("playerChoices")
-
-if(!matches.length){
-el.innerHTML = "No players found"
-document.getElementById("playerResult").innerHTML = ""
-return
-}
-
-el.innerHTML = matches
-.map((p, i)=>`<button onclick="showPlayer(${i})">${p.name} (age ${p.age})</button>`)
-.join("")
-
-}
-
-function showPlayer(index){
-selectedKeyMlbam = matches[index].key_mlbam
-renderPlayer(selectedKeyMlbam)
-}
-
-function renderPlayer(keyMlbam){
-
-const metric = currentMetric()
-const p = projections.find(row=>row.key_mlbam === keyMlbam && row.metric === metric)
-const el = document.getElementById("playerResult")
-
+function renderAgePlayer(){
+const p = agePlayerRow(agePlayerKey, ageMetricKey)
+const hero = document.getElementById("ageHero")
+const chart = document.getElementById("ageChart")
+const list = document.getElementById("ageComparables")
+renderAgeMetricTabs()
 if(!p){
-el.innerHTML = `<div class="infoCard">No ${metric} data for this player.</div>`
-document.getElementById("comparablesTable").innerHTML = ""
-if(chart){ chart.destroy(); chart = null }
+hero.innerHTML = `<div class="vizCard">No ${ageMetric(ageMetricKey).label} for this player.</div>`
+chart.innerHTML = ""
+list.innerHTML = ""
 return
 }
+const comps = ageComparables(ageComparableRows, p.key_mlbam, ageMetricKey)
+hero.innerHTML = ageHeroHtml(p, ageMetricKey, ageLeague, comps, ageTeams[String(p.key_mlbam)])
+chart.innerHTML = `<div class="vizHead"><b>${mlbEsc(p.name)}'s ${ageMetric(ageMetricKey).label} by age</b>
+<span class="vizKey"><i class="keyOwn"></i>His seasons <i class="keyProj"></i>Next season (likely range) <i class="keyLeague"></i>League average <i class="keyUp"></i>A similar player got better <i class="keyDown"></i>worse</span></div>
+<div class="ageChartBox">${ageChartSvg(p, ageMetricKey, ageLeague, ageHistory, comps, ageChartWidth())}</div>`
+list.innerHTML = ageComparablesHtml(comps, ageMetricKey)
+}
 
-const hasProjection = p.projected_value_mean && p.projected_value_mean !== "" && p.projected_value_mean !== "nan"
+function selectAgePlayer(key){
+agePlayerKey = key
+const metrics = ageMetricsFor(key)
+if(!metrics.includes(ageMetricKey)){ ageMetricKey = metrics[0] || "OPS" }
+renderAgePlayer()
+}
 
-if(!hasProjection){
-el.innerHTML = `<div class="infoCard">No comparable historical seasons with a resolvable next season for ${p.name} (${metric}) - can't project.</div>`
-document.getElementById("comparablesTable").innerHTML = ""
-if(chart){ chart.destroy(); chart = null }
+function wireAgeCurves(){
+const input = document.getElementById("agePlayerSearch")
+const search = () => {
+const query = input.value.trim().toLowerCase()
+const seen = new Set()
+ageMatches = query ? ageProjections.filter(r => String(r.name || "").toLowerCase().includes(query) && !seen.has(r.key_mlbam) && seen.add(r.key_mlbam)).slice(0, 8) : []
+document.getElementById("agePlayerChoices").innerHTML = query ? ageSuggestionsHtml(ageMatches) : ""
+}
+input.addEventListener("input", search)
+input.addEventListener("keydown", e => {
+if(e.key === "Enter"){ search(); if(ageMatches[0]){ selectAgePlayer(ageMatches[0].key_mlbam) } document.getElementById("agePlayerChoices").innerHTML = "" }
+})
+document.getElementById("agePlayerChoices").addEventListener("click", e => {
+const button = e.target.closest(".playerChoice")
+if(!button){ return }
+selectAgePlayer(ageMatches[Number(button.dataset.index)].key_mlbam)
+document.getElementById("agePlayerChoices").innerHTML = ""
+})
+document.getElementById("ageMetricTabs").addEventListener("click", e => {
+const button = e.target.closest("[data-age-metric]")
+if(button){ ageMetricKey = button.dataset.ageMetric; renderAgePlayer() }
+})
+let resizeTimer = null
+window.addEventListener("resize", () => {
+clearTimeout(resizeTimer)
+resizeTimer = setTimeout(() => { if(agePlayerKey !== null){ renderAgePlayer() } }, 150)
+})
+}
+
+async function loadAgeCurves(){
+const [projections, comparables, league, history, wave, pave] = await Promise.all([
+ageOptionalCSV("./data/age_curve_projections.csv"), ageOptionalCSV("./data/age_curve_comparables.csv"),
+ageOptionalCSV("./data/age_curve_league.csv"), ageOptionalCSV("./data/age_curve_player_history.csv"),
+ageOptionalCSV("./data/wave.csv"), ageOptionalCSV("./data/pave.csv"),
+])
+ageProjections = projections
+ageComparableRows = comparables
+ageLeague = league
+ageHistory = history
+pave.concat(wave).forEach(r => { ageTeams[String(r.key_mlbam)] = r.team })
+if(!projections.length){
+document.getElementById("ageHero").innerHTML = "No age curve data published yet."
 return
 }
-
-el.innerHTML = `
-<div class="infoCard">
-<div class="cardHeader">
-<div class="cardTitle">${p.name}</div>
-<div class="cardBadge">${metric}</div>
-</div>
-<div class="cardStats">
-<div>Age</div>
-<div>${p.age}</div>
-<div>Current Season ${metric}</div>
-<div>${Number(p.value).toFixed(3)}</div>
-<div>Projected Next-Season ${metric}</div>
-<div>${Number(p.projected_value_mean).toFixed(3)} (range: ${Number(p.projected_value_p25).toFixed(3)} - ${Number(p.projected_value_p75).toFixed(3)})</div>
-<div>Comparables Used</div>
-<div>${p.n_with_next_season} of ${p.n_comparables} nearest same-age comparables had a next season on record</div>
-</div>
-</div>
-`
-
-renderChart(p, metric)
-renderComparablesTable(p, metric)
-
+// Open on the hitter with the best OPS this season.
+const best = projections.filter(r => r.metric === "OPS").sort((a, b) => Number(b.value) - Number(a.value))[0]
+selectAgePlayer(best ? best.key_mlbam : projections[0].key_mlbam)
 }
 
-function renderChart(p, metric){
-
-const canvas = document.getElementById("ageCurveChart")
-if(!canvas || typeof Chart === "undefined"){ return }
-
-const curveRows = leagueCurve.filter(r=>r.metric === metric)
-const ages = curveRows.map(r=>Number(r.age)).sort((a, b)=>a - b)
-const valueByAge = {}
-curveRows.forEach(r=>{ valueByAge[Number(r.age)] = Number(r.value) })
-
-// The player's own real values: their Lahman-tracked past seasons (if
-// they have any - a rookie who debuted after Lahman's last completed
-// season won't) plus their current season - a genuine multi-point
-// trajectory, not just "now." See age_curve_player_history.csv.
-const ownHistory = {}
-playerHistory
-.filter(r=>String(r.key_mlbam) === String(p.key_mlbam) && r.metric === metric)
-.forEach(r=>{ ownHistory[Number(r.age)] = Number(r.value) })
-ownHistory[Number(p.age)] = Number(p.value)
-
-const actualSeries = ages.map(a=>ownHistory.hasOwnProperty(a) ? ownHistory[a] : null)
-const projectedSeries = ages.map(a=>a === Number(p.age) + 1 ? Number(p.projected_value_mean) : null)
-
-if(chart){ chart.destroy() }
-
-chart = new Chart(canvas.getContext("2d"), {
-type: "line",
-data: {
-labels: ages,
-datasets: [
-{
-label: `League average ${metric} by age`,
-data: ages.map(a=>valueByAge[a]),
-borderColor: "#5c7cfa",
-pointRadius: 0,
-spanGaps: true,
-},
-{
-label: `${p.name} (actual)`,
-data: actualSeries,
-borderColor: "#4caf50",
-backgroundColor: "#4caf50",
-pointRadius: 5,
-spanGaps: true,
-},
-{
-label: `${p.name} (projected next season)`,
-data: projectedSeries,
-borderColor: "#f0a020",
-backgroundColor: "#f0a020",
-pointRadius: 7,
-pointStyle: "triangle",
-showLine: false,
-},
-],
-},
-options: {
-responsive: true,
-scales: {
-y: {title: {display: true, text: metric}},
-x: {title: {display: true, text: "Age"}},
-},
-},
-})
-
-}
-
-function renderComparablesTable(p, metric){
-
-const rows = comparablesAll
-.filter(r=>String(r.key_mlbam) === String(p.key_mlbam) && r.metric === metric)
-.map(r=>({
-"Player": r.name,
-"Year": r.yearID,
-"Age": r.age,
-[metric]: r.value && r.value !== "" ? Number(r.value).toFixed(3) : "-",
-[`Next Season ${metric}`]: r.next_value && r.next_value !== "" && r.next_value !== "nan" ? Number(r.next_value).toFixed(3) : "no next season",
-}))
-
-buildTable(rows, "comparablesTable")
-
-}
-
-document.getElementById("playerSearch").addEventListener("keydown", function(e){
-if(e.key === "Enter"){ searchPlayer() }
-})
-
-loadAll()
+installVizTips()
+wireAgeCurves()
+loadAgeCurves()

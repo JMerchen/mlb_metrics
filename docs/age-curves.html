@@ -6,7 +6,7 @@
 
 <meta charset="utf-8">
 
-<title>Diamond &amp; Gridiron Metrics - Age Curves</title>
+<title>Diamond &amp; Gridiron Metrics - MLB Age Curves</title>
 
 <link
 rel="icon"
@@ -57,67 +57,49 @@ href="./style.css">
 <div class="tabGroup" id="mlbSubTabs">
 <a class="tabButton" href="./predictive.html">Picks</a>
 <a class="tabButton" href="./stats.html">Stats</a>
-<a class="tabButton" href="./dfs.html">Fantasy (DFS)</a>
 <a class="tabButton active" href="./age-curves.html">Age Curves</a>
 <a class="tabButton" href="./prospects.html">Prospects</a>
 </div>
 
-<p style="opacity:.75; max-width:700px;">
-Pick a current hitter or pitcher and a stat, and see how their season
-compares to historical players at the same age, and what a next season
-might look like based on what those comparable players actually did. See
-the
-<a href="https://github.com/JMerchen/mlb_metrics#age-curves-docsage-curveshtml-exploratory---separate-page" style="color:inherit">README</a>
-for the full methodology, known limitations, and backtest numbers.
-</p>
+<h2>
+Age curves
+</h2>
 
-<div class="tabGroup" id="metricTabs">
-<span class="tabGroupLabel">Hitter:</span>
-<button class="tabButton active" data-metric="OPS" onclick="selectMetric('OPS')">OPS</button>
-<button class="tabButton" data-metric="AVG" onclick="selectMetric('AVG')">AVG</button>
-<button class="tabButton" data-metric="OBP" onclick="selectMetric('OBP')">OBP</button>
-<button class="tabButton" data-metric="SLG" onclick="selectMetric('SLG')">SLG</button>
-<span class="tabGroupLabel">Pitcher:</span>
-<button class="tabButton" data-metric="K9" onclick="selectMetric('K9')">K9</button>
-<button class="tabButton" data-metric="BB9" onclick="selectMetric('BB9')">BB9</button>
-<button class="tabButton" data-metric="HR9" onclick="selectMetric('HR9')">HR9</button>
-<button class="tabButton" data-metric="FIP" onclick="selectMetric('FIP')">FIP</button>
+<p class="sectionIntro">How a player's season stacks up against history at his age, and what players most like him did the next year. Each player is matched with the 25 historical seasons closest to his at the same age; where they went next is his projection. Search a hitter or pitcher, then pick a stat.</p>
+
+<div class="lookupControls">
+<input id="agePlayerSearch" placeholder="Search hitter or pitcher" autocomplete="off" aria-label="Search player">
 </div>
 
-<input
-id="playerSearch"
-placeholder="Search player">
+<div id="agePlayerChoices" class="playerChoices"></div>
 
-<button onclick="searchPlayer()">
-Search
-</button>
+<div class="tabGroup" id="ageMetricTabs"></div>
 
-<div id="playerChoices">
+<div id="ageHero">
+
+Loading...
+
 </div>
 
-<br>
-
-<div id="playerResult">
-</div>
-
-<div style="max-width:900px; margin-top:20px;">
-<canvas id="ageCurveChart" height="120"></canvas>
-</div>
+<div class="vizCard" id="ageChart"></div>
 
 <h3>
-Comparable Players
+Players who looked like him at his age
 </h3>
 
-<div class="scrollbox" id="comparablesTable">
-</div>
+<p class="sectionIntro">Most similar first. The colored number is how his stat moved the next season - green better, red worse.</p>
 
-<br>
+<div id="ageComparables"></div>
 
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script src="./teams.js"></script>
+
+<script src="./mlb_render.js"></script>
+
+<script src="./age_render.js"></script>
 
 <script src="./age-curves.js"></script>
 

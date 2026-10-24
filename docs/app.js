@@ -189,48 +189,6 @@ html
 
 
 
-// ---- Hover / tap tooltips ----
-// Any element with data-tip shows it in one shared tooltip on hover,
-// keyboard focus or tap. A data-mark="x%,y%" also places the chart dot
-// (.vegasDot) at that point of its plot.
-function installVizTips(){
-const tip = document.createElement("div")
-tip.className = "vizTip"
-tip.setAttribute("role", "tooltip")
-document.body.appendChild(tip)
-const show = target => {
-const el = target && target.closest ? target.closest("[data-tip]") : null
-if(!el){ tip.style.display = "none"; return }
-tip.textContent = el.getAttribute("data-tip")
-tip.style.display = "block"
-const box = el.getBoundingClientRect()
-const width = tip.offsetWidth
-const left = Math.min(Math.max(8, box.left + box.width / 2 - width / 2), window.innerWidth - width - 8)
-const above = box.top - tip.offsetHeight - 8
-tip.style.left = `${left + window.scrollX}px`
-tip.style.top = `${(above > 8 ? above : box.bottom + 8) + window.scrollY}px`
-const mark = el.getAttribute("data-mark")
-const plot = el.parentElement
-const dot = plot && plot.querySelector(".vegasDot")
-if(mark && dot){
-const [x, y] = mark.split(",")
-dot.style.left = `${x}%`
-dot.style.top = `${y}%`
-dot.style.display = "block"
-}
-}
-const hide = () => {
-tip.style.display = "none"
-document.querySelectorAll(".vegasDot").forEach(d => { d.style.display = "none" })
-}
-document.addEventListener("mouseover", e => show(e.target))
-document.addEventListener("focusin", e => show(e.target))
-document.addEventListener("click", e => { if(e.target.closest && e.target.closest("[data-tip]")){ show(e.target) } })
-document.addEventListener("mouseout", e => { if(!e.relatedTarget || !e.relatedTarget.closest || !e.relatedTarget.closest("[data-tip]")){ hide() } })
-document.addEventListener("focusout", hide)
-window.addEventListener("scroll", hide, { passive: true })
-}
-
 function byId(id){
 return document.getElementById(id)
 }

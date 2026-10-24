@@ -1,24 +1,20 @@
 """Builds the standalone HTML for the full-site Claude Artifact - the
-whole real docs/ dashboard (MLB Picks and Stats, Age Curves, DFS Rankings,
+whole real docs/ dashboard (MLB Picks and Stats, Age Curves,
 NFL, Methodology) plus the Beat the Streak Assistant chat, all under one
 claude.ai URL. Ports the real docs/*.js/*.html/*.css almost verbatim
-(same code, same tested DFS optimizer) rather than reimplementing:
+(same code) rather than reimplementing:
 
 1. Every docs/data/*.csv is pre-parsed to JSON and embedded (an artifact
    page's own network is blocked, so the real `fetch("./data/X.csv")`
    calls the site normally makes cannot work here - see loadCSV below).
 2. Each page script's `loadCSV(path)` is redefined to look up the
    embedded JSON by filename instead of fetching - a single, mechanical,
-   well-contained swap; everything downstream (rendering, the real DFS
-   knapsack solver, the NFL Draft Assistant) is untouched, so it behaves
+   well-contained swap; everything downstream (rendering, the NFL Draft
+   Assistant) is untouched, so it behaves
    exactly like the live site given the same data.
-3. Two real DOM-id/function-name collisions get fixed (age-curves.js's
-   own `searchPlayer`/`showPlayer`/`#playerSearch`/`#playerChoices`/
-   `#playerResult` clash with app.js's identically-named ones - both
-   pages now coexist in one DOM/global scope, which they never did
-   live) - renamed to an `age`-prefixed set, verified to be the ONLY
-   collision across the whole site (checked every id="" and every
-   function used from an onclick/oninput attribute for duplicates).
+3. No DOM ids or global function names collide across the pages, which
+   all share one DOM and global scope here (the Age Curves page uses its
+   own age-prefixed ids and functions for that reason).
 4. mlb_render.js's headshot/cap URL helpers (real MLB CDN URLs) return
    "" - an artifact page can't load images from external hosts, so the
    pictures fall back to initials and team codes instead of 404ing.
@@ -26,7 +22,8 @@ claude.ai URL. Ports the real docs/*.js/*.html/*.css almost verbatim
    no page that actually loads it (no NFL DFS tab exists in nfl.html
    today - only its own test file references it) - it isn't part of the
    live site to port, and skipping it also removes what would otherwise
-   be a second solver-globals collision with dfs_solver.js.
+   be a second DFS solver to carry for no page (the MLB DFS page itself
+   was removed 2026-10-24).
 
 Run manually, or by the daily resync job (same idea as
 build_bts_assistant_page.py, which this supersedes) after the daily
@@ -143,30 +140,21 @@ def _patch_mlb_render_js(js: str) -> str:
     return js
 
 
-def _patch_age_curves_js(js: str) -> str:
-    js = _patch_loadcsv(js, "age-curves.js")
-    # Real collision with app.js: both files define searchPlayer/
-    # showPlayer with DIFFERENT behavior (hitter/pitcher search vs. age-
-    # curve search) - both are onclick-reachable once merged into one
-    # page/global scope, so whichever loaded last would silently win for
-    # BOTH tabs. Rename age-curves.js's pair (word-boundary so
-    # e.g. `searchPlayerX` is untouched, though none exists).
-    js = re.sub(r"\bsearchPlayer\b", "ageSearchPlayer", js)
-    js = re.sub(r"\bshowPlayer\b", "ageShowPlayer", js)
-    # Same story for the 3 DOM ids app.js's Player Search section already
-    # owns (#playerSearch/#playerChoices/#playerResult) - verified via a
-    # full id="" audit across every docs/*.html to be the only collision.
-    for old, new in [("playerSearch", "ageplayerSearch"), ("playerChoices", "ageplayerChoices"), ("playerResult", "ageplayerResult")]:
-        js = re.sub(rf'"{old}"', f'"{new}"', js)
+def _patch_nfl_stats_js(js: str) -> str:
+    """Same as _patch_mlb_render_js for the NFL Stats tab's logo (ESPN) and
+    headshot (nfl.com) URLs."""
+    for signature in ("function nflLogoUrl(team)", "function nflHeadshotUrl(url)"):
+        start, end = _extract_balanced_function(js, signature, "nfl_stats.js")
+        js = js[:start] + f'{signature}{{\nreturn ""\n}}' + js[end:]
     return js
 
 
 PAGE_JS_PATCHERS = {
     "mlb_render.js": _patch_mlb_render_js,
+    "nfl_stats.js": _patch_nfl_stats_js,
     "app.js": _patch_app_js,
-    "dfs.js": lambda js: _patch_loadcsv(js, "dfs.js"),
     "nfl.js": lambda js: _patch_loadcsv(js, "nfl.js"),
-    "age-curves.js": _patch_age_curves_js,
+    "age-curves.js": lambda js: _patch_loadcsv(js, "age-curves.js"),
 }
 
 # Verbatim - no loadCSV/network/image dependency to patch (see module
@@ -190,7 +178,7 @@ PAGE_JS_PATCHERS = {
 # and by the MLB/NFL tabs.
 VERBATIM_JS = [
     "teams.js", "summary_render.js",
-    "dfs_solver.js", "nfl_draft_assistant.js", "consensus_board.js", "player_props.js", "nfl_units.js", "prop_cards.js",
+    "age_render.js", "nfl_draft_assistant.js", "consensus_board.js", "player_props.js", "nfl_units.js", "prop_cards.js",
 ]
 
 
@@ -202,7 +190,7 @@ REAL_SITE_ONLY_NAV_MARKERS = (
     # artifact already builds its own copy of both higher up the DOM (see
     # full_site_template.html), so these must NOT also flow into the
     # page's own extracted content - besides being a visual duplicate,
-    # <a href="./dfs.html">-style links wouldn't work inside the
+    # <a href="./stats.html">-style links wouldn't work inside the
     # single-page artifact anyway.
     '<div class="sportHeader">',
     '<div class="tabGroup" id="mlbSubTabs">',
@@ -275,22 +263,11 @@ def build_html(docs_dir: str) -> str:
     # wants lives at predictive.html (and its Stats at stats.html).
     index_content = _extract_page_content(read("predictive.html"), "predictive.html")
     stats_content = _extract_page_content(read("stats.html"), "stats.html")
-    dfs_content = _extract_page_content(read("dfs.html"), "dfs.html")
     nfl_content = _extract_page_content(read("nfl.html"), "nfl.html")
     age_curves_content = _extract_page_content(read("age-curves.html"), "age-curves.html")
     methodology_html = read("methodology.html")
     methodology_content = _extract_page_content(methodology_html, "methodology.html")
     methodology_style = _extract_methodology_style(methodology_html)
-
-    # Rewrite the DOM ids/onclick text this SPECIFIC page's static markup
-    # references, matching age-curves.js's own renames above.
-    for old, new in [
-        ('id="playerSearch"', 'id="ageplayerSearch"'),
-        ('id="playerChoices"', 'id="ageplayerChoices"'),
-        ('id="playerResult"', 'id="ageplayerResult"'),
-        ("searchPlayer()", "ageSearchPlayer()"),
-    ]:
-        age_curves_content = age_curves_content.replace(old, new)
 
     js_blocks = []
     for filename in VERBATIM_JS:
@@ -321,7 +298,6 @@ def build_html(docs_dir: str) -> str:
     template = template.replace("/*__METHODOLOGY_STYLE__*/", methodology_style)
     template = template.replace("<!--__INDEX_CONTENT__-->", index_content)
     template = template.replace("<!--__STATS_CONTENT__-->", stats_content)
-    template = template.replace("<!--__DFS_CONTENT__-->", dfs_content)
     template = template.replace("<!--__NFL_CONTENT__-->", nfl_content)
     template = template.replace("<!--__AGE_CURVES_CONTENT__-->", age_curves_content)
     template = template.replace("<!--__METHODOLOGY_CONTENT__-->", methodology_content)
