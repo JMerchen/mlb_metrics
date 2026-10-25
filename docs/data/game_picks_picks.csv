@@ -1,5 +1,5 @@
 date,game_pk,home_team,away_team,predicted_winner,predicted_loser,predicted_probability,above_threshold,status,market_home_win_probability,market_predicted_winner_probability,bet_units,bet_side,bet_team,bet_moneyline,bet_profit_units
-2026-10-24,849802,MIL,TB,MIL,TB,0.5857346190907797,True,pending,0.5217391304347826,0.5217391304347826,0.0,,,,
+2026-10-24,849802,MIL,TB,MIL,TB,0.5857346190907797,True,win,0.5217391304347826,0.5217391304347826,0.0,,,,
 2026-10-23,849805,MIL,TB,MIL,TB,0.6667201628354634,True,win,0.6237851395130107,0.6237851395130107,0.0,,,,
 2026-10-19,849815,TB,CLE,TB,CLE,0.5319621084685678,False,win,0.5842096748099014,0.5842096748099014,0.0,,,,
 2026-10-18,849817,CLE,TB,CLE,TB,0.519369992268333,False,loss,0.4548116338083154,0.4548116338083154,0.0,,,,
