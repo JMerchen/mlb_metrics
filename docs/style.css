@@ -1743,3 +1743,23 @@ background:linear-gradient(90deg,rgba(0,0,0,.06),transparent 8%,transparent 92%,
 .ageMove.dim{font-weight:400;font-size:12px;}
 .ageCompList{max-width:640px;}
 #ageMetricTabs{margin:4px 0 14px;}
+
+/* ---- NFL game picks: "What if?" panel (docs/nfl_whatif.js) ---- */
+.whatIf{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:18px;}
+.whatIfField{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--text-dim);margin-bottom:10px;max-width:100%;}
+.whatIfField select{margin:0;width:100%;max-width:100%;box-sizing:border-box;}
+.whatIfResult{margin:4px 0 14px;}
+.whatIfHeadline{font-size:22px;font-weight:700;margin-bottom:6px;font-variant-numeric:tabular-nums;}
+.whatIfBreakdown{font-size:13px;color:var(--text-dim);margin-top:6px;}
+.whatIfBreakdown b{color:var(--text);}
+.whatIfTeams{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;}
+.whatIfTeam h4{margin:0 0 8px;}
+.whatIfOutLabel{font-size:12px;color:var(--text-dim);margin:4px 0 6px;}
+.whatIfGroup{margin-bottom:8px;}
+.whatIfGroupName{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);margin-bottom:2px;}
+.whatIfPlayer{display:flex;align-items:center;gap:6px;font-size:13px;padding:2px 0;cursor:pointer;}
+.whatIfPlayer input{margin:0;padding:0;}
+.whatIfPlayer small{color:var(--text-dim);margin-left:auto;font-variant-numeric:tabular-nums;}
+@media (max-width:640px){
+.whatIfTeams{grid-template-columns:1fr;}
+}

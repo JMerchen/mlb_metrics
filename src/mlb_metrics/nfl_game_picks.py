@@ -52,7 +52,7 @@ nfl_team_strength.py's own season-carryover shrinkage.
 
 import pandas as pd
 
-from mlb_metrics import config, ml_models, nfl_passing
+from mlb_metrics import config, ml_models, nfl_passing, nfl_totals
 
 GAME_PICK_FEATURE_COLUMNS = [
     "home_composite",
@@ -196,6 +196,51 @@ def build_game_features_disaggregated(
     games = _add_qb_adjustments(games, qb_continuity, weekly_df)
 
     return games[["game_id", "season", "week", "home_team", "away_team"] + DISAGGREGATED_FEATURE_COLUMNS]
+
+
+# QB+ in place of the QB-continuity adjustment (2026-10-26, "how do we get
+# closer to Vegas?"): Vegas rates a team ~0.3 logits lower than this model
+# when its starting QB changed, and the results side with Vegas. Each
+# starter rated as QB+ is (nfl_totals.starter_qb_epa - EPA per dropback
+# over his last 16 games, shrunk toward replacement level), from the
+# weekly player stats already passed in, lowered walk-forward log loss in
+# all 9 seasons 2018-2026 (.6458 -> .6368, accuracy 62.9% -> 64.1%, paired
+# p = .0001); see scripts/backtest_nfl_game_pick_qb_rest.py.
+QB_PLUS_FEATURE_COLUMNS = (
+    [f"home_{c}" for c in DISAGGREGATED_SIGNAL_COLUMNS]
+    + [f"away_{c}" for c in DISAGGREGATED_SIGNAL_COLUMNS]
+    + ["home_qb_plus", "away_qb_plus"]
+)
+
+
+def qb_games_from_weekly(weekly_df: pd.DataFrame) -> pd.DataFrame:
+    """One row per QB per regular-season game in `weekly_df` (player
+    stats): [qb, season, week, epa_sum, dropbacks] - passing EPA and
+    attempts plus sacks - the shape nfl_totals.starter_qb_epa rates."""
+    rows = weekly_df
+    if "season_type" in rows.columns:
+        rows = rows[rows["season_type"] == "REG"]
+    sacks = rows["sacks_suffered"].fillna(0) if "sacks_suffered" in rows.columns else 0
+    dropbacks = rows["attempts"].fillna(0) + sacks
+    rows = rows[dropbacks > 0]
+    return pd.DataFrame({
+        "qb": rows["player_id"], "season": rows["season"], "week": rows["week"],
+        "epa_sum": rows["passing_epa"].fillna(0.0), "dropbacks": dropbacks[dropbacks > 0],
+    })
+
+
+def build_game_features_qb_plus(
+    master: pd.DataFrame, qb_continuity: pd.DataFrame, weekly_df: pd.DataFrame, schedule_games_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Returns [game_id, season, week, home_team, away_team] + QB_PLUS_FEATURE_COLUMNS:
+    the disaggregated team signals plus each listed starter's QB+ (EPA per
+    dropback; a starter with no history is replacement level)."""
+    games = build_game_features_disaggregated(master, qb_continuity, weekly_df, schedule_games_df)
+    qb_games = qb_games_from_weekly(weekly_df)
+    starters = schedule_games_df.set_index("game_id")[["home_qb_id", "away_qb_id"]].reindex(games["game_id"])
+    games["home_qb_plus"] = nfl_totals.starter_qb_epa(qb_games, starters["home_qb_id"]).to_numpy()
+    games["away_qb_plus"] = nfl_totals.starter_qb_epa(qb_games, starters["away_qb_id"]).to_numpy()
+    return games[["game_id", "season", "week", "home_team", "away_team"] + QB_PLUS_FEATURE_COLUMNS]
 
 
 # Real follow-up (2026-09-11 - "it's a comparison... if the difference
@@ -357,6 +402,7 @@ _FEATURE_COLUMN_BUILDERS = [
     (DISAGGREGATED_FEATURE_COLUMNS, build_game_features_disaggregated),
     (MATCHUP_ADDED_FEATURE_COLUMNS, build_game_features_matchup),
     (MATCHUP_FOCUSED_FEATURE_COLUMNS, build_game_features_matchup),
+    (QB_PLUS_FEATURE_COLUMNS, build_game_features_qb_plus),
 ]
 
 

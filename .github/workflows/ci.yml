@@ -50,6 +50,9 @@ jobs:
       - name: Run age_render.js unit tests
         run: node --test docs/age_render.test.js
 
+      - name: Run nfl_whatif.js unit tests
+        run: node --test docs/nfl_whatif.test.js
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
