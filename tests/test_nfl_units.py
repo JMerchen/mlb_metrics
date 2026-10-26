@@ -55,12 +55,14 @@ def test_team_unit_ratings_put_average_at_100_and_flip_defenses(monkeypatch):
 
     ratings = nfl_units.team_unit_ratings(games, qb_games, starters).set_index("team")
 
-    assert ratings["receiving_plus"].mean() == pytest.approx(100, abs=0.5)
-    assert ratings["receiving_plus"].std() == pytest.approx(config.NFL_UNIT_PLUS_POINTS_PER_SD, abs=1)
-    assert ratings.loc["KC", "receiving_plus"] > 100 > ratings.loc["DEN", "receiving_plus"]
+    # The unadjusted season view (one game each can't separate an offense
+    # from the defense it faced, so the schedule-adjusted views can't either).
+    assert ratings["receiving_plus_season"].mean() == pytest.approx(100, abs=0.5)
+    assert ratings["receiving_plus_season"].std() == pytest.approx(config.NFL_UNIT_PLUS_POINTS_PER_SD, abs=1)
+    assert ratings.loc["KC", "receiving_plus_season"] > 100 > ratings.loc["DEN", "receiving_plus_season"]
     # KC's offense put up the most per dropback against DEN, so DEN's pass defense rates worst
-    assert ratings.loc["DEN", "pass_defense_plus"] == ratings["pass_defense_plus"].min()
-    assert ratings.loc["KC", "qb_plus"] == ratings["qb_plus"].max()
+    assert ratings.loc["DEN", "pass_defense_plus_season"] == ratings["pass_defense_plus_season"].min()
+    assert ratings.loc["KC", "qb_plus_season"] == ratings["qb_plus_season"].max()
     assert ratings.loc["KC", "qb_name"] == "Patrick Mahomes"
 
 
@@ -104,8 +106,8 @@ def test_strength_of_schedule_credits_production_against_a_strong_defense(monkey
     assert ratings.loc["B", "receiving_plus_season_sos"] > ratings.loc["A", "receiving_plus_season_sos"]
     # and the defenses: Y allowed less than X either way
     assert ratings.loc["Y", "pass_defense_plus_season_sos"] > ratings.loc["X", "pass_defense_plus_season_sos"]
-    # the plain columns are the season view
-    assert ratings["receiving_plus"].equals(ratings["receiving_plus_season"])
+    # the plain columns are the default view
+    assert ratings["receiving_plus"].equals(ratings[f"receiving_plus_{nfl_units.DEFAULT_VIEW}"])
 
 
 def test_season_view_uses_this_season_only_and_recency_reaches_back(monkeypatch):

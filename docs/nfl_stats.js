@@ -185,7 +185,7 @@ default: return String(n)
 }
 }
 
-// Team stats joined with their unit ratings (season view) and win %.
+// Team stats joined with their unit ratings (the default view) and win %.
 function nflTeamRows(stats, units){
 const byTeam = {}
 ;(units || []).forEach(u => { byTeam[u.team] = u })
@@ -195,9 +195,8 @@ const games = mlbNum(t.games) || 0
 const winPct = games ? ((mlbNum(t.wins) || 0) + 0.5 * (mlbNum(t.ties) || 0)) / games : null
 return Object.assign({}, t, {
 win_pct: winPct,
-qb_plus: u.qb_plus_season ?? u.qb_plus, receiving_plus: u.receiving_plus_season ?? u.receiving_plus,
-rushing_plus: u.rushing_plus_season ?? u.rushing_plus, pass_defense_plus: u.pass_defense_plus_season ?? u.pass_defense_plus,
-run_defense_plus: u.run_defense_plus_season ?? u.run_defense_plus,
+qb_plus: u.qb_plus, receiving_plus: u.receiving_plus, rushing_plus: u.rushing_plus,
+pass_defense_plus: u.pass_defense_plus, run_defense_plus: u.run_defense_plus,
 })
 })
 }

@@ -96,14 +96,20 @@ def _plus(values: pd.Series, direction: float) -> pd.Series:
 
 
 # The four views the page toggles between: (recency weighting, strength of
-# schedule). The plain `{unit}_plus` columns are the default, "season".
+# schedule). The plain `{unit}_plus` columns are the default view.
 VIEWS = {
     "season": (False, False),
     "recency": (True, False),
     "season_sos": (False, True),
     "recency_sos": (True, True),
 }
-DEFAULT_VIEW = "season"
+# Recent games plus strength of schedule predicts a unit's next game best
+# (scripts/backtest_nfl_unit_views.py, 4,636 team-games 2017-2026: average
+# correlation .163 across the five units vs .152 for this season alone, and
+# .163 vs .109 in weeks 2-4; best for four of the five units, QB+ a hair
+# behind recent games alone). It was "season" until 2026-10-26, which made
+# Seattle's Darnold a 65 QB+ off four starts while his last 16 games say 84.
+DEFAULT_VIEW = "recency_sos"
 
 # (unit, play-type numerator, denominator, offense or defense side, + direction)
 _PLAY_TYPES = {"targets": ("target_epa", "targets"), "runs": ("run_epa", "runs"), "dropbacks": ("dropback_epa", "dropbacks")}
