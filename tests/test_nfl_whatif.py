@@ -12,7 +12,7 @@ def _snap(game, week, team, pid, name, position, offense=0.0, defense=0.0):
             "offense_pct": offense, "defense_pct": defense}
 
 
-def test_regular_players_uses_the_last_four_games_counting_a_missed_game_as_zero():
+def test_regular_players_without_rosters_uses_the_teams_last_four_games():
     snaps = []
     for week in range(1, 6):
         game = f"2026_0{week}_GB"
@@ -21,18 +21,56 @@ def test_regular_players_uses_the_last_four_games_counting_a_missed_game_as_zero
         if week <= 3:
             snaps.append(_snap(game, week, "GB", "wr", "Receiver", "WR", offense=1.0))
         snaps.append(_snap(game, week, "GB", "cb", "Corner", "CB", defense=0.4))
+        snaps.append(_snap(game, week, "GB", "lb", "Backup", "LB", defense=0.2))
     regulars = nfl_whatif.regular_players(pd.DataFrame(snaps)).set_index("pfr_player_id")
 
     assert regulars.loc["lt", "group"] == "OL"
     assert regulars.loc["lt", "share"] == pytest.approx(1.0)
-    # Weeks 2-5: played 2 of 4 at 100% -> 0.5, still a regular.
+    # Weeks 2-5: played 2 of 4 at 100% -> 0.5.
     assert regulars.loc["wr", "share"] == pytest.approx(0.5)
-    assert "cb" not in regulars.index  # 40% of snaps isn't a regular
+    assert regulars.loc["cb", "share"] == pytest.approx(0.4)  # rotational, still listed
+    assert "lb" not in regulars.index  # under LISTED_SHARE
+    assert "cb" not in nfl_whatif.regular_players(pd.DataFrame(snaps), min_share=0.5)["pfr_player_id"].values
+
+
+def _roster(week, team, pfr_id, name, status="ACT", position="CB"):
+    return {"season": 2026, "week": week, "team": team, "pfr_id": pfr_id, "full_name": name,
+            "status": status, "position": position}
+
+
+def test_regular_players_follow_a_traded_player_and_fill_missing_lineman_ids():
+    snaps, roster = [], []
+    for week in range(1, 6):
+        for team in ("PIT", "DAL"):
+            snaps.append(_snap(f"2026_0{week}_{team}", week, team, f"qb_{team}", "Filler", "QB", offense=1.0))
+        # Porter: every snap for Pittsburgh through week 3, traded, inactive
+        # week 4, then 60% for Dallas in week 5.
+        if week <= 3:
+            snaps.append(_snap(f"2026_0{week}_PIT", week, "PIT", "porter", "Joey Porter Jr.", "CB", defense=1.0))
+        if week == 5:
+            snaps.append(_snap("2026_05_DAL", week, "DAL", "porter", "Joey Porter Jr.", "CB", defense=0.6))
+        snaps.append(_snap(f"2026_0{week}_DAL", week, "DAL", "smith", "Tyler Smith", "G", offense=1.0))
+        snaps.append(_snap(f"2026_0{week}_DAL", week, "DAL", "cut", "Released Guy", "WR", offense=0.9))
+        team = "PIT" if week <= 3 else "DAL"
+        roster.append(_roster(week, team, "porter", "Joey Porter Jr.", status="INA" if week == 4 else "ACT"))
+        # Rosters leave linemen's pfr_id blank.
+        roster.append(_roster(week, "DAL", None, "Tyler Smith", position="OL"))
+        roster.append(_roster(week, "DAL", "cut", "Released Guy", status="CUT" if week == 5 else "ACT", position="WR"))
+    regulars = nfl_whatif.regular_players(pd.DataFrame(snaps), pd.DataFrame(roster)).set_index("pfr_player_id")
+
+    # His last 4 active games: PIT weeks 1-3 at 100% and DAL week 5 at 60%.
+    assert regulars.loc["porter", "team"] == "DAL"
+    assert regulars.loc["porter", "share"] == pytest.approx(0.9)
+    assert regulars.loc["smith", "team"] == "DAL"
+    assert regulars.loc["smith", "group"] == "OL"
+    assert "cut" not in regulars.index
 
 
 def _weekly(pid, name, team, week, attempts, epa, season=2026):
-    return {"player_id": pid, "player_display_name": name, "team": team, "season": season, "week": week,
-            "season_type": "REG", "attempts": attempts, "sacks_suffered": 0, "passing_epa": epa}
+    return {"player_id": pid, "player_display_name": name, "position": "QB", "team": team, "season": season, "week": week,
+            "season_type": "REG", "attempts": attempts, "sacks_suffered": 0, "passing_epa": epa,
+            "game_id": f"{season}_{week:02d}_{team}", "completions": 20, "passing_yards": 200, "passing_tds": 1,
+            "passing_interceptions": 0, "carries": 2, "rushing_yards": 5, "rushing_tds": 0}
 
 
 def _games():
@@ -58,13 +96,16 @@ def test_qb_options_lists_the_starter_first_then_teammates_with_qb_plus():
 
     options = nfl_whatif.qb_options(weekly, rosters, _games())
 
-    assert [q["id"] for q in options["GB"]] == ["love", "taylor"]
+    assert [q["id"] for q in options["GB"]] == ["love", "taylor", "average"]
     assert options["GB"][0]["listed"] is True
-    assert [q["name"] for q in options["CAR"]] == ["Bryce Young", "Kenny Pickett"]
+    assert [q["name"] for q in options["CAR"]] == ["Bryce Young", "Kenny Pickett", "Average starter"]
     # League 4.0 EPA / 70 dropbacks; replacement = that - 0.10; Pickett has no dropbacks.
     replacement = 4.0 / 70 - 0.10
     assert options["CAR"][1]["qb_plus"] == pytest.approx(replacement, abs=1e-4)
     assert options["GB"][0]["qb_plus"] == pytest.approx((6.0 + 150 * replacement) / 180, abs=1e-4)
+    # The average starter: the mean of each team's most-used passer (Love, Young).
+    young = (0.0 + 150 * replacement) / 180
+    assert options["GB"][-1]["qb_plus"] == pytest.approx((options["GB"][0]["qb_plus"] + young) / 2, abs=1e-4)
 
 
 def test_write_whatif_json_carries_the_shown_probability_pairings_and_regulars(monkeypatch, tmp_path):
@@ -73,6 +114,9 @@ def test_write_whatif_json_carries_the_shown_probability_pairings_and_regulars(m
         return pd.DataFrame({"game_id": games["game_id"],
                              "home_win_probability": [0.6 if h == "love" else 0.4 for h in games["home_qb_id"]]})
 
+    # No saved model: QBs are swapped by id, and an average starter can't
+    # be priced, so it isn't offered.
+    monkeypatch.setattr(nfl_whatif.config, "NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH", str(tmp_path / "none.joblib"))
     monkeypatch.setattr(nfl_whatif.nfl_game_picks, "compute_game_win_probabilities", fake_probs)
     monkeypatch.setattr(nfl_whatif.nfl_game_picks, "apply_ml_model", lambda probs, *a: probs)
     weekly = pd.DataFrame([_weekly("love", "Jordan Love", "GB", 1, 30, 6.0),
@@ -85,10 +129,37 @@ def test_write_whatif_json_carries_the_shown_probability_pairings_and_regulars(m
     nfl_whatif.write_whatif_json(str(path), shown, None, None, weekly, None, snaps, _games())
 
     data = json.loads(path.read_text())
-    assert data["injury_log_odds"]["OL"] == pytest.approx(-0.85)
+    assert data["injury_log_odds"]["WR"] == pytest.approx(-0.25)
+    assert data["average_regular_share"] == {"OL": 1.0}
     game = data["games"][0]
     assert game["home_win_probability"] == pytest.approx(0.62)
     assert game["pairing_log_odds"]["love|young"] == pytest.approx(0.4055, abs=1e-4)
     assert game["pairing_log_odds"]["taylor|young"] == pytest.approx(-0.4055, abs=1e-4)
     assert game["home"]["regulars"] == [{"id": "lt", "name": "Left Tackle", "group": "OL", "share": 1.0}]
     assert game["away"]["regulars"] == []
+    assert [q["id"] for q in game["home"]["qbs"]] == ["love", "taylor"]
+
+
+def test_pairings_with_a_qb_plus_model_price_an_average_starter(monkeypatch, tmp_path):
+    from sklearn.linear_model import LogisticRegression
+
+    columns = nfl_whatif.nfl_game_picks.QB_PLUS_FEATURE_COLUMNS
+    X = pd.DataFrame(0.0, index=range(4), columns=columns)
+    X["home_qb_plus"] = [-0.2, -0.1, 0.1, 0.2]
+    model = LogisticRegression().fit(X, [0, 0, 1, 1])
+    path = tmp_path / "model.joblib"
+    nfl_whatif.ml_models.save_model({"model": model, "feature_columns": columns}, str(path))
+    monkeypatch.setattr(nfl_whatif.config, "NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH", str(path))
+    master = pd.DataFrame([{"team": t, "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "offensive_edge": 1.0,
+                            "defensive_edge": 1.0, "turnover_margin": 1.0, "points_per_drive": 1.0} for t in ("GB", "CAR")])
+    options = {"GB": [{"id": "love", "qb_plus": 0.12}, {"id": "average", "qb_plus": 0.03}],
+               "CAR": [{"id": "young", "qb_plus": 0.05}]}
+    weekly = pd.DataFrame([_weekly("love", "Jordan Love", "GB", 1, 30, 6.0), _weekly("young", "Bryce Young", "CAR", 1, 30, 0.0)])
+
+    qb_continuity = pd.DataFrame([{"team": t, "recent_primary_qb_id": q, "recent_primary_qb_epa": 0.0,
+                                   "recent_primary_qb_games": 8} for t, q in (("GB", "love"), ("CAR", "young"))])
+
+    pairs = nfl_whatif.pairing_log_odds(master, qb_continuity, weekly, _games(), options)["2026_08_CAR_GB"]
+
+    assert set(pairs) == {"love|young", "average|young"}
+    assert pairs["love|young"] > pairs["average|young"]

@@ -34,10 +34,25 @@ RESULT (2026-10-26, 2016-2026 snap counts; 2,221 games 2018-2026 for 2):
   Vegas prices every group (-.07 to -.20 per whole group against our line),
   most for WR, DL, OL and CB.
 
+  Per regular lost instead (each absent regular counts his snap share, not
+  his share of however many regulars his group lists - what the page uses):
+              results (se)     Vegas (se)
+      WR     -.25 (.10)       -.12 (.02)
+      OL     -.19 (.05)       -.04 (.01)
+      CB     -.19 (.08)       -.08 (.02)
+      DL     -.19 (.11)       -.13 (.02)
+      TE     -.11 (.17)       -.07 (.04)
+      LB     -.10 (.09)       -.06 (.02)
+      S      -.03 (.08)       -.04 (.02)
+      RB     +.19 (.21)       -.13 (.05)
+  Losing several at once cost about the sum (a squared term: -.03, p = .35).
+  nfl_whatif.INJURY_LOG_ODDS takes the results where they're clear (WR, OL,
+  CB) and Vegas's price elsewhere.
+
 "Out" here is "took no snaps", which is known when inactives are announced
 90 minutes before kickoff; the injury report's Out/Doubtful is the
 earlier, noisier version. These per-group log-odds drive the injury
-toggles on the NFL page's what-if panel (nfl_whatif.INJURY_LOG_ODDS).
+toggles on the NFL page's what-if panel.
 
 Usage:
     python scripts/backtest_nfl_injury_impact.py --rows rows_qb_plus.parquet
@@ -90,7 +105,8 @@ def missing_shares(snaps: pd.DataFrame) -> pd.DataFrame:
             expected = prior.where(regular, 0).sum(axis=1)
             missing = prior.where(regular & ~played, 0).sum(axis=1)
             shares.append(pd.DataFrame({"team": team, "game_id": g.index,
-                                        f"miss_{group}": (missing / expected.replace(0, np.nan)).values}))
+                                        f"miss_{group}": (missing / expected.replace(0, np.nan)).values,
+                                        f"lost_{group}": missing.values}))
         out = out.merge(pd.concat(shares), on=["game_id", "team"], how="left")
     return out
 
@@ -128,15 +144,23 @@ def unit_cost(units: pd.DataFrame, missing: pd.DataFrame) -> None:
     print(table.round(4).to_string(index=False))
 
 
-def win_effect(rows: pd.DataFrame, missing: pd.DataFrame, schedules: pd.DataFrame) -> None:
+def win_effect(rows: pd.DataFrame, missing: pd.DataFrame, schedules: pd.DataFrame, prefix: str = "miss_",
+               compound: bool = False) -> pd.DataFrame:
+    """Home win ~ model log-odds + home-minus-away absences (columns
+    starting `prefix`), and Vegas's line minus ours ~ the same. With
+    `compound`, one more term: the sum over groups of each side's lost
+    regulars squared - does losing several at once cost more than the sum?
+    Returns per group: outcome and market coefficients and standard errors."""
     pred = grid.walk_forward(rows, 0.03, list(range(2018, 2027)))
     games = pred.merge(rows[["game_id", "home_team", "away_team"]], on="game_id")
     games["home_team"], games["away_team"] = nfl_totals._canonical(games["home_team"]), nfl_totals._canonical(games["away_team"])
     m = missing.set_index(["game_id", "team"])
-    cols = [c for c in missing.columns if c.startswith("miss_")]
-    home = m.reindex(pd.MultiIndex.from_frame(games[["game_id", "home_team"]]))[cols].to_numpy()
-    away = m.reindex(pd.MultiIndex.from_frame(games[["game_id", "away_team"]]))[cols].to_numpy()
-    diff = pd.DataFrame(home - away, columns=[f"{c}_home_minus_away" for c in cols], index=games.index).fillna(0)
+    cols = [c for c in missing.columns if c.startswith(prefix)]
+    home = m.reindex(pd.MultiIndex.from_frame(games[["game_id", "home_team"]]))[cols].fillna(0).to_numpy()
+    away = m.reindex(pd.MultiIndex.from_frame(games[["game_id", "away_team"]]))[cols].fillna(0).to_numpy()
+    diff = pd.DataFrame(home - away, columns=[f"{c}_home_minus_away" for c in cols], index=games.index)
+    if compound:
+        diff["compound_home_minus_away"] = (home ** 2).sum(axis=1) - (away ** 2).sum(axis=1)
     sched = schedules.set_index("game_id")
     imp = lambda ml: np.where(ml < 0, -ml / (-ml + 100), 100 / (ml + 100))  # noqa: E731
     h, a = imp(sched["home_moneyline"]), imp(sched["away_moneyline"])
@@ -148,12 +172,17 @@ def win_effect(rows: pd.DataFrame, missing: pd.DataFrame, schedules: pd.DataFram
 
     ok = ~np.isnan(vegas)
     ours = pd.Series(logit(games["p"].to_numpy()), index=games.index, name="logit_ours")
-    print(f"\nHome win ~ model log-odds + (home minus away) missing share, {ok.sum()} games 2018-2026:\n")
+    print(f"\nHome win ~ model log-odds + (home minus away) {prefix}*, {ok.sum()} games 2018-2026:\n")
     fit = sm.Logit(games.loc[ok, "y"], sm.add_constant(pd.concat([ours, diff], axis=1)[ok])).fit(disp=0)
     print(fit.summary2().tables[1].round(3).to_string())
     gap = pd.Series(logit(vegas[ok]) - ours[ok].to_numpy(), index=games.index[ok])
     print("\nVegas log-odds minus ours ~ the same (what Vegas prices that we don't):\n")
-    print(sm.OLS(gap, sm.add_constant(diff[ok])).fit().summary2().tables[1].round(3).to_string())
+    market = sm.OLS(gap, sm.add_constant(diff[ok])).fit()
+    print(market.summary2().tables[1].round(3).to_string())
+    groups = [c for c in diff.columns if c.startswith(prefix)]
+    return pd.DataFrame({"outcome": fit.params[groups], "outcome_se": fit.bse[groups],
+                         "market": market.params[groups], "market_se": market.bse[groups]}).rename(
+        index=lambda c: c[len(prefix):].replace("_home_minus_away", ""))
 
 
 def main():
@@ -184,7 +213,19 @@ def main():
     grid_cols = grid.nfl_game_picks.DISAGGREGATED_FEATURE_COLUMNS
     grid.nfl_game_picks.DISAGGREGATED_FEATURE_COLUMNS = nfl_game_picks.QB_PLUS_FEATURE_COLUMNS
     try:
-        win_effect(rows, missing, grid._load("schedules"))
+        schedules = grid._load("schedules")
+        win_effect(rows, missing, schedules)
+        # Per player: each absent regular counts his snap share (about 1 for
+        # an every-down starter), not his share of however many regulars
+        # his group lists - the what-if panel's toggles.
+        per_player = win_effect(rows, missing, schedules, prefix="lost_")
+        win_effect(rows, missing, schedules, prefix="lost_", compound=True)
+        # The panel's values: results and the market's price, each weighted
+        # by how precisely it was measured.
+        w_o, w_m = 1 / per_player["outcome_se"] ** 2, 1 / per_player["market_se"] ** 2
+        per_player["blend"] = (per_player["outcome"] * w_o + per_player["market"] * w_m) / (w_o + w_m)
+        print("\nPer regular lost (home-win log-odds):\n")
+        print(per_player.round(3).to_string())
     finally:
         grid.nfl_game_picks.DISAGGREGATED_FEATURE_COLUMNS = grid_cols
 
