@@ -23,7 +23,7 @@ exact methodology to NFL and - unlike MLB's own version - actually wires
 the validated result into live picks via `nfl_game_picks.apply_ml_model`
 if a real candidate clears the save-gate.
 
-Four real feature-set candidates (`nfl_game_picks.build_game_features`'s
+Five real feature-set candidates (`nfl_game_picks.build_game_features`'s
 minimal composite-only set, `build_game_features_disaggregated`'s richer
 per-signal set, and - real follow-up, 2026-09-11, "we're looking at
 ratios and magnitudes between opponents, not straight efficiency" -
@@ -32,7 +32,10 @@ ratios and magnitudes between opponents, not straight efficiency" -
 home-defense/net-matchup-edge differentials) and
 MATCHUP_FOCUSED_FEATURE_COLUMNS (drops the raw standalone offensive_edge/
 defensive_edge columns entirely, keeping only the matchup differentials -
-see that module's own docstring for the full reasoning). Each swept
+see that module's own docstring for the full reasoning), and - 2026-10-26,
+"how do we get closer to Vegas?" - `build_game_features_qb_plus`
+(disaggregated with each starter's QB+ in place of the QB-continuity
+adjustment). Each swept
 through LogisticRegression and HistGradientBoostingClassifier via the
 same real walk-forward CV every other ML fit in this project uses
 (`ml_models.grid_search_walk_forward`), keyed on a real `season*100+week`
@@ -50,7 +53,10 @@ CURRENTLY-SHIPPED model's own real holdout predictions (resolved via
 which candidate is currently live, without hardcoding one), all on
 holdout log_loss. A new candidate that only beats the stale bare-ratio
 heuristic but not the model that already superseded it does NOT clear
-the bar. Also prints a real, explicit predicted-probability SPREAD
+the bar. Among the candidates that clear it, the one with the lowest
+walk-forward CV log loss (every season before the holdout) is saved -
+the single holdout season is too small to rank candidates this close.
+Also prints a real, explicit predicted-probability SPREAD
 comparison (min/p5/median/p95/max) between the heuristic and the new
 model on the same holdout - the direct, concrete check for whether this
 fixes the actual blowout-confidence complaint, not just the aggregate
@@ -92,6 +98,7 @@ FEATURE_SET_CANDIDATES = {
     "disaggregated": (nfl_game_picks.build_game_features_disaggregated, nfl_game_picks.DISAGGREGATED_FEATURE_COLUMNS),
     "matchup_added": (nfl_game_picks.build_game_features_matchup, nfl_game_picks.MATCHUP_ADDED_FEATURE_COLUMNS),
     "matchup_focused": (nfl_game_picks.build_game_features_matchup, nfl_game_picks.MATCHUP_FOCUSED_FEATURE_COLUMNS),
+    "qb_plus": (nfl_game_picks.build_game_features_qb_plus, nfl_game_picks.QB_PLUS_FEATURE_COLUMNS),
 }
 
 
@@ -306,6 +313,7 @@ def evaluate_candidate(
     return {
         "label": label, "model_name": best_name, "estimator": best_search.best_estimator_,
         "feature_columns": feature_columns, "holdout_log_loss": result["log_loss"],
+        "cv_log_loss": -best_search.best_score_,
         "heuristic_log_loss": heuristic_result["log_loss"], "clears_bar": clears_bar,
     }
 
@@ -377,9 +385,20 @@ def main():
         print("\nnfl_pipeline.py's live path stays on today's ratio+home-field heuristic, unchanged.")
         return
 
-    winner = min(winners, key=lambda r: r["holdout_log_loss"])
+    # Chosen by walk-forward CV log loss over every season before the
+    # holdout (~1,900 games), not by the one holdout season (~270): the
+    # holdout is too small to rank candidates whose real difference is a
+    # hundredth of a log loss point - QB+ beat disaggregated in 7 of the 8
+    # seasons 2018-2024 and 2026 but tied on 2025 alone
+    # (scripts/backtest_nfl_game_pick_qb_rest.py). The holdout stays the
+    # pass/fail gate above.
+    winner = min(winners, key=lambda r: r["cv_log_loss"])
+    for r in sorted(results, key=lambda r: r["cv_log_loss"]):
+        print(f"  {r['label']:16s} cv log_loss={r['cv_log_loss']:.4f} holdout log_loss={r['holdout_log_loss']:.4f} "
+              f"clears bar={r['clears_bar']}")
     print(
         f"Best validated candidate: {winner['label']} ({winner['model_name']}), "
+        f"cv log_loss={winner['cv_log_loss']:.4f}, "
         f"holdout log_loss={winner['holdout_log_loss']:.4f} vs. heuristic {winner['heuristic_log_loss']:.4f}"
     )
 

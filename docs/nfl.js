@@ -513,6 +513,68 @@ console.log("no nfl_game_picks_picks.csv yet", e)
 renderNflGamePickStats(summary)
 renderNflTodaysGamePicks(picks)
 renderNflGamePickHistory(picks)
+loadNflWhatIf()
+
+}
+
+// "What if?" panel (docs/nfl_whatif.js): the chosen game, QBs and absences.
+let nflWhatIfData = null
+let nflWhatIfGame = null
+let nflWhatIfState = null
+
+async function loadNflWhatIf(){
+
+const el = document.getElementById("nflWhatIf")
+
+try{
+if(window.SITE_DATA && window.SITE_DATA.nfl_whatif){
+nflWhatIfData = window.SITE_DATA.nfl_whatif
+}else{
+const response = await fetch(`./data/nfl_whatif.json?t=${Date.now()}`, {cache:"no-store"})
+if(!response.ok){ throw new Error(`HTTP ${response.status}`) }
+nflWhatIfData = await response.json()
+}
+}catch(e){
+console.log("no nfl_whatif.json yet", e)
+el.innerHTML = "No upcoming games to try yet"
+return
+}
+
+nflWhatIfState = whatifEmptyState()
+renderNflWhatIf()
+el.addEventListener("change", onNflWhatIfChange)
+
+}
+
+function renderNflWhatIf(focusSelector){
+
+const el = document.getElementById("nflWhatIf")
+el.innerHTML = whatifPanelHtml(nflWhatIfData, nflWhatIfGame, nflWhatIfState)
+// Re-rendering replaces the control that changed; keep keyboard focus on it.
+const again = focusSelector ? el.querySelector(focusSelector) : null
+if(again){ again.focus() }
+
+}
+
+function onNflWhatIfChange(event){
+
+const t = event.target
+let focus = null
+if(t.dataset.whatif === "game"){
+nflWhatIfGame = t.value
+nflWhatIfState = whatifEmptyState()
+focus = '[data-whatif="game"]'
+}else if(t.dataset.whatifQb){
+nflWhatIfState[t.dataset.whatifQb === "home" ? "homeQb" : "awayQb"] = t.value
+focus = `[data-whatif-qb="${t.dataset.whatifQb}"]`
+}else if(t.dataset.whatifOut){
+const out = nflWhatIfState.out[t.dataset.whatifOut]
+if(t.checked){ out.add(t.value) }else{ out.delete(t.value) }
+focus = `[data-whatif-out="${t.dataset.whatifOut}"][value="${CSS.escape(t.value)}"]`
+}else{
+return
+}
+renderNflWhatIf(focus)
 
 }
 

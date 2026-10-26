@@ -83,6 +83,11 @@ def build_data_payload(docs_data_dir: str) -> dict:
         stem = os.path.splitext(os.path.basename(path))[0]
         df = pd.read_csv(path)
         payload[stem] = _records(df)
+    # JSON data files (the NFL what-if panel's) ride along as-is, looked up
+    # by the page script before it tries the network.
+    for path in sorted(glob.glob(os.path.join(docs_data_dir, "*.json"))):
+        with open(path) as fh:
+            payload[os.path.splitext(os.path.basename(path))[0]] = json.load(fh)
     return payload
 
 
@@ -179,6 +184,7 @@ PAGE_JS_PATCHERS = {
 VERBATIM_JS = [
     "teams.js", "summary_render.js",
     "age_render.js", "nfl_draft_assistant.js", "consensus_board.js", "player_props.js", "nfl_units.js", "prop_cards.js",
+    "nfl_whatif.js",
 ]
 
 

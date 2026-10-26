@@ -424,6 +424,82 @@ def test_apply_ml_model_resolves_matchup_focused_builder(monkeypatch, tmp_path):
     assert result.iloc[0]["home_win_probability"] != pytest.approx(0.55)  # real overwrite - resolved the right builder
 
 
+# --- QB+ in place of the QB-continuity adjustment (2026-10-26) ---
+
+
+def test_qb_games_from_weekly_counts_sacks_as_dropbacks_and_skips_the_postseason():
+    weekly = pd.DataFrame([
+        {**_weekly_epa("qb_a", 6.0), "sacks_suffered": 2, "season_type": "REG"},
+        {**_weekly_epa("qb_a", 9.0), "week": 19, "sacks_suffered": 1, "season_type": "POST"},
+        {**_weekly_epa("wr_b", 0.0), "attempts": 0, "sacks_suffered": 0, "season_type": "REG"},
+    ])
+
+    games = nfl_game_picks.qb_games_from_weekly(weekly)
+
+    assert len(games) == 1
+    row = games.iloc[0]
+    assert row["qb"] == "qb_a"
+    assert row["dropbacks"] == 32  # 30 attempts + 2 sacks
+    assert row["epa_sum"] == pytest.approx(6.0)
+
+
+def test_build_game_features_qb_plus_rates_each_starter_and_a_backup_at_replacement():
+    master = _master_disaggregated([
+        {"team": "KC", "pyth_Strength": 1.1, "pyth_Confidence": 1.05, "offensive_edge": 1.02,
+         "defensive_edge": 1.0, "turnover_margin": 1.0, "points_per_drive": 1.0},
+        {"team": "DEN", "pyth_Strength": 0.9, "pyth_Confidence": 0.95, "offensive_edge": 0.98,
+         "defensive_edge": 1.0, "turnover_margin": 1.0, "points_per_drive": 1.0},
+    ])
+    qb_continuity = pd.DataFrame([
+        {"team": "KC", "recent_primary_qb_id": "qb_home", "recent_primary_qb_epa": 6.0, "recent_primary_qb_games": 8},
+        {"team": "DEN", "recent_primary_qb_id": "qb_away", "recent_primary_qb_epa": -3.0, "recent_primary_qb_games": 8},
+    ])
+    weekly = pd.DataFrame([_weekly_epa("qb_home", 6.0), _weekly_epa("qb_away", -3.0)])
+    # DEN starts a backup with no dropbacks at all.
+    schedule_games = _schedule_games(away_qb="qb_backup")
+
+    features = nfl_game_picks.build_game_features_qb_plus(master, qb_continuity, weekly, schedule_games)
+
+    assert list(features.columns) == (
+        ["game_id", "season", "week", "home_team", "away_team"] + nfl_game_picks.QB_PLUS_FEATURE_COLUMNS
+    )
+    # League: 3.0 EPA over 60 dropbacks = 0.05; replacement = 0.05 - 0.10 = -0.05.
+    # qb_home: (6.0 + 150 * -0.05) / (30 + 150) = -1.5 / 180.
+    row = features.iloc[0]
+    assert row["home_qb_plus"] == pytest.approx(-1.5 / 180)
+    assert row["away_qb_plus"] == pytest.approx(-0.05)
+    assert row["home_pyth_Strength"] == pytest.approx(1.1)
+
+
+def test_apply_ml_model_resolves_qb_plus_builder(monkeypatch, tmp_path):
+    from sklearn.linear_model import LogisticRegression
+
+    columns = nfl_game_picks.QB_PLUS_FEATURE_COLUMNS
+    X_fit = pd.DataFrame([[0.0] * len(columns), [1.0] * len(columns)], columns=columns)
+    model = LogisticRegression().fit(X_fit, [0, 1])
+    model_path = tmp_path / "model.joblib"
+    nfl_game_picks.ml_models.save_model({"model": model, "feature_columns": columns}, str(model_path))
+    monkeypatch.setattr(nfl_game_picks.config, "NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH", str(model_path))
+    assert nfl_game_picks.resolve_feature_builder(columns) is nfl_game_picks.build_game_features_qb_plus
+
+    win_probabilities = pd.DataFrame([{"game_id": "2025_08_DEN_KC", "home_win_probability": 0.55}])
+    master = _master_disaggregated([
+        {"team": "KC", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "offensive_edge": 1.0,
+         "defensive_edge": 1.0, "turnover_margin": 1.0, "points_per_drive": 1.0},
+        {"team": "DEN", "pyth_Strength": 1.0, "pyth_Confidence": 1.0, "offensive_edge": 1.0,
+         "defensive_edge": 1.0, "turnover_margin": 1.0, "points_per_drive": 1.0},
+    ])
+    qb_continuity = pd.DataFrame([
+        {"team": "KC", "recent_primary_qb_id": "qb_home", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+        {"team": "DEN", "recent_primary_qb_id": "qb_away", "recent_primary_qb_epa": 0.0, "recent_primary_qb_games": 8},
+    ])
+    weekly = pd.DataFrame([_weekly_epa("qb_home", 3.0), _weekly_epa("qb_away", -3.0)])
+
+    result = nfl_game_picks.apply_ml_model(win_probabilities, master, qb_continuity, weekly, _schedule_games())
+
+    assert result.iloc[0]["home_win_probability"] != pytest.approx(0.55)
+
+
 # --- Real follow-up: defer to market on large disagreement (2026-09-05) ---
 
 

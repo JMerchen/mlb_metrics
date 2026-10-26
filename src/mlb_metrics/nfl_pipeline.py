@@ -44,6 +44,7 @@ import pandas as pd
 from mlb_metrics import (
     config, market_odds, nfl_data, nfl_game_evaluation, nfl_game_picks, nfl_game_predictions,
     nfl_player_props, nfl_position_floors, nfl_prop_predictions, nfl_team_strength, nfl_totals, nfl_units,
+    nfl_whatif,
 )
 
 NFL_GAME_PREDICTIONS_LOG_PATH = "data/predictions/nfl_game_predictions.csv"
@@ -349,6 +350,13 @@ def run(
             # everywhere else.
             probs = nfl_game_picks.apply_market_tiebreak(probs, market)
             probs = nfl_game_picks.apply_calibration(probs)
+
+            # The NFL page's "What if?" panel: QB swaps and absences for the
+            # games still to be played, starting from these probabilities.
+            nfl_whatif.write_whatif_json(
+                os.path.join(output_dir, "nfl_whatif.json"), probs, master, qb_continuity, history["weekly"],
+                history["rosters_weekly"], history.get("snap_counts", pd.DataFrame()), props_games,
+            )
 
             # Predicted points per side and total (nfl_totals.py), from
             # the same no-lookahead history. Shown next to the market's
