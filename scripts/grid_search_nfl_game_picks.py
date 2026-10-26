@@ -10,15 +10,20 @@ not yet backtested" in config.py:
     NFL_QB_WINDOWS              the QB rating's recency windows
     NFL_QB_CONTINUITY_WEIGHT    how much a starter change moves the QB term
 
-Each candidate value rebuilds the 2016-2025 history with no lookahead
+Every setting moves at once (a joint random search: today's settings plus
+--samples random combinations drawn from all of them), because they
+interact - the best schedule weight can depend on the recency windows -
+and a full grid would be ~1,150 rebuilds. Each combination rebuilds the
+2016-2025 history with no lookahead
 (nfl_game_picks_backtest.build_multi_season_history, ~6.5 minutes each),
 assembles the live feature set (nfl_game_picks.build_game_features_
 disaggregated) and fits the live model type (standardized
-LogisticRegression, with its own C picked from the grid) walk-forward:
-each validation season 2018-2024 is predicted by a model trained on the
-seasons before it. One setting moves at a time from today's values; then
-every setting that beat today's values is combined and checked once on
-the untouched 2025 season, with a paired test.
+LogisticRegression, its C re-picked from the grid for every combination,
+so the model's own setting is searched jointly too) walk-forward: each
+validation season 2018-2024 is predicted by a model trained on the
+seasons before it. The best combination is then checked once on the
+untouched 2025 season against today's, with a paired test - the guard
+against a combination that only won validation by luck.
 
 Also answers "can we train in epochs?": a gradient-boosted model's trees
 are its epochs, so the validation log loss is traced against the number of
@@ -30,6 +35,7 @@ Usage:
 
 import argparse
 import copy
+import random
 import hashlib
 import importlib.util
 import json
@@ -177,54 +183,64 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--workers", type=int, default=3)
     parser.add_argument("--cache-dir", default="data/backtest/nfl_grid_cache")
+    parser.add_argument("--samples", type=int, default=35)
+    parser.add_argument("--seed", type=int, default=7)
     args = parser.parse_args()
     os.makedirs(args.cache_dir, exist_ok=True)
 
-    configs = [("baseline", BASELINE)]
-    for name, values in CANDIDATES.items():
-        for value in values:
-            settings = copy.deepcopy(BASELINE)
-            settings[name] = value
-            configs.append((f"{name}={value}", settings))
-    print(f"Round 1: {len(configs)} settings, {args.workers} at a time...", flush=True)
+    # Joint random search: every setting moves at once, so interactions
+    # between them are explored (a full grid is ~1,150 rebuilds).
+    rng = random.Random(args.seed)
+    options = {name: [BASELINE[name]] + values for name, values in CANDIDATES.items()}
+    configs, seen = [("baseline", BASELINE)], {_key(BASELINE)}
+    while len(configs) < args.samples + 1:
+        settings = {name: rng.choice(values) for name, values in options.items()}
+        if _key(settings) not in seen:
+            seen.add(_key(settings))
+            configs.append((f"sample {len(configs)}", settings))
+    print(f"{len(configs)} combinations, {args.workers} at a time...", flush=True)
     with Pool(args.workers, initializer=_init) as pool:
         paths = pool.map(build_rows, [(s, args.cache_dir) for _, s in configs])
 
     results = []
     for (label, settings), path in zip(configs, paths):
         r = score(pd.read_parquet(path))
-        results.append({"setting": label, **r})
-        print(f"  {label}: log loss {r['log_loss']:.4f} (C={r['C']})", flush=True)
-    table = pd.DataFrame(results).set_index("setting")
+        results.append({"combo": label, **r, **{k: str(v) for k, v in settings.items()}})
+    table = pd.DataFrame(results).set_index("combo").sort_values("log_loss")
     base = table.loc["baseline", "log_loss"]
-    pd.set_option("display.width", 200)
-    print("\nRound 1 (validation 2018-2024, lower log loss is better):")
+    pd.set_option("display.width", 250)
+    pd.set_option("display.max_colwidth", 60)
+    print("\nAll combinations (validation 2018-2024, lower log loss is better):")
     print(table.assign(vs_baseline=table["log_loss"] - base).round(4).to_string())
+    print(f"\nToday's settings rank {list(table.index).index('baseline') + 1} of {len(table)}.")
 
-    # Round 2: every setting's best value, where it beat today's.
-    combined = copy.deepcopy(BASELINE)
-    for name, values in CANDIDATES.items():
-        options = [(table.loc[f"{name}={v}", "log_loss"], v) for v in values]
-        best_ll, best_value = min(options, key=lambda o: o[0])
-        if best_ll < base:
-            combined[name] = best_value
-    changed = {k: v for k, v in combined.items() if v != BASELINE[k]}
-    print(f"\nRound 2: combining {changed or 'nothing (no setting beat today)'}")
-    if not changed:
+    # Each setting's average validation log loss by value, across every
+    # combination it appeared in - which settings matter at all.
+    print("\nAverage log loss by each setting's value (across combinations):")
+    for name in CANDIDATES:
+        by_value = table.groupby(name)["log_loss"].agg(["mean", "size"]).sort_values("mean")
+        print(f"  {name}:")
+        for value, row in by_value.iterrows():
+            print(f"    {value}: {row['mean']:.4f} ({int(row['size'])} combos)")
+
+    best_label = table.index[0]
+    if best_label == "baseline":
+        print("\nToday's settings were best - nothing to check on 2025.")
+        print("\nEpochs: validation log loss by number of boosting trees (today's settings):")
+        print(epochs_curve(pd.read_parquet(paths[0])).round(4).to_string())
         return
-    with Pool(1, initializer=_init) as pool:
-        combined_path = pool.map(build_rows, [(combined, args.cache_dir)])[0]
-    combo = score(pd.read_parquet(combined_path))
-    print(f"  combined: validation log loss {combo['log_loss']:.4f} vs baseline {base:.4f}")
+    combined_path = paths[[label for label, _ in configs].index(best_label)]
+    combo = table.loc[best_label]
+    print(f"\nBest: {best_label} - " + ", ".join(f"{k}={combo[k]}" for k in CANDIDATES))
 
     # Untouched 2025: train on everything before it.
     from scipy.stats import ttest_rel
 
     base_rows, combo_rows = pd.read_parquet(paths[0]), pd.read_parquet(combined_path)
     hb = walk_forward(base_rows, table.loc["baseline", "C"], [HOLDOUT_SEASON])
-    hc = walk_forward(combo_rows, combo["C"], [HOLDOUT_SEASON]).set_index("game_id").loc[hb["game_id"]].reset_index()
+    hc = walk_forward(combo_rows, float(combo["C"]), [HOLDOUT_SEASON]).set_index("game_id").loc[hb["game_id"]].reset_index()
     lb, lc = _ll(hb["y"], hb["p"]), _ll(hc["y"], hc["p"])
-    print(f"\n2025 holdout ({len(hb)} games): log loss baseline {lb.mean():.4f}, combined {lc.mean():.4f}; "
+    print(f"\n2025 holdout ({len(hb)} games): log loss today {lb.mean():.4f}, best combination {lc.mean():.4f}; "
           f"accuracy {((hb.p > .5) == (hb.y == 1)).mean():.3f} vs {((hc.p > .5) == (hc.y == 1)).mean():.3f}; "
           f"paired p = {ttest_rel(lc, lb).pvalue:.3f}")
 
