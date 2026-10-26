@@ -1,9 +1,9 @@
 name: NFL Game-Pick Grid Search
 
 # The full grid of NFL game-pick feature settings (1,152 combinations,
-# ~6.5 minutes each - ~125 hours on one machine), split into 20 shards that
-# run at once (a free plan's limit for concurrent jobs), three combinations
-# at a time per 4-core runner: ~3 hours. See
+# ~4 minutes each - ~75 hours on one machine), split into 20 shards that
+# run at once (a free plan's limit for concurrent jobs), two combinations
+# at a time per runner (~4 GB each of its 16 GB): ~2.5 hours. See
 # scripts/grid_search_nfl_game_picks.py. Manual only - it's a one-off
 # experiment, not part of any update. The aggregate job runs even if some
 # shards fail or time out and scores whatever finished; each shard uploads
@@ -37,7 +37,7 @@ jobs:
       - name: Run shard
         run: |
           python scripts/grid_search_nfl_game_picks.py --mode shard \
-            --shard ${{ matrix.shard }} --num-shards 20 --workers 3 \
+            --shard ${{ matrix.shard }} --num-shards 20 --workers 2 \
             --out grid/shard_${{ matrix.shard }}.csv
 
       - name: Upload shard results

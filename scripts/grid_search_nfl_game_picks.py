@@ -13,7 +13,7 @@ hand and are labelled "placeholder, not yet backtested" in config.py:
 Every combination of every value in OPTIONS is tried (6 x 4 x 4 x 3 x 4 =
 1,152), because the settings interact - the best schedule weight can depend
 on the recency windows. Each combination rebuilds the 2016-2025 history with
-no lookahead (nfl_game_picks_backtest.build_multi_season_history, ~6.5
+no lookahead (nfl_game_picks_backtest.build_multi_season_history, ~4
 minutes), assembles the live feature set (nfl_game_picks.build_game_
 features_disaggregated) and fits the live model type (standardized
 LogisticRegression, its C re-picked from C_GRID for every combination)
@@ -23,7 +23,7 @@ stored too, but only the validation winner's are compared with today's,
 once, with a paired test - the guard against a combination that won
 validation by luck out of 1,152.
 
-Too long for one machine (~125 hours), so it runs as shards in parallel on
+Too long for one machine (~75 hours), so it runs as shards in parallel on
 GitHub Actions (.github/workflows/nfl_grid_search.yml):
 
   shard      run every num_shards-th combination starting at shard,
@@ -63,8 +63,8 @@ SEASONS = list(range(2016, 2026))
 VALIDATION_SEASONS = list(range(2018, 2025))
 HOLDOUT_SEASON = 2025
 C_GRID = [0.01, 0.03, 0.1, 0.3, 1.0]
-# The history only needs play-by-play for points per drive; the full table
-# is ~5 GB in memory per worker.
+# The history only needs play-by-play for points per drive; loading every
+# column runs workers out of memory (with only these, one peaks near 4 GB).
 PBP_COLUMNS = ["game_id", "play_id", "season", "week", "season_type", "posteam", "fixed_drive",
                "posteam_score", "posteam_score_post"]
 
