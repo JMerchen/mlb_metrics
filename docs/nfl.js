@@ -585,6 +585,18 @@ focus = `[data-whatif-qb="${t.dataset.whatifQb}"]`
 const out = state.out[t.dataset.whatifOut]
 if(t.checked){ out.add(t.value) }else{ out.delete(t.value) }
 focus = `[data-whatif-out="${t.dataset.whatifOut}"][value="${CSS.escape(t.value)}"]`
+}else if(t.dataset.whatifUnit){
+// A unit's percent typed over (blank goes back to the absences' percent).
+const [side, unit] = t.dataset.whatifUnit.split("|")
+const pct = whatifParsePct(t.value)
+if(pct === undefined){ delete state.unitPct[side][unit] }else{ state.unitPct[side][unit] = pct }
+focus = `[data-whatif-unit="${t.dataset.whatifUnit}"]`
+}else if(t.dataset.whatifPlayer){
+// A player's percent for one unit (blank goes back to his default).
+const [side, id, unit] = t.dataset.whatifPlayer.split("|")
+const pct = whatifParsePct(t.value)
+if(pct === undefined){ delete state.playerPct[side][`${id}|${unit}`] }else{ state.playerPct[side][`${id}|${unit}`] = pct }
+focus = `[data-whatif-player="${CSS.escape(t.dataset.whatifPlayer)}"]`
 }else{
 return
 }
@@ -605,6 +617,9 @@ const data = nflWhatIf.data[mode]
 const game = data.games.find(g => g.game_id === nflWhatIf.game[mode]) || data.games[0]
 nflWhatIf.state[mode] = whatifMissedState(game)
 renderNflWhatIf('[data-whatif-action="missed"]')
+}else if(t.dataset.whatifAction === "reset"){
+nflWhatIf.state[nflWhatIf.mode] = whatifEmptyState()
+renderNflWhatIf('[data-whatif-action="reset"]')
 }
 
 }

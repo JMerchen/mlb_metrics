@@ -129,13 +129,16 @@ def test_write_whatif_json_carries_the_shown_probability_pairings_and_regulars(m
     nfl_whatif.write_whatif_json(str(path), shown, None, None, weekly, None, snaps, _games())
 
     data = json.loads(path.read_text())
-    assert data["injury_log_odds"]["WR"] == pytest.approx(-0.25)
+    assert data["group_units"]["OL"] == ["pass_offense", "run_offense"]
+    assert data["logodds_per_point"] == pytest.approx(nfl_whatif.LOGODDS_PER_POINT)
+    assert data["group_default_pct"] == {}  # no play-by-play given
     assert data["average_regular_share"] == {"OL": 1.0}
     game = data["games"][0]
     assert game["home_win_probability"] == pytest.approx(0.62)
     assert game["pairing_log_odds"]["love|young"] == pytest.approx(0.4055, abs=1e-4)
     assert game["pairing_log_odds"]["taylor|young"] == pytest.approx(-0.4055, abs=1e-4)
-    assert game["home"]["regulars"] == [{"id": "lt", "name": "Left Tackle", "group": "OL", "share": 1.0}]
+    assert game["home"]["regulars"] == [{"id": "lt", "name": "Left Tackle", "group": "OL", "share": 1.0, "record": {}}]
+    assert game["home"]["units"] == {}
     assert game["away"]["regulars"] == []
     assert [q["id"] for q in game["home"]["qbs"]] == ["love", "taylor"]
 
@@ -185,3 +188,50 @@ def test_add_results_marks_finals_starters_and_who_played():
     assert [q["started"] for q in game["home"]["qbs"]] == [False, True]
     assert [r["played"] for r in game["home"]["regulars"]] == [True, False]
     assert game["away"]["regulars"][0]["played"] is True
+
+
+def _play(game, week, off, deff, yards, run=0, dropback=0):
+    return {"game_id": game, "season": 2026, "week": week, "season_type": "REG", "posteam": off, "defteam": deff,
+            "yards_gained": yards, "rush": run, "qb_scramble": 0, "qb_dropback": dropback}
+
+
+def test_unit_yards_team_units_and_position_defaults():
+    plays = []
+    for week in range(1, 4):
+        game = f"2026_0{week}_DAL_X"
+        plays += [_play(game, week, "DAL", "X", 4, run=1)] * 25 + [_play(game, week, "DAL", "X", 6, dropback=1)] * 35
+        plays += [_play(game, week, "X", "DAL", 5, run=1)] * 20 + [_play(game, week, "X", "DAL", 7, dropback=1)] * 30
+    yards = nfl_whatif.unit_game_yards(pd.DataFrame(plays))
+    assert yards.loc[yards["team"] == "DAL", "run_yards"].tolist() == [100.0] * 3
+
+    units = nfl_whatif.team_units(yards)["DAL"]
+    assert units["run_offense"] == {"ypp": 4.0, "plays": 25.0}
+    assert units["pass_defense"] == {"ypp": 7.0, "plays": 30.0}
+
+    defaults = nfl_whatif.group_default_pct(yards)
+    # A running back touches the run game only: league run yards a team-game
+    # = (100 + 100) / 2; the drop costs |-0.13| log-odds.
+    rb_drop = 0.13 / (nfl_whatif.LOGODDS_PER_POINT * nfl_whatif.POINTS_PER_YARD * 100)
+    assert defaults["RB"] == pytest.approx(1 - rb_drop, abs=1e-3)
+    # The line touches both offense units: the same drop costs more, so it's smaller.
+    assert 1 - defaults["OL"] < 1 - defaults["WR"]
+
+
+def test_games_missed_record_needs_two_missed_games():
+    plays, snaps = [], []
+    for week in range(1, 10):
+        game = f"2026_{week:02d}_DAL_X"
+        runs = 30 if week not in (8, 9) else 15  # half the run yards in the two games he missed
+        plays += [_play(game, week, "DAL", "X", 4 if runs == 30 else 2, run=1)] * 25
+        plays += [_play(game, week, "DAL", "X", 6, dropback=1)] * 35
+        plays += [_play(game, week, "X", "DAL", 4, run=1)] * 25 + [_play(game, week, "X", "DAL", 6, dropback=1)] * 35
+        if week < 8:
+            snaps.append(_snap(game, week, "DAL", "rb1", "Javonte Williams", "RB", offense=0.8))
+    yards = nfl_whatif.unit_game_yards(pd.DataFrame(plays))
+    regulars = pd.DataFrame([{"team": "DAL", "group": "RB", "player": "Javonte Williams", "pfr_player_id": "rb1", "share": 0.8}])
+
+    record = nfl_whatif.games_missed_record(pd.DataFrame(snaps), yards, regulars)
+
+    assert record["rb1"]["run_offense"]["games"] == 2
+    # About half (the second missed game's expectation already includes the first).
+    assert record["rb1"]["run_offense"]["pct"] == pytest.approx(0.5, abs=0.05)
