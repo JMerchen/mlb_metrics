@@ -53,9 +53,12 @@ def _get(session, url, **kwargs):
             response = session.get(url, timeout=60, **kwargs)
             if response.status_code == 200:
                 return response
-            print(f"  {response.status_code} from {url}")
+            print(f"  {response.status_code} from {url}", flush=True)
+            if response.status_code == 429:  # the archive's rate limit
+                time.sleep(60 * (attempt + 1))
+                continue
         except requests.RequestException as e:
-            print(f"  {type(e).__name__} from {url}")
+            print(f"  {type(e).__name__} from {url}", flush=True)
         time.sleep(5 * (attempt + 1))
     return None
 
