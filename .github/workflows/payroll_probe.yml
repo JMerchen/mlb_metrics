@@ -3,7 +3,7 @@ name: Payroll source probe (temporary)
 on:
   push:
     branches: [claude/baseball-hot-cold-eval-juiywk]
-    paths: [.github/workflows/payroll_probe.yml]
+    paths: [.github/workflows/payroll_probe.yml, payroll_probe/probe.py]
 
 jobs:
   probe:
@@ -12,19 +12,22 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install browser
+        run: |
+          pip install playwright
+          python -m playwright install --with-deps chromium
       - name: Fetch candidate pages
         run: |
-          mkdir -p payroll_probe
-          UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
-          for y in 1988 2005 2023 2025 2026; do
-            curl -sSL -A "$UA" -o payroll_probe/cube_$y.html -w "cube $y %{http_code} %{size_download}\n" "https://thebaseballcube.com/content/payroll_year/$y" || true
-          done
-          curl -sSL -A "$UA" -o payroll_probe/stevetheump.html -w "ump %{http_code} %{size_download}\n" "https://stevetheump.com/Payrolls.htm" || true
+          rm -f payroll_probe/*.html
+          xvfb-run -a python payroll_probe/probe.py
           ls -la payroll_probe
       - name: Commit
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add payroll_probe
-          git commit -m "Payroll source probe pages" || echo "nothing"
+          git add -A payroll_probe
+          git commit -m "Payroll source probe pages (browser)" || echo "nothing"
           git push
