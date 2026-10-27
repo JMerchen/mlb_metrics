@@ -49,6 +49,8 @@ def build_game_picks_export(
     if model_version is not None:
         picks = picks[picks["model_version"] == model_version] if "model_version" in picks.columns else picks.iloc[0:0]
 
+    picks, report_compare = _latest_pick_per_game(picks)
+
     picks["status"] = _classify_outcome(picks)
     picks["actual_correct"] = pd.NA
     picks.loc[picks["status"] == "win", "actual_correct"] = 1.0
@@ -85,6 +87,7 @@ def build_game_picks_export(
             "market_predicted_winner_probability",
             "bet_units", "bet_side", "bet_team", "bet_moneyline", "bet_profit_units",
             *DISPLAY_COLUMNS,
+            "injury_report", "injury_note", "before_report_winner", "before_report_probability",
         ]
     ].sort_values("date", ascending=False).reset_index(drop=True)
 
@@ -119,10 +122,40 @@ def build_game_picks_export(
                 "beat_closing_line_rate_p_value": beat_closing_line_rate_p_value,
                 **evaluation.model_vs_market(picks),
                 **points_total_metrics(picks),
+                **report_compare,
             }
         ]
     )
     return picks_out, summary
+
+
+def _latest_pick_per_game(picks: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """One row per game: the pick after the final injury report where there
+    is one (nfl_game_predictions logs both), else the one before it - with
+    the before-report pick alongside (before_report_winner/_probability).
+    Also, over finished games picked both ways, how often each was right
+    (n_report_compared, before_report_accuracy, after_report_accuracy)."""
+    picks = picks.copy()
+    if "injury_report" not in picks.columns:
+        picks["injury_report"] = "before"
+    if "injury_note" not in picks.columns:
+        picks["injury_note"] = pd.NA
+    picks["injury_report"] = picks["injury_report"].fillna("before")
+    before = picks[picks["injury_report"] != "after"].drop_duplicates("game_id", keep="first").set_index("game_id")
+    after = picks[picks["injury_report"] == "after"].drop_duplicates("game_id", keep="last")
+    latest = pd.concat([after, picks[(picks["injury_report"] != "after") & ~picks["game_id"].isin(after["game_id"])]],
+                       ignore_index=True)
+    latest["before_report_winner"] = latest["game_id"].map(before["predicted_winner"])
+    latest["before_report_probability"] = latest["game_id"].map(before["predicted_probability"])
+
+    both = after.set_index("game_id").join(before[["predicted_winner"]].rename(columns={"predicted_winner": "before_winner"}),
+                                           how="inner")
+    done = both[both["actual_winner"].notna() & (both["game_played"] == 1)]
+    compare = {"n_report_compared": len(done)}
+    if len(done):
+        compare["before_report_accuracy"] = float((done["before_winner"] == done["actual_winner"]).mean())
+        compare["after_report_accuracy"] = float((done["predicted_winner"] == done["actual_winner"]).mean())
+    return latest, compare
 
 
 def points_total_metrics(picks: pd.DataFrame) -> dict:

@@ -1,28 +1,23 @@
 name: NFL Weekly Update
 
 on:
-  # 13:17 UTC Tuesday = 6:17 AM Arizona time (UTC-7, fixed - real
-  # Arizona time has no DST, same convention every other cron in this
-  # repo already uses). Tuesday morning, not daily: real NFL games
-  # cluster Thu/Sun/Mon, so a Tuesday run comes AFTER Monday Night
-  # Football has fully resolved (last week's picks can be graded) and
-  # BEFORE next week's slate/odds firm up further in the week - see
-  # nfl_pipeline.py's own module docstring. Off the top of the hour
-  # (`:17`, not `:00`) for the same "avoid peak scheduled-workflow load"
-  # reason daily_update.yml's own cron already documents. A weekly (not
-  # daily) cadence is a deliberate choice, not an oversight - this
-  # project has already learned firsthand that shared GitHub Actions
-  # minutes are a real, finite, easily-squeezed budget (see
-  # daily_update.yml's own history), and an idle NFL pipeline rerun on
-  # 6 of 7 days a week would waste exactly that.
+  # Off the top of the hour (`:17`) to avoid peak scheduled-workflow load,
+  # same as daily_update.yml. Four runs a week, not daily: games cluster
+  # Thursday/Sunday/Monday, and Actions minutes are a finite budget.
   schedule:
+    # Times are UTC; Arizona is UTC-7 all year.
+    # Tuesday 13:17 UTC (6:17 AM Arizona): after Monday Night Football is
+    # final - grades last week and logs every game's pick for the new week
+    # BEFORE the injury report.
     - cron: "17 13 * * 2"
-    # Friday 22:17 UTC (3:17 PM Arizona): teams post final injury
-    # designations Friday afternoon, after Tuesday's run. This run
-    # rebuilds the player props with them for games still to be played
-    # and replaces those games' pending prop picks (nfl_pipeline's props
-    # step); game picks already logged for the week are kept as they are.
-    - cron: "17 22 * * 5"
+    # Thursday, Saturday and Monday 15:17 UTC (8:17 AM Arizona): each
+    # game's final injury report is out by the morning of it (Thursday) or
+    # the day before (Saturday, for Sunday) - these runs reprice the games
+    # played that day or the next with it (the pick AFTER the injury
+    # report) and refresh the player props for every game still to come.
+    - cron: "17 15 * * 4"
+    - cron: "17 15 * * 6"
+    - cron: "17 15 * * 1"
   workflow_dispatch:
     inputs:
       season:

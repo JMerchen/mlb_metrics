@@ -263,3 +263,13 @@ def test_run_resilient_to_a_failed_table_fetch(tmp_path, monkeypatch, capsys):
 
     assert "falling back to the last persisted copy" in capsys.readouterr().out
     assert not predictions_log.exists()  # no real history to predict off of - skipped, not crashed
+
+
+def test_report_final_games_are_today_and_tomorrows():
+    import datetime
+    from mlb_metrics import nfl_pipeline
+    games = pd.DataFrame({"game_id": ["thu", "sun", "mon"], "gameday": ["2026-10-29", "2026-11-01", "2026-11-02"]})
+    assert nfl_pipeline._report_final_games(games, datetime.date(2026, 10, 27)) == []  # Tuesday
+    assert nfl_pipeline._report_final_games(games, datetime.date(2026, 10, 29)) == ["thu"]  # Thursday
+    assert nfl_pipeline._report_final_games(games, datetime.date(2026, 10, 31)) == ["sun"]  # Saturday
+    assert nfl_pipeline._report_final_games(games, datetime.date(2026, 11, 2)) == ["mon"]  # Monday

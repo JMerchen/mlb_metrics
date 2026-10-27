@@ -34,6 +34,11 @@ const d = new Date(iso + 'T12:00:00')
 return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', {weekday: 'short', month: 'short', day: 'numeric'})
 }
 
+// Today's date on the viewer's clock, as the daily files write it.
+function localIsoDate(d = new Date()){
+return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function latestDateStr(rows){
 const dates = rows.map(r => r.date).filter(Boolean).sort()
 return dates.length ? dates[dates.length - 1] : null
@@ -143,15 +148,17 @@ loadGamePicksSection('game_picks'),
 loadGamePicksSection('nfl_game_picks', {groupByWeek: true}),
 ])
 
-const seasonOver = btsSeasonOver(bts.summary)
-document.getElementById('asof-badge').textContent = seasonOver
-? 'MLB season over'
-: (bts.asOf ? 'Updated ' + friendlyDate(bts.asOf) : 'No data yet')
+// Beat the Streak (its record tiles and today's picks) shows only on a day
+// with picks - so not on off days, and not all offseason.
+const btsToday = bts.asOf === localIsoDate() && bts.todaysPicks.length > 0
+const latest = [bts.asOf, mlb.asOf, nfl.asOf].filter(Boolean).sort().slice(-1)[0]
+document.getElementById('asof-badge').textContent = latest ? 'Updated ' + friendlyDate(latest) : 'No data yet'
+if(btsToday){
 renderStats(bts.summary, bts.topApproach)
-if(seasonOver){
-document.getElementById('picks-list').innerHTML = btsSeasonOverHtml(bts.summary)
-}else{
 renderPicks(bts.todaysPicks)
+}else{
+document.getElementById('stat-row').style.display = 'none'
+document.getElementById('bts-panel').style.display = 'none'
 }
 renderGamePicks('mlb', mlb)
 renderGamePicks('nfl', nfl)

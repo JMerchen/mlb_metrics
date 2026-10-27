@@ -1,90 +1,28 @@
-"""ML-based replacements for dfs.py's three weak-signal projections
-(real backtest numbers, config.py's DFS section):
-  DK_Points_Hitter:    correlation -0.004 (essentially zero)
-  Expected_H_Allowed:  MAE worse than the naive baseline
-  Expected_BB:         weak correlation (0.182)
+"""Features for the Beat the Streak hit-probability model
+(config.HITTER_HIT_PROBABILITY_MODEL_PATH, trained by
+scripts/train_hitter_hit_model.py): build_hitter_features assembles each
+batter's raw ingredients - his own form (WAVE and splits), the opposing
+starter's and bullpen's PAVE, the venue's Park_Factor, is_home, Statcast
+contact quality (Exit_Velo/Barrel_Rate/xBA/xwOBA), pitch-family rates
+against the starter's pitch mix, and plate discipline (Whiff_Rate/
+Chase_Rate) - and hitter_feature_matrix turns them into the model's input,
+every not-yet-computable value filled with 0. The same no-lookahead
+discipline as dfs_backtest.assemble_ml_training_rows: each row's features
+come only from data strictly before that row's game date.
 
-Walk-forward, grid-searched (ml_models.py) Ridge/gradient-boosting models,
-trained on dfs_backtest.assemble_ml_training_rows's full-history feature
-table - the SAME no-lookahead discipline (each row's features come only
-from data strictly before that row's game date) the existing heuristic
-backtest already uses.
+**Retraining note**: whenever HITTER_FEATURE_COLUMNS changes, a model
+trained on the older schema is incompatible and must be retrained or
+deleted - predict_hitter_hit_probability's predict_proba() call isn't
+wrapped in a try/except, so a stale artifact would crash live daily picks
+rather than fall back.
 
-## Hitter features: raw ingredients, not the flagged-bad ratio
-
-dfs.compute_matchup_adjustment's ratio (Matchup_Hit_Probability / a
-batter's own Game_Hit_Probability, applied multiplicatively to
-Expected_Bases) was flagged in dfs.py's own docstring as the single
-highest-risk modeling choice in that module, and the real backtest
-confirmed it: essentially zero correlation. build_hitter_features exposes
-the RAW ingredients that ratio was built from (the batter's own form, plus
-matchup.py's own internal log5-blend inputs - the opposing starter's PAVE,
-their bullpen's PAVE, the venue's Park_Factor, is_home) instead of only
-the already-blended Matchup_Hit_Probability, so a model can learn its own
-(possibly additive, possibly nonlinear) combination rather than
-inheriting the multiplicative assumption. Also includes Expected_BB/
-Expected_HBP/Expected_RBI (hitters.compute_extended_dk_rates) now that
-dfs.compute_hitter_dk_points scores those categories too - the SAME
-raw-ingredients philosophy applies: these are fed directly, not run
-through the flagged ratio.
-
-**Retraining note**: HITTER_FEATURE_COLUMNS widened when BB/HBP/RBI
-scoring shipped, again to add real Statcast batted-ball-quality signals
-(Exit_Velo/Barrel_Rate/xBA/xwOBA, hitters.compute_quality_of_contact),
-again to add pitch-type-family signals (Fastball_WAVE/Breaking_WAVE/
-Offspeed_WAVE - hitters.compute_pitch_family_rates - and today's probable
-starter's own starter_fastball_rate/starter_breaking_rate/
-starter_offspeed_rate - pitchers.compute_pitch_arsenal), and again to add
-real per-pitch plate-discipline signals (Whiff_Rate/Chase_Rate -
-hitters.compute_plate_discipline) - any model artifact trained on an
-OLDER (narrower) schema is schema-incompatible and MUST be retired
-(deleted, not left in place) whenever this list changes, since BOTH
-apply_ml_overrides's predict() call AND
-predict_hitter_hit_probability's predict_proba() call are NOT wrapped in
-a try/except - a stale artifact would hard-crash
-scripts/build_dfs_rankings.py/live daily picks rather than gracefully
-falling back. Every prior modeling attempt in this project used only
-outcome-RATE signals (WAVE/PAVE-style hit/walk/RBI rates) - never a real
-measure of contact QUALITY (how hard/well the ball was actually hit,
-independent of whether that particular ball found a fielder), never a
-pitch-type-specific matchup signal (does this batter's own fastball/
-breaking/offspeed split suggest a better/worse day against THIS starter's
-own real pitch mix), and never a real per-pitch plate-discipline signal
-(how often the batter swings and misses entirely, or chases a pitch
-genuinely outside the strike zone) - even though the raw Statcast columns
-needed for all three (launch_speed/launch_angle/
-estimated_ba_using_speedangle/estimated_woba_using_speedangle/
-launch_speed_angle for the first, pitch_type for the second, description/
-zone for the third) were sitting unused in the already-persisted raw data
-the whole time.
-
-## Pitcher features: dfs.py's own engineered columns
-
-Unlike hitters, dfs.compute_pitcher_dk_points's engineered columns
-(K9/BB9/HR9/IP_per_start/Expected_IP/Expected_K/Expected_H_Allowed/
-FIP_Windowed) aren't suspected of a bad transform the way the hitter
-ratio was - Expected_H_Allowed's problem (real backtest: MAE worse than
-baseline despite positive correlation) looks like a systematic scaling
-bias (PAVE * Expected_IP * DFS_BATTERS_FACED_PER_INNING), the kind of
-thing a regression CAN absorb from the same inputs. So pitcher features
-reuse dfs.py's already-engineered columns directly (this also keeps
-train-time and live-serving feature assembly identical by construction,
-since both call dfs.compute_pitcher_dk_points).
-
-## Fallback discipline
-
-apply_ml_overrides only overrides a signal when a trained model artifact
-exists (ml_models.load_model returns non-None) - a missing/corrupt/
-not-yet-trained artifact silently keeps the existing heuristic column
-untouched, the same "missing optional input degrades to a documented
-fallback, never a crash" pattern pipeline.run() already uses for a failed
-schedule fetch. Each signal is independently gated - a hitter model
-failure never affects the pitcher columns and vice versa.
+(The module once also held DFS fantasy-point models; the DFS pages and
+their models are gone.)
 """
 
 import pandas as pd
 
-from mlb_metrics import config, dfs, ml_models
+from mlb_metrics import config, ml_models
 
 HITTER_FEATURE_COLUMNS = [
     "WAVE", "WAVE_L", "WAVE_R", "PA_L", "PA_R", "probability",
@@ -194,86 +132,6 @@ def hitter_feature_matrix(features_df: pd.DataFrame) -> pd.DataFrame:
     X = features_df.reindex(columns=HITTER_FEATURE_COLUMNS).copy()
     X["is_home"] = X["is_home"].fillna(False).astype(float)
     return X.fillna(0)
-
-
-def pitcher_feature_matrix(features_df: pd.DataFrame) -> pd.DataFrame:
-    """The numeric X matrix a pitcher model trains/predicts on."""
-    return features_df.reindex(columns=PITCHER_FEATURE_COLUMNS).copy().fillna(0)
-
-
-def apply_ml_overrides(
-    hitters_df: pd.DataFrame,
-    hitter_features: pd.DataFrame,
-    pitchers_df: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Overrides DK_Points_Hitter/Expected_H_Allowed/Expected_BB with a
-    trained model's prediction wherever a model artifact
-    (config.DFS_*_MODEL_PATH) is present and loadable - otherwise leaves
-    the existing heuristic column completely untouched. Adds
-    `DK_Points_Hitter_Source`/`Expected_H_Allowed_Source`/
-    `Expected_BB_Source` columns ("model" or "heuristic") so the served
-    output visibly shows which path produced each number, rather than
-    hiding the fallback. Recomputes DK_Points_Pitcher from any overridden
-    pitcher components, so the combined total stays internally consistent
-    with whichever Expected_H_Allowed/Expected_BB actually got used.
-
-    `hitters_df` is dfs.compute_hitter_dk_points's own output
-    (HITTER_DFS_COLUMNS); `hitter_features` is build_hitter_features's
-    output for the same slate (carries key_mlbam + HITTER_FEATURE_COLUMNS,
-    including the raw matchup ingredients HITTER_DFS_COLUMNS doesn't
-    expose). The two share several column names (PA_L, Expected_Bases,
-    Game_Hit_Probability, is_home, Matchup_Hit_Probability), so this
-    predicts from `hitter_features` directly (never merges its columns
-    into `hitters_df`, which would otherwise silently rename the shared
-    columns to `_x`/`_y` suffixes - a real bug caught after shipping,
-    since HITTER_DFS_COLUMNS' own PA_L/Expected_Bases/etc. would vanish
-    from the output CSV and the dashboard would show every cell as blank)
-    and merges back only the one new prediction column, keyed on
-    key_mlbam. `pitchers_df` is dfs.compute_pitcher_dk_points's own output
-    (PITCHER_DFS_COLUMNS), which already carries every column in
-    PITCHER_FEATURE_COLUMNS directly under its own names, so no merge is
-    needed on the pitcher side at all."""
-    hitters_df = hitters_df.copy()
-    hitters_df["DK_Points_Hitter_Source"] = "heuristic"
-    hitter_model = ml_models.load_model(config.DFS_HITTER_MODEL_PATH)
-    if hitter_model is not None and not hitters_df.empty and not hitter_features.empty:
-        X = hitter_feature_matrix(hitter_features)
-        predicted = hitter_model.predict(X).clip(min=0)
-        prediction_lookup = pd.DataFrame({"key_mlbam": hitter_features["key_mlbam"], "_ml_dk_points_hitter": predicted})
-        hitters_df = hitters_df.merge(prediction_lookup, on="key_mlbam", how="left")
-        has_prediction = hitters_df["_ml_dk_points_hitter"].notna()
-        hitters_df.loc[has_prediction, "DK_Points_Hitter"] = hitters_df.loc[has_prediction, "_ml_dk_points_hitter"]
-        hitters_df.loc[has_prediction, "DK_Points_Hitter_Source"] = "model"
-        hitters_df = hitters_df.drop(columns="_ml_dk_points_hitter")
-    hitters_df = hitters_df.sort_values("DK_Points_Hitter", ascending=False)
-
-    pitchers_df = pitchers_df.copy()
-    pitchers_df["Expected_H_Allowed_Source"] = "heuristic"
-    pitchers_df["Expected_BB_Source"] = "heuristic"
-    if not pitchers_df.empty:
-        X = pitcher_feature_matrix(pitchers_df)
-
-        h_model = ml_models.load_model(config.DFS_PITCHER_H_ALLOWED_MODEL_PATH)
-        if h_model is not None:
-            pitchers_df["Expected_H_Allowed"] = h_model.predict(X).clip(min=0)
-            pitchers_df["Expected_H_Allowed_Source"] = "model"
-
-        bb_model = ml_models.load_model(config.DFS_PITCHER_BB_MODEL_PATH)
-        if bb_model is not None:
-            pitchers_df["Expected_BB"] = bb_model.predict(X).clip(min=0)
-            pitchers_df["Expected_BB_Source"] = "model"
-
-        if h_model is not None or bb_model is not None:
-            pitchers_df["DK_Points_Pitcher"] = (
-                pitchers_df["Expected_IP"] * config.DFS_DK_PITCHER_IP_POINTS
-                + pitchers_df["Expected_K"] * config.DFS_DK_PITCHER_K_POINTS
-                + pitchers_df["Expected_BB"] * config.DFS_DK_PITCHER_BB_POINTS
-                + pitchers_df["Expected_H_Allowed"] * config.DFS_DK_PITCHER_H_POINTS
-                + pitchers_df["Expected_ER"] * config.DFS_DK_PITCHER_ER_POINTS
-            )
-    pitchers_df = pitchers_df.sort_values("DK_Points_Pitcher", ascending=False)
-
-    return hitters_df, pitchers_df
 
 
 def predict_hitter_hit_probability(hitter_features: pd.DataFrame) -> pd.DataFrame:

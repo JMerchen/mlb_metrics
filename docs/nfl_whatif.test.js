@@ -4,7 +4,7 @@ const assert = require("node:assert/strict")
 global.teamName = require("./teams.js").teamName
 const {
   whatifProbability, whatifPanelHtml, whatifEmptyState, whatifPoints, whatifUnitPcts, whatifDefaultPct,
-  whatifMissedState, whatifWeekSummary, whatifParsePct,
+  whatifMissedState, whatifWeekSummary, whatifParsePct, whatifPostedState,
 } = require("./nfl_whatif.js")
 
 const text = html => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
@@ -174,4 +174,16 @@ test("points read as signed whole percentage points", () => {
   assert.equal(whatifPoints(0.034), "+3 pts")
   assert.equal(whatifPoints(-0.1), "−10 pts")
   assert.equal(whatifPoints(0.001), "no change")
+})
+
+test("a game repriced after its injury report opens on that report", () => {
+  const game = { ...GAME, injury_report: { out: { home: ["rb1"], away: [] }, qb: { home: "taylor" }, note: "Jordan Love (QB; Tyrod Taylor starts), Josh Jacobs" } }
+  const state = whatifPostedState(game)
+  assert.deepEqual([...state.out.home], ["rb1"])
+  assert.equal(state.homeQb, "taylor")
+  assert.deepEqual([...whatifPostedState(GAME).out.home], [])
+  const out = text(whatifPanelHtml({ ...DATA, games: [game] }, game.game_id, state))
+  assert.match(out, /Posted after the final injury report \(out: Jordan Love \(QB; Tyrod Taylor starts\), Josh Jacobs\)/)
+  assert.match(out, /Packers' chance: 60% before the injury report → /)
+  assert.match(out, /Without the injury report/)
 })

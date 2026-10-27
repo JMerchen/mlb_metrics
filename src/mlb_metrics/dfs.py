@@ -38,12 +38,9 @@ WAVE/Game_Hit_Probability/Consistency/Approach, the opposing starter's and
 bullpen's PAVE, Park_Factor, is_home) instead of the multiplicative ratio
 itself, validated on a real held-out backtest (config.py's ML section has
 the full numbers: correlation improved from -0.004 to 0.145, MAE beats
-both the naive baseline and this module's own heuristic). When a
-validated model artifact exists (config.DFS_HITTER_MODEL_PATH),
-dfs_ml.apply_ml_overrides swaps it in for DK_Points_Hitter automatically;
-compute_matchup_adjustment/compute_hitter_dk_points below are the fallback
-path, used whenever no validated artifact is present - they are NOT
-removed, and remain what a fresh install without a trained model serves.
+both the naive baseline and this module's own heuristic). The DFS pages
+and those models are gone; compute_matchup_adjustment/compute_hitter_dk_points
+below remain as the heuristic.
 
 **Update: BB/HBP/RBI now included too.** The original v1 excluded five of
 DraftKings' nine hitter scoring categories (BB, HBP, runs, RBI, SB) - a
@@ -128,16 +125,7 @@ bullpen arm's variable-length outing.
 live output.** The original backtest found Expected_H_Allowed's MAE was
 actually WORSE than the naive baseline (a likely systematic scaling bias
 in the PAVE * batters-faced calculation above) and Expected_BB only weakly
-correlated. scripts/train_dfs_ml_models.py trains a Ridge regression on
-the SAME inputs (K9/BB9/HR9/IP_per_start/Expected_IP/Expected_K/
-Expected_H_Allowed/FIP_Windowed) for each component separately, validated
-on a real held-out backtest - both now beat their naive baseline AND this
-module's own heuristic (config.py's ML section has the full numbers).
-dfs_ml.apply_ml_overrides swaps in either/both wherever a validated
-artifact exists (config.DFS_PITCHER_H_ALLOWED_MODEL_PATH/
-DFS_PITCHER_BB_MODEL_PATH), recomputing DK_Points_Pitcher from whichever
-components were actually used; compute_pitcher_dk_points below remains the
-fallback path when no validated artifact is present.
+correlated (the DFS pages and the models that once replaced them are gone).
 
 ## Qualifiers
 

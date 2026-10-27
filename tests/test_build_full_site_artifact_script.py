@@ -130,7 +130,7 @@ def test_build_html_end_to_end_against_real_docs(tmp_path):
     i = html.index("/*__SITE_DATA_JSON__*/") + len("/*__SITE_DATA_JSON__*/")
     j = html.index("/*__END_SITE_DATA_JSON__*/")
     site_data = json.loads(html[i:j])
-    assert "wave" in site_data and "nfl_bestball_rankings" in site_data
+    assert "wave" in site_data and "nfl_game_picks_picks" in site_data
 
     assert html.count("<script") == html.count("</script>")
     # Top-level pages: Assistant, MLB (an umbrella - see below), NFL,

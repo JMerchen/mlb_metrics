@@ -37,7 +37,20 @@ test("game row: a bet reads as a sentence, not units shorthand", () => {
     home_team: "SEA", away_team: "LAC", predicted_winner: "SEA",
     predicted_probability: 0.82, market_predicted_winner_probability: "", bet_units: 1.73, bet_team: "SEA",
   }, "nfl"))
-  assert.equal(row, "Chargers at Seahawks We say Seahawks 82% Bet Seahawks · 1.7 units")
+  assert.equal(row, "Chargers at Seahawks We say Seahawks 82% Bet Seahawks · 1.7 units Before the final injury report")
+})
+
+test("NFL game row: outlined and labelled by the injury report; MLB rows aren't", () => {
+  const after = gamePickRowHtml({
+    home_team: "KC", away_team: "DEN", predicted_winner: "DEN", predicted_probability: 0.55,
+    injury_report: "after", injury_note: "Patrick Mahomes (QB; Gardner Minshew starts)",
+  }, "nfl")
+  assert.match(after, /class="game report-after"/)
+  assert.match(text(after), /After the final injury report · Out: Patrick Mahomes \(QB; Gardner Minshew starts\)/)
+  assert.match(gamePickRowHtml({ home_team: "KC", away_team: "DEN", predicted_winner: "KC" }, "nfl"), /class="game report-before"/)
+  const mlb = gamePickRowHtml({ home_team: "NYY", away_team: "BOS", predicted_winner: "NYY" }, "mlb")
+  assert.match(mlb, /class="game"/)
+  assert.doesNotMatch(text(mlb), /injury report/)
 })
 
 test("record line while bets are paused: right N of M next to Vegas", () => {
@@ -78,7 +91,7 @@ test("NFL game row: predicted total next to Vegas's; nothing for MLB", () => {
     home_team: "LA", away_team: "BUF", predicted_winner: "LA", predicted_probability: 0.51,
     market_predicted_winner_probability: 0.57, bet_units: 0, predicted_total: 51.37, market_total: 54.5,
   }, "nfl"))
-  assert.equal(row, "Bills at Rams We say Rams 51% · Vegas 57%Total points: we say 51 · Vegas 54.5")
+  assert.equal(row, "Bills at Rams We say Rams 51% · Vegas 57%Total points: we say 51 · Vegas 54.5 Before the final injury report")
   assert.equal(text(totalPointsText({ predicted_total: "47.6", market_total: "" })), "Total points: we say 48")
   assert.equal(totalPointsText({ predicted_total: "" }), "")
   assert.equal(totalPointsText({}), "")

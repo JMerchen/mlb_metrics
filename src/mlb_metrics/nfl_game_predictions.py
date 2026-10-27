@@ -41,6 +41,10 @@ NFL_GAME_PREDICTION_COLUMNS = [
     "home_win_probability_pessimistic", "away_win_probability_pessimistic",
     "predicted_home_points", "predicted_away_points", "predicted_total", "market_total", "actual_total",
     *nfl_totals.EPA_DISPLAY_COLUMNS,
+    # "before" the week's final injury report (Tuesday's pick) or "after"
+    # it (repriced the morning of, or the day before, the game), and for
+    # an "after" pick the players the report took out.
+    "injury_report", "injury_note",
 ]
 
 POINT_PREDICTION_COLUMNS = ["predicted_home_points", "predicted_away_points", "predicted_total"]
@@ -251,6 +255,8 @@ def select_game_picks(
     else:
         picks["market_total"] = pd.NA
     picks["actual_total"] = pd.NA
+    picks["injury_report"] = "before"
+    picks["injury_note"] = pd.NA
 
     return picks[NFL_GAME_PREDICTION_COLUMNS]
 
@@ -284,8 +290,17 @@ def append_game_predictions(picks: pd.DataFrame, log_path: str) -> pd.DataFrame:
             combined[column] = combined[column].astype(object).where(
                 combined[column].notna(), pd.Series(fresh[column].reindex(keys).to_numpy(), index=combined.index)
             )
-    combined = combined.drop_duplicates(subset=["game_id", "metric"], keep="last")
-    combined = combined.sort_values(["date", "game_id"]).reset_index(drop=True)
+    # One pick per game before the injury report - the first logged - and
+    # one after it - the latest (a later run with a newer report replaces
+    # it). Rows from before this column existed are "before" picks.
+    if "injury_report" not in combined.columns:
+        combined["injury_report"] = pd.NA
+    combined["injury_report"] = combined["injury_report"].fillna("before")
+    is_after = combined["injury_report"] == "after"
+    before = combined[~is_after].drop_duplicates(subset=["game_id", "metric"], keep="last")
+    after = combined[is_after].drop_duplicates(subset=["game_id", "metric"], keep="first")
+    combined = pd.concat([before, after], ignore_index=True)
+    combined = combined.sort_values(["date", "game_id", "injury_report"], ascending=[True, True, False]).reset_index(drop=True)
     combined.to_csv(log_path, index=False)
     return combined
 

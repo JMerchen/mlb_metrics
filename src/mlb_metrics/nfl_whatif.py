@@ -467,6 +467,105 @@ def build_whatif(final_probs: pd.DataFrame, master, qb_continuity, weekly, roste
             "games": out_games}
 
 
+# Injury-report statuses treated as not playing.
+REPORT_OUT_STATUSES = {"Out", "Doubtful"}
+
+
+def unit_pcts(team: dict, out_ids, data: dict) -> dict:
+    """{unit: percent} for one side with the players `out_ids` out at their
+    defaults - the page's whatifUnitPcts without typed overrides (an
+    "average:<G>" id counts the league's average regular at G)."""
+    pcts = {unit: 1.0 for kind in UNIT_PLAYS for unit in (f"{kind}_offense", f"{kind}_defense")}
+    players = [r for r in team.get("regulars", []) if r["id"] in out_ids]
+    for pid in out_ids:
+        if str(pid).startswith("average:"):
+            group = pid.split(":", 1)[1]
+            players.append({"group": group, "share": data.get("average_regular_share", {}).get(group, 0)})
+    for player in players:
+        full = data.get("group_default_pct", {}).get(player["group"])
+        if full is None:
+            continue
+        pct = 1 - (1 - full) * float(player["share"])
+        for unit in data.get("group_units", {}).get(player["group"], []):
+            pcts[unit] *= pct
+    return pcts
+
+
+def home_probability(game: dict, data: dict, out: dict | None = None, qbs: dict | None = None) -> float:
+    """The page's whatifProbability: the game's pre-report probability moved
+    by the model's change to the chosen QBs and by the absences `out`
+    ({"home": ids, "away": ids}) at their defaults."""
+    out = out or {"home": set(), "away": set()}
+    qbs = qbs or {}
+
+    def listed(side):
+        options = game[side].get("qbs", [])
+        return next((q["id"] for q in options if q.get("listed")), options[0]["id"] if options else None)
+
+    pairs = game.get("pairing_log_odds", {})
+    listed_key = f"{listed('home')}|{listed('away')}"
+    chosen_key = f"{qbs.get('home') or listed('home')}|{qbs.get('away') or listed('away')}"
+    qb_shift = pairs[chosen_key] - pairs[listed_key] if chosen_key in pairs and listed_key in pairs else 0.0
+
+    def net(side):
+        team = game[side]
+        pcts = unit_pcts(team, out.get(side, set()), data)
+        return sum((pct - 1) * team.get("units", {})[unit]["ypp"] * team["units"][unit]["plays"] * data.get("points_per_yard", 0)
+                   for unit, pct in pcts.items() if unit in team.get("units", {}))
+
+    margin = net("home") - net("away")
+    logit = _log_odds(game["home_win_probability"]) + qb_shift + data.get("logodds_per_point", 0) * margin
+    return 1 / (1 + math.exp(-logit))
+
+
+def apply_injury_report(data: dict, report: pd.DataFrame, rosters: pd.DataFrame | None,
+                        snap_counts: pd.DataFrame | None, game_ids) -> dict:
+    """For each game in `game_ids` (the ones the report is final for): the
+    regulars and starting QBs the injury report lists Out or Doubtful,
+    stored on the game as "injury_report" {"out": {side: [ids]}, "qb":
+    {side: id}, "note"} with the probability that gives ("posted_probability").
+    A listed QB who's out is replaced by his team's next QB option. Returns
+    {game_id: {"probability", "note"}} for the games it changed or confirmed."""
+    if report is None or report.empty or not {"gsis_id", "report_status"} <= set(report.columns):
+        return {}
+    out_report = report[report["report_status"].isin(REPORT_OUT_STATUSES)]
+    out_gsis = set(out_report["gsis_id"].dropna())
+    out_pfr = set()
+    if rosters is not None and not rosters.empty and {"gsis_id", "pfr_id"} <= set(rosters.columns):
+        roster = rosters.copy()
+        if snap_counts is not None and not snap_counts.empty:
+            snaps = snap_counts[snap_counts["game_type"] == "REG"].copy()
+            snaps["team"] = nfl_totals._canonical(snaps["team"])
+            roster["team"] = nfl_totals._canonical(roster["team"])
+            roster = _fill_pfr_ids(roster, snaps)
+        out_pfr = set(roster.loc[roster["gsis_id"].isin(out_gsis), "pfr_id"].dropna())
+    names = out_report.set_index("gsis_id")["full_name"].to_dict() if "full_name" in out_report.columns else {}
+    results = {}
+    for game in data["games"]:
+        if game["game_id"] not in set(game_ids):
+            continue
+        entry = {"out": {}, "qb": {}, "note": []}
+        for side in ("home", "away"):
+            team = game[side]
+            ids = [r["id"] for r in team.get("regulars", []) if r["id"] in out_pfr]
+            entry["out"][side] = ids
+            entry["note"] += [r["name"] for r in team.get("regulars", []) if r["id"] in out_pfr]
+            options = team.get("qbs", [])
+            listed = next((q for q in options if q.get("listed")), None)
+            if listed is not None and listed["id"] in out_gsis:
+                backup = next((q for q in options if q["id"] not in out_gsis and q["id"] != listed["id"]
+                               and q["id"] != AVERAGE_QB_ID), None)
+                if backup is not None:
+                    entry["qb"][side] = backup["id"]
+                    entry["note"].append(f"{names.get(listed['id'], listed['name'])} (QB; {backup['name']} starts)")
+        probability = home_probability(game, data, {s: set(v) for s, v in entry["out"].items()}, entry["qb"])
+        entry["note"] = ", ".join(entry["note"])
+        game["injury_report"] = entry
+        game["posted_probability"] = round(probability, 4)
+        results[game["game_id"]] = {"probability": probability, "note": entry["note"]}
+    return results
+
+
 def add_results(data: dict, schedules: pd.DataFrame, week_snaps: pd.DataFrame) -> dict:
     """For a replayed week: each game's final score, the QBs who started
     (marked "started"), and each listed player's "played" - whether he took

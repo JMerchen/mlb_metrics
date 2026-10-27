@@ -85,6 +85,23 @@ def test_build_hitter_hit_predictions_writes_csv(tmp_path, monkeypatch):
     assert result.iloc[0]["key_mlbam"] == 1
     assert result.iloc[0]["Model_Hit_Probability"] == 0.61
     assert result.iloc[0]["opponent"] == "NYY"
+    assert result.iloc[0]["date"] == "2026-06-20"  # the page shows only today's rows
+
+
+def test_build_hitter_hit_predictions_no_games_writes_an_empty_file_for_today(tmp_path, monkeypatch):
+    module = _load_module()
+    data_dir = tmp_path / "data"
+    data_dir.mkdir()
+    _write_daily_csvs(data_dir)
+    (data_dir / "hitter_hit_predictions.csv").write_text("date,key_mlbam\n2026-06-19,1\n")
+    monkeypatch.setattr(module.schedule, "fetch_probable_pitchers", lambda date: pd.DataFrame())
+
+    sys.argv = ["build_hitter_hit_predictions.py", "--data-dir", str(data_dir), "--as-of-date", "2026-06-20"]
+    module.main()
+
+    result = pd.read_csv(data_dir / "hitter_hit_predictions.csv")
+    assert result.empty
+    assert "date" in result.columns
 
 
 def test_build_hitter_hit_predictions_excludes_hitter_who_has_not_played_recently(tmp_path, monkeypatch):

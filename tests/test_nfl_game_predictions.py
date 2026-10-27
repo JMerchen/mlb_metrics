@@ -241,6 +241,25 @@ def test_append_game_predictions_dedupes_keeping_existing_resolved_row(tmp_path)
     assert combined.iloc[0]["game_played"] == 1
 
 
+def test_append_game_predictions_keeps_the_first_pick_before_and_the_latest_after_the_injury_report(tmp_path):
+    log_path = str(tmp_path / "nfl_game_predictions.csv")
+    tuesday = pd.DataFrame([{**_resolved_pick("g1", "KC", "DEN"), "injury_report": "before", "predicted_probability": 0.60}])
+    nfl_game_predictions.append_game_predictions(tuesday, log_path)
+    # Saturday's run logs the game again before the report (ignored) and after it.
+    again = pd.DataFrame([{**_resolved_pick("g1", "KC", "DEN"), "injury_report": "before", "predicted_probability": 0.70}])
+    nfl_game_predictions.append_game_predictions(again, log_path)
+    saturday = pd.DataFrame([{**_resolved_pick("g1", "KC", "DEN"), "injury_report": "after",
+                              "predicted_probability": 0.52, "injury_note": "Patrick Mahomes (QB)"}])
+    nfl_game_predictions.append_game_predictions(saturday, log_path)
+    later = pd.DataFrame([{**_resolved_pick("g1", "KC", "DEN"), "injury_report": "after", "predicted_probability": 0.55}])
+    combined = nfl_game_predictions.append_game_predictions(later, log_path)
+
+    assert len(combined) == 2
+    rows = combined.set_index("injury_report")
+    assert rows.loc["before", "predicted_probability"] == 0.60
+    assert rows.loc["after", "predicted_probability"] == 0.55
+
+
 def test_resolve_game_predictions_final_game_sets_winner(tmp_path):
     log_path = str(tmp_path / "nfl_game_predictions.csv")
     nfl_game_predictions.append_game_predictions(pd.DataFrame([_resolved_pick("g1", "KC", "DEN")]), log_path)

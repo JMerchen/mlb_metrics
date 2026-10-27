@@ -23,6 +23,11 @@ page shaped very differently from every other page's data tables, so
 these live here rather than in the shared stylesheet. Built entirely
 from style.css's shared :root tokens (--bg-card, --border, --text-dim,
 --accent, --radius) so it still visually matches every other page. */
+.methodPart{margin:48px 0 0;font-size:22px;}
+.glossary{display:grid;grid-template-columns:minmax(160px,240px) minmax(0,1fr);gap:8px 20px;margin:0;}
+.glossary dt{font-weight:700;}
+.glossary dd{margin:0;color:var(--text-dim);}
+@media (max-width:640px){.glossary{grid-template-columns:1fr;gap:2px 0;}.glossary dd{margin-bottom:10px;}}
 .methodologyIntro{
 opacity:.75;
 max-width:760px;
@@ -144,16 +149,196 @@ font-size:13px;
 </div>
 
 <p class="methodologyIntro">
-Every statistical, machine-learning, optimization, and domain-specific
-method actually used somewhere in this project's code - not what each
-feature predicts, but the real technique behind it, in case this site is
-useful for learning the theory itself. Each entry: what the method is in
-general, how this project specifically uses it (with the real file/
-function), and a link to learn more. For real results, backtest numbers,
-and full implementation detail on any of these, see the
-<a href="https://github.com/JMerchen/mlb_metrics#readme" style="color:inherit">README</a>
-- this page is the theory reference, the README is the results record.
+What each part of the site does, how our models work, and what the terms
+mean - then the statistics underneath, technique by technique, for anyone
+who wants the theory. Backtest numbers and implementation detail live in
+the <a href="https://github.com/JMerchen/mlb_metrics#readme" style="color:inherit">README</a>.
 </p>
+
+<ul class="toc">
+<li><a href="#tools">What each tool does</a></li>
+<li><a href="#our-models">Our models</a></li>
+<li><a href="#glossary">Glossary</a></li>
+</ul>
+
+<section class="methodCategory" id="tools">
+<h2>What each tool does</h2>
+<div class="methodGrid">
+
+<div class="methodCard">
+<h3>Today</h3>
+<p>One page for the day: Beat the Streak picks (on days there are any),
+today's baseball game picks and this week's football picks, each next to
+how our picks have done.</p>
+</div>
+
+<div class="methodCard">
+<h3>MLB · Picks</h3>
+<p><b>Beat the Streak</b>: the hitters most likely to get a hit today, for
+MLB's contest of picking a hitter a day and building a streak - with our
+own running streak. <b>Hit chances</b>: every hitter's chance of a hit
+today. <b>Game picks</b>: who we think wins each game, next to Vegas, with
+our record and any bet we'd suggest.</p>
+</div>
+
+<div class="methodCard">
+<h3>MLB · Stats</h3>
+<p>What feeds the picks: every hitter's WAVE, hit chance, CAVE and WOPS
+(as played, or adjusted for the pitchers he faced), active hit streaks, a
+player lookup, today's probable starters, team ratings and each team's
+schedule.</p>
+</div>
+
+<div class="methodCard">
+<h3>MLB · Age Curves</h3>
+<p>How a player's season compares with history at his age: the 25 most
+similar seasons by players the same age, and what those players did the
+next year - his projection.</p>
+</div>
+
+<div class="methodCard">
+<h3>MLB · Prospects</h3>
+<p>Several published prospect and draft rankings blended into one
+consensus list.</p>
+</div>
+
+<div class="methodCard">
+<h3>NFL · Picks</h3>
+<p><b>Game picks</b> for the week next to Vegas, outlined by whether the
+pick came before the final injury report (Tuesday) or after it (the
+morning of, or the day before, the game). <b>What if?</b>: swap a starting
+QB, mark players out or set any unit's efficiency and see the chance move;
+last week's games can be replayed to test your settings against how they
+finished.</p>
+</div>
+
+<div class="methodCard">
+<h3>NFL · Stats</h3>
+<p>Every team's schedule, power rankings by net EPA per play, team
+profiles, the team units (QB+, Receiving+, Rushing+, Pass D+, Run D+) and
+each game's matchup differentials, and players' season views.</p>
+</div>
+
+<div class="methodCard">
+<h3>NFL · Player Props</h3>
+<p>Players with the friendliest matchups for receptions, yards and sacks
+this week, from their recent games and what their opponent allows, plus
+each position's every-game floors. Places to look, not checked against
+sportsbook lines.</p>
+</div>
+
+<div class="methodCard">
+<h3>NFL · Prospects</h3>
+<p>Published college big boards for the next NFL draft, blended into one
+ranking; players already drafted are left out.</p>
+</div>
+
+</div>
+</section>
+
+<section class="methodCategory" id="our-models">
+<h2>Our models</h2>
+<div class="methodGrid">
+
+<div class="methodCard">
+<h3>Beat the Streak</h3>
+<p>Each hitter's hit rates are blended over the season and his last 81, 30
+and 10 days (recent games count more), pulled toward the league for small
+samples, and combined with today's matchup - the opposing starter's and
+bullpen's PAVE and the park - in a model trained on past seasons and
+calibrated so its percentages mean what they say. A hitter qualifies only
+if both his hit chance and his games-with-a-hit rate clear 70%; the best
+Approach is the pick. Whether to risk the streak today is an
+optimal-stopping decision (Bellman, below).</p>
+</div>
+
+<div class="methodCard">
+<h3>MLB game picks</h3>
+<p>Each team's Pythagorean strength (from runs scored and allowed), its
+schedule-adjusted rating and its hitting power, adjusted by the starter
+and bullpen it faces today and home field; then calibrated. Every pick is
+logged before the game and graded after, next to Vegas's closing line. A
+bet is suggested only when our chance beats the de-vigged market by
+enough, sized by fractional Kelly in units.</p>
+</div>
+
+<div class="methodCard">
+<h3>NFL game picks</h3>
+<p>A logistic regression on each team's Pythagorean strength,
+schedule-adjusted confidence, offensive and defensive EPA edges, turnover
+margin and points per drive, plus each starting QB's QB+. Trained on every
+game since 2016 with each week predicted only from earlier games, the
+feature set chosen by walk-forward validation and checked on a season it
+never saw. When we disagree sharply with Vegas we defer to it (it's
+proven right more often there), then calibrate.</p>
+</div>
+
+<div class="methodCard">
+<h3>Injury report and What if?</h3>
+<p>A team's run game, pass game, run defense and pass defense are rated in
+percent of their normal yards per play. A player out lowers his units by
+what an absence at his position has cost teams in results (or what Vegas
+charges, where results are too noisy), times his snap share; a QB change
+goes through the model with the new QB's rating. Yards become points (0.07
+a yard) and points become win chance (0.137 log-odds a point, from how
+Vegas turns spreads into odds). The final injury report's Out and Doubtful
+players reprice each game the morning of, or the day before, it.</p>
+</div>
+
+<div class="methodCard">
+<h3>NFL team units</h3>
+<p>Each unit's EPA per play, solved for every offense and defense at once
+so each is credited for the opponents it faced, with recent games
+weighted more and reaching back into last season. Shown on a 100 =
+league-average scale, 30 points per standard deviation.</p>
+</div>
+
+<div class="methodCard">
+<h3>Player props, age curves, prospects</h3>
+<p>Props: a player's production blended over his season, last 8 and last 4
+games, against what his opponent allows his position. Age curves: nearest
+neighbors among historical seasons at the same age. Prospects: each
+source's ranks blended into one list. The Stats pages (WAVE, CAVE, WOPS,
+QB+ and the rest) describe; only the Picks pages predict.</p>
+</div>
+
+</div>
+</section>
+
+<section class="methodCategory" id="glossary">
+<h2>Glossary</h2>
+<dl class="glossary">
+<dt>Approach</dt><dd>A hitter's games-with-a-hit rate times his hit chance - how Beat the Streak ranks qualified hitters.</dd>
+<dt>Average regular / average starter</dt><dd>In What if?, a typical regular at a position (or a typical starting QB) - for someone not listed or whose role isn't known yet.</dd>
+<dt>Beat the Streak</dt><dd>MLB's contest: pick a hitter each day; the streak grows when he gets a hit and resets when he doesn't.</dd>
+<dt>Brier score</dt><dd>The average squared gap between a probability and what happened (1 or 0). Lower is better.</dd>
+<dt>Calibration</dt><dd>Adjusting a model's probabilities so its 60% calls win about 60% of the time.</dd>
+<dt>CAVE (Carried Average)</dt><dd>The share of a hitter's games with at least one hit - a 1-for-4 and a 4-for-4 count the same.</dd>
+<dt>De-vig</dt><dd>Removing the sportsbook's margin from both sides' odds so they add to 100% - what "Vegas" means on this site.</dd>
+<dt>EPA (expected points added)</dt><dd>How many points a play adds compared with what was expected from the down, distance and field position. Per play, per dropback or per target.</dd>
+<dt>Floor</dt><dd>The fewest a player has put up in a single game this season.</dd>
+<dt>Hit chance</dt><dd>A hitter's chance of at least one hit in 3.5 at-bats at his WAVE.</dd>
+<dt>Injury report: before / after</dt><dd>An NFL pick logged Tuesday, before the final injury report (purple outline), or repriced with it the morning of, or the day before, the game (blue).</dd>
+<dt>Kelly / units</dt><dd>A bet-sizing rule that stakes more the bigger our edge over the odds; a unit is one standard stake.</dd>
+<dt>Log loss</dt><dd>A score for probabilities that punishes confident misses hardest. Lower is better.</dd>
+<dt>Net EPA per play</dt><dd>A team's offensive EPA per play minus the EPA per play its defense allows.</dd>
+<dt>PAVE / PAVE+</dt><dd>The batting average hitters manage against a pitcher, blended like WAVE; PAVE+ compares it with the league (below 1 is tougher). Bullpen PAVE is the same for a team's relievers.</dd>
+<dt>Park factor</dt><dd>How much a ballpark helps or hurts hitting compared with an average park.</dd>
+<dt>Pythagorean strength</dt><dd>The winning percentage a team's points (or runs) scored and allowed would predict.</dd>
+<dt>QB+</dt><dd>A quarterback's EPA per dropback over his last 16 games, pulled toward a replacement-level backup when he has few. On the Stats tab, on the 100 scale.</dd>
+<dt>Receiving+, Rushing+, Pass D+, Run D+</dt><dd>Team unit ratings: 100 is league average, higher is always stronger, 30 points is one standard deviation.</dd>
+<dt>Regular</dt><dd>A player on at least half his side's snaps over his last 4 active games (What if? lists anyone at 30%).</dd>
+<dt>Snap share</dt><dd>The share of his side's plays a player was on the field for.</dd>
+<dt>Strength of schedule</dt><dd>How good the opponents a team has played were.</dd>
+<dt>Unit %</dt><dd>In What if?, a unit's yards per play as a percent of its normal; a defense at 90% allows 10% more.</dd>
+<dt>vs. pitchers faced / vs. defenses faced</dt><dd>A player's numbers adjusted for how tough his opponents were, from what each allowed all season.</dd>
+<dt>Walk-forward</dt><dd>Testing a model only on games after everything it learned from - never peeking ahead.</dd>
+<dt>WAVE</dt><dd>A hitter's batting average blended over the season and his last 81, 30 and 10 days, pulled toward the league for small samples.</dd>
+<dt>WOPS</dt><dd>A hitter's OPS (on-base plus slugging), blended the same way.</dd>
+</dl>
+</section>
+
+<h2 class="methodPart">The statistics underneath</h2>
 
 <ul class="toc">
 <li><a href="#estimation">Statistical Estimation &amp; Smoothing</a></li>
@@ -163,7 +348,7 @@ and full implementation detail on any of these, see the
 <li><a href="#significance">Statistical Significance Testing</a></li>
 <li><a href="#metrics">Evaluation Metrics</a></li>
 <li><a href="#resampling">Resampling</a></li>
-<li><a href="#decision">Decision Theory &amp; Optimization</a></li>
+<li><a href="#decision">Decision Theory</a></li>
 <li><a href="#risk">Portfolio &amp; Risk Concepts</a></li>
 <li><a href="#sabermetrics">Sabermetric Domain Formulas</a></li>
 <li><a href="#betting">Sports-Betting Math</a></li>
@@ -298,10 +483,8 @@ coefficients, shrinking them toward zero. Trades a little bias for lower
 variance - useful when features are correlated or numerous relative to
 the sample size, both common here.</p>
 <p class="methodLabel">How we use it</p>
-<p>A candidate model (vs. gradient boosting) for DK fantasy point
-projections (<code>scripts/train_dfs_ml_models.py</code>, both hitters
-and the pitcher <code>Expected_H_Allowed</code>/<code>Expected_BB</code>
-components) and for next-season HR9 projection
+<p>A candidate model (vs. gradient boosting) for the Age Curves page's
+next-season HR9 projection
 (<code>scripts/train_age_curve_hr9_model.py</code>).</p>
 <a class="methodLink" href="https://en.wikipedia.org/wiki/Ridge_regression" target="_blank" rel="noopener">Learn more &rarr;</a>
 </div>
@@ -645,7 +828,7 @@ distribution assumed on the underlying probabilities.</p>
 </section>
 
 <section class="methodCategory" id="decision">
-<h2>Decision Theory &amp; Optimization</h2>
+<h2>Decision Theory</h2>
 <div class="methodGrid">
 
 <div class="methodCard" id="bellman">
@@ -669,25 +852,6 @@ compares today's real predicted probability against it.</p>
 <a class="methodLink" href="https://en.wikipedia.org/wiki/Bellman_equation" target="_blank" rel="noopener">Learn more &rarr;</a>
 </div>
 
-<div class="methodCard" id="milp">
-<h3>Mixed-Integer (0/1) Linear Programming</h3>
-<p class="methodLabel">What it is</p>
-<p>Optimization where some or all decision variables are restricted to
-integers (here, strictly 0 or 1 - "include this player, or don't"),
-subject to linear constraints, maximizing a linear objective. Unlike a
-greedy heuristic, a real solver considers the whole combinatorial space
-at once and is guaranteed to find the true optimum under a shared budget
-constraint - a locally-good pick can foreclose a better global
-combination, which is exactly what a greedy approach would miss.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>dfs_optimizer.solve_optimal_lineup</code> - one binary variable
-per player, objective = maximize total projected points (or ceiling, or
-value), constraints = salary cap and exact roster-slot counts per
-position, solved via PuLP's CBC solver. A real 0/1 knapsack-with-groups
-problem. <code>nfl_dfs_optimizer.py</code> reuses this same function
-directly rather than reimplementing it.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Integer_programming" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
 
 </div>
 </section>
@@ -716,39 +880,7 @@ turning it on.</p>
 <a class="methodLink" href="https://en.wikipedia.org/wiki/Diversification_(finance)" target="_blank" rel="noopener">Learn more &rarr;</a>
 </div>
 
-<div class="methodCard" id="semideviation">
-<h3>Semi-Deviation (One-Sided Volatility)</h3>
-<p class="methodLabel">What it is</p>
-<p>Like standard deviation, but computed using only the deviations on one
-side of the mean (e.g. only above-mean values). Isolates "upside spread"
-or "downside spread" separately, rather than treating both directions as
-equally undesirable the way plain variance does.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>dfs_ceiling.compute_upside_deviation</code> computes only the
-above-mean spread of a player's historical game log. Combined as
-<code>mean + k * upside_deviation</code> - deliberately the mirror image
-of a risk-averse Sharpe-ratio-style penalty: this project's "boom
-score" is risk-SEEKING (rewards upside spread), since a DFS
-tournament lineup wants explosive ceiling games, not smooth/low-variance
-ones.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Downside_risk" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
 
-<div class="methodCard" id="percentile">
-<h3>Percentile-Based Signal Design</h3>
-<p class="methodLabel">What it is</p>
-<p>Using a specific percentile (quantile) of a real historical
-distribution - rather than the mean - as the number you actually care
-about. The 90th percentile answers "what's a real, plausible GREAT game
-for this player," a genuinely different question than "what's typical."</p>
-<p class="methodLabel">How we use it</p>
-<p><code>dfs_ceiling.compute_ceiling_percentiles</code> takes the
-<code>config.DFS_CEILING_PERCENTILE</code>-th (default 90th) percentile
-of a player's real modeled DK points history (falling back to a
-position-group percentile for players with too little history of their
-own) as the "ceiling" signal for tournament-style lineup building.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Quantile" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
 
 </div>
 </section>
@@ -904,20 +1036,6 @@ we beat the closing line," not just our own heuristic.</p>
 <h2>Data &amp; Feature Engineering</h2>
 <div class="methodGrid">
 
-<div class="methodCard" id="minmax">
-<h3>Min-Max Scaling</h3>
-<p class="methodLabel">What it is</p>
-<p>Linearly rescaling a value into a fixed target range using
-<code>(x - min) / (max - min)</code>. Unlike z-scoring, the result has a
-known, bounded range - useful when the target itself is naturally
-bounded.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>estimated_salary.compute_estimated_salary</code> (and its NFL
-counterpart) rescales projected fantasy points into a plausible DraftKings
-salary range, clipped at a real floor/ceiling and rounded to the nearest
-real salary increment.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Feature_scaling" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
 
 <div class="methodCard" id="idempotence">
 <h3>Idempotent Dedup Keys</h3>

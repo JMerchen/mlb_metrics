@@ -66,11 +66,10 @@ this block isn't in the shared stylesheet. */
 </div>
 
 <div class="tabGroup" id="nflTabs">
-<button class="tabButton active" data-nfl-tab="preseason" onclick="selectNflTab('preseason')">Fantasy draft</button>
-<button class="tabButton" data-nfl-tab="gamepicks" onclick="selectNflTab('gamepicks')">Game picks</button>
+<button class="tabButton active" data-nfl-tab="picks" onclick="selectNflTab('picks')">Picks</button>
 <button class="tabButton" data-nfl-tab="stats" onclick="selectNflTab('stats')">Stats</button>
-<button class="tabButton" data-nfl-tab="draftboard" onclick="selectNflTab('draftboard')">College prospects</button>
-<button class="tabButton" data-nfl-tab="playerprops" onclick="selectNflTab('playerprops')">Player props</button>
+<button class="tabButton" data-nfl-tab="playerprops" onclick="selectNflTab('playerprops')">Player Props</button>
+<button class="tabButton" data-nfl-tab="prospects" onclick="selectNflTab('prospects')">Prospects</button>
 </div>
 
 <div id="gamePicksSection" style="display:none">
@@ -94,6 +93,8 @@ This week
 </h3>
 
 <p class="sectionIntro">EPA per play is how many points a team adds, on average, each snap. On offense higher is better; on defense it is what opponents gain, so lower is better. Ranks are out of 32 (1st is best), from each team's recent games with the latest weighted most.</p>
+
+<div class="reportKey"><span class="before">Picked before the final injury report (Tuesday)</span><span class="after">Repriced after it (the morning of, or the day before, the game)</span></div>
 
 <div
 class="todaysPicks"
@@ -133,7 +134,7 @@ Loading...
 
 <div id="teamUnitsSection" style="display:none">
 
-<p class="sectionIntro">What we calculate and what feeds the models: every team's season, team ratings and units, and players' season views. Our picks are on the Game picks and Player props tabs.</p>
+<p class="sectionIntro">What we calculate and what feeds the models: every team's season, team ratings and units, and players' season views. Our picks are on the Picks and Player Props tabs.</p>
 
 <h3>
 Team schedules
@@ -247,119 +248,6 @@ id="nflUnitByes">
 
 </div>
 
-<div id="preseasonSection">
-
-<div class="tabGroup" id="bestballPositionTabs">
-<button class="tabButton active" data-bestball-position="all" onclick="selectBestballPosition('all')">All</button>
-<button class="tabButton" data-bestball-position="QB" onclick="selectBestballPosition('QB')">QB</button>
-<button class="tabButton" data-bestball-position="RB" onclick="selectBestballPosition('RB')">RB</button>
-<button class="tabButton" data-bestball-position="WR" onclick="selectBestballPosition('WR')">WR</button>
-<button class="tabButton" data-bestball-position="TE" onclick="selectBestballPosition('TE')">TE</button>
-</div>
-
-<input
-type="text"
-id="bestballSearch"
-placeholder="Search player"
-oninput="renderBestball()">
-
-<div class="scrollbox" id="bestballTable">
-Loading...
-</div>
-
-<h3>
-My Draft
-</h3>
-
-<p>
-Real, transparent signals for the pick you're at right now - your own real
-roster gap against real per-team targets, and each position's real
-necessity (Position Necessity above). This tool does NOT try to guess who's
-still on the board - it has no view of a live draft board, so it can't know
-what OTHER teams have taken. Instead, add the specific players YOU'RE
-weighing for this pick below and the table assesses each one: their real
-value above replacement, whether their position is a real roster need
-right now, and - once a draft slot + pick number are entered - a real
-reach/value read against their own real ECR +/- expert-rank standard
-deviation (a player with no real ECR match simply shows no read, not a
-fabricated one). Saved to this browser only (no account/server) - use
-"Clear My Draft" to reset.
-</p>
-
-<p><strong>My Roster</strong></p>
-
-<input
-type="text"
-id="draftAssistantSearch"
-placeholder="Search player to add to your roster"
-oninput="renderDraftAssistantCandidates()">
-
-<div id="draftAssistantCandidates"></div>
-
-<div class="todaysPicks" id="draftAssistantRoster"></div>
-
-<div class="scrollbox" id="draftAssistantGapTable">
-Loading...
-</div>
-
-<div id="draftAssistantInputs">
-<label>Your draft slot (1-12): <input type="number" id="draftAssistantSlot" min="1" max="12" oninput="renderDraftAssistant()"></label>
-<label>Current pick number: <input type="number" id="draftAssistantPick" min="1" oninput="renderDraftAssistant()"></label>
-<button onclick="clearDraftAssistant()">Clear My Draft</button>
-</div>
-
-<div id="draftAssistantPicksUntilTurn"></div>
-
-<p><strong>Players I'm Considering For This Pick</strong></p>
-
-<input
-type="text"
-id="draftAssistantConsiderSearch"
-placeholder="Search player to assess for this pick"
-oninput="renderDraftAssistantConsiderCandidates()">
-
-<div id="draftAssistantConsiderCandidates"></div>
-
-<div class="todaysPicks" id="draftAssistantConsiderList"></div>
-
-<div class="scrollbox" id="draftAssistantTable">
-Loading...
-</div>
-
-<h3>
-Position Scarcity
-</h3>
-
-<div class="scrollbox" id="positionScarcityTable">
-Loading...
-</div>
-
-<h3>
-Draft Strategy
-</h3>
-
-<div class="scrollbox" id="draftStrategyTable">
-Loading...
-</div>
-
-<h3>
-Position Necessity
-</h3>
-
-<div class="scrollbox" id="positionNecessityTable">
-Loading...
-</div>
-
-<h3>
-Preseason Notes
-</h3>
-
-<div class="scrollbox" id="draftNotesTable">
-Loading...
-</div>
-
-</div>
-
 <div id="draftBoardSection" style="display:none">
 
 <h3>
@@ -421,8 +309,6 @@ Loading...
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
-
-<script src="./nfl_draft_assistant.js"></script>
 
 <script src="./consensus_board.js"></script>
 

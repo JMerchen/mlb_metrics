@@ -591,6 +591,11 @@ if(button && button.dataset.schedTeam !== scheduleTeam){ showSchedule(button.dat
 })
 }
 
+// Today's date on the viewer's clock, as the daily files write it.
+function localIsoDate(d = new Date()){
+return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+}
+
 // ---- Everything that needs the player files ----
 
 async function loadAll(){
@@ -607,7 +612,9 @@ byId("scheduleSheet") ? loadOptionalCSV("./data/team_schedule.csv") : [],
 wave = waveRows
 pave = paveRows
 confidence = confidenceRows.sort((a, b) => String(a.team).localeCompare(String(b.team)))
-hitterHitPredictions = predictions
+// Only today's list: on a day without games the file is empty, and an
+// older file (or one from before it carried a date) isn't shown as today's.
+hitterHitPredictions = predictions.filter(r => r.date === localIsoDate())
 hitStreaks = streaks
 hitterStats = statRows
 if(hitterStats.length){ useSeasonViews(wave, hitterStats) }

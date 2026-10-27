@@ -35,10 +35,6 @@ jobs:
           mkdir -p data/models
           mkdir -p data/raw/lahman
 
-      - name: Train DFS ML models (hitter, pitcher H allowed, pitcher BB)
-        run: |
-          python scripts/train_dfs_ml_models.py
-
       - name: Convert Lahman_Raw CSVs to parquet
         run: |
           python scripts/fetch_lahman.py
