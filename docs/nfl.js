@@ -517,39 +517,51 @@ loadNflWhatIf()
 
 }
 
-// "What if?" panel (docs/nfl_whatif.js): the chosen game, QBs and absences.
-let nflWhatIfData = null
-let nflWhatIfGame = null
-let nflWhatIfState = null
+// "What if?" panel (docs/nfl_whatif.js): this week's games, or last week's
+// replayed as a test case; per view, the chosen game, QBs and absences.
+const NFL_WHATIF_MODES = [
+{key: "this", label: "This week", file: "nfl_whatif"},
+{key: "last", label: "Last week (with results)", file: "nfl_whatif_last_week"},
+]
+const nflWhatIf = {mode: "this", data: {}, game: {}, state: {}}
+
+async function loadNflWhatIfFile(file){
+if(window.SITE_DATA && window.SITE_DATA[file]){ return window.SITE_DATA[file] }
+const response = await fetch(`./data/${file}.json?t=${Date.now()}`, {cache:"no-store"})
+if(!response.ok){ throw new Error(`HTTP ${response.status}`) }
+return response.json()
+}
 
 async function loadNflWhatIf(){
 
 const el = document.getElementById("nflWhatIf")
 
+for(const m of NFL_WHATIF_MODES){
 try{
-if(window.SITE_DATA && window.SITE_DATA.nfl_whatif){
-nflWhatIfData = window.SITE_DATA.nfl_whatif
-}else{
-const response = await fetch(`./data/nfl_whatif.json?t=${Date.now()}`, {cache:"no-store"})
-if(!response.ok){ throw new Error(`HTTP ${response.status}`) }
-nflWhatIfData = await response.json()
-}
+nflWhatIf.data[m.key] = await loadNflWhatIfFile(m.file)
+nflWhatIf.state[m.key] = whatifEmptyState()
 }catch(e){
-console.log("no nfl_whatif.json yet", e)
+console.log(`no ${m.file}.json yet`, e)
+}
+}
+if(!nflWhatIf.data.this && !nflWhatIf.data.last){
 el.innerHTML = "No upcoming games to try yet"
 return
 }
+if(!nflWhatIf.data.this){ nflWhatIf.mode = "last" }
 
-nflWhatIfState = whatifEmptyState()
 renderNflWhatIf()
 el.addEventListener("change", onNflWhatIfChange)
+el.addEventListener("click", onNflWhatIfClick)
 
 }
 
 function renderNflWhatIf(focusSelector){
 
 const el = document.getElementById("nflWhatIf")
-el.innerHTML = whatifPanelHtml(nflWhatIfData, nflWhatIfGame, nflWhatIfState)
+const mode = nflWhatIf.mode
+const modes = NFL_WHATIF_MODES.filter(m => nflWhatIf.data[m.key]).map(m => ({...m, active: m.key === mode}))
+el.innerHTML = whatifPanelHtml(nflWhatIf.data[mode], nflWhatIf.game[mode], nflWhatIf.state[mode], {modes})
 // Re-rendering replaces the control that changed; keep keyboard focus on it.
 const again = focusSelector ? el.querySelector(focusSelector) : null
 if(again){ again.focus() }
@@ -559,22 +571,41 @@ if(again){ again.focus() }
 function onNflWhatIfChange(event){
 
 const t = event.target
+const mode = nflWhatIf.mode
+const state = nflWhatIf.state[mode]
 let focus = null
 if(t.dataset.whatif === "game"){
-nflWhatIfGame = t.value
-nflWhatIfState = whatifEmptyState()
+nflWhatIf.game[mode] = t.value
+nflWhatIf.state[mode] = whatifEmptyState()
 focus = '[data-whatif="game"]'
 }else if(t.dataset.whatifQb){
-nflWhatIfState[t.dataset.whatifQb === "home" ? "homeQb" : "awayQb"] = t.value
+state[t.dataset.whatifQb === "home" ? "homeQb" : "awayQb"] = t.value
 focus = `[data-whatif-qb="${t.dataset.whatifQb}"]`
 }else if(t.dataset.whatifOut){
-const out = nflWhatIfState.out[t.dataset.whatifOut]
+const out = state.out[t.dataset.whatifOut]
 if(t.checked){ out.add(t.value) }else{ out.delete(t.value) }
 focus = `[data-whatif-out="${t.dataset.whatifOut}"][value="${CSS.escape(t.value)}"]`
 }else{
 return
 }
 renderNflWhatIf(focus)
+
+}
+
+function onNflWhatIfClick(event){
+
+const t = event.target.closest("button")
+if(!t){ return }
+if(t.dataset.whatifMode){
+nflWhatIf.mode = t.dataset.whatifMode
+renderNflWhatIf(`[data-whatif-mode="${t.dataset.whatifMode}"]`)
+}else if(t.dataset.whatifAction === "missed"){
+const mode = nflWhatIf.mode
+const data = nflWhatIf.data[mode]
+const game = data.games.find(g => g.game_id === nflWhatIf.game[mode]) || data.games[0]
+nflWhatIf.state[mode] = whatifMissedState(game)
+renderNflWhatIf('[data-whatif-action="missed"]')
+}
 
 }
 
