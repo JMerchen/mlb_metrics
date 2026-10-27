@@ -1,0 +1,39 @@
+  503 from https://web.archive.org/cdx/search/cdx
+  429 from https://web.archive.org/web/20251204232451id_/https://thebaseballcube.com/content/payroll_year/1988/
+  429 from https://web.archive.org/web/20251204232451id_/https://thebaseballcube.com/content/payroll_year/1988/
+  429 from https://web.archive.org/web/20251204232451id_/https://thebaseballcube.com/content/payroll_year/1988/
+  429 from https://web.archive.org/web/20251204232451id_/https://thebaseballcube.com/content/payroll_year/1988/
+  429 from https://web.archive.org/web/20230626190728id_/https://www.thebaseballcube.com/content/payroll_year/1988/
+  429 from https://web.archive.org/web/20230626190728id_/https://www.thebaseballcube.com/content/payroll_year/1988/
+  429 from https://web.archive.org/web/20230626190728id_/https://www.thebaseballcube.com/content/payroll_year/1988/
+  429 from https://web.archive.org/web/20230626190728id_/https://www.thebaseballcube.com/content/payroll_year/1988/
+1988: no complete capture - kept as is
+  429 from https://web.archive.org/web/20260113081559id_/https://www.thebaseballcube.com/content/payroll_year/1989/
+  429 from https://web.archive.org/web/20260113081559id_/https://www.thebaseballcube.com/content/payroll_year/1989/
+  429 from https://web.archive.org/web/20260113081559id_/https://www.thebaseballcube.com/content/payroll_year/1989/
+  429 from https://web.archive.org/web/20260113081559id_/https://www.thebaseballcube.com/content/payroll_year/1989/
+  429 from https://web.archive.org/web/20251111022644id_/https://www.thebaseballcube.com/content/payroll_year/1989/
+  1989 capture 20251111022644: 0 teams - trying an older one
+  429 from https://web.archive.org/web/20250223073805id_/https://www.thebaseballcube.com/content/payroll_year/1989/
+  429 from https://web.archive.org/web/20250223073805id_/https://www.thebaseballcube.com/content/payroll_year/1989/
+  429 from https://web.archive.org/web/20250223073805id_/https://www.thebaseballcube.com/content/payroll_year/1989/
+  429 from https://web.archive.org/web/20250223073805id_/https://www.thebaseballcube.com/content/payroll_year/1989/
+  429 from https://web.archive.org/web/20250125144550id_/https://thebaseballcube.com/content/payroll_year/1989/
+  429 from https://web.archive.org/web/20250125144550id_/https://thebaseballcube.com/content/payroll_year/1989/
+  429 from https://web.archive.org/web/20250125144550id_/https://thebaseballcube.com/content/payroll_year/1989/
+  429 from https://web.archive.org/web/20250125144550id_/https://thebaseballcube.com/content/payroll_year/1989/
+1989: no complete capture - kept as is
+  ReadTimeout from https://web.archive.org/cdx/search/cdx
+  503 from https://web.archive.org/cdx/search/cdx
+  503 from https://web.archive.org/cdx/search/cdx
+  429 from https://web.archive.org/web/20250125152114id_/https://thebaseballcube.com/content/payroll_year/1990/
+  429 from https://web.archive.org/web/20250125152114id_/https://thebaseballcube.com/content/payroll_year/1990/
+  ConnectionError from https://web.archive.org/web/20250125152114id_/https://thebaseballcube.com/content/payroll_year/1990/
+  1990 capture 20250125152114: 0 teams - trying an older one
+  429 from https://web.archive.org/web/20241201014057id_/https://www.thebaseballcube.com/content/payroll_year/1990/
+  1990 capture 20241201014057: 0 teams - trying an older one
+  429 from https://web.archive.org/web/20240816213356id_/https://www.thebaseballcube.com/content/payroll_year/1990/
+  429 from https://web.archive.org/web/20240816213356id_/https://www.thebaseballcube.com/content/payroll_year/1990/
+  ConnectionError from https://web.archive.org/web/20240816213356id_/https://www.thebaseballcube.com/content/payroll_year/1990/
+  429 from https://web.archive.org/web/20240816213356id_/https://www.thebaseballcube.com/content/payroll_year/1990/
+  429 from https://web.archive.org/web/20240212181618id_/https://www.thebaseballcube.com/content/payroll_year/1990/
