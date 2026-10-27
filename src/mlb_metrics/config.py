@@ -655,10 +655,6 @@ MATCHUP_PARK_FACTOR_WEIGHT = 1.0
 # probability further than a real arsenal skew would.
 MATCHUP_PITCH_ARSENAL_CLIP = (0.85, 1.15)
 
-# Same role as PITCHER_MATCHUP_WEIGHT_GRID - swept by a real backtest
-# before choosing MATCHUP_PITCH_ARSENAL_WEIGHT below. 0.0 is the built-in
-# null hypothesis (multiplier == 1.0 exactly, not an approximation of it).
-MATCHUP_PITCH_ARSENAL_WEIGHT_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
 
 # Real league-average pitch-family usage mix, used as the neutral baseline
 # a batter's own family rates are compared against (the same role
@@ -917,42 +913,16 @@ DFS_DK_HITTER_SINGLE_POINTS = 3
 DFS_DK_HITTER_DOUBLE_POINTS = 5
 DFS_DK_HITTER_TRIPLE_POINTS = 8
 DFS_DK_HITTER_HR_POINTS = 10
-# DFS_DK_HITTER_BB_POINTS/HBP_POINTS/RBI_POINTS are now used live in
-# dfs.compute_hitter_dk_points (hitters.compute_extended_dk_rates supplies
-# the Expected_BB/Expected_HBP/Expected_RBI these multiply against - see
-# dfs.py's module docstring for why runs/SB are still excluded).
-# DFS_DK_HITTER_RUN_POINTS/SB_POINTS remain unused (no runs-scored-by-
-# batter or stolen-base signal exists - see dfs.py's module docstring for
-# exactly why each is deferred/not-planned) - kept so dfs_backtest.py can
-# still report the FULL real DK score for a historical day alongside the
-# modeled subset, honestly, instead of silently comparing against a
-# partial actual.
-DFS_DK_HITTER_RUN_POINTS = 2
 DFS_DK_HITTER_RBI_POINTS = 2
 DFS_DK_HITTER_BB_POINTS = 2
 DFS_DK_HITTER_HBP_POINTS = 2
-DFS_DK_HITTER_SB_POINTS = 5
-# DraftKings removed the caught-stealing penalty from its current ruleset
-# (confirmed live via web search, July 2026) - 0, not a negative value.
-DFS_DK_HITTER_CS_POINTS = 0
 
 # DraftKings Classic MLB scoring - pitchers. Same sources as above.
 DFS_DK_PITCHER_IP_POINTS = 2.25  # per inning (0.75 per out)
 DFS_DK_PITCHER_K_POINTS = 2
 DFS_DK_PITCHER_BB_POINTS = -0.6
 DFS_DK_PITCHER_H_POINTS = -0.6
-DFS_DK_PITCHER_HBP_POINTS = -0.6
 DFS_DK_PITCHER_ER_POINTS = -2
-# Out of scope for v1 (see dfs.py's module docstring: Win needs a
-# win-probability estimate this project doesn't build; CG/CGSO/no-hitter
-# are rare discrete events with no signal here) - kept, unused, purely as a
-# visible reminder of what real DK pitcher scoring includes that this
-# ranking does NOT model, so a reader doesn't mistake DK_Points_Pitcher for
-# the full real score.
-DFS_DK_PITCHER_WIN_POINTS = 4
-DFS_DK_PITCHER_CG_POINTS = 2.5
-DFS_DK_PITCHER_CGSO_POINTS = 2.5
-DFS_DK_PITCHER_NO_HITTER_POINTS = 5
 
 # DK's hitter scoring is non-linear in total bases (a double isn't 2x a
 # single's value: 5 != 2*3), but this project only computes a linear
@@ -1101,8 +1071,6 @@ DFS_BATTERS_FACED_PER_INNING = 4.335
 # ~13-26 rows/date vs. thousands of hitter-day rows).
 ML_WALK_FORWARD_MIN_TRAIN_DATES_HITTER = 30
 ML_WALK_FORWARD_TEST_BLOCK_DATES_HITTER = 10
-ML_WALK_FORWARD_MIN_TRAIN_DATES_PITCHER = 40
-ML_WALK_FORWARD_TEST_BLOCK_DATES_PITCHER = 15
 
 # Dates reserved as a final holdout the grid search never sees at all -
 # model selection (grid search + CV) only ever uses earlier dates; the
@@ -1112,28 +1080,9 @@ ML_WALK_FORWARD_TEST_BLOCK_DATES_PITCHER = 15
 # heuristic-only backtest sample, so it's a fair head-to-head comparison.
 ML_FINAL_HOLDOUT_DATES = 20
 
-DFS_HITTER_MODEL_PATH = "data/models/dfs_hitter_model.joblib"
-DFS_PITCHER_H_ALLOWED_MODEL_PATH = "data/models/dfs_pitcher_h_allowed_model.joblib"
-DFS_PITCHER_BB_MODEL_PATH = "data/models/dfs_pitcher_bb_model.joblib"
 AGE_CURVE_HR9_MODEL_PATH = "data/models/age_curve_hr9_model.joblib"
 HITTER_HIT_PROBABILITY_MODEL_PATH = "data/models/hitter_hit_probability_model.joblib"
 
-# Deliberately narrow grids (1-2 hyperparameters, <10 combinations) given
-# the modest walk-forward fold count on the DFS side (~116 dates -> ~6-8
-# blocked CV folds) - a wide sweep over that few folds would just fit CV
-# noise, not find a real best setting. Ridge is the primary candidate for
-# both pitcher signals (small distinct-pitcher pool, ~755 across full
-# history); a heavily depth-capped gradient-boosting grid is included as a
-# secondary candidate only for the hitter signal, where the distinct-batter
-# pool (~604) and row count are both larger.
-DFS_HITTER_RIDGE_ALPHA_GRID = [0.1, 1, 3, 10, 30, 100]
-DFS_HITTER_GBM_PARAM_GRID = {
-    "max_depth": [2, 3],
-    "learning_rate": [0.03, 0.1],
-    "max_iter": [100, 200],
-    "min_samples_leaf": [50, 200],
-}
-DFS_PITCHER_RIDGE_ALPHA_GRID = [0.1, 0.3, 1, 3, 10, 30, 100]
 
 # LogisticRegression's C (inverse regularization strength) grid for the
 # hitter hit-probability model (scripts/train_hitter_hit_model.py) - same
@@ -1403,32 +1352,6 @@ AGE_CURVE_HR9_GBM_PARAM_GRID = {
 # SLG/OPS/K9/BB9/FIP) is untouched and still served by the original KNN
 # path, which was already beating its own baseline.
 
-# --- Ceiling/volatility signal (dfs_ceiling.py) ---
-#
-# GPP (tournament) DFS lineups are won by boom/spike-game players, not
-# players who reliably score near their own mean - a real, well-known DFS
-# strategy concept (the user's own framing: "the winner won't have
-# players getting 5 points across their lineup, they're more likely to
-# have lucked into players averaging 15 or so"). Ceiling_DK_Points is the
-# Pth percentile of a player's own REAL historical modeled DK points
-# (dfs_backtest.compute_actual_hitter_dk_points/
-# compute_actual_pitcher_dk_points applied per real game date they
-# played) - an ADDITIONAL informational column alongside the existing
-# mean projection (DK_Points_Hitter/DK_Points_Pitcher), never replacing
-# it. See dfs_ceiling.py's module docstring for why this ships
-# informational-only rather than as the optimizer's default objective.
-DFS_CEILING_PERCENTILE = 90
-
-# A player with fewer than this many real scored games has too little
-# history for a meaningful per-player percentile (a rookie's 3rd game
-# could literally BE their whole "ceiling" sample) - falls back to the
-# GROUP-WIDE (all hitters', or all pitchers', pooled) percentile at the
-# same level instead, the same small-sample philosophy
-# MATCHUP_LEAGUE_PAVE_FALLBACK already uses. Modest, not a
-# qualified-season bar - matches DFS_PITCHER_MIN_STARTS/AGE_CURVE_MIN_IP's
-# reasoning that a small-but-real sample should still surface rather than
-# being silently excluded.
-DFS_CEILING_MIN_GAMES = 10
 
 # Backtested (dfs_ceiling.backtest_ceiling_signal) against the same 20
 # real game dates as the heuristic DFS backtest above, no-lookahead
@@ -1465,55 +1388,6 @@ DFS_CEILING_MIN_GAMES = 10
 # yet. Re-run this backtest (and update this comment) after any change to
 # DK_Points_Hitter/DK_Points_Pitcher's own formula.
 
-# --- Boom_Adjusted_DK_Points (dfs_ceiling.compute_boom_adjusted_score) ---
-#
-# Neither pure mean nor pure ceiling: the user explicitly wants a player
-# with real, frequent upside swings (sometimes 20, sometimes 5, sometimes
-# 0, averaging 4.8) ranked ABOVE a metronomic player averaging a flat 5 -
-# credit for genuine volatility, not a max-chasing boom-or-bust score and
-# not blind to the mean either. Boom_Adjusted_DK_Points =
-# DK_Points_Hitter/Pitcher (today's mean projection) + k * Upside_Deviation
-# (a player's own real historical UPSIDE-ONLY semi-deviation - see
-# dfs_ceiling.compute_upside_deviation's docstring for exactly why it's a
-# semi-deviation, not plain stdev).
-#
-# The grid dfs_ceiling.backtest_boom_adjusted_signal searches to pick k
-# from real data rather than guessing one.
-DFS_BOOM_ADJUSTED_K_GRID = [0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0]
-
-# Backtested (dfs_ceiling.backtest_boom_adjusted_signal) against the same
-# 20-date sample as Ceiling_DK_Points's own backtest, same no-lookahead
-# discipline, same correlation/capture-rate metrics, once per k in the
-# grid above:
-#
-#   Hitters (n=5,430, 543 real top-decile days): correlation and capture
-#   rate both rose MONOTONICALLY across the entire tested grid, never
-#   turning over - k=0.0 (plain mean): correlation 0.009, capture 10.1%;
-#   k=1.0: correlation 0.044, capture 12.5%; k=2.0 (grid max): correlation
-#   0.061, capture 13.3%. The grid didn't localize a peak, but the
-#   grid-max k=2.0 was deliberately NOT chosen: at k=2.0 the volatility
-#   term (mean real Upside_Deviation 4.417) OUTWEIGHS the mean term (mean
-#   real DK_Points_Hitter 5.185) by nearly 2:1, which just recreates pure
-#   ceiling-chasing under a different name - directly contrary to the
-#   user's explicit "neither pure boom nor pure mean" request. k=1.0 keeps
-#   the two terms roughly balanced (mean contributes ~54% of a typical
-#   score, deviation ~46%) while still capturing a real, validated
-#   improvement over the plain mean (capture rate +24% relative, from
-#   10.1% to 12.5%). Chosen for that balance, not because it's the
-#   highest-scoring k in the grid.
-#
-#   Pitchers (n=468, 47 real top-decile days): correlation stayed flat
-#   (0.328-0.340) and capture rate bounced non-monotonically (25.5%-29.8%)
-#   across the whole grid, with NO k reliably beating k=0.0's baseline
-#   27.7% - the same conclusion Ceiling_DK_Points's own backtest reached
-#   for pitchers (no clear upside-signal edge). k=0.0 (falls back to the
-#   plain mean projection) is the honest choice, not a guessed nonzero
-#   value chasing sample noise.
-#
-# Re-run this backtest (and update this comment) after any change to
-# DK_Points_Hitter/DK_Points_Pitcher's own formula.
-DFS_BOOM_ADJUSTED_K_HITTER = 1.0
-DFS_BOOM_ADJUSTED_K_PITCHER = 0.0
 
 # --- Matchup_Boom_Score (dfs_ceiling.compute_matchup_boom_score, hitters only) ---
 #
@@ -1614,68 +1488,6 @@ PITCHER_MATCHUP_WEIGHT_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
 # formula or to teams.compute_offensive_edge's team_bases_pg.
 PITCHER_MATCHUP_OFFENSE_WEIGHT = 0.0
 
-# --- Value_Score (dfs_optimizer.py, "stars not superstars" roster construction) ---
-#
-# Real evidence from an actual DK contest: this project's own mean/
-# ceiling/boom-adjusted optimizer objectives all independently converged
-# on the SAME two most expensive pitchers, spending $19,900-$21,200 on
-# pitching and leaving barely enough budget for 8 undifferentiated
-# floor-priced hitters. Root cause, diagnosed directly against real
-# numbers: Estimated_Salary's fixed $2,000 floor is a much smaller
-# fraction of an elite player's price than a replacement-level player's,
-# so ANY high scorer - regardless of position - gets a structurally
-# better AVERAGE dollars-per-point rate purely from that floor dilution,
-# even though the earlier parity fix already equalized the MARGINAL rate.
-# An objective that maximizes raw point totals under a budget will always
-# rationally chase that average-rate advantage and overpay for the 1-2
-# biggest scorers, leaving nothing to build a real roster (a mix of
-# reliable "consistent" floor plays and genuine "boom" upside plays, in
-# the user's own framing - "consistent players carry their own, boom
-# players pick up slack") with what's left.
-#
-# Value_Score = boom-adjusted points per $1,000 of Estimated_Salary -
-# directly rewards being UNDERPRICED relative to real upside (a "star")
-# over being fully priced-in already (a "superstar"), instead of chasing
-# raw point totals regardless of cost. Computed for BOTH hitters and
-# pitchers (dfs_optimizer.build_player_pool), unlike Boom_Adjusted_DK_Points/
-# Matchup_Boom_Score above, which are hitter-validated or hitter-only.
-#
-# DFS_VALUE_BOOM_K_PITCHER gives pitchers real boom credit for this
-# specific objective - explicitly NOT the same as DFS_BOOM_ADJUSTED_K_PITCHER
-# (0.0) above, which was validated against a different, narrower question
-# (does boom-adjusting predict WHICH DAY a pitcher booms - it didn't).
-# Implemented here anyway, per explicit user direction, because Value_Score
-# answers a different question: roster-construction diversification, not
-# single-day prediction. Matches hitters' own validated k=1.0 for
-# consistency - not independently re-validated for pitchers via a capture-
-# rate backtest (that specific metric already showed no k helps there for
-# THAT question), so treat this as a deliberate strategic choice, not a
-# claimed statistical win.
-DFS_VALUE_BOOM_K_PITCHER = 1.0
-
-# Value_Score maximizes a per-dollar RATIO, which carries no pressure to
-# spend anywhere close to the salary cap - confirmed via a real sanity
-# check against actual production data: objective=Value_Score selected a
-# full legal lineup for only $39,700 of the $50,000 cap (total DK_Points
-# fell from 81.38 to 56.31 vs. objective=DK_Points on the same slate),
-# because leaving $10,300 unspent doesn't cost the ratio objective
-# anything. That's a real flaw, not the intended "stars not superstars"
-# behavior - a usable lineup has to actually spend close to its budget.
-#
-# DFS_VALUE_MIN_SALARY_FRACTION adds a floor constraint
-# (sum(Estimated_Salary) >= fraction * DFS_SALARY_CAP) so the optimizer is
-# forced to use most of the cap even under Value_Score. Chosen via the
-# same real pool, testing three fractions of the $50,000 cap:
-#   0.85 (min $42,500): total_salary=$43,900  DK_Points=67.99  pitcher_salary=$16,900
-#   0.90 (min $45,000): total_salary=$46,000  DK_Points=73.66  pitcher_salary=$19,000
-#   0.95 (min $47,500): total_salary=$47,500  DK_Points=77.79  pitcher_salary=$19,900
-# 0.95 defeats the purpose (pitcher spend creeps back to the same
-# overpriced $19,900 the whole feature exists to avoid). 0.85 keeps
-# pitcher spend near the real winning-lineup range ($17,500-$18,100 in
-# the contest that originally motivated this) while still using most of
-# the budget - the best balance of the three, not a formally optimized
-# value.
-DFS_VALUE_MIN_SALARY_FRACTION = 0.85
 
 # --- Optimal Lineup (docs/dfs.html's "Optimal Lineup" tab, roster_positions.py,
 # estimated_salary.py, dfs_optimizer.py, scripts/build_optimal_lineup.py) ---
@@ -1697,76 +1509,6 @@ DFS_VALUE_MIN_SALARY_FRACTION = 0.85
 # lose real money mistaking this for what DraftKings will actually charge -
 # treat every one of those disclaimer sites as load-bearing, not decorative.
 
-# DraftKings Classic MLB roster construction, confirmed live via web search
-# (not memory) against https://www.draftkings.com/help/rules/mlb: 10 roster
-# spots, no FLEX/UTIL slot, $50,000 salary cap.
-DFS_ROSTER_SLOTS = {"P": 2, "C": 1, "1B": 1, "2B": 1, "3B": 1, "SS": 1, "OF": 3}
-DFS_SALARY_CAP = 50000
-
-# Real DK salaries: a universal $2,000 floor and always $100 increments -
-# both confirmed via the same source above. The ceiling below is NOT from
-# an official DK table (DraftKings doesn't publish one - prices float
-# algorithmically) - it's an anecdotal 2026 example from secondary sources
-# (elite starters ~$9,500-$10,500), rounded outward to a defensible
-# ceiling. This distinction (floor/increment are real DK rules; the
-# ceiling is an estimate) is itself part of the honesty requirement here -
-# don't let the presence of some real numbers imply the ceiling is equally
-# authoritative.
-DFS_ESTIMATED_SALARY_FLOOR = 2000
-DFS_ESTIMATED_SALARY_ROUND_TO = 100
-
-# --- Salary $/point parity fix (2026-07-26) ---
-#
-# v1 had SEPARATE reference point ranges and SEPARATE salary ceilings per
-# position (DFS_REFERENCE_MIN/MAX_POINTS_HITTER/_PITCHER,
-# DFS_ESTIMATED_SALARY_CEILING_HITTER/_PITCHER, both since removed) - each
-# group independently min-max-scaled to its OWN range/ceiling. This was a
-# real bug found in production: pitcher DK scoring naturally spans a much
-# wider raw point range (~2.6-22.75, box-score categories piling up over 6
-# innings) than hitters' hit-type-driven scoring (~2.6-4.7), so
-# independently rescaling each to its own ceiling made a pitcher's
-# marginal DK point worth roughly 5x a hitter's in salary terms - a pure
-# scaling artifact, not real relative DFS value (confirmed by inspecting a
-# real optimizer output: 2 elite pitchers alone consumed ~$22K of the
-# $50K cap, leaving 8 hitter slots filled with replacement-level bats).
-#
-# Fixed by collapsing both position groups onto ONE shared reference point
-# range and ONE shared salary ceiling (estimated_salary.py's
-# compute_hitter_estimated_salary/compute_pitcher_estimated_salary both
-# delegate to the same constants below) - one DK point is worth the same
-# dollar amount regardless of position; a pitcher still costs far more in
-# practice only because pitchers genuinely PROJECT far more points, which
-# is the real, not artifactual, reason.
-#
-# Computed from a REAL 20-game-date backtest sample (dfs_backtest.
-# backtest_dfs_projections, the same no-lookahead recompute every other
-# backtest in this project uses), pooling both position groups' DK_Points
-# together - not a single day's snapshot like the pre-fix v1 constants
-# were, and not guessed. Hitters: DK_Points_Hitter ranged 0.1595-16.6757
-# (mean 4.827, n=5,430). Pitchers: DK_Points_Pitcher ranged 0.1207-25.1412
-# (mean 11.459, n=468) - the pitcher range fully spans the hitter range on
-# both ends here, so the shared min/max below are effectively the pitcher
-# extremes; that's expected, not a bug, since pitcher DK scoring
-# genuinely spans a wider range than hitter scoring even after B's
-# widening. With this shared scale, a real average hitter (~4.8 points)
-# now prices around $3,700 and a real average pitcher (~11.5 points)
-# around $6,100 - a plausible, non-degenerate spread. Compare to the old
-# per-position scaling, where every pitcher's dollar-per-point rate was
-# independently ~5x cheaper than every hitter's purely from the separate
-# scaling - the optimizer exploited that mispricing by loading up on
-# "cheap" pitcher points, which is the actual mechanism behind the real
-# 2-elite-pitchers-eat-$22K bug described above.
-#
-# Acceptance check against real production DK_Points (2026-07-25,
-# docs/data/dfs_hitters.csv/dfs_pitchers.csv): a hitter projecting exactly
-# 8.0 points priced at $6,500 under the OLD scale (pinned near the hitter
-# ceiling) vs. a pitcher projecting the SAME 8.0 points at only $4,400
-# (still cheap on pitchers' much wider range) - a 48% price difference for
-# an identical point total, purely the scaling artifact. Both now price
-# identically at $4,800 under this shared scale.
-DFS_REFERENCE_MIN_POINTS = 0.1207
-DFS_REFERENCE_MAX_POINTS = 25.1412
-DFS_ESTIMATED_SALARY_CEILING = 11000
 
 # Statcast plate-appearance outcome values that count as a "completed" event
 # (used to filter pitch-by-pitch data down to one row per at-bat outcome).
@@ -1872,11 +1614,7 @@ NFL_DEFENSE_WINDOWS = [
 # consumed yet, defined here alongside its sibling since both are the
 # same "matchup ratio" concept applied in opposite directions.
 NFL_MATCHUP_OFFENSE_CLIP = (0.85, 1.15)
-NFL_MATCHUP_DEFENSE_CLIP = (0.85, 1.15)
 
-# Mirrors PITCHER_MATCHUP_WEIGHT_GRID - grid searched by a future
-# nfl_dfs_backtest.py go/no-go run (Phase 7), not yet run for NFL.
-NFL_MATCHUP_WEIGHT_GRID = [0.0, 0.25, 0.5, 0.75, 1.0]
 
 # Ships at 0.0 (informational-only, exactly reproduces the unadjusted
 # heuristic) for the live 2026 season regardless of what a historical-
@@ -2388,102 +2126,6 @@ PROP_QUOTE_MAX_STALENESS_MINUTES = 10.0
 # enough books agree that one of them standing apart is informative.
 PROP_MIN_BOOKS_FOR_CONSENSUS = 3
 
-# --- NFL DFS: DK Scoring (nfl_dfs.py) ---
-#
-# DraftKings NFL Classic scoring, confirmed live via web search against
-# DraftKings' own real rules (not from memory) - see README's NFL DFS
-# section for the citation. Unlike this project's MLB scoring, which had
-# to approximate hit-type value from a linear signal, DK's real NFL
-# categories map directly onto the per-game rate stats nfl_passing.py/
-# nfl_rush_rec.py already compute - the actual risk here is entirely
-# upstream in those windowed projections, not in this formula.
-NFL_DK_PASS_YARD_POINTS = 0.04  # 1 point per 25 passing yards
-NFL_DK_PASS_TD_POINTS = 4
-NFL_DK_INTERCEPTION_POINTS = -1  # interception thrown
-NFL_DK_RUSH_YARD_POINTS = 0.1  # 1 point per 10 rushing yards
-NFL_DK_RUSH_TD_POINTS = 6
-NFL_DK_RECEIVING_YARD_POINTS = 0.1  # 1 point per 10 receiving yards
-NFL_DK_RECEIVING_TD_POINTS = 6
-NFL_DK_RECEPTION_POINTS = 1  # full PPR
-NFL_DK_FUMBLE_LOST_POINTS = -1
-NFL_DK_2PT_POINTS = 2  # 2-point conversion, pass/run/catch all score the same
-NFL_DK_100_YARD_BONUS = 3  # 100+ rushing OR receiving yards in a game (each counted separately)
-NFL_DK_300_PASS_YARD_BONUS = 3  # 300+ passing yards in a game
-
-# --- NFL DFS: DST Scoring (nfl_dst.py) ---
-#
-# Also confirmed live via web search - see README's NFL DFS section.
-NFL_DK_DST_SACK_POINTS = 1
-NFL_DK_DST_INT_POINTS = 2
-NFL_DK_DST_FUMBLE_REC_POINTS = 2
-NFL_DK_DST_TD_POINTS = 6  # defensive/return TD of any kind - see nfl_dst.py for which real columns feed this
-NFL_DK_DST_SAFETY_POINTS = 2
-NFL_DK_DST_BLOCKED_KICK_POINTS = 2
-
-# Points-allowed bucket table: list of (upper_bound_inclusive, dk_points),
-# checked in order, last entry's upper_bound is None ("and above"). Real
-# DK rule: points allowed only counts points surrendered while the DST
-# unit is on the field (a pick-six is charged to the DEFENSE that allowed
-# it, not this team's own DST) - nflreadpy's per-game final score (used
-# by nfl_dst.compute_points_allowed) doesn't make that distinction, a
-# known, documented v1 simplification (the same category of approximation
-# as nfl_dst.py's windowed-mean-through-the-bucket-table choice below).
-NFL_DK_DST_POINTS_ALLOWED_BUCKETS = [
-    (0, 10),
-    (6, 7),
-    (13, 4),
-    (20, 1),
-    (27, 0),
-    (34, -1),
-    (None, -4),
-]
-
-# --- NFL DFS: Estimated Salary (nfl_estimated_salary.py) ---
-#
-# Direct structural port of DFS_ESTIMATED_SALARY_*/DFS_REFERENCE_*_POINTS
-# - see estimated_salary.py's module docstring for the full "why a shared
-# reference range, not per-position" reasoning (equally true here: QB and
-# skill-position DK scoring span very different raw point ranges, so a
-# per-position-group scale would misprice a point the same way the old
-# MLB hitter/pitcher split did).
-#
-# Reference range computed from REAL 2025 season DK_Points_QB/
-# DK_Points_Skill/DK_Points_DST (nfl_dfs.compute_qb_dk_points/
-# compute_skill_dk_points, nfl_dst.compute_dst_dk_points, run against
-# nflreadpy's real load_player_stats/load_team_stats/load_schedules([2025])
-# - full-season blended rates, not a single week's snapshot), pooling all
-# three position groups together, real min/max (not a percentile) - same
-# convention DFS_REFERENCE_MIN/MAX_POINTS used. QB: -0.33 to 24.52
-# (n=81). Skill (RB/WR/TE): -0.05 to 27.89 (n=530). DST: -1.51 to 12.33
-# (n=32). Unlike the MLB reference range, this one includes real negative
-# values (a low-efficiency QB's interceptions, or a DST's worst
-# points-allowed bucket, can both go net negative) - compute_estimated_salary's
-# linear scaling handles that fine, same as any other range.
-NFL_DFS_REFERENCE_MIN_POINTS = -1.5066
-NFL_DFS_REFERENCE_MAX_POINTS = 27.8924
-# DraftKings NFL Classic salary cap is $50,000 and $100 increments -
-# confirmed live via web search (README's NFL DFS section has the
-# citation), same real cap MLB Classic uses. The FLOOR is NOT an
-# official DK table (DraftKings doesn't publish one - prices float
-# algorithmically), same honesty caveat DFS_ESTIMATED_SALARY_FLOOR's own
-# docstring makes for its ceiling: this is an estimate informed by real
-# evidence (live search found real Week 1 2026 DST salaries topping out
-# at $3,500, suggesting a real floor at or below $3,000), reusing MLB's
-# own $2,000-$11,000 range as the defensible starting point since NFL's
-# real floor/ceiling aren't independently confirmed.
-NFL_DFS_ESTIMATED_SALARY_FLOOR = 2000
-NFL_DFS_ESTIMATED_SALARY_CEILING = 11000
-NFL_DFS_ESTIMATED_SALARY_ROUND_TO = 100
-NFL_DFS_SALARY_CAP = 50000
-
-# --- NFL DFS: Optimizer (nfl_dfs_optimizer.py) ---
-#
-# DK Classic's real 9-slot roster - confirmed live via web search
-# alongside the salary cap above (README's NFL DFS section has the
-# citation). Sums to 9. Passed directly to dfs_optimizer.solve_optimal_lineup
-# (reused unmodified, not re-implemented - see nfl_dfs_optimizer.py's
-# module docstring).
-NFL_DFS_ROSTER_SLOTS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "FLEX": 1, "DST": 1}
 
 # --- NFL DFS: Backtesting (nfl_dfs_backtest.py) ---
 #
@@ -2539,119 +2181,6 @@ NFL_DFS_ROSTER_SLOTS = {"QB": 1, "RB": 2, "WR": 3, "TE": 1, "FLEX": 1, "DST": 1}
 # data/raw/nfl/{weekly,team_stats,schedules}_<season>.parquet - see
 # scripts/fetch_nfl_historical.py).
 
-# --- NFL Bestball: Position Scarcity (nfl_bestball.compute_position_scarcity) ---
-#
-# NFL_BESTBALL_SCARCITY_MIN_GAMES (a real games_played >= 8 qualifier) was
-# removed after real 2025 data showed it let in players with almost no real
-# offensive role - e.g. a real return specialist with games_played=11 but
-# exactly 1 real offensive snap all season. games_played only requires ANY
-# real stat row that week (even a single special-teams play), not a
-# meaningful offensive role. Replaced by NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE
-# below - see nfl_bestball.compute_position_scarcity's own docstring for the
-# full reasoning. games_played/games_missed are untouched everywhere else
-# (the rankings table, the injury-history proxy) - only this qualifier
-# changed.
-#
-# The snap-share qualifier itself was originally a real PER-GAME average
-# (avg_offense_pct), which was then replaced by nfl_bestball.compute_
-# player_snap_share's real SEASON-TOTAL share (a player's real total
-# offensive snaps that season / their team's real total offensive snaps
-# that season) - the per-game average let a real one-or-two-game emergency
-# spot start at a high per-game rate qualify just as easily as a real
-# every-week starter (e.g. a real 2025 backup QB's real 82% single-game
-# rate across exactly 1 real game); the season-total share correctly drops
-# that same real player to a real 5% share once measured against the
-# team's full real season offensive-play total. games_played/dk_points_total
-# etc. are unaffected - only how this specific qualifier is computed
-# changed.
-#
-# 0.3 (30% of a team's real total season offensive snaps) is a simple,
-# honest first-pass default - NOT backtest-derived, and deliberately lower
-# than a "majority of snaps" bar would suggest, because a real SEASON-TOTAL
-# share runs meaningfully lower than a per-game rate even for genuinely
-# fantasy-relevant committee/complementary players (real 2025 example:
-# Jaylen Warren and TreVeyon Henderson, both clearly real, draftable RB2/
-# committee-role players with 200+ real season DK points, sit at real
-# season shares of 0.47/0.46 - a 0.5 bar would have wrongly excluded real,
-# relevant players like them). Easy to override via the build script's own
-# flag if a different bar turns out to matter more.
-NFL_BESTBALL_SCARCITY_MIN_SNAP_SHARE = 0.3
-
-# Which nfl_bestball_rankings.csv column the bell-curve buckets and
-# mean/std are computed over. dk_points_total (real realized season
-# value), not dk_points_per_game - bestball drafting is about the whole
-# season's production, and rate stats alone would erase exactly the
-# playing-time/opportunity signal that makes a position scarce or deep in
-# the first place.
-NFL_BESTBALL_SCARCITY_VALUE_COLUMN = "dk_points_total"
-
-# Tukey's IQR-fence multiplier for excluding real statistical outliers
-# before computing a position's mean/std (see
-# nfl_bestball._iqr_outlier_bounds/compute_position_scarcity) - 1.5 is the
-# standard, textbook convention (not tuned/invented for this project), used
-# specifically because it doesn't require an already-computed mean/std as
-# an input, unlike a z-score-based rule (real NFL season-point totals among
-# a snap-share-qualified population are often right-skewed, so a mean/std
-# computed WITH the outliers already baked in would itself be distorted by
-# them - see that function's own docstring for the real before/after
-# numbers).
-NFL_BESTBALL_SCARCITY_IQR_MULTIPLIER = 1.5
-
-# --- NFL Bestball: Roster Construction & Draftable Pool Depth
-# (nfl_bestball.compute_draftable_points_floor, compute_position_necessity) ---
-#
-# Confirmed live via web search (2026-08-07) against DraftKings' own
-# published rules and major fantasy outlets (FantasyPros, Establish The
-# Run, The Fantasy Footballers): DK Best Ball Mania (the flagship DK
-# Best Ball tournament) draft rooms are real 12-team pods, 20 rounds/
-# players per team, with a real 8-slot weekly starting lineup (QB, RB,
-# RB, WR, WR, WR, TE, FLEX).
-NFL_BESTBALL_DRAFT_POD_SIZE = 12
-
-# Real published roster-construction strategy guidance gives typical
-# PER-TEAM position counts drafted across those 20 rounds - "how many of
-# each position do we actually want on our own team": QB 2-3, RB 5-7 (6
-# the consistently-cited number across multiple real sources), WR 6-8,
-# TE 1-2. This is the real "position necessity" input -
-# compute_position_necessity compares it against how many real players
-# at that position actually clear compute_position_scarcity's qualifier
-# this season (real role AND real value), not just an invented "wanted"
-# number in isolation.
-NFL_BESTBALL_ROSTER_TARGET = {"QB": (2, 3), "RB": (5, 7), "WR": (6, 8), "TE": (1, 2)}
-
-# Real user feedback: even a real 50%+ snap-share qualifier still let in
-# real players nobody would actually draft (a real WR playing a
-# meaningful complementary role but producing very little - snap share
-# measures ROLE/health, not VALUE). This is a real, SEPARATE production
-# floor, layered on top of (not instead of) the snap-share qualifier -
-# real season-total dk_points_total, with the floor itself set at the
-# real Nth-ranked player's own real total, N derived from real DraftKings
-# Best Ball Mania roster-depth math, not an arbitrary points number.
-#
-# The midpoint of each real NFL_BESTBALL_ROSTER_TARGET range, times the
-# real 12-team pod size, gives a real (not invented) estimate of how many
-# players at each position a typical 12-team pool actually drafts - the
-# real "draftable pool depth" (derived, not independently hardcoded, so
-# this and NFL_BESTBALL_ROSTER_TARGET can never silently drift apart):
-NFL_BESTBALL_DRAFTABLE_POOL_SIZE = {
-    position: round((lo + hi) / 2 * NFL_BESTBALL_DRAFT_POD_SIZE)
-    for position, (lo, hi) in NFL_BESTBALL_ROSTER_TARGET.items()
-}
-
-# --- NFL Bestball: Round Split (nfl_bestball.build_bestball_rankings) ---
-#
-# Confirmed live via web search (2026-08-08) against Establish The Run and
-# 4for4: DK Best Ball Mania's real tournament structure runs a real
-# "Round 1" across weeks 1-14 (cumulative points across those real weeks
-# decide who advances out of each real 12-team draft pod - the top 2),
-# followed by three real single-week knockout rounds - "Round 2" at real
-# week 15, "Round 3" at real week 16, and the real championship "Round 4"
-# at week 17. nfl_bestball_rankings.csv reports the real weeks-1-14 sum as
-# r1_dk_points and the real weeks-15-17 sum as r2_r4_dk_points (one
-# combined column, not split further per round) - a real, direct answer to
-# "was this player producing early enough in the real season to matter for
-# real pod advancement, not just totaling well by the end."
-NFL_BESTBALL_ROUND1_END_WEEK = 14
 
 # --- NFL Game Predictions (nfl_team_strength.py, nfl_game_picks.py) ---
 #

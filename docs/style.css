@@ -1,5 +1,9 @@
 :root{
 
+--report-before:#b48ead;
+
+--report-after:#4fb3d9;
+
 --bg:#0b0d10;
 
 --bg-raised:#14171c;
@@ -1777,3 +1781,15 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 .whatIfPlayerUnits{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:2px 0 4px 24px;font-size:12px;color:var(--text-dim);}
 .whatIfRecord{margin:0 0 4px 24px;font-size:11px;color:var(--text-dim);}
 .whatIfPctWrap{display:inline-flex;align-items:center;white-space:nowrap;}
+
+/* ---- NFL picks: before / after the final injury report ---- */
+.pickCard.report-before,.game.report-before{outline:2px solid var(--report-before);outline-offset:-2px;}
+.pickCard.report-after,.game.report-after{outline:2px solid var(--report-after);outline-offset:-2px;}
+.reportNote{font-size:12px;color:var(--text-dim);margin-top:4px;}
+.reportNote b{font-weight:600;}
+.report-before .reportNote b{color:var(--report-before);}
+.report-after .reportNote b{color:var(--report-after);}
+.reportKey{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--text-dim);margin:0 0 10px;}
+.reportKey span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-2px;}
+.reportKey .before::before{border:2px solid var(--report-before);}
+.reportKey .after::before{border:2px solid var(--report-after);}

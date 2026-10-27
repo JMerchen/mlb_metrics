@@ -25,7 +25,7 @@ def main():
     parser = argparse.ArgumentParser(description="Reconstruct, resolve, and score historical picks.")
     parser.add_argument("--predictions-log", default="data/predictions/predictions.csv")
     parser.add_argument("--raw-dir", default="data/raw")
-    parser.add_argument("--summary-out", default="docs/data/backtest_summary.csv")
+    parser.add_argument("--summary-out", default="data/backtest/backtest_summary.csv")
     parser.add_argument(
         "--docs-data-dir",
         default="docs/data",

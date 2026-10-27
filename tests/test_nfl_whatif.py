@@ -235,3 +235,63 @@ def test_games_missed_record_needs_two_missed_games():
     assert record["rb1"]["run_offense"]["games"] == 2
     # About half (the second missed game's expectation already includes the first).
     assert record["rb1"]["run_offense"]["pct"] == pytest.approx(0.5, abs=0.05)
+
+
+def _priced_game():
+    units = {"run_offense": {"ypp": 4, "plays": 25}, "pass_offense": {"ypp": 5, "plays": 20},
+             "run_defense": {"ypp": 4, "plays": 25}, "pass_defense": {"ypp": 5, "plays": 20}}
+    game = {
+        "game_id": "2026_08_CAR_GB", "home_win_probability": 0.6,
+        "home": {"team": "GB", "units": units,
+                 "qbs": [{"id": "love", "name": "Jordan Love", "listed": True}, {"id": "taylor", "name": "Tyrod Taylor"},
+                         {"id": "average", "name": "Average starter"}],
+                 "regulars": [{"id": "rb1", "name": "Josh Jacobs", "group": "RB", "share": 0.75}]},
+        "away": {"team": "CAR", "units": units, "qbs": [{"id": "young", "name": "Bryce Young", "listed": True}],
+                 "regulars": [{"id": "cb1", "name": "Top Corner", "group": "CB", "share": 1.0}]},
+        "pairing_log_odds": {"love|young": 0.30, "taylor|young": -0.10, "average|young": 0.10},
+    }
+    data = {"group_units": {"RB": ["run_offense"], "CB": ["pass_defense"]},
+            "group_default_pct": {"RB": 0.866, "CB": 0.913}, "average_regular_share": {"RB": 0.7},
+            "points_per_yard": 0.07, "logodds_per_point": 0.137, "games": [game]}
+    return game, data
+
+
+def test_home_probability_matches_the_pages_math():
+    import math
+    game, data = _priced_game()
+    logit = math.log(0.6 / 0.4)
+    assert nfl_whatif.home_probability(game, data) == pytest.approx(0.6)
+    # Same case as docs/nfl_whatif.test.js: the back out costs 10.05 run yards = 0.7035 points.
+    assert nfl_whatif.home_probability(game, data, {"home": {"rb1"}, "away": set()}) == pytest.approx(
+        1 / (1 + math.exp(-(logit - 0.137 * 0.7035))))
+    assert nfl_whatif.home_probability(game, data, qbs={"home": "taylor"}) == pytest.approx(
+        1 / (1 + math.exp(-(logit - 0.4))))
+
+
+def test_apply_injury_report_marks_regulars_out_and_starts_the_backup_qb():
+    import math
+    game, data = _priced_game()
+    report = pd.DataFrame([
+        {"gsis_id": "love", "full_name": "Jordan Love", "report_status": "Out"},
+        {"gsis_id": "g-cb1", "full_name": "Top Corner", "report_status": "Doubtful"},
+        {"gsis_id": "g-rb1", "full_name": "Josh Jacobs", "report_status": "Questionable"},  # still plays
+    ])
+    rosters = pd.DataFrame([{"gsis_id": "g-cb1", "pfr_id": "cb1"}, {"gsis_id": "g-rb1", "pfr_id": "rb1"}])
+
+    out = nfl_whatif.apply_injury_report(data, report, rosters, None, ["2026_08_CAR_GB"])
+
+    entry = game["injury_report"]
+    assert entry["out"] == {"home": [], "away": ["cb1"]}
+    assert entry["qb"] == {"home": "taylor"}
+    assert "Jordan Love (QB; Tyrod Taylor starts)" in entry["note"] and "Top Corner" in entry["note"]
+    # QB swap -0.4; Carolina's pass defense at 91.3% gives Green Bay 0.087 * 100 * 0.07 points.
+    expected = 1 / (1 + math.exp(-(math.log(1.5) - 0.4 + 0.137 * 0.087 * 7)))
+    assert out["2026_08_CAR_GB"]["probability"] == pytest.approx(expected)
+    assert game["posted_probability"] == pytest.approx(expected, abs=1e-4)
+
+
+def test_apply_injury_report_skips_games_the_report_isnt_final_for():
+    game, data = _priced_game()
+    report = pd.DataFrame([{"gsis_id": "love", "full_name": "Jordan Love", "report_status": "Out"}])
+    assert nfl_whatif.apply_injury_report(data, report, None, None, []) == {}
+    assert "injury_report" not in game

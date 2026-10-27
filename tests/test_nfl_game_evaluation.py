@@ -308,3 +308,27 @@ def test_build_game_picks_export_carries_team_epa_columns():
     picks, _ = nfl_game_evaluation.build_game_picks_export(predictions)
     assert (picks["home_off_epa"] == 0.1).all() and (picks["away_def_rank"] == 4.0).all()
     assert picks["home_def_epa"].isna().all()
+
+
+def test_build_game_picks_export_shows_the_pick_after_the_injury_report_with_the_one_before():
+    rows = [
+        {**_pick("2025-10-19", "g1", "KC", "DEN", "KC", 0.62, "DEN", 1), "injury_report": "before"},
+        {**_pick("2025-10-19", "g1", "KC", "DEN", "DEN", 0.55, "DEN", 1), "injury_report": "after",
+         "injury_note": "Patrick Mahomes (QB; Gardner Minshew starts)"},
+        {**_pick("2025-10-19", "g2", "BUF", "MIA", "BUF", 0.70, "BUF", 1), "injury_report": "before"},
+    ]
+    picks, summary = nfl_game_evaluation.build_game_picks_export(pd.DataFrame(rows))
+
+    assert len(picks) == 2
+    g1 = picks.set_index("game_id").loc["g1"]
+    assert g1["injury_report"] == "after"
+    assert g1["predicted_winner"] == "DEN"
+    assert g1["before_report_winner"] == "KC"
+    assert g1["before_report_probability"] == 0.62
+    assert "Mahomes" in g1["injury_note"]
+    assert picks.set_index("game_id").loc["g2", "injury_report"] == "before"
+    # The record counts each game once, with its latest pick: both right.
+    s = summary.iloc[0]
+    assert s["n_report_compared"] == 1
+    assert s["before_report_accuracy"] == 0.0
+    assert s["after_report_accuracy"] == 1.0

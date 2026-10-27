@@ -62,8 +62,14 @@ def main():
               f"leaving yesterday's hitter_hit_predictions.csv in place, if any.")
         return
 
+    out_path = os.path.join(args.data_dir, "hitter_hit_predictions.csv")
     if schedule_df.empty:
-        print("No games scheduled today - leaving yesterday's hitter_hit_predictions.csv in place, if any.")
+        # An empty file for today, not yesterday's list left in place - the
+        # page shows only rows dated today.
+        os.makedirs(args.data_dir, exist_ok=True)
+        pd.DataFrame(columns=["date", "key_mlbam", "name_first", "name_last", "team", "opponent", "is_home",
+                              "Model_Hit_Probability"]).to_csv(out_path, index=False)
+        print(f"No games scheduled {args.as_of_date} - wrote an empty hitter_hit_predictions.csv.")
         return
 
     matchup_probability = matchup.compute_matchup_hit_probability(wave, pave, confidence, schedule_df)
@@ -101,9 +107,10 @@ def main():
         predictions, on="key_mlbam", how="inner"
     )
     result = result.sort_values("Model_Hit_Probability", ascending=False)
+    result.insert(0, "date", args.as_of_date.isoformat())
 
     os.makedirs(args.data_dir, exist_ok=True)
-    result.to_csv(os.path.join(args.data_dir, "hitter_hit_predictions.csv"), index=False)
+    result.to_csv(out_path, index=False)
     print(f"Wrote hitter_hit_predictions.csv ({len(result)} rows) for {args.as_of_date}.")
 
 

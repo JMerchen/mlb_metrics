@@ -155,13 +155,20 @@ const units = srNum(g.bet_units) || 0
 const total = totalPointsText(g)
 const bet = units > 0
 ? `<span class="bet-badge">Bet ${srEsc(srTeam(g.bet_team, sport))}&nbsp;&middot; ${units.toFixed(1)} units</span>` : ""
-return `<div class="game">
+// NFL picks carry whether they came before or after the final injury
+// report (outlined in different colors).
+const report = sport === "nfl" ? (g.injury_report === "after" ? "after" : "before") : ""
+const reportNote = report
+? `<span class="reportNote"><b>${report === "after" ? "After" : "Before"} the final injury report</b>${report === "after" && g.injury_note ? ` &middot; Out: ${srEsc(g.injury_note)}` : ""}</span>`
+: ""
+return `<div class="game${report ? ` report-${report}` : ""}">
 <div class="btsMatchup">
 <span class="${homePicked ? "" : "winner"}">${away}</span> at
 <span class="${homePicked ? "winner" : ""}">${home}</span>
 </div>
 <span class="prob">We say <b>${pick} ${srPct(g.predicted_probability)}</b>${vegas !== null ? `<span class="mkt">&nbsp;&middot; Vegas ${srPct(vegas)}</span>` : ""}${total ? `<span class="total">${total}</span>` : ""}</span>
 ${bet}
+${reportNote}
 </div>`
 }
 

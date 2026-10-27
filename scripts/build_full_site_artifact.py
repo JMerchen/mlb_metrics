@@ -18,13 +18,6 @@ claude.ai URL. Ports the real docs/*.js/*.html/*.css almost verbatim
 4. mlb_render.js's headshot/cap URL helpers (real MLB CDN URLs) return
    "" - an artifact page can't load images from external hosts, so the
    pictures fall back to initials and team codes instead of 404ing.
-5. `nfl_dfs_solver.js` is NOT ported: grepping the whole docs/ tree finds
-   no page that actually loads it (no NFL DFS tab exists in nfl.html
-   today - only its own test file references it) - it isn't part of the
-   live site to port, and skipping it also removes what would otherwise
-   be a second DFS solver to carry for no page (the MLB DFS page itself
-   was removed 2026-10-24).
-
 Run manually, or by the daily resync job (same idea as
 build_bts_assistant_page.py, which this supersedes) after the daily
 pipeline refreshes docs/data/*.csv.
@@ -162,28 +155,16 @@ PAGE_JS_PATCHERS = {
     "age-curves.js": lambda js: _patch_loadcsv(js, "age-curves.js"),
 }
 
-# Verbatim - no loadCSV/network/image dependency to patch (see module
-# docstring point 5 for why nfl_dfs_solver.js is deliberately excluded).
-# consensus_board.js is real, shared rendering logic nfl.js's own
-# NFL Draft Board tab calls directly (buildConsensusTable) - it has no
-# loadCSV/network call of its own to patch (nfl.js's own patched loadCSV
-# still supplies the data), so it's verbatim here exactly like
-# nfl_draft_assistant.js's own functions are. Must be listed BEFORE
-# nfl.js in this list (Python dicts/lists preserve insertion order) so
-# its declarations exist before nfl.js's own bottom-of-file
-# loadNflDraftBoard() call runs - each file gets its own <script> tag
-# (see page_scripts below), so script EXECUTION order follows list
-# order even though each file's own top-level `function` declarations
-# stay scoped to that file's own tag. player_props.js is the same real
-# shape for nfl.js's own Player Props tab (formatPlayerPropsValue/
-# buildPlayerPropsTable) - real, direct user request (2026-09-16).
-# teams.js/summary_render.js come first: team nicknames and the
-# plain-language picks rendering, used by the Assistant tab (whose own
-# script waits for DOMContentLoaded so these exist by the time it runs)
-# and by the MLB/NFL tabs.
+# Verbatim - no loadCSV/network/image dependency to patch. Each file gets
+# its own <script> tag (see page_scripts below), in this order, before the
+# patched page scripts that call into them: teams.js/summary_render.js
+# first (team nicknames and the plain-language picks rendering, used by the
+# Assistant tab and the MLB/NFL tabs), then the shared rendering for the
+# Age Curves, Prospects (consensus_board.js), Player Props, Stats units and
+# What-if panels.
 VERBATIM_JS = [
     "teams.js", "summary_render.js",
-    "age_render.js", "nfl_draft_assistant.js", "consensus_board.js", "player_props.js", "nfl_units.js", "prop_cards.js",
+    "age_render.js", "consensus_board.js", "player_props.js", "nfl_units.js", "prop_cards.js",
     "nfl_whatif.js",
 ]
 

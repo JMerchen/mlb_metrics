@@ -49,6 +49,21 @@ unitPct: {home: {}, away: {}},
 }
 }
 
+// A game's state as posted: for a game repriced after its final injury
+// report, that report's players out and backup QBs; otherwise nothing.
+function whatifPostedState(game){
+const state = whatifEmptyState()
+const report = game && game.injury_report
+if(report){
+for(const side of ["home", "away"]){
+for(const id of (report.out || {})[side] || []){ state.out[side].add(id) }
+}
+state.homeQb = (report.qb || {}).home || null
+state.awayQb = (report.qb || {}).away || null
+}
+return state
+}
+
 // The players a side has marked out, each {id, group, share} - an "average
 // regular" counts the league's average share at his position.
 function whatifOutPlayers(team, outIds, data){
@@ -218,7 +233,8 @@ Math.abs(result.margin) >= 0.05 ? `units ${whatifGamePoints(result.margin)} pts 
 return `<div class="whatIfResult">
 <div class="whatIfHeadline">${whatifEsc(leader)} ${whatifPct(leaderP)}</div>${final}
 <span class="chanceTrack"><span class="chanceFill" style="width:${(leaderP * 100).toFixed(1)}%"></span></span>
-<div class="whatIfBreakdown">${whatifEsc(home)}${/s$/.test(home) ? "'" : "'s"} chance: ${whatifPct(result.base)} as posted${parts.length
+${game.injury_report ? `<div class="whatIfFinal">Posted after the final injury report${game.injury_report.note ? ` (out: ${whatifEsc(game.injury_report.note)})` : ""} - those players and QBs are marked below.</div>` : ""}
+<div class="whatIfBreakdown">${whatifEsc(home)}${/s$/.test(home) ? "'" : "'s"} chance: ${whatifPct(result.base)} ${game.injury_report ? "before the injury report" : "as posted"}${parts.length
 ? ` → <b>${whatifPct(result.probability)}</b> (${parts.join("; ")})`
 : " (no changes yet)"}</div>
 </div>`
@@ -282,7 +298,8 @@ const replay = game.final
 ? `${whatifSummaryHtml(data)}<button class="whatIfAction" data-whatif-action="missed">Mark everyone who actually missed this game</button>`
 : ""
 return `${modes}${replay}${picker}${whatifResultHtml(game, result)}
-<button class="whatIfAction" data-whatif-action="reset">Reset this game</button>
+<button class="whatIfAction" data-whatif-action="reset">Reset this game</button>${game.injury_report ? `
+<button class="whatIfAction" data-whatif-action="clear">Without the injury report</button>` : ""}
 <div class="whatIfTeams">${whatifTeamHtml("away", game, data, state)}${whatifTeamHtml("home", game, data, state)}</div>`
 }
 
@@ -298,5 +315,6 @@ if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 whatifProbability, whatifPanelHtml, whatifEmptyState, whatifListedQb, whatifPoints, whatifUnitPcts,
 whatifUnitPoints, whatifDefaultPct, whatifMissedState, whatifWeekSummary, whatifParsePct, whatifOutPlayers,
+whatifPostedState,
 }
 }

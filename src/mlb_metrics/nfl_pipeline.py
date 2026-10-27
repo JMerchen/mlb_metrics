@@ -37,7 +37,9 @@ nfl_game_predictions.select_game_picks already handles for every other
 missing-market case.
 """
 
+import datetime
 import os
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 
@@ -101,6 +103,23 @@ def _this_week_injury_report(raw_dir: str, season: int, week: int) -> pd.DataFra
     if "game_type" in report.columns:
         report = report[report["game_type"] == "REG"]
     return report
+
+
+def _today_eastern() -> datetime.date:
+    """Today on the US East Coast, where NFL game dates are set."""
+    return datetime.datetime.now(ZoneInfo("America/New_York")).date()
+
+
+def _report_final_games(games: pd.DataFrame, today: datetime.date) -> list:
+    """The games in `games` (not yet played) whose final injury report is
+    out by `today`'s morning run: those played today or tomorrow - Thursday
+    games on the Thursday run, Sunday games on the Saturday run, Monday
+    games on the Monday run."""
+    if games.empty or "gameday" not in games.columns:
+        return []
+    day = pd.to_datetime(games["gameday"], errors="coerce").dt.date
+    soon = (day == today) | (day == today + datetime.timedelta(days=1))
+    return games.loc[soon, "game_id"].tolist()
 
 
 def _build_market_probabilities(this_week_games: pd.DataFrame) -> pd.DataFrame:
@@ -328,10 +347,10 @@ def run(
                 history.get("snap_counts", pd.DataFrame()), history["rosters_weekly"], season
             )
             # Props are built for games not played yet only, with this
-            # week's injury report: a re-run later in the week (the Friday
-            # run, after final injury designations) refreshes the board and
-            # the pending picks for games still to come, and leaves a
-            # Thursday game that's already been played alone.
+            # week's injury report: each re-run later in the week (Thursday,
+            # Saturday and Monday mornings) refreshes the board and the
+            # pending picks for games still to come, and leaves a game
+            # that's already been played alone.
             unplayed = schedules.loc[this_week_games.index, "home_score"].isna()
             props_games = this_week_games[unplayed]
             injury_report = _this_week_injury_report(raw_dir, season, week)
@@ -394,11 +413,22 @@ def run(
 
             # The NFL page's "What if?" panel: QB swaps and absences for the
             # games still to be played, starting from these probabilities.
-            nfl_whatif.write_whatif_json(
-                os.path.join(output_dir, "nfl_whatif.json"), probs, master, qb_continuity, history["weekly"],
-                history["rosters_weekly"], history.get("snap_counts", pd.DataFrame()), props_games,
-                pbp=history.get("pbp"),
+            whatif = nfl_whatif.build_whatif(
+                probs, master, qb_continuity, history["weekly"], history["rosters_weekly"],
+                history.get("snap_counts", pd.DataFrame()), props_games, pbp=history.get("pbp"),
             )
+            # Games whose final injury report is out - played today or
+            # tomorrow (the Thursday, Saturday and Monday morning runs) -
+            # are repriced with it: its Out/Doubtful regulars at their
+            # position defaults, and a backup for a listed QB who's out,
+            # exactly as the What-if panel would (and the panel opens on
+            # that report for them).
+            report_games = _report_final_games(props_games, today=_today_eastern())
+            repriced = nfl_whatif.apply_injury_report(
+                whatif, injury_report, fresh.get("rosters_weekly"), history.get("snap_counts", pd.DataFrame()),
+                report_games,
+            )
+            nfl_whatif.save_json(os.path.join(output_dir, "nfl_whatif.json"), whatif)
             _write_last_week_whatif(fresh, prior_season, season, week, output_dir)
 
             # Predicted points per side and total (nfl_totals.py), from
@@ -423,11 +453,27 @@ def run(
                 units.insert(0, "season", season)
                 units.to_csv(os.path.join(output_dir, "nfl_team_units.csv"), index=False)
 
+            # Every game's pick before the injury report (the first one
+            # logged stays), then, for the games repriced above, the pick
+            # after it (the latest replaces an earlier one).
             picks = nfl_game_predictions.select_game_picks(
                 probs, this_week_games, market_probabilities=market, confidence=master,
                 point_predictions=points,
             )
+            picks["injury_report"] = "before"
             nfl_game_predictions.append_game_predictions(picks, predictions_log_path)
+            if repriced:
+                after_probs = probs.copy()
+                after_probs["home_win_probability"] = after_probs["game_id"].map(
+                    {g: r["probability"] for g, r in repriced.items()}).fillna(after_probs["home_win_probability"])
+                after = nfl_game_predictions.select_game_picks(
+                    after_probs, this_week_games, market_probabilities=market, confidence=master,
+                    point_predictions=points,
+                )
+                after = after[after["game_id"].isin(repriced)].copy()
+                after["injury_report"] = "after"
+                after["injury_note"] = after["game_id"].map({g: r["note"] for g, r in repriced.items()})
+                nfl_game_predictions.append_game_predictions(after, predictions_log_path)
 
     write_nfl_game_picks_export(predictions_log_path, output_dir)
 

@@ -21,12 +21,6 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Run nfl_dfs_solver.js unit tests
-        run: node --test docs/nfl_dfs_solver.test.js
-
-      - name: Run nfl_draft_assistant.js unit tests
-        run: node --test docs/nfl_draft_assistant.test.js
-
       - name: Run consensus_board.js unit tests
         run: node --test docs/consensus_board.test.js
 
