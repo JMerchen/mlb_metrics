@@ -309,9 +309,35 @@ def build_whatif(final_probs: pd.DataFrame, master, qb_continuity, weekly, roste
             "games": out_games}
 
 
-def write_whatif_json(path: str, *args, **kwargs) -> dict:
-    data = build_whatif(*args, **kwargs)
+def add_results(data: dict, schedules: pd.DataFrame, week_snaps: pd.DataFrame) -> dict:
+    """For a replayed week: each game's final score, the QBs who started
+    (marked "started"), and each listed player's "played" - whether he took
+    a snap on his side of the ball. Returns `data`, changed in place."""
+    final = schedules.set_index("game_id")
+    played = set()
+    if week_snaps is not None and not week_snaps.empty:
+        took = week_snaps[(week_snaps["offense_pct"].fillna(0) > 0) | (week_snaps["defense_pct"].fillna(0) > 0)]
+        played = set(took["pfr_player_id"])
+    for game in data["games"]:
+        if game["game_id"] not in final.index:
+            continue
+        row = final.loc[game["game_id"]]
+        game["final"] = {"home_score": int(row["home_score"]), "away_score": int(row["away_score"])}
+        for side in ("home", "away"):
+            started = row.get(f"{side}_qb_id")
+            for qb in game[side]["qbs"]:
+                qb["started"] = qb["id"] == started
+            for player in game[side]["regulars"]:
+                player["played"] = player["id"] in played
+    return data
+
+
+def save_json(path: str, data: dict) -> dict:
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "w") as fh:
         json.dump(data, fh, separators=(",", ":"))
     return data
+
+
+def write_whatif_json(path: str, *args, **kwargs) -> dict:
+    return save_json(path, build_whatif(*args, **kwargs))

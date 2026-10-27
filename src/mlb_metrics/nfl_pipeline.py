@@ -134,6 +134,74 @@ def write_nfl_game_picks_export(predictions_log_path: str, output_dir: str) -> N
     by_version_summary.to_csv(os.path.join(output_dir, "nfl_game_picks_summary_by_version.csv"), index=False)
 
 
+def _history_before(fresh: dict, prior_season: dict, week: int, rosters_through: int | None = None) -> dict:
+    """Last season's tables plus this season's strictly before `week` -
+    no lookahead for the week-scoped tables (schedules/team_stats/weekly/
+    snap_counts/pbp). rosters_weekly has no such concern for a live run (a
+    roster crosswalk row, not a game result), so the whole current season's
+    is used unless `rosters_through` caps it - a replay of a past week
+    shouldn't know about later trades."""
+    def _current_season_before_week(table: str) -> pd.DataFrame:
+        df = fresh[table]
+        # A table whose live fetch failed entirely this run (see the
+        # fetch loop in `run`) degrades to a real, empty, column-less
+        # frame - filtering by "week" on that is a real KeyError, not
+        # a row to include, so it's skipped rather than crashing.
+        if df.empty or "week" not in df.columns:
+            return pd.DataFrame()
+        return df[df["week"] < week]
+
+    def _prior(table: str) -> pd.DataFrame:
+        return prior_season[table] if prior_season[table] is not None else pd.DataFrame()
+
+    history = {
+        table: pd.concat([_prior(table), _current_season_before_week(table)], ignore_index=True)
+        for table in TABLES if table != "rosters_weekly"
+    }
+    rosters = fresh["rosters_weekly"]
+    if rosters_through is not None and not rosters.empty and "week" in rosters.columns:
+        rosters = rosters[rosters["week"] <= rosters_through]
+    history["rosters_weekly"] = pd.concat([_prior("rosters_weekly"), rosters], ignore_index=True)
+    return history
+
+
+def _write_last_week_whatif(fresh: dict, prior_season: dict, season: int, week: int, output_dir: str) -> None:
+    """The "What if?" panel's last-week view: the week just finished,
+    replayed with only what was known before it (history, rosters and the
+    live model, market tie-break and calibration exactly as a forward run
+    would have used them), plus each game's final score, the QBs who
+    started and which listed players took no snaps - a test case for the
+    panel. Skipped in week 1 (no week of this season to replay)."""
+    path = os.path.join(output_dir, "nfl_whatif_last_week.json")
+    schedules = fresh["schedules"]
+    last = week - 1
+    games = schedules[(schedules["season"] == season) & (schedules["game_type"] == "REG")
+                      & (schedules["week"] == last) & schedules["home_score"].notna()]
+    if last < 1 or games.empty:
+        return
+    history = _history_before(fresh, prior_season, last, rosters_through=last)
+    master = nfl_team_strength.assemble_team_metrics(
+        history["schedules"], history["team_stats"], history["pbp"], current_season=season
+    )
+    qb_continuity = nfl_team_strength.compute_qb_continuity_adjustment(
+        history["snap_counts"], history["weekly"], history["rosters_weekly"]
+    )
+    columns = ["game_id", "season", "week", "home_team", "away_team", "home_qb_id", "away_qb_id",
+               "gameday", "home_moneyline", "away_moneyline", "home_qb_name", "away_qb_name"]
+    games = games[[c for c in columns if c in games.columns]]
+    probs = nfl_game_picks.compute_game_win_probabilities(master, qb_continuity, history["weekly"], games)
+    probs = nfl_game_picks.apply_ml_model(probs, master, qb_continuity, history["weekly"], games)
+    probs = nfl_game_picks.apply_market_tiebreak(probs, _build_market_probabilities(games))
+    probs = nfl_game_picks.apply_calibration(probs)
+    data = nfl_whatif.build_whatif(
+        probs, master, qb_continuity, history["weekly"], history["rosters_weekly"], history["snap_counts"], games
+    )
+    snaps = fresh.get("snap_counts", pd.DataFrame())
+    week_snaps = snaps[snaps["week"] == last] if not snaps.empty and "week" in snaps.columns else snaps
+    nfl_whatif.add_results(data, schedules[schedules["game_id"].isin(games["game_id"])], week_snaps)
+    nfl_whatif.save_json(path, data)
+
+
 def run(
     season: int | None = None,
     raw_dir: str = config.NFL_RAW_DATA_DIR,
@@ -198,35 +266,7 @@ def run(
         prior_season = {
             table: nfl_data.load_persisted_table(raw_dir, table, season - 1) for table in TABLES
         }
-        # week-scoped tables (schedules/team_stats/weekly/snap_counts):
-        # no-lookahead restricted to strictly-before-`week` current-season
-        # rows. rosters_weekly has no such concern (a roster crosswalk
-        # row, not a game result) - the whole current season's real
-        # rosters plus last season's are always fair game.
-        week_scoped_tables = [t for t in TABLES if t != "rosters_weekly"]
-
-        def _current_season_before_week(table: str) -> pd.DataFrame:
-            df = fresh[table]
-            # A table whose live fetch failed entirely this run (see the
-            # fetch loop above) degrades to a real, empty, column-less
-            # frame - filtering by "week" on that is a real KeyError, not
-            # a row to include, so it's skipped rather than crashing.
-            if df.empty or "week" not in df.columns:
-                return pd.DataFrame()
-            return df[df["week"] < week]
-
-        history = {
-            table: pd.concat(
-                [prior_season[table] if prior_season[table] is not None else pd.DataFrame(),
-                 _current_season_before_week(table)],
-                ignore_index=True,
-            )
-            for table in week_scoped_tables
-        }
-        history["rosters_weekly"] = pd.concat(
-            [prior_season["rosters_weekly"] if prior_season["rosters_weekly"] is not None else pd.DataFrame(), fresh["rosters_weekly"]],
-            ignore_index=True,
-        )
+        history = _history_before(fresh, prior_season, week)
 
         real_history_games = history["schedules"][
             (history["schedules"]["game_type"] == "REG")
@@ -357,6 +397,7 @@ def run(
                 os.path.join(output_dir, "nfl_whatif.json"), probs, master, qb_continuity, history["weekly"],
                 history["rosters_weekly"], history.get("snap_counts", pd.DataFrame()), props_games,
             )
+            _write_last_week_whatif(fresh, prior_season, season, week, output_dir)
 
             # Predicted points per side and total (nfl_totals.py), from
             # the same no-lookahead history. Shown next to the market's

@@ -163,3 +163,25 @@ def test_pairings_with_a_qb_plus_model_price_an_average_starter(monkeypatch, tmp
 
     assert set(pairs) == {"love|young", "average|young"}
     assert pairs["love|young"] > pairs["average|young"]
+
+
+def test_add_results_marks_finals_starters_and_who_played():
+    data = {"games": [{
+        "game_id": "2026_07_DAL_PHI",
+        "home": {"qbs": [{"id": "hurts"}, {"id": "mckee"}], "regulars": [{"id": "lane"}, {"id": "brown"}]},
+        "away": {"qbs": [{"id": "dak"}], "regulars": [{"id": "lamb"}]},
+    }]}
+    schedules = pd.DataFrame([{"game_id": "2026_07_DAL_PHI", "home_score": 20.0, "away_score": 24.0,
+                               "home_qb_id": "mckee", "away_qb_id": "dak"}])
+    snaps = pd.DataFrame([
+        {"pfr_player_id": "lane", "offense_pct": 1.0, "defense_pct": 0.0},
+        {"pfr_player_id": "brown", "offense_pct": 0.0, "defense_pct": 0.0},  # special teams only
+        {"pfr_player_id": "lamb", "offense_pct": 0.8, "defense_pct": 0.0},
+    ])
+
+    game = nfl_whatif.add_results(data, schedules, snaps)["games"][0]
+
+    assert game["final"] == {"home_score": 20, "away_score": 24}
+    assert [q["started"] for q in game["home"]["qbs"]] == [False, True]
+    assert [r["played"] for r in game["home"]["regulars"]] == [True, False]
+    assert game["away"]["regulars"][0]["played"] is True

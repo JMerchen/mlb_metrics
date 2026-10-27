@@ -2,7 +2,7 @@
 const test = require("node:test")
 const assert = require("node:assert/strict")
 global.teamName = require("./teams.js").teamName
-const { whatifLost, whatifProbability, whatifPanelHtml, whatifEmptyState, whatifPoints } = require("./nfl_whatif.js")
+const { whatifLost, whatifProbability, whatifPanelHtml, whatifEmptyState, whatifPoints, whatifMissedState, whatifWeekSummary } = require("./nfl_whatif.js")
 
 const text = html => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
 const logit = p => Math.log(p / (1 - p))
@@ -94,4 +94,47 @@ test("points read as signed whole percentage points", () => {
   assert.equal(whatifPoints(0.034), "+3 pts")
   assert.equal(whatifPoints(-0.1), "−10 pts")
   assert.equal(whatifPoints(0.001), "no change")
+})
+
+// A replayed week: final score, who didn't play, the QBs who started.
+const REPLAY = {
+  ...GAME,
+  final: { home_score: 17, away_score: 24 },
+  home: { ...GAME.home, qbs: GAME.home.qbs.map(q => ({ ...q, started: q.id === "love" })),
+    regulars: GAME.home.regulars.map(r => ({ ...r, played: r.id !== "lt" })) },
+  away: { ...GAME.away, regulars: GAME.away.regulars.map(r => ({ ...r, played: true })) },
+}
+
+test("the missed state marks every listed player who took no snaps", () => {
+  const state = whatifMissedState(REPLAY)
+  assert.deepEqual([...state.out.home], ["lt"])
+  assert.deepEqual([...state.out.away], [])
+})
+
+test("a replayed week tallies picks as posted and with the real absences", () => {
+  // Home at 60% lost: wrong as posted; Left Tackle out (-0.19) leaves home at 55%, still wrong.
+  const t = whatifWeekSummary({ injury_log_odds: ODDS, average_regular_share: AVERAGES, games: [REPLAY] })
+  assert.equal(t.n, 1)
+  assert.equal(t.posted.right, 0)
+  close(t.posted.winner, 0.4)
+  close(t.missed.winner, 1 - sigmoid(logit(0.6) - 0.19))
+})
+
+test("a replayed game shows the final, the starters, who didn't play, the summary and the mark-missed button", () => {
+  const data = { injury_log_odds: ODDS, average_regular_share: AVERAGES, games: [REPLAY] }
+  const modes = [{ key: "this", label: "This week", active: false }, { key: "last", label: "Last week (with results)", active: true }]
+  const html = whatifPanelHtml(data, REPLAY.game_id, whatifEmptyState(), { modes })
+  const out = text(html)
+  assert.match(html, /data-whatif-mode="last"/)
+  assert.match(out, /This week Last week \(with results\)/)
+  assert.match(out, /Final: Panthers 24, Packers 17 · wrong side/)
+  assert.match(out, /Jordan Love \(started\)/)
+  assert.match(out, /Left Tackle didn't play/)
+  assert.match(out, /on the winning side in 0 of 1 games as posted/)
+  assert.match(html, /data-whatif-action="missed"/)
+})
+
+test("this week's view has no replay pieces", () => {
+  const out = text(whatifPanelHtml({ injury_log_odds: ODDS, games: [GAME] }, GAME.game_id, whatifEmptyState()))
+  assert.doesNotMatch(out, /Final:|winning side|actually missed/)
 })
