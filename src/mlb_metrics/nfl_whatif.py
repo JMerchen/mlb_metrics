@@ -16,8 +16,11 @@ every weekly run) - so a player traded or signed mid-season shows up with
 his new team, and one traded away, cut or placed on injured reserve drops
 off.
 
-Injuries move the log-odds by INJURY_LOG_ODDS per regular marked out,
-times his snap share. Weather isn't an input: wind, cold and domes moved
+Absences are in unit terms: each team's run and pass offense and defense
+as a percent of normal yards per play. A player out lowers the units his
+position touches by a default (GROUP_UNITS' comment), times his snap
+share; on the page any player's or unit's percent can be typed over, and
+the change in yards becomes points and then win chance. Weather isn't an input: wind, cold and domes moved
 neither results nor Vegas's sides beyond the model (it changes how many
 points get scored, not who wins).
 """
@@ -55,7 +58,152 @@ LISTED_SHARE = 0.3
 # Losing several at once cost about the sum of each - no extra.
 INJURY_LOG_ODDS = {"WR": -0.25, "OL": -0.19, "CB": -0.19, "DL": -0.13, "RB": -0.13, "TE": -0.07, "LB": -0.06, "S": -0.04}
 
+# The panel rates each team's units in percent of normal yards per play
+# (defense: 90% allows 10% more). A player out lowers the units his group
+# touches; the default is the drop that costs what INJURY_LOG_ODDS says an
+# absence at his position costs, through POINTS_PER_YARD and
+# LOGODDS_PER_POINT (scripts/backtest_nfl_unit_absences.py: all points over
+# all scrimmage yards on runs and dropbacks, 2016-2026; Vegas's closing
+# moneyline against its spread). Measured on yards directly, single
+# absences barely register (0-3%, mostly noise), and a player's own games
+# missed predict his unit's next game worse than his position does at any
+# blend - so they're shown for reference, not used.
+GROUP_UNITS = {
+    "RB": ["run_offense"], "WR": ["pass_offense"], "TE": ["pass_offense", "run_offense"],
+    "OL": ["pass_offense", "run_offense"], "DL": ["run_defense", "pass_defense"],
+    "LB": ["run_defense", "pass_defense"], "CB": ["pass_defense"], "S": ["pass_defense"],
+}
+POINTS_PER_YARD = 0.0696
+LOGODDS_PER_POINT = 0.137
+UNIT_PRIOR_GAMES = 8
+
 AVERAGE_QB_ID = "average"
+
+# Units the panel rates in percent of normal yards per play: each play type
+# (column of yards, column of plays in unit_game_yards) on offense and on
+# the defense facing it, and the position groups that touch each.
+UNIT_PLAYS = {"run": ("run_yards", "runs"), "pass": ("dropback_yards", "dropbacks")}
+UNIT_GROUPS = {
+    "run_offense": ["OL", "RB", "TE", "WR"], "pass_offense": ["OL", "WR", "TE", "RB"],
+    "run_defense": ["DL", "LB", "S", "CB"], "pass_defense": ["CB", "S", "LB", "DL"],
+}
+YARDS_PBP_COLUMNS = ["game_id", "season", "week", "season_type", "posteam", "defteam", "yards_gained",
+                     "rush", "qb_scramble", "qb_dropback"]
+
+
+def unit_game_yards(pbp: pd.DataFrame) -> pd.DataFrame:
+    """One row per (regular-season game, offense): yards and plays on
+    designed runs and on dropbacks (sacks and scrambles included).
+    Columns: game_id, season, week, team, opp, run_yards, runs,
+    dropback_yards, dropbacks."""
+    columns = ["game_id", "season", "week", "team", "opp", "run_yards", "runs", "dropback_yards", "dropbacks"]
+    if pbp is None or pbp.empty or not set(YARDS_PBP_COLUMNS) <= set(pbp.columns):
+        return pd.DataFrame(columns=columns)
+    plays = pbp[(pbp["season_type"] == "REG") & pbp["posteam"].notna() & pbp["yards_gained"].notna()].copy()
+    run = (plays["rush"] == 1) & (plays["qb_scramble"] != 1)
+    dropback = plays["qb_dropback"] == 1
+    plays["run_yards"] = plays["yards_gained"].where(run, 0.0)
+    plays["runs"] = run.astype(float)
+    plays["dropback_yards"] = plays["yards_gained"].where(dropback, 0.0)
+    plays["dropbacks"] = dropback.astype(float)
+    return (plays.groupby(["game_id", "season", "week", "posteam", "defteam"])[columns[5:]].sum()
+            .reset_index().rename(columns={"posteam": "team", "defteam": "opp"})[columns])
+def unit_ratios(yards: pd.DataFrame) -> pd.DataFrame:
+    """`yards` (unit_game_yards, teams canonical) with each game's run and
+    pass efficiency: actual yards per play over expected (the offense's
+    previous UNIT_PRIOR_GAMES games times the defense's previous allowed,
+    over the league's that season) - `run_ratio`, `pass_ratio`."""
+    y = yards.sort_values(["season", "week"]).copy()
+    for kind, (yds, n) in UNIT_PLAYS.items():
+        league = y.groupby("season")[yds].transform("sum") / y.groupby("season")[n].transform("sum")
+
+        def prior(key):
+            g = y.groupby(key)
+            total = g[yds].transform(lambda x: x.shift(1).rolling(UNIT_PRIOR_GAMES, min_periods=3).sum())
+            count = g[n].transform(lambda x: x.shift(1).rolling(UNIT_PRIOR_GAMES, min_periods=3).sum())
+            return total / count
+
+        y[f"{kind}_ratio"] = (y[yds] / y[n].replace(0, float("nan"))) / (prior("team") * prior("opp") / league)
+    return y
+
+
+def team_units(yards: pd.DataFrame) -> dict:
+    """{team: {unit: {"ypp", "plays"}}} over each team's last
+    UNIT_PRIOR_GAMES games: yards per play and plays a game on offense, and
+    allowed on defense."""
+    y = yards.sort_values(["season", "week"])
+    out = {}
+    for team in set(y["team"]) | set(y["opp"]):
+        units = {}
+        for side, key in (("offense", "team"), ("defense", "opp")):
+            rows = y[y[key] == team].tail(UNIT_PRIOR_GAMES)
+            for kind, (yds, n) in UNIT_PLAYS.items():
+                if rows.empty or rows[n].sum() == 0:
+                    continue
+                units[f"{kind}_{side}"] = {"ypp": round(float(rows[yds].sum() / rows[n].sum()), 3),
+                                           "plays": round(float(rows[n].sum() / len(rows)), 2)}
+        out[team] = units
+    return out
+
+
+def group_default_pct(yards: pd.DataFrame) -> dict:
+    """{group: unit percent with one every-down regular out} - the drop in
+    each unit his group touches (the same for each) that costs
+    INJURY_LOG_ODDS at a league-average team's yards a game."""
+    games = len(yards)
+    per_game = {f"{kind}_{side}": yards[yds].sum() / games
+                for kind, (yds, _) in UNIT_PLAYS.items() for side in ("offense", "defense")}
+    out = {}
+    for group, units in GROUP_UNITS.items():
+        yards_at_stake = sum(per_game[u] for u in units)
+        drop = abs(INJURY_LOG_ODDS[group]) / (LOGODDS_PER_POINT * POINTS_PER_YARD * yards_at_stake)
+        out[group] = round(1 - drop, 3)
+    return out
+
+
+def games_missed_record(snap_counts: pd.DataFrame, yards: pd.DataFrame, regulars: pd.DataFrame) -> dict:
+    """{pfr_id: {unit: {"pct", "games"}}} for listed players who missed a
+    game for their current team in this history: the unit's efficiency in
+    those games over the games he played (from the third he played on) -
+    shown for reference only (see GROUP_UNITS' comment)."""
+    if regulars.empty or yards.empty or snap_counts is None or snap_counts.empty:
+        return {}
+    snaps = snap_counts[snap_counts["game_type"] == "REG"].copy()
+    snaps["team"] = nfl_totals._canonical(snaps["team"])
+    ratios = unit_ratios(yards)
+    out = {}
+    for row in regulars.itertuples():
+        side = GROUPS[row.group][0]
+        mine = snaps[(snaps["pfr_player_id"] == row.pfr_player_id) & (snaps["team"] == row.team)]
+        played_ids = set(mine.loc[mine[f"{side}_pct"].fillna(0) > 0, "game_id"])
+        if mine.empty:
+            continue
+        first = (mine["season"] * 100 + mine["week"]).min()
+        key = "team" if side == "offense" else "opp"
+        team_games = ratios[(ratios[key] == row.team) & ((ratios["season"] * 100 + ratios["week"]) >= first)]
+        played = team_games["game_id"].isin(played_ids)
+        # Two missed games at least - one game's yards are mostly noise.
+        if (~played).sum() < 2 or played.sum() < 3:
+            continue
+        record = {}
+        for unit in GROUP_UNITS[row.group]:
+            kind = unit.split("_")[0]
+            n = UNIT_PLAYS[kind][1]
+            ok = team_games[f"{kind}_ratio"].notna()
+
+            def mean(mask):
+                rows = team_games[mask & ok]
+                return (rows[f"{kind}_ratio"] * rows[n]).sum() / rows[n].sum() if rows[n].sum() else float("nan")
+
+            missed, normal = mean(~played), mean(played)
+            if pd.notna(missed) and pd.notna(normal) and normal > 0 and (~played & ok).sum() >= 2:
+                pct = missed / normal if side == "offense" else 2 - missed / normal
+                record[unit] = {"pct": round(float(pct), 3), "games": int((~played & ok).sum())}
+        if record:
+            out[row.pfr_player_id] = record
+    return out
+
+
 MAX_QB_OPTIONS = 4
 
 
@@ -278,11 +426,17 @@ def pairing_log_odds(master, qb_continuity, weekly, games: pd.DataFrame, options
 
 
 def build_whatif(final_probs: pd.DataFrame, master, qb_continuity, weekly, rosters, snap_counts,
-                 games: pd.DataFrame) -> dict:
+                 games: pd.DataFrame, pbp: pd.DataFrame | None = None) -> dict:
     """The page's what-if data for `games` (the ones not yet played)."""
     options = qb_options(weekly, rosters, games)
     pairings = pairing_log_odds(master, qb_continuity, weekly, games, options)
     regulars = regular_players(snap_counts, rosters)
+    yards = unit_game_yards(pbp[[c for c in YARDS_PBP_COLUMNS if c in pbp.columns]] if pbp is not None else None)
+    if not yards.empty:
+        yards["team"], yards["opp"] = nfl_totals._canonical(yards["team"]), nfl_totals._canonical(yards["opp"])
+    units = team_units(yards) if not yards.empty else {}
+    defaults = group_default_pct(yards) if not yards.empty else {}
+    record = games_missed_record(snap_counts, yards, regulars)
     shown = final_probs.set_index("game_id")["home_win_probability"]
     out_games = []
     for _, g in games.iterrows():
@@ -291,21 +445,25 @@ def build_whatif(final_probs: pd.DataFrame, master, qb_continuity, weekly, roste
         teams = {}
         for side in ("home", "away"):
             team = g[f"{side}_team"]
-            r = regulars[regulars["team"] == nfl_totals._canonical(pd.Series([team])).iloc[0]]
+            canonical = nfl_totals._canonical(pd.Series([team])).iloc[0]
+            r = regulars[regulars["team"] == canonical]
             # Only QB options the model could price (an average starter
             # needs a QB+ model).
             priced = {key.split("|")[0 if side == "home" else 1] for key in pairings[g["game_id"]]}
             teams[side] = {
                 "team": team, "qbs": [q for q in options.get(team, []) if q["id"] in priced],
+                "units": units.get(canonical, {}),
                 "regulars": [{"id": row.pfr_player_id, "name": row.player, "group": row.group,
-                              "share": round(float(row.share), 3)} for row in r.itertuples()],
+                              "share": round(float(row.share), 3), "record": record.get(row.pfr_player_id, {})}
+                             for row in r.itertuples()],
             }
         out_games.append({
             "game_id": g["game_id"], "season": int(g["season"]), "week": int(g["week"]),
             "gameday": str(g.get("gameday", "") or ""), "home_win_probability": round(float(shown[g["game_id"]]), 4),
             "home": teams["home"], "away": teams["away"], "pairing_log_odds": pairings[g["game_id"]],
         })
-    return {"injury_log_odds": INJURY_LOG_ODDS, "average_regular_share": average_regular_shares(regulars),
+    return {"group_units": GROUP_UNITS, "group_default_pct": defaults, "points_per_yard": POINTS_PER_YARD,
+            "logodds_per_point": LOGODDS_PER_POINT, "average_regular_share": average_regular_shares(regulars),
             "games": out_games}
 
 

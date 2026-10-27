@@ -194,7 +194,8 @@ def _write_last_week_whatif(fresh: dict, prior_season: dict, season: int, week: 
     probs = nfl_game_picks.apply_market_tiebreak(probs, _build_market_probabilities(games))
     probs = nfl_game_picks.apply_calibration(probs)
     data = nfl_whatif.build_whatif(
-        probs, master, qb_continuity, history["weekly"], history["rosters_weekly"], history["snap_counts"], games
+        probs, master, qb_continuity, history["weekly"], history["rosters_weekly"], history["snap_counts"], games,
+        pbp=history.get("pbp"),
     )
     snaps = fresh.get("snap_counts", pd.DataFrame())
     week_snaps = snaps[snaps["week"] == last] if not snaps.empty and "week" in snaps.columns else snaps
@@ -396,6 +397,7 @@ def run(
             nfl_whatif.write_whatif_json(
                 os.path.join(output_dir, "nfl_whatif.json"), probs, master, qb_continuity, history["weekly"],
                 history["rosters_weekly"], history.get("snap_counts", pd.DataFrame()), props_games,
+                pbp=history.get("pbp"),
             )
             _write_last_week_whatif(fresh, prior_season, season, week, output_dir)
 

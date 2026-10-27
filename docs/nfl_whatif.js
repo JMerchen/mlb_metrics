@@ -1,16 +1,24 @@
-// NFL game picks "What if?" panel (nfl_whatif.py's docs/data/nfl_whatif.json):
-// swap a team's starting QB or mark players out and the home team's win
-// chance is recomputed. The shown probability is moved in log-odds by
-// (1) the model's change from the listed QB pairing to the chosen one and
-// (2) each player marked out: his position group's measured cost of losing
-// a regular, times his snap share ("an average regular" uses the league's
-// average share at the position). Pure functions returning numbers or HTML
+// NFL game picks "What if?" panel (nfl_whatif.py's docs/data/nfl_whatif.json
+// and nfl_whatif_last_week.json). Swap a team's starting QB, mark players
+// out, and set how well each unit plays: run and pass offense and defense,
+// in percent of their normal yards per play (defense: 90% allows 10% more).
+// A player out lowers the units his position touches by a default you can
+// type over; a unit's percent can be typed over outright. The shown
+// probability then moves in log-odds by the model's change from the listed
+// QB pairing to the chosen one, plus the units' change in yards turned into
+// points (data.points_per_yard) and points into log-odds
+// (data.logodds_per_point). Pure functions returning numbers or HTML
 // strings, so node tests can check them; nfl.js does the DOM wiring.
 
 const WHATIF_GROUP_LABELS = {
 OL: "Offensive line", WR: "Receivers", TE: "Tight ends", RB: "Running backs",
 DL: "Defensive line", LB: "Linebackers", CB: "Cornerbacks", S: "Safeties",
 }
+const WHATIF_UNITS = ["run_offense", "pass_offense", "run_defense", "pass_defense"]
+const WHATIF_UNIT_LABELS = {
+run_offense: "Run game", pass_offense: "Pass game", run_defense: "Run defense", pass_defense: "Pass defense",
+}
+const WHATIF_AVERAGE_PREFIX = "average:"
 
 function whatifEsc(value){
 return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
@@ -30,42 +38,86 @@ const listed = (team.qbs || []).find(q => q.listed) || (team.qbs || [])[0]
 return listed ? listed.id : null
 }
 
-const WHATIF_AVERAGE_PREFIX = "average:"
-
-// Regulars lost per group for one side: the snap shares of the players
-// marked out, an "average regular" counting the league's average share.
-function whatifLost(team, outIds, averageShares){
-const lost = {}
-for(const r of team.regulars || []){
-if(outIds.has(r.id)){ lost[r.group] = (lost[r.group] || 0) + Number(r.share) }
+function whatifEmptyState(){
+return {
+homeQb: null, awayQb: null,
+out: {home: new Set(), away: new Set()},
+// "<player id>|<unit>" -> percent (as a fraction) typed for that player out
+playerPct: {home: {}, away: {}},
+// unit -> percent (as a fraction) typed for the whole unit
+unitPct: {home: {}, away: {}},
 }
+}
+
+// The players a side has marked out, each {id, group, share} - an "average
+// regular" counts the league's average share at his position.
+function whatifOutPlayers(team, outIds, data){
+const players = (team.regulars || []).filter(r => outIds.has(r.id))
 for(const id of outIds){
 if(id.startsWith(WHATIF_AVERAGE_PREFIX)){
 const group = id.slice(WHATIF_AVERAGE_PREFIX.length)
-lost[group] = (lost[group] || 0) + (Number((averageShares || {})[group]) || 0)
+players.push({id, group, share: Number((data.average_regular_share || {})[group]) || 0})
 }
 }
-return lost
+return players
 }
 
-// state: {homeQb, awayQb, out: {home: Set, away: Set}}
-function whatifProbability(game, injuryLogOdds, state, averageShares){
+// A player's default percent for a unit: his position's every-down drop,
+// times his snap share.
+function whatifDefaultPct(data, group, share){
+const full = Number((data.group_default_pct || {})[group])
+return Number.isFinite(full) ? 1 - (1 - full) * Number(share) : 1
+}
+
+function whatifPlayerPct(data, state, side, player, unit){
+const typed = state.playerPct[side][`${player.id}|${unit}`]
+return typed !== undefined ? typed : whatifDefaultPct(data, player.group, player.share)
+}
+
+// {unit: percent} for one side: a typed unit percent, or the product of
+// the marked players' percents for that unit.
+function whatifUnitPcts(game, side, data, state){
+const pcts = {}
+for(const unit of WHATIF_UNITS){ pcts[unit] = 1 }
+for(const player of whatifOutPlayers(game[side], state.out[side], data)){
+for(const unit of (data.group_units || {})[player.group] || []){
+pcts[unit] *= whatifPlayerPct(data, state, side, player, unit)
+}
+}
+for(const unit of WHATIF_UNITS){
+const typed = state.unitPct[side][unit]
+if(typed !== undefined){ pcts[unit] = typed }
+}
+return pcts
+}
+
+// Points a unit's percent is worth to its own team a game: an offense at
+// 90% gains 10% fewer yards, a defense at 90% allows 10% more - both cost
+// that many yards' worth of points.
+function whatifUnitPoints(data, team, unit, pct){
+const base = (team.units || {})[unit]
+if(!base){ return 0 }
+return (pct - 1) * Number(base.ypp) * Number(base.plays) * (Number(data.points_per_yard) || 0)
+}
+
+// state: see whatifEmptyState
+function whatifProbability(game, data, state){
 const base = whatifLogit(game.home_win_probability)
 const listedKey = `${whatifListedQb(game.home)}|${whatifListedQb(game.away)}`
 const chosenKey = `${state.homeQb || whatifListedQb(game.home)}|${state.awayQb || whatifListedQb(game.away)}`
 const pairs = game.pairing_log_odds || {}
 const qbShift = pairs[chosenKey] !== undefined && pairs[listedKey] !== undefined ? pairs[chosenKey] - pairs[listedKey] : 0
-const home = whatifLost(game.home, state.out.home, averageShares)
-const away = whatifLost(game.away, state.out.away, averageShares)
-let injuryShift = 0
-for(const [group, coef] of Object.entries(injuryLogOdds || {})){
-injuryShift += Number(coef) * ((home[group] || 0) - (away[group] || 0))
+const net = side => {
+const pcts = whatifUnitPcts(game, side, data, state)
+return WHATIF_UNITS.reduce((sum, unit) => sum + whatifUnitPoints(data, game[side], unit, pcts[unit]), 0)
 }
+const margin = net("home") - net("away")
+const unitShift = (Number(data.logodds_per_point) || 0) * margin
 return {
 base: game.home_win_probability,
-probability: whatifSigmoid(base + qbShift + injuryShift),
+probability: whatifSigmoid(base + qbShift + unitShift),
 qbProbability: whatifSigmoid(base + qbShift),
-qbShift, injuryShift,
+qbShift, unitShift, margin,
 }
 }
 
@@ -78,23 +130,50 @@ const pts = Math.round(delta * 100)
 return pts === 0 ? "no change" : `${pts > 0 ? "+" : "−"}${Math.abs(pts)} pts`
 }
 
+function whatifGamePoints(points){
+const r = Math.round(points * 10) / 10
+return r === 0 ? "±0.0" : `${r > 0 ? "+" : "−"}${Math.abs(r).toFixed(1)}`
+}
+
 function whatifQbLabel(q){
 const rating = q.qb_plus === null || q.qb_plus === undefined ? "no passes yet" : `${q.qb_plus >= 0 ? "+" : "−"}${Math.abs(q.qb_plus).toFixed(2)} EPA/dropback`
 return `${q.name}${q.started ? " (started)" : q.listed ? " (listed)" : ""} · ${rating}`
 }
 
-// Roughly what one absence is worth in win chance (a log-odds change of x
-// is about x/4 near a coin flip).
-function whatifWorth(coef, share){
-const pts = Math.round(Math.abs(Number(coef) * Number(share)) * 25)
-return pts < 1 ? "under 1 pt" : `~${pts} pt${pts === 1 ? "" : "s"}`
+function whatifPctInput(attr, value, placeholder, label){
+return `<span class="whatIfPctWrap"><input class="whatIfPct" type="number" inputmode="numeric" min="0" max="200" step="1" ${attr} value="${value === undefined ? "" : Math.round(value * 100)}" placeholder="${Math.round(placeholder * 100)}" aria-label="${whatifEsc(label)} percent">%</span>`
 }
 
-function whatifCheckbox(side, id, state, label, detail){
-return `<label class="whatIfPlayer"><input type="checkbox" data-whatif-out="${side}" value="${whatifEsc(id)}"${state.out[side].has(id) ? " checked" : ""}> ${label} <small>${detail}</small></label>`
+function whatifUnitsHtml(side, game, data, state){
+const team = game[side]
+const pcts = whatifUnitPcts(game, side, data, state)
+return `<div class="whatIfUnits">${WHATIF_UNITS.filter(u => (team.units || {})[u]).map(unit => {
+const typed = state.unitPct[side][unit]
+const points = whatifUnitPoints(data, team, unit, pcts[unit])
+const source = typed !== undefined ? "set by you" : Math.abs(pcts[unit] - 1) < 0.0005 ? "normal" : "from absences"
+return `<label class="whatIfUnit"><span>${WHATIF_UNIT_LABELS[unit]}</span>${whatifPctInput(`data-whatif-unit="${side}|${unit}"`, typed, pcts[unit], WHATIF_UNIT_LABELS[unit])}<small>${source} · ${whatifGamePoints(points)} pts</small></label>`
+}).join("")}</div>`
 }
 
-function whatifTeamHtml(side, team, injuryLogOdds, state, averageShares){
+function whatifPlayerHtml(side, player, data, state, label, detail){
+const checked = state.out[side].has(player.id)
+const units = (data.group_units || {})[player.group] || []
+const typedAny = Object.keys(state.playerPct[side]).some(k => k.startsWith(`${player.id}|`))
+const inputs = checked
+? `<div class="whatIfPlayerUnits">${units.map(unit => `<span>${WHATIF_UNIT_LABELS[unit]} ${whatifPctInput(
+`data-whatif-player="${side}|${whatifEsc(player.id)}|${unit}"`, state.playerPct[side][`${player.id}|${unit}`],
+whatifDefaultPct(data, player.group, player.share), WHATIF_UNIT_LABELS[unit])}</span>`).join("")}<small>${typedAny ? "set by you" : "position average"}</small></div>`
+: ""
+const record = Object.entries(player.record || {})
+const recordLine = checked && record.length
+? `<div class="whatIfRecord">In his ${record[0][1].games} games missed: ${record.map(([unit, r]) =>
+`${WHATIF_UNIT_LABELS[unit].toLowerCase()} ${Math.round(r.pct * 100)}%`).join(", ")} (a handful of games - mostly noise)</div>`
+: ""
+return `<div class="whatIfPlayerRow"><label class="whatIfPlayer"><input type="checkbox" data-whatif-out="${side}" value="${whatifEsc(player.id)}"${checked ? " checked" : ""}> ${label} <small>${detail}</small></label>${inputs}${recordLine}</div>`
+}
+
+function whatifTeamHtml(side, game, data, state){
+const team = game[side]
 const name = typeof teamName === "function" ? teamName(team.team, "nfl") : team.team
 const chosen = (side === "home" ? state.homeQb : state.awayQb) || whatifListedQb(team)
 const qbSelect = `<label class="whatIfField">Starting QB
@@ -102,20 +181,21 @@ const qbSelect = `<label class="whatIfField">Starting QB
 `<option value="${whatifEsc(q.id)}"${q.id === chosen ? " selected" : ""}>${whatifEsc(whatifQbLabel(q))}</option>`).join("")}</select></label>`
 const groups = {}
 for(const r of team.regulars || []){ (groups[r.group] = groups[r.group] || []).push(r) }
-// Costliest positions first; every position gets an "average regular"
-// for a player who isn't listed or whose role isn't known yet.
-const order = Object.keys(injuryLogOdds).sort((a, b) => Number(injuryLogOdds[a]) - Number(injuryLogOdds[b]))
+const defaults = data.group_default_pct || {}
+// Costliest positions first; every position gets "an average regular" for
+// a player who isn't listed or whose role isn't known yet.
+const order = Object.keys(defaults).sort((a, b) => Number(defaults[a]) - Number(defaults[b]))
 const groupHtml = order.map(group => {
-const coef = injuryLogOdds[group]
-const players = (groups[group] || []).map(r => whatifCheckbox(side, r.id, state,
+const players = (groups[group] || []).map(r => whatifPlayerHtml(side, r, data, state,
 `${whatifEsc(r.name)}${r.played === false ? ' <span class="whatIfMissed">didn\'t play</span>' : ""}`,
-`${Math.round(Number(r.share) * 100)}% of snaps · ${whatifWorth(coef, r.share)}`)).join("")
-const average = (averageShares || {})[group]
-const averageBox = average ? whatifCheckbox(side, `${WHATIF_AVERAGE_PREFIX}${group}`, state, "<i>An average regular (not listed)</i>",
-whatifWorth(coef, average)) : ""
-return `<div class="whatIfGroup"><div class="whatIfGroupName">${WHATIF_GROUP_LABELS[group] || group}</div>${players}${averageBox}</div>`
+`${Math.round(Number(r.share) * 100)}% of snaps`)).join("")
+const average = (data.average_regular_share || {})[group]
+const averageRow = average ? whatifPlayerHtml(side, {id: `${WHATIF_AVERAGE_PREFIX}${group}`, group, share: average}, data, state,
+"<i>An average regular (not listed)</i>", "") : ""
+return `<div class="whatIfGroup"><div class="whatIfGroupName">${WHATIF_GROUP_LABELS[group] || group}</div>${players}${averageRow}</div>`
 }).join("")
 return `<div class="whatIfTeam"><h4>${whatifEsc(name)}${side === "home" ? " (home)" : ""}</h4>${qbSelect}
+<div class="whatIfOutLabel">Units, % of normal yards per play (type to set)</div>${whatifUnitsHtml(side, game, data, state)}
 <div class="whatIfOutLabel">Mark players out</div>${groupHtml}</div>`
 }
 
@@ -125,21 +205,21 @@ const away = typeof teamName === "function" ? teamName(game.away.team, "nfl") : 
 const homeWins = result.probability >= 0.5
 const leader = homeWins ? home : away
 const leaderP = homeWins ? result.probability : 1 - result.probability
-const changed = Math.abs(result.probability - result.base) >= 0.005
 const qbDelta = result.qbProbability - result.base
-const injuryDelta = result.probability - result.qbProbability
+const unitDelta = result.probability - result.qbProbability
 const final = game.final
 ? `<div class="whatIfFinal">Final: ${whatifEsc(away)} ${game.final.away_score}, ${whatifEsc(home)} ${game.final.home_score}${
 game.final.home_score === game.final.away_score ? " (tie)" : (game.final.home_score > game.final.away_score) === homeWins ? " · right side" : " · wrong side"}</div>`
 : ""
+const parts = [
+Math.round(qbDelta * 100) !== 0 ? `QB change ${whatifPoints(qbDelta)}` : "",
+Math.abs(result.margin) >= 0.05 ? `units ${whatifGamePoints(result.margin)} pts on the margin, ${whatifPoints(unitDelta)}` : "",
+].filter(Boolean)
 return `<div class="whatIfResult">
 <div class="whatIfHeadline">${whatifEsc(leader)} ${whatifPct(leaderP)}</div>${final}
 <span class="chanceTrack"><span class="chanceFill" style="width:${(leaderP * 100).toFixed(1)}%"></span></span>
-<div class="whatIfBreakdown">${whatifEsc(home)}${/s$/.test(home) ? "'" : "'s"} chance: ${whatifPct(result.base)} as posted${changed
-? ` → <b>${whatifPct(result.probability)}</b> (${[
-Math.round(qbDelta * 100) !== 0 ? `QB change ${whatifPoints(qbDelta)}` : "",
-Math.round(injuryDelta * 100) !== 0 ? `absences ${whatifPoints(injuryDelta)}` : "",
-].filter(Boolean).join(", ") || "under a point"})`
+<div class="whatIfBreakdown">${whatifEsc(home)}${/s$/.test(home) ? "'" : "'s"} chance: ${whatifPct(result.base)} as posted${parts.length
+? ` → <b>${whatifPct(result.probability)}</b> (${parts.join("; ")})`
 : " (no changes yet)"}</div>
 </div>`
 }
@@ -160,17 +240,15 @@ return state
 }
 
 // How a replayed week's picks did as posted and with the real absences
-// marked: picks on the winning side, and the average chance given to the
-// team that won.
+// marked at their defaults: picks on the winning side, and the average
+// chance given to the team that won.
 function whatifWeekSummary(data){
 const games = ((data && data.games) || []).filter(g => g.final && g.final.home_score !== g.final.away_score)
-const odds = data.injury_log_odds || {}
-const averages = data.average_regular_share || {}
 const tally = {posted: {right: 0, winner: 0}, missed: {right: 0, winner: 0}, n: games.length}
 for(const g of games){
 const homeWon = g.final.home_score > g.final.away_score
 for(const [key, state] of [["posted", whatifEmptyState()], ["missed", whatifMissedState(g)]]){
-const p = whatifProbability(g, odds, state, averages).probability
+const p = whatifProbability(g, data, state).probability
 const winner = homeWon ? p : 1 - p
 tally[key].winner += winner / games.length
 if(winner > 0.5){ tally[key].right += 1 }
@@ -184,7 +262,7 @@ const t = whatifWeekSummary(data)
 if(!t.n){ return "" }
 return `<div class="whatIfSummary">Replayed with only what we knew before kickoff: our picks were on the winning side in
 <b>${t.posted.right} of ${t.n}</b> games as posted (average chance given to the winner ${whatifPct(t.posted.winner)}),
-and <b>${t.missed.right} of ${t.n}</b> with everyone who actually missed marked out (${whatifPct(t.missed.winner)}).</div>`
+and <b>${t.missed.right} of ${t.n}</b> with everyone who actually missed marked out at the defaults (${whatifPct(t.missed.winner)}).</div>`
 }
 
 // options.modes: [{key, label, active}] for the This week / Last week
@@ -199,23 +277,26 @@ if(!games.length){ return `${modes}No upcoming games to try yet` }
 const game = games.find(g => g.game_id === gameId) || games[0]
 const picker = `<label class="whatIfField">Game
 <select data-whatif="game">${games.map(g => `<option value="${whatifEsc(g.game_id)}"${g.game_id === game.game_id ? " selected" : ""}>${whatifEsc(whatifGameLabel(g))}</option>`).join("")}</select></label>`
-const odds = data.injury_log_odds || {}
-const averages = data.average_regular_share || {}
-const result = whatifProbability(game, odds, state, averages)
+const result = whatifProbability(game, data, state)
 const replay = game.final
 ? `${whatifSummaryHtml(data)}<button class="whatIfAction" data-whatif-action="missed">Mark everyone who actually missed this game</button>`
 : ""
 return `${modes}${replay}${picker}${whatifResultHtml(game, result)}
-<div class="whatIfTeams">${whatifTeamHtml("away", game.away, odds, state, averages)}${whatifTeamHtml("home", game.home, odds, state, averages)}</div>`
+<button class="whatIfAction" data-whatif-action="reset">Reset this game</button>
+<div class="whatIfTeams">${whatifTeamHtml("away", game, data, state)}${whatifTeamHtml("home", game, data, state)}</div>`
 }
 
-function whatifEmptyState(){
-return {homeQb: null, awayQb: null, out: {home: new Set(), away: new Set()}}
+// A typed percent ("" clears it) as a fraction, or undefined.
+function whatifParsePct(text){
+const value = String(text ?? "").trim()
+if(value === ""){ return undefined }
+const n = Number(value)
+return Number.isFinite(n) && n >= 0 ? n / 100 : undefined
 }
 
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
-whatifLost, whatifProbability, whatifPanelHtml, whatifEmptyState, whatifListedQb, whatifPoints,
-whatifMissedState, whatifWeekSummary,
+whatifProbability, whatifPanelHtml, whatifEmptyState, whatifListedQb, whatifPoints, whatifUnitPcts,
+whatifUnitPoints, whatifDefaultPct, whatifMissedState, whatifWeekSummary, whatifParsePct, whatifOutPlayers,
 }
 }
