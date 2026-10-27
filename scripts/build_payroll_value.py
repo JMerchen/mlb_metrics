@@ -2,9 +2,10 @@
 payroll_franchises.csv and payroll_league.csv (payroll_value). The page
 builds the downloadable workbook from these in the browser.
 
-Payrolls are entered by hand in data/payroll/team_payroll.csv (season,
-franchise, payroll, wins, losses - a new season's 30 rows with wins and
-losses left blank make it the preseason forecast). This fills in the
+Payrolls come from data/payroll/team_payroll.csv (season, franchise,
+payroll, wins, losses - The Baseball Cube's opening-day payrolls, written
+by scripts/fetch_payrolls.py; a season whose wins and losses are blank is
+the preseason forecast). This fills in the
 current season's wins and losses (and any earlier season's left blank)
 from the MLB standings - falling back to docs/data/team_schedule.csv, the
 Stats page's game log - and writes them back to that file.

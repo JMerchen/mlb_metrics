@@ -64,7 +64,7 @@ return played.length ? Math.max(...played) : (paySeasons(rows)[0] ?? null)
 // [key, label, short label, higher is better (null: neither), tip]
 const PAY_COLUMNS = [
 ["team", "Team", "Team", null, ""],
-["payroll", "Payroll", "Pay", null, "The season's payroll, as entered in data/payroll/team_payroll.csv"],
+["payroll", "Payroll", "Pay", null, "Opening-day payroll (players under contract on opening day), from The Baseball Cube"],
 ["payroll_rank", "Payroll rank", "Pay #", null, "1 = the biggest payroll that season"],
 ["wins", "Record", "W-L", true, ""],
 ["wins_rank", "Wins rank", "W #", false, "1 = the most wins that season"],

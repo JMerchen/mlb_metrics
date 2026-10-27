@@ -2,8 +2,9 @@
 
 The MLB Payroll page (docs/payroll.html) and its downloadable workbook,
 rebuilt from data/payroll/team_payroll.csv (one row per team-season:
-season, franchise, payroll, wins, losses - payroll entered by hand once a
-year, wins and losses filled in by scripts/build_payroll_value.py).
+season, franchise, payroll, wins, losses - opening-day payrolls from The
+Baseball Cube via scripts/fetch_payrolls.py, wins and losses filled in by
+scripts/build_payroll_value.py).
 
 Every number is relative to its own season, so 1988 and 2026 compare:
 

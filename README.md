@@ -3062,11 +3062,20 @@ and the year-by-year grids. It automates the hand-built
 Payroll_Effectiveness workbook, and the page's Download button rebuilds
 that workbook (same sheets and colour scales) in the browser.
 
-- **Payroll is entered by hand** in `data/payroll/team_payroll.csv`, one
-  row per team-season: `season,franchise,payroll,wins,losses`. Add a new
-  season's 30 rows with `wins`/`losses` blank and it shows as a preseason
-  forecast. Franchise codes are the site's (`ATH`, `AZ`, `CWS`, `WSH`,
-  ...); older names such as "Montreal Expos" are accepted too
+- **Every payroll comes from one source: The Baseball Cube's opening-day
+  payrolls** (`thebaseballcube.com/content/payroll_year/<season>`, players
+  under contract on opening day), the source the original workbook was
+  built from. The site blocks automated requests, so
+  `scripts/fetch_payrolls.py` (`payroll_sources.py`) reads the Wayback
+  Machine's newest complete capture of each season's page, asking for a
+  fresh capture when there's none. The Payroll Update workflow runs it
+  weekly for the current season - a new season's payrolls arrive as a
+  preseason forecast (wins and losses blank) - and by hand with
+  `seasons` (e.g. `1988-2026`) for earlier years.
+- `data/payroll/team_payroll.csv` holds one row per team-season:
+  `season,franchise,payroll,wins,losses,payroll_source` (the capture each
+  payroll came from). Franchise codes are the site's (`ATH`, `AZ`, `CWS`,
+  `WSH`, ...); older names such as "Montreal Expos" map to them
   (`payroll_value.FRANCHISE_ALIASES`).
 - **Wins and losses fill themselves in**: the daily update runs
   `scripts/build_payroll_value.py`, which takes the current season's

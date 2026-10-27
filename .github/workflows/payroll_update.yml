@@ -1,0 +1,66 @@
+name: Payroll Update
+
+# The Payroll page's payrolls from The Baseball Cube (scripts/
+# fetch_payrolls.py), then the page rebuilt. Weekly, so a new season's
+# opening-day payrolls arrive soon after they're published; run by hand
+# with `seasons` (e.g. 1988-2026) to refresh earlier years.
+on:
+  schedule:
+    - cron: "41 14 * * 2"
+  workflow_dispatch:
+    inputs:
+      seasons:
+        description: "Seasons to refresh, e.g. 1988-2026 or 2025,2026 (blank: the current season)"
+        required: false
+        default: ""
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Fetch payrolls
+        run: |
+          if [ -n "${{ github.event.inputs.seasons }}" ]; then
+            python scripts/fetch_payrolls.py --seasons "${{ github.event.inputs.seasons }}" --capture
+          else
+            python scripts/fetch_payrolls.py --capture
+          fi
+
+      - name: Build payroll value
+        run: |
+          python scripts/build_payroll_value.py
+
+      - name: Commit updates
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add data/payroll/ docs/data/payroll_*.csv
+          git commit -m "Payroll update" || echo "No changes"
+          branch=$(git rev-parse --abbrev-ref HEAD)
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              exit 0
+            fi
+            echo "Push attempt $attempt failed - pulling/rebasing and retrying..."
+            git pull --rebase origin "$branch"
+            sleep 5
+          done
+          exit 1
