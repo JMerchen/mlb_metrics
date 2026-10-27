@@ -1,30 +1,26 @@
-"""Temporary: fetch candidate payroll pages with a real browser."""
-import sys
+"""Temporary: how far back Spotrac's and FanGraphs' team payrolls go."""
+import re
 import time
 from playwright.sync_api import sync_playwright
 
-urls = {
-    "cube_1988": "https://thebaseballcube.com/content/payroll_year/1988",
-    "cube_2023": "https://thebaseballcube.com/content/payroll_year/2023",
-    "cube_2026": "https://thebaseballcube.com/content/payroll_year/2026",
-    "wb_cube_1988": "https://web.archive.org/web/2025/https://thebaseballcube.com/content/payroll_year/1988/",
-    "wb_cube_2023": "https://web.archive.org/web/2025/https://thebaseballcube.com/content/payroll_year/2023/",
-    "ump": "https://stevetheump.com/Payrolls.htm",
-}
-with sync_playwright() as p:
+urls = {f"spotrac_{y}": f"https://www.spotrac.com/mlb/payroll/_/year/{y}/" for y in (1990, 1995, 2000, 2005, 2010, 2011, 2012, 2023)}
+urls["fangraphs_payroll"] = "https://www.fangraphs.com/roster-resource/payroll"
+urls["fangraphs_payroll_2015"] = "https://www.fangraphs.com/roster-resource/payroll?season=2015"
+with sync_playwright() as p, open("payroll_probe/coverage.txt", "w") as out:
     browser = p.chromium.launch(headless=False)
     page = browser.new_page()
     for name, url in urls.items():
         try:
             page.goto(url, timeout=60000)
-            for _ in range(20):
+            for _ in range(15):
                 if "Just a moment" not in page.title():
                     break
                 time.sleep(2)
-            page.wait_for_timeout(3000)
-            html = page.content()
-            open(f"payroll_probe/{name}.html", "w").write(html)
-            print(name, page.title(), len(html), flush=True)
+            page.wait_for_timeout(4000)
+            text = re.sub(r"\s+", " ", page.inner_text("body"))
+            i = text.find("Yankees")
+            out.write(f"== {name} {page.url}\ntitle: {page.title()}\n{text[max(0, i - 600):i + 900] if i >= 0 else text[:1500]}\n\n")
+            print(name, page.title(), flush=True)
         except Exception as e:
-            print(name, "ERROR", e, flush=True)
+            out.write(f"== {name} ERROR {e}\n\n")
     browser.close()

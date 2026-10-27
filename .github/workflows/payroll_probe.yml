@@ -3,7 +3,7 @@ name: Payroll source probe (temporary)
 on:
   push:
     branches: [claude/baseball-hot-cold-eval-juiywk]
-    paths: [.github/workflows/payroll_probe.yml, payroll_probe/probe.py]
+    paths: [.github/workflows/payroll_probe.yml, payroll_probe/probe.py, payroll_probe/wayback.py]
 
 jobs:
   probe:
@@ -17,17 +17,18 @@ jobs:
           python-version: "3.12"
       - name: Install browser
         run: |
-          pip install playwright
+          pip install playwright requests
           python -m playwright install --with-deps chromium
       - name: Fetch candidate pages
         run: |
           rm -f payroll_probe/*.html
-          xvfb-run -a python payroll_probe/probe.py
+          xvfb-run -a python payroll_probe/probe.py || true
+          python payroll_probe/wayback.py payroll_probe/cube_wayback.csv
           ls -la payroll_probe
       - name: Commit
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add -A payroll_probe
-          git commit -m "Payroll source probe pages (browser)" || echo "nothing"
+          git commit -m "Payroll source probe: Wayback + coverage" || echo "nothing"
           git push
