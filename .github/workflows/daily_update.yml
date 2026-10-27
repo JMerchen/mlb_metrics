@@ -74,6 +74,10 @@ jobs:
         run: |
           python scripts/build_team_schedules.py
 
+      - name: Build payroll value
+        run: |
+          python scripts/build_payroll_value.py || echo "::warning::Payroll page not rebuilt"
+
       - name: Build hit streaks
         run: |
           python scripts/build_hit_streaks.py
@@ -91,7 +95,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add docs/data/ data/raw/ data/predictions/ data/season_dates.json
+          git add docs/data/ data/raw/ data/predictions/ data/payroll/ data/season_dates.json
 
           git commit -m "Daily update" || echo "No changes"
 

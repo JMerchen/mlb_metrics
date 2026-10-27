@@ -3053,6 +3053,29 @@ original KNN comparable search. See `config.py`'s Age Curves section for
 the model's selected hyperparameters and `age_curve_ml.py`'s module
 docstring for the full methodology.
 
+## Payroll value (`docs/payroll.html`, `payroll_value.py`)
+
+The MLB Payroll tab: which teams get the most winning for their money,
+every season since 1988 - payroll effectiveness, expected wins from
+payroll (the Front Office model), wins against them, franchise averages
+and the year-by-year grids. It automates the hand-built
+Payroll_Effectiveness workbook, and the page's Download button rebuilds
+that workbook (same sheets and colour scales) in the browser.
+
+- **Payroll is entered by hand** in `data/payroll/team_payroll.csv`, one
+  row per team-season: `season,franchise,payroll,wins,losses`. Add a new
+  season's 30 rows with `wins`/`losses` blank and it shows as a preseason
+  forecast. Franchise codes are the site's (`ATH`, `AZ`, `CWS`, `WSH`,
+  ...); older names such as "Montreal Expos" are accepted too
+  (`payroll_value.FRANCHISE_ALIASES`).
+- **Wins and losses fill themselves in**: the daily update runs
+  `scripts/build_payroll_value.py`, which takes the current season's
+  records (and any earlier season left blank) from the MLB standings,
+  falling back to the Stats page's game log, writes them back to that
+  file and rebuilds `docs/data/payroll_*.csv`.
+- Expected wins compare only with other franchises' seasons 11 or more
+  years earlier, so seasons before 1999 have none.
+
 ## NFL Automated Game Picks (`docs/nfl.html`'s Picks tab)
 
 > **Predicted point totals (2026-10-12, improved 2026-10-13).** Each game

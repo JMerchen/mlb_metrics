@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8">
+
+<title>Diamond &amp; Gridiron Metrics - MLB Payroll</title>
+
+<link
+rel="icon"
+type="image/svg+xml"
+href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTQiIGZpbGw9IiNmZmZmZmYiIHN0cm9rZT0iI2Q5ZDRjNyIgc3Ryb2tlLXdpZHRoPSIxIi8+PHBhdGggZD0iTTEwIDQgQzE0IDEwLCAxNCAyMiwgMTAgMjgiIHN0cm9rZT0iI2M4MTAyZSIgc3Ryb2tlLXdpZHRoPSIxLjYiIGZpbGw9Im5vbmUiLz48cGF0aCBkPSJNMTAuNiA4LjIgTDEzIDcuNCBNMTEuNyAxMiBMMTQuMSAxMS41IE0xMi4xIDE2IEwxNC42IDE2IE0xMS43IDIwIEwxNC4xIDIwLjUgTTEwLjYgMjMuOCBMMTMgMjQuNiIgc3Ryb2tlPSIjYzgxMDJlIiBzdHJva2Utd2lkdGg9IjEuMSIgZmlsbD0ibm9uZSIvPjxwYXRoIGQ9Ik0yMiA0IEMxOCAxMCwgMTggMjIsIDIyIDI4IiBzdHJva2U9IiNjODEwMmUiIHN0cm9rZS13aWR0aD0iMS42IiBmaWxsPSJub25lIi8+PHBhdGggZD0iTTIxLjQgOC4yIEwxOSA3LjQgTTIwLjMgMTIgTDE3LjkgMTEuNSBNMTkuOSAxNiBMMTcuNCAxNiBNMjAuMyAyMCBMMTcuOSAyMC41IE0yMS40IDIzLjggTDE5IDI0LjYiIHN0cm9rZT0iI2M4MTAyZSIgc3Ryb2tlLXdpZHRoPSIxLjEiIGZpbGw9Im5vbmUiLz48L3N2Zz4=">
+
+<link
+rel="stylesheet"
+href="./style.css">
+
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="siteHeader">
+
+<div class="brandRow">
+<svg class="brandMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+<path d="M16 2 A14 14 0 0 0 16 30 Z" fill="#ffffff"/>
+<path d="M16 2 A14 14 0 0 1 16 30 Z" fill="#8a5230"/>
+<path d="M10 6 C13 11, 13 21, 10 26" stroke="#c8102e" stroke-width="1.5" fill="none"/><path d="M10.9 9 L13.2 8.3 M12.1 13 L14.4 12.6 M12.3 17 L14.6 17.2 M11.7 21 L13.9 21.6" stroke="#c8102e" stroke-width="1" fill="none"/>
+<path d="M19 16 L27 16" stroke="#ffffff" stroke-width="1.6" fill="none"/>
+<path d="M21 14 L21 18 M23 14 L23 18 M25 14 L25 18" stroke="#ffffff" stroke-width="1.2" fill="none"/>
+</svg>
+<h1>Diamond &amp; Gridiron <span class="brandAccent">Metrics</span></h1>
+</div>
+
+<div class="tabGroup pageTabs">
+<a class="tabButton" href="./index.html">Today</a>
+<a class="tabButton active" href="./predictive.html">MLB</a>
+<a class="tabButton" href="./nfl.html">NFL</a>
+<a class="tabButton" href="./methodology.html">How it works</a>
+</div>
+
+</div>
+
+<div class="sportHeader">
+<svg class="sportMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+<circle cx="16" cy="16" r="14" fill="#ffffff" stroke="#d9d4c7" stroke-width="1"/>
+<path d="M10 4 C14 10, 14 22, 10 28" stroke="#c8102e" stroke-width="1.6" fill="none"/><path d="M10.6 8.2 L13 7.4 M11.7 12 L14.1 11.5 M12.1 16 L14.6 16 M11.7 20 L14.1 20.5 M10.6 23.8 L13 24.6" stroke="#c8102e" stroke-width="1.1" fill="none"/>
+<path d="M22 4 C18 10, 18 22, 22 28" stroke="#c8102e" stroke-width="1.6" fill="none"/><path d="M21.4 8.2 L19 7.4 M20.3 12 L17.9 11.5 M19.9 16 L17.4 16 M20.3 20 L17.9 20.5 M21.4 23.8 L19 24.6" stroke="#c8102e" stroke-width="1.1" fill="none"/>
+</svg>
+<h2 class="sportHeading">MLB <span class="brandAccent">Metrics</span></h2>
+</div>
+
+<div class="tabGroup" id="mlbSubTabs">
+<a class="tabButton" href="./predictive.html">Picks</a>
+<a class="tabButton" href="./stats.html">Stats</a>
+<a class="tabButton" href="./age-curves.html">Age Curves</a>
+<a class="tabButton" href="./prospects.html">Prospects</a>
+<a class="tabButton active" href="./payroll.html">Payroll</a>
+</div>
+
+<h2>
+Payroll value
+</h2>
+
+<p class="sectionIntro">Winning isn't the only measure of success - winning for the money is. Each team's season is measured against its own league year, so a 1990 payroll and a 2026 payroll compare fairly. Payroll effectiveness above 1 means a team bought more wins per dollar than the league did; expected wins are what the seasons that spent most like it won.</p>
+
+<div class="lookupControls payControls">
+<label class="payField">Season <select id="paySeasonPick" aria-label="Season"></select></label>
+<button class="tabButton" id="payDownload" data-tip="Every season, the Front Office model and the year grids, as an Excel workbook">Download workbook (.xlsx)</button>
+</div>
+
+<div id="payHero">
+
+Loading...
+
+</div>
+
+<div class="vizCard" id="payScatter"></div>
+
+<h3 id="paySeasonTitle">
+Season
+</h3>
+
+<p class="sectionIntro">Click a column to sort, or a team to see its history.</p>
+
+<div id="payTable"></div>
+
+<h3 id="payTeamSection">
+Team history
+</h3>
+
+<div class="lookupControls">
+<label class="payField">Team <select id="payTeamPick" aria-label="Team"></select></label>
+</div>
+
+<div class="vizCard" id="payTeamChart"></div>
+
+<div id="payNeighbors"></div>
+
+<h3>
+All-time value by franchise
+</h3>
+
+<p class="sectionIntro">Averages over every final season since 1988 (each franchise's seasons under its earlier names included).</p>
+
+<div id="payFranchises"></div>
+
+<h3>
+Year by year
+</h3>
+
+<p class="sectionIntro">Every final season at a glance - by team, or by where a payroll or record ranked that year. Blue is the better end of each grid, orange the worse.</p>
+
+<div id="payGridTabs"></div>
+
+<div id="payGrid"></div>
+
+<h3>
+The price of a win
+</h3>
+
+<p class="sectionIntro">The league's total payroll over its total wins, each season. 2020 spikes because full-season payrolls bought a 60-game season.</p>
+
+<div class="vizCard" id="payLeague"></div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<script src="./teams.js"></script>
+
+<script src="./mlb_render.js"></script>
+
+<script src="./payroll_render.js"></script>
+
+<script src="./payroll.js"></script>
+
+</body>
+
+</html>
