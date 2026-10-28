@@ -1854,3 +1854,12 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 .payGridTable tbody th{position:sticky;left:0;z-index:1;}
 .payGridTable .payCell{text-align:center;padding:4px 5px;min-width:34px;border-radius:3px;font-variant-numeric:tabular-nums;}
 .payGridTable td:empty{background:transparent;}
+
+/* ---- Installable app (docs/install.js) ----
+   The header's "Install app" button, and the Add to Home Screen steps it
+   shows on iPhone and iPad. */
+.installButton{border-style:dashed;}
+.installTip{background:var(--bg-card);border:1px solid var(--border-strong);border-radius:var(--radius);padding:14px 16px;margin:0 0 16px;max-width:460px;font-size:14px;}
+.installTip ol{margin:8px 0 8px 20px;padding:0;}
+.installTip li{margin:4px 0;}
+.installTip p{color:var(--text-dim);font-size:13px;margin:0 0 10px;}

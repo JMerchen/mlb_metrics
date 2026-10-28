@@ -1,0 +1,21 @@
+{
+  "name": "Diamond & Gridiron Metrics",
+  "short_name": "D&G Metrics",
+  "description": "MLB and NFL picks, stats, age curves, prospects and payroll value.",
+  "id": "./index.html",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0d10",
+  "theme_color": "#0b0d10",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "MLB picks", "url": "./predictive.html" },
+    { "name": "NFL picks", "url": "./nfl.html#picks" },
+    { "name": "Payroll value", "url": "./payroll.html" }
+  ]
+}
