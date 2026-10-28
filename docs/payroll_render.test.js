@@ -25,11 +25,11 @@ const SEASONS = [
   row(2026, "TB", { status: "forecast", wins: "", losses: "", win_avg: "", pe_index: "", wins_rank: "", wins_above_expected: "", expected_wins: "88" }),
 ]
 const LEAGUE = [
-  { season: "2003", teams: "30", average_payroll: "70000000", wins: "2430", price_per_win: "864198", price_per_81_wins: "864198" },
+  { season: "2003", teams: "30", average_payroll: "70000000", wins: "2430", price_per_win: "864198", price_per_win_full_season: "864198" },
   // 2020: 60 games, so per actual win it's 2.7x dearer; per 81 wins it isn't.
-  { season: "2020", teams: "30", average_payroll: "140000000", wins: "900", price_per_win: "4666667", price_per_81_wins: "1728395" },
-  { season: "2025", teams: "30", average_payroll: "160000000", wins: "2430", price_per_win: "1975309", price_per_81_wins: "1975309" },
-  { season: "2026", teams: "30", average_payroll: "170000000", wins: "", price_per_win: "", price_per_81_wins: "2098765" },
+  { season: "2020", teams: "30", average_payroll: "140000000", wins: "900", price_per_win: "4666667", price_per_win_full_season: "1728395" },
+  { season: "2025", teams: "30", average_payroll: "160000000", wins: "2430", price_per_win: "1975309", price_per_win_full_season: "1975309" },
+  { season: "2026", teams: "30", average_payroll: "170000000", wins: "", price_per_win: "", price_per_win_full_season: "2098765" },
 ]
 
 test("formats money, ratios and signed numbers", () => {
@@ -159,4 +159,45 @@ test("colour runs green (value) through grey to red (overspending), inked to rea
   // Three teams: the best sits on the green side, the worst on the red.
   assert.match(chip, /background:rgb\(78,146,90\);color:#0b0d10">2\.20/)
   assert.match(chip, /background:rgb\(140,66,72\);color:#fff">0\.40/)
+})
+
+// ---- NFL (PAY_NFL) ----
+global.nflLogo = (code, size) => `<span class="logo">${code}</span>`
+const NFL = p.PAY_NFL
+const nflRow = (season, franchise, extra) => row(season, franchise, { games: "17", wins: "9", losses: "8", ties: "0", ...extra })
+const NFL_SEASONS = [
+  nflRow(2024, "WAS", { wins: "12.5", losses: "4.5", ties: "1", win_avg: "1.470588", pe_index: "1.9", expected_wins: "9.36", wins_above_expected: "3.14", fo_score: "0.1", neighbors: "2015 DAL" }),
+  nflRow(2024, "KC", { wins: "15", losses: "2", pe_index: "1.2" }),
+  nflRow(2015, "DAL", { wins: "4", losses: "12", games: "16", win_avg: "0.5", relative_payroll: "1.1" }),
+]
+
+test("NFL: W-L-T records, decimal expected wins, Washington's old names", () => {
+  assert.equal(p.payWins(9.36, NFL), "9.4")
+  assert.equal(p.payWins(81.6), "82")
+  assert.equal(p.payTeamName("WAS", 2019, NFL), "Redskins")
+  assert.equal(p.payTeamName("WAS", 2021, NFL), "Football Team")
+  assert.equal(p.payTeamName("WAS", 2024, NFL), "Commanders")
+  const out = text(p.paySeasonTableHtml(p.paySeasonRows(NFL_SEASONS, 2024), "pe_index", null, NFL))
+  assert.match(out, /Commanders \$100\.0M 15th 12-4-1 15th 1\.90 9\.4 \+3\.1 \+0\.9/)
+  assert.match(out, /Chiefs \$100\.0M 15th 15-2/)
+})
+
+test("NFL: per-17-game charts, 32 grid columns, the comparable seasons", () => {
+  assert.match(p.payScatterSvg(p.paySeasonRows(NFL_SEASONS, 2024), null, 720, NFL), /wins per 17 games/)
+  assert.equal(p.payGrid(NFL_SEASONS, "payroll_rank", "pe_index", NFL).columns.length, 32)
+  assert.equal(p.payGrid(NFL_SEASONS, "franchise", "pe_index", NFL).columns[0], "BUF")
+  const out = text(p.payNeighborsHtml(NFL_SEASONS, NFL_SEASONS[0], NFL))
+  assert.match(out, /averaged 8\.5 wins per 17 games/)
+  assert.match(out, /2015 DAL 4\.3/)
+  assert.match(out, /9\.4 expected wins ?, actual 12\.5/)
+})
+
+test("the view's sections take the prefix; the NFL view has the cash / cap switch", () => {
+  const mlb = p.payViewHtml(p.PAY_MLB, "pay")
+  assert.match(mlb, /id="paySeasonPick"/)
+  assert.doesNotMatch(mlb, /data-pay-measure/)
+  const nfl = p.payViewHtml(NFL, "nflPay")
+  assert.match(nfl, /id="nflPaySeasonPick"/)
+  assert.match(text(nfl), /Cash paid Cap spending/)
+  assert.doesNotMatch(nfl, /id="pay[A-Z]/)
 })

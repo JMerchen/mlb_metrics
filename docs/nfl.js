@@ -45,7 +45,7 @@ return value < 0.05
 : `not significant (p=${value.toFixed(2)})`
 }
 
-const NFL_TABS = ["picks", "stats", "playerprops", "prospects"]
+const NFL_TABS = ["picks", "stats", "playerprops", "prospects", "payroll"]
 // Old tab names in links: "#gamepicks" (now Picks), "#teamunits" (now
 // Stats), "#draftboard" (now Prospects).
 const NFL_TAB_ALIASES = {gamepicks: "picks", teamunits: "stats", draftboard: "prospects"}
@@ -69,7 +69,15 @@ document.getElementById("gamePicksSection").style.display = tab === "picks" ? ""
 document.getElementById("draftBoardSection").style.display = tab === "prospects" ? "" : "none"
 document.getElementById("playerPropsSection").style.display = tab === "playerprops" ? "" : "none"
 document.getElementById("teamUnitsSection").style.display = tab === "stats" ? "" : "none"
+document.getElementById("nflPayrollSection").style.display = tab === "payroll" ? "" : "none"
+// The Payroll tab (payroll.js) loads the first time it's opened.
+if(tab === "payroll" && !nflPayrollStarted && typeof payrollView === "function"){
+nflPayrollStarted = true
+payrollView(PAY_NFL, "nflPay", "nflPayrollView")
 }
+}
+
+let nflPayrollStarted = false
 
 // --- NFL Automated Game Picks (nfl_game_evaluation.build_game_picks_export's
 // own docs/data/nfl_game_picks_*.csv exports) - direct structural mirror

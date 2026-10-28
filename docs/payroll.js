@@ -1,6 +1,9 @@
-// Payroll page (payroll.html): loads the CSVs and wires the DOM; the
-// rendering lives in payroll_render.js. The workbook download is built
-// here in the browser with ExcelJS (loaded on first click).
+// Payroll value views: the MLB Payroll page (payroll.html) and the NFL
+// page's Payroll tab (started by nfl.js). payrollView(sport, prefix, rootId)
+// draws payroll_render.js's sections into the root, loads the sport's CSVs
+// and wires the DOM; element ids are prefix + a name, so both views can
+// share one page (the artifact). The workbook download is built in the
+// browser with ExcelJS (loaded on first click).
 
 async function loadCSV(path){
 const response = await fetch(`${path}?t=${Date.now()}`, {cache:"no-store"})
@@ -11,60 +14,8 @@ return Papa.parse(text, {header:true, skipEmptyLines:true}).data
 
 const EXCELJS_URL = "https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"
 
-let paySeasonsAll = []
-let payFranchises = []
-let payLeague = []
-let paySeason = null
-let payTeam = null
-let payTeamSeason = null
-let paySortKey = "pe_index"
-let payGridKey = "team_pe"
-
 async function payOptionalCSV(path){
 try{ return await loadCSV(path) }catch(e){ console.log(`no ${path} yet`, e); return [] }
-}
-
-function payWidth(id){
-const width = document.getElementById(id).clientWidth
-return width > 100 ? width - 32 : 720
-}
-
-function renderPaySeason(){
-const rows = paySeasonRows(paySeasonsAll, paySeason)
-const status = rows[0] && rows[0].status
-const label = status === "forecast" ? " (preseason forecast)" : status === "in progress" ? " (in progress)" : ""
-document.getElementById("payHero").innerHTML = payHeroHtml(rows, payLeague, paySeason, payModelMiss(paySeasonsAll))
-const scatter = payScatterSvg(rows, payTeam, payWidth("payScatter"))
-document.getElementById("payScatter").innerHTML = scatter ? `<div class="vizHead"><b>${paySeason}${label}: wins against payroll</b>
-<span class="vizKey"><i class="payKeyGood"></i>More value <i class="payKeyMid"></i>Average <i class="payKeyBad"></i>Less value</span>
-<span class="vizSub">Each dot is a team. Further right spent more than the league average; higher won more. Teams above the curve got more wins per dollar than the league did.</span></div>${scatter}`
-: `<div class="vizHead"><b>${paySeason}${label}</b><span class="vizSub">No games played yet - the table shows expected wins from payroll alone.</span></div>`
-document.getElementById("paySeasonTitle").textContent = `${paySeason} season${label}`
-document.getElementById("payTable").innerHTML = paySeasonTableHtml(rows, paySortKey, payTeam)
-}
-
-function renderPayTeam(){
-if(!payTeam){ return }
-const own = paySeasonsAll.filter(r => r.franchise === payTeam)
-if(!own.some(r => Number(r.season) === payTeamSeason)){ payTeamSeason = Number(paySeason) }
-const pick = own.find(r => Number(r.season) === payTeamSeason) || own[own.length - 1]
-document.getElementById("payTeamPick").value = payTeam
-document.getElementById("payTeamChart").innerHTML = `<div class="vizHead"><b>${mlbEsc(mlbTeam(payTeam))}: wins and expected wins per 162 games</b>
-<span class="vizKey"><i class="payKeyActual"></i>Wins <i class="payKeyExpected"></i>Expected from payroll</span>
-<span class="vizSub">Click a season to see the 10 seasons its expected wins came from.</span></div>${payTeamChartSvg(paySeasonsAll, payTeam, payWidth("payTeamChart"))}`
-document.getElementById("payNeighbors").innerHTML = payNeighborsHtml(paySeasonsAll, pick)
-}
-
-function selectPayTeam(team, season = null){
-payTeam = team
-payTeamSeason = season === null ? Number(paySeason) : season
-renderPaySeason()
-renderPayTeam()
-}
-
-function renderPayGrid(){
-document.getElementById("payGridTabs").innerHTML = payGridTabsHtml(payGridKey)
-document.getElementById("payGrid").innerHTML = payGridHtml(paySeasonsAll, payGridKey)
 }
 
 function payColumnLetter(n){
@@ -89,15 +40,10 @@ return { type: "colorScale", cfvo: [{ type: "min" }, { type: "percentile", value
 color: [{ argb: low }, { argb: "FFFFEB84" }, { argb: high }] }
 }
 
-async function downloadPayWorkbook(){
-const button = document.getElementById("payDownload")
-const label = button.textContent
-button.disabled = true
-button.textContent = "Building..."
-try{
+async function payWriteWorkbook(sheets, fileName){
 if(typeof ExcelJS === "undefined"){ await payLoadScript(EXCELJS_URL) }
 const wb = new ExcelJS.Workbook()
-payWorkbookSheets(paySeasonsAll, payFranchises, payLeague).forEach(spec => {
+sheets.forEach(spec => {
 const ws = wb.addWorksheet(spec.name.slice(0, 31), { views: [{ state: "frozen", xSplit: 1, ySplit: 1 }] })
 ws.addRow(spec.columns.map(c => c[0])).font = { bold: true }
 spec.rows.forEach(row => ws.addRow(row))
@@ -119,11 +65,79 @@ ws.addConditionalFormatting({ ref: `B2:${payColumnLetter(spec.columns.length - 1
 const blob = new Blob([await wb.xlsx.writeBuffer()], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
 const link = document.createElement("a")
 link.href = URL.createObjectURL(blob)
-link.download = "Payroll_Effectiveness.xlsx"
+link.download = fileName
 document.body.appendChild(link)
 link.click()
 link.remove()
 setTimeout(() => URL.revokeObjectURL(link.href), 1000)
+}
+
+function payrollView(S, P, rootId){
+const root = document.getElementById(rootId)
+if(!root){ return }
+root.innerHTML = payViewHtml(S, P)
+const $ = name => document.getElementById(P + name)
+const loaded = { seasons: [], franchises: [], league: [] }
+const state = { measure: S.measures ? S.measures[0][0] : null, season: null, team: null, teamSeason: null, sortKey: "pe_index", gridKey: "team_pe" }
+// The rows for the chosen measure (NFL: cash or cap); MLB has one.
+const rows = key => S.measures ? loaded[key].filter(r => r.measure === state.measure) : loaded[key]
+const width = name => { const w = $(name).clientWidth; return w > 100 ? w - 32 : 720 }
+
+function renderSeason(){
+const seasonRows = paySeasonRows(rows("seasons"), state.season)
+const status = seasonRows[0] && seasonRows[0].status
+const label = status === "forecast" ? " (preseason forecast)" : status === "in progress" ? " (in progress)" : ""
+$("Hero").innerHTML = payHeroHtml(seasonRows, rows("league"), state.season, payModelMiss(rows("seasons"), S), S)
+const scatter = payScatterSvg(seasonRows, state.team, width("Scatter"), S)
+$("Scatter").innerHTML = scatter ? `<div class="vizHead"><b>${state.season}${label}: wins against spending</b>
+<span class="vizKey"><i class="payKeyGood"></i>More value <i class="payKeyMid"></i>Average <i class="payKeyBad"></i>Less value</span>
+<span class="vizSub">Each dot is a team. Further right spent more than the league average; higher won more. Teams above the curve got more wins per dollar than the league did.</span></div>${scatter}`
+: `<div class="vizHead"><b>${state.season}${label}</b><span class="vizSub">No games played yet - the table shows expected wins from spending alone.</span></div>`
+$("SeasonTitle").textContent = `${state.season} season${label}`
+$("Table").innerHTML = paySeasonTableHtml(seasonRows, state.sortKey, state.team, S)
+}
+
+function renderTeam(){
+if(!state.team){ return }
+const own = rows("seasons").filter(r => r.franchise === state.team)
+if(!own.some(r => Number(r.season) === state.teamSeason)){ state.teamSeason = Number(state.season) }
+const pick = own.find(r => Number(r.season) === state.teamSeason) || own[own.length - 1]
+$("TeamPick").value = state.team
+$("TeamChart").innerHTML = `<div class="vizHead"><b>${mlbEsc(S.name(state.team))}: ${S.perLabel}, actual and expected</b>
+<span class="vizKey"><i class="payKeyActual"></i>Wins <i class="payKeyExpected"></i>Expected from spending</span>
+<span class="vizSub">Click a season to see the 10 seasons its expected wins came from.</span></div>${payTeamChartSvg(rows("seasons"), state.team, width("TeamChart"), S)}`
+$("Neighbors").innerHTML = payNeighborsHtml(rows("seasons"), pick, S)
+}
+
+function selectTeam(team, season = null){
+state.team = team
+state.teamSeason = season === null ? Number(state.season) : season
+renderSeason()
+renderTeam()
+}
+
+function renderGrid(){
+$("GridTabs").innerHTML = payGridTabsHtml(state.gridKey)
+$("Grid").innerHTML = payGridHtml(rows("seasons"), state.gridKey, S)
+}
+
+function renderAll(){
+$("Franchises").innerHTML = payFranchiseTableHtml(rows("franchises"), S)
+$("League").innerHTML = payLeagueChartSvg(rows("league"), width("League"), S)
+renderGrid()
+renderSeason()
+renderTeam()
+}
+
+async function download(){
+const button = $("Download")
+const label = button.textContent
+button.disabled = true
+button.textContent = "Building..."
+try{
+const sheets = payWorkbookSheets(rows("seasons"), rows("franchises"), rows("league"), S)
+const name = S.measures ? S.workbook.replace(".xlsx", `_${state.measure}.xlsx`) : S.workbook
+await payWriteWorkbook(sheets, name)
 button.textContent = label
 }catch(e){
 console.log(e)
@@ -132,73 +146,75 @@ button.textContent = "Download unavailable here"
 button.disabled = false
 }
 
-function wirePayroll(){
-document.getElementById("paySeasonPick").addEventListener("change", e => {
-paySeason = Number(e.target.value)
-payTeamSeason = paySeason
-renderPaySeason()
-renderPayTeam()
+const toHistory = () => $("TeamSection").scrollIntoView({ behavior: "smooth" })
+$("SeasonPick").addEventListener("change", e => {
+state.season = Number(e.target.value)
+state.teamSeason = state.season
+renderSeason()
+renderTeam()
 })
-document.getElementById("payTeamPick").addEventListener("change", e => selectPayTeam(e.target.value))
-document.getElementById("payTable").addEventListener("click", e => {
+if(S.measures){
+$("Measures").addEventListener("click", e => {
+const button = e.target.closest("[data-pay-measure]")
+if(!button){ return }
+state.measure = button.dataset.payMeasure
+$("Measures").querySelectorAll("[data-pay-measure]").forEach(b => b.classList.toggle("active", b === button))
+renderAll()
+})
+}
+$("TeamPick").addEventListener("change", e => selectTeam(e.target.value))
+$("Table").addEventListener("click", e => {
 const sort = e.target.closest("[data-pay-sort]")
-if(sort){ paySortKey = sort.dataset.paySort; renderPaySeason(); return }
+if(sort){ state.sortKey = sort.dataset.paySort; renderSeason(); return }
 const team = e.target.closest("[data-pay-team]")
-if(team){ selectPayTeam(team.dataset.payTeam); document.getElementById("payTeamSection").scrollIntoView({ behavior: "smooth" }) }
+if(team){ selectTeam(team.dataset.payTeam); toHistory() }
 })
-document.getElementById("payScatter").addEventListener("click", e => {
+$("Scatter").addEventListener("click", e => {
 const team = e.target.closest("[data-pay-team]")
-if(team){ selectPayTeam(team.dataset.payTeam) }
+if(team){ selectTeam(team.dataset.payTeam) }
 })
-document.getElementById("payTeamChart").addEventListener("click", e => {
+$("TeamChart").addEventListener("click", e => {
 const season = e.target.closest("[data-pay-season]")
-if(season){ payTeamSeason = Number(season.dataset.paySeason); renderPayTeam() }
+if(season){ state.teamSeason = Number(season.dataset.paySeason); renderTeam() }
 })
-document.getElementById("payFranchises").addEventListener("click", e => {
+$("Franchises").addEventListener("click", e => {
 const team = e.target.closest("[data-pay-team]")
-if(team){ selectPayTeam(team.dataset.payTeam); document.getElementById("payTeamSection").scrollIntoView({ behavior: "smooth" }) }
+if(team){ selectTeam(team.dataset.payTeam); toHistory() }
 })
-document.getElementById("payGridTabs").addEventListener("click", e => {
+$("GridTabs").addEventListener("click", e => {
 const tab = e.target.closest("[data-pay-grid]")
-if(tab){ payGridKey = tab.dataset.payGrid; renderPayGrid() }
+if(tab){ state.gridKey = tab.dataset.payGrid; renderGrid() }
 })
-document.getElementById("payDownload").addEventListener("click", downloadPayWorkbook)
+$("Download").addEventListener("click", download)
 let resizeTimer = null
 window.addEventListener("resize", () => {
 clearTimeout(resizeTimer)
 resizeTimer = setTimeout(() => {
-if(paySeason === null){ return }
-renderPaySeason()
-renderPayTeam()
-document.getElementById("payLeague").innerHTML = payLeagueChartSvg(payLeague, payWidth("payLeague"))
+if(state.season === null || !root.offsetParent){ return }
+renderSeason()
+renderTeam()
+$("League").innerHTML = payLeagueChartSvg(rows("league"), width("League"), S)
 }, 150)
+})
+
+Promise.all([payOptionalCSV(S.files.seasons), payOptionalCSV(S.files.franchises), payOptionalCSV(S.files.league)])
+.then(([seasons, franchises, league]) => {
+Object.assign(loaded, { seasons, franchises, league })
+if(!seasons.length){
+$("Hero").innerHTML = "No payroll data published yet."
+return
+}
+state.season = payDefaultSeason(rows("seasons"))
+$("SeasonPick").innerHTML = paySeasons(rows("seasons")).map(s =>
+`<option value="${s}"${s === state.season ? " selected" : ""}>${s}</option>`).join("")
+const teams = [...new Set(rows("seasons").map(r => r.franchise))].sort((a, b) => S.name(a).localeCompare(S.name(b)))
+$("TeamPick").innerHTML = teams.map(t => `<option value="${t}">${mlbEsc(S.name(t))}</option>`).join("")
+// Open the team view on the season's best value.
+const best = paySeasonRows(rows("seasons"), state.season).filter(r => mlbNum(r.pe_index) !== null).sort((a, b) => b.pe_index - a.pe_index)[0]
+state.team = best ? best.franchise : teams[0]
+renderAll()
 })
 }
 
-async function loadPayroll(){
-const [seasons, franchises, league] = await Promise.all([
-payOptionalCSV("./data/payroll_seasons.csv"), payOptionalCSV("./data/payroll_franchises.csv"), payOptionalCSV("./data/payroll_league.csv"),
-])
-paySeasonsAll = seasons
-payFranchises = franchises
-payLeague = league
-if(!seasons.length){
-document.getElementById("payHero").innerHTML = "No payroll data published yet."
-return
-}
-paySeason = payDefaultSeason(seasons)
-document.getElementById("paySeasonPick").innerHTML = paySeasons(seasons).map(s =>
-`<option value="${s}"${s === paySeason ? " selected" : ""}>${s}</option>`).join("")
-const teams = [...new Set(seasons.map(r => r.franchise))].sort((a, b) => mlbTeam(a).localeCompare(mlbTeam(b)))
-document.getElementById("payTeamPick").innerHTML = teams.map(t => `<option value="${t}">${mlbEsc(mlbTeam(t))}</option>`).join("")
-// Open the team view on the season's best value.
-const best = paySeasonRows(seasons, paySeason).filter(r => mlbNum(r.pe_index) !== null).sort((a, b) => b.pe_index - a.pe_index)[0]
-document.getElementById("payFranchises").innerHTML = payFranchiseTableHtml(franchises)
-document.getElementById("payLeague").innerHTML = payLeagueChartSvg(league, payWidth("payLeague"))
-renderPayGrid()
-selectPayTeam(best ? best.franchise : teams[0])
-}
-
 installVizTips()
-wirePayroll()
-loadPayroll()
+payrollView(PAY_MLB, "pay", "payrollView")

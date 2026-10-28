@@ -75,9 +75,9 @@ def franchise_code(name) -> str:
     return _ALIAS[key]
 
 
-def load_payrolls(path: str) -> pd.DataFrame:
+def load_payrolls(path: str, code=franchise_code) -> pd.DataFrame:
     df = pd.read_csv(path)
-    df["franchise"] = df["franchise"].map(franchise_code)
+    df["franchise"] = df["franchise"].map(code)
     for col in ("wins", "losses"):
         df[col] = pd.to_numeric(df[col], errors="coerce")
     dupes = df[df.duplicated(["season", "franchise"], keep=False)]
@@ -117,11 +117,12 @@ def _recent_mean(df: pd.DataFrame, col: str) -> pd.Series:
     return out
 
 
-def league_seasons(seasons: pd.DataFrame) -> pd.DataFrame:
+def league_seasons(seasons: pd.DataFrame, full_season_games: int = FULL_SEASON_GAMES) -> pd.DataFrame:
     """Per season: teams, total and average payroll, and the league's price
     per win and per game (unplayed seasons: per scheduled game).
-    `price_per_81_wins` is the average payroll over 81 wins - the price of
-    a win as if every season were 162 games (2020's 60 and the strike-cut
+    `price_per_win_full_season` is the average payroll over an average
+    team's wins in a full season (81 of 162) - the price of a win as if
+    every season were full length (2020's 60 games and the strike-cut
     1994-95 seasons otherwise look several times dearer or cheaper)."""
     g = seasons.groupby("season")
     league = pd.DataFrame({
@@ -130,24 +131,29 @@ def league_seasons(seasons: pd.DataFrame) -> pd.DataFrame:
     })
     league["price_per_win"] = league["total_payroll"] / league["wins"]
     league["price_per_game"] = league["total_payroll"] / league["games"]
-    league["price_per_81_wins"] = league["average_payroll"] / (FULL_SEASON_GAMES / 2)
+    league["price_per_win_full_season"] = league["average_payroll"] / (full_season_games / 2)
     return league.reset_index()
 
 
-def season_metrics(payrolls: pd.DataFrame, final_seasons=None) -> pd.DataFrame:
+def season_metrics(payrolls: pd.DataFrame, final_seasons=None, min_years_back: int = NEIGHBOR_MIN_YEARS_BACK,
+                   full_season_games: int = FULL_SEASON_GAMES) -> pd.DataFrame:
     """Every metric per team-season. `final_seasons`: seasons whose records
-    are complete (neighbour pool); default every season with records."""
+    are complete (neighbour pool); default every season with records.
+    `min_years_back`: how many seasons earlier a comparable season must be;
+    `full_season_games`: a season's games, for one not played yet."""
     df = payrolls[["season", "franchise", "payroll", "wins", "losses"]].copy()
     played = df["wins"].notna() & df["losses"].notna()
-    df["games"] = np.where(played, df["wins"] + df["losses"], FULL_SEASON_GAMES)
+    df["games"] = np.where(played, df["wins"] + df["losses"], full_season_games)
     df["wpct"] = df["wins"] / (df["wins"] + df["losses"])
     df["price_per_game"] = df["payroll"] / df["games"]
-    df["price_per_win"] = df["payroll"] / df["wins"]
-    league = league_seasons(df).set_index("season")
+    # A winless team (an 0-16 NFL season) has no price per win.
+    df["price_per_win"] = df["payroll"] / df["wins"].where(df["wins"] > 0)
+    league = league_seasons(df, full_season_games).set_index("season")
     df["league_price_per_win"] = df["season"].map(league["price_per_win"])
     df["price_per_win_avg"] = df["price_per_win"] / df["league_price_per_win"]
     df["win_avg"] = df["wins"] / (df["games"] / 2)
-    df["pe_index"] = df["win_avg"] / df["price_per_win_avg"]
+    # Win/Average over Price/Win/Average, written so no wins gives 0.
+    df["pe_index"] = df["win_avg"] * df["wins"] * df["league_price_per_win"] / df["payroll"]
     df["relative_payroll"] = df["price_per_game"] / df["season"].map(league["price_per_game"])
     df["payroll_rank"] = df.groupby("season")["payroll"].transform(_rank_desc)
     df["wins_rank"] = df.groupby("season")["wins"].transform(_rank_desc)
@@ -155,7 +161,7 @@ def season_metrics(payrolls: pd.DataFrame, final_seasons=None) -> pd.DataFrame:
     if final_seasons is None:
         final_seasons = df.loc[played, "season"].unique()
     pool = df[played & df["season"].isin(final_seasons)]
-    df = df.join(_neighbors(df, pool))
+    df = df.join(_neighbors(df, pool, min_years_back))
     df["year_fo_score"] = df["win_avg"] - df["baseline_win_avg"]
     df["fo_score"] = _recent_mean(df, "year_fo_score").fillna(0).where(df["baseline_win_avg"].notna())
     df["expected_win_avg"] = df["baseline_win_avg"] + df["fo_score"]
@@ -171,9 +177,9 @@ def season_metrics(payrolls: pd.DataFrame, final_seasons=None) -> pd.DataFrame:
     return df.drop(columns=["league_price_per_win"])
 
 
-def _neighbors(df: pd.DataFrame, pool: pd.DataFrame) -> pd.DataFrame:
+def _neighbors(df: pd.DataFrame, pool: pd.DataFrame, min_years_back: int = NEIGHBOR_MIN_YEARS_BACK) -> pd.DataFrame:
     """The NEIGHBORS pool seasons closest in relative payroll to each row,
-    from other franchises at least NEIGHBOR_MIN_YEARS_BACK seasons earlier:
+    from other franchises at least `min_years_back` seasons earlier:
     their mean Win/Average and who they were ("2008 SEA;2001 KC;...")."""
     rel = pool["relative_payroll"].to_numpy()
     wins = pool["win_avg"].to_numpy()
@@ -182,7 +188,7 @@ def _neighbors(df: pd.DataFrame, pool: pd.DataFrame) -> pd.DataFrame:
     labels = (pool["season"].astype(str) + " " + pool["franchise"]).to_numpy()
     baseline, names = [], []
     for row in df.itertuples():
-        ok = (franchises != row.franchise) & (row.season - seasons >= NEIGHBOR_MIN_YEARS_BACK)
+        ok = (franchises != row.franchise) & (row.season - seasons >= min_years_back)
         if ok.sum() < NEIGHBORS:
             baseline.append(np.nan)
             names.append("")
@@ -214,13 +220,13 @@ def franchise_summary(seasons: pd.DataFrame) -> pd.DataFrame:
     return out.reset_index().sort_values("average_effectiveness", ascending=False)
 
 
-def model_error_wins(seasons: pd.DataFrame) -> float:
-    """Mean absolute miss of expected wins, per 162 games, over final
+def model_error_wins(seasons: pd.DataFrame, full_season_games: int = FULL_SEASON_GAMES) -> float:
+    """Mean absolute miss of expected wins, per full season, over final
     seasons with a baseline."""
     s = seasons[(seasons["status"] == "final") & seasons["expected_wins"].notna()]
     if s.empty:
         return float("nan")
-    return float((s["wins_above_expected"].abs() / s["games"].astype(float)).mean() * FULL_SEASON_GAMES)
+    return float((s["wins_above_expected"].abs() / s["games"].astype(float)).mean() * full_season_games)
 
 
 def standings_records(raw: dict, season: int) -> pd.DataFrame:

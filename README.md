@@ -3089,6 +3089,21 @@ that workbook (same sheets and colour scales) in the browser.
 - Expected wins compare only with other franchises' seasons 11 or more
   years earlier, so seasons before 1999 have none.
 
+## NFL payroll value (`docs/nfl.html`'s Payroll tab, `nfl_payroll.py`)
+
+The MLB Payroll page's numbers for NFL teams, 2014 on, on two measures
+(a switch on the tab): **cash paid** (what teams actually paid players
+that season, signing bonuses counted when paid) and **cap spending** (the
+cap charges - the hard cap keeps every team close). Both are summed from
+OverTheCap's player contracts (nflverse's `load_contracts`), so dead money
+isn't included; records come from nflverse schedules (a tie is half a win
+and half a loss). Expected wins compare a season with other teams' seasons
+from any earlier year (MLB's: 11 or more years earlier), so they start in
+2015. The weekly NFL update runs `scripts/build_nfl_payroll_value.py`,
+which writes `data/nfl_payroll/team_payroll.csv` and
+`docs/data/nfl_payroll_*.csv`; the tab shares `docs/payroll_render.js` and
+`docs/payroll.js` with the MLB page.
+
 ## NFL Automated Game Picks (`docs/nfl.html`'s Picks tab)
 
 > **Predicted point totals (2026-10-12, improved 2026-10-13).** Each game
