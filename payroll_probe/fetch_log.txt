@@ -1,5 +1,0 @@
-2024 2026 https://web.archive.org/web/20261015203605/https://www.thebaseballcube.com/content/payroll_year/2024/ 30 teams
-2025 2026 https://web.archive.org/web/20260203211700/https://www.thebaseballcube.com/content/payroll_year/2025/ 30 teams
-2026 2026 https://web.archive.org/web/2026/https://www.thebaseballcube.com/content/payroll_year/2026/ 0 teams
-2026 2025 https://web.archive.org/web/2025/https://www.thebaseballcube.com/content/payroll_year/2026/ 0 teams
-60 payrolls changed
