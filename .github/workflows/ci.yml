@@ -50,6 +50,9 @@ jobs:
       - name: Run payroll_render.js unit tests
         run: node --test docs/payroll_render.test.js
 
+      - name: Run install.js / sw.js unit tests
+        run: node --test docs/install.test.js
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

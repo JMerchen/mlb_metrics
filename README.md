@@ -3053,6 +3053,18 @@ original KNN comparable search. See `config.py`'s Age Curves section for
 the model's selected hyperparameters and `age_curve_ml.py`'s module
 docstring for the full methodology.
 
+## Installable app (`docs/manifest.webmanifest`, `docs/sw.js`, `docs/install.js`)
+
+The site installs as an app (a progressive web app) from its own pages - no
+app store. `install.js`, loaded by every page, registers the service worker
+and adds an **Install app** button to the header: Chrome, Edge and Android
+install from the button; iPhone and iPad (no install prompt) get Share →
+Add to Home Screen steps. `sw.js` keeps a copy of each page, script and
+data file as it's fetched (network first, so the app is never staler than
+the site) and serves it offline; icons and the version-pinned CDN
+libraries come from the cache first. Bump `SW_VERSION` to clear what's
+kept. Icons are in `docs/icons/`.
+
 ## Payroll value (`docs/payroll.html`, `payroll_value.py`)
 
 The MLB Payroll tab: which teams get the most winning for their money,
