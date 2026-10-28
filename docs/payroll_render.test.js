@@ -25,9 +25,11 @@ const SEASONS = [
   row(2026, "TB", { status: "forecast", wins: "", losses: "", win_avg: "", pe_index: "", wins_rank: "", wins_above_expected: "", expected_wins: "88" }),
 ]
 const LEAGUE = [
-  { season: "2003", teams: "30", average_payroll: "70000000", price_per_win: "860000" },
-  { season: "2025", teams: "30", average_payroll: "160000000", price_per_win: "2000000" },
-  { season: "2026", teams: "30", average_payroll: "170000000", price_per_win: "" },
+  { season: "2003", teams: "30", average_payroll: "70000000", wins: "2430", price_per_win: "864198", price_per_81_wins: "864198" },
+  // 2020: 60 games, so per actual win it's 2.7x dearer; per 81 wins it isn't.
+  { season: "2020", teams: "30", average_payroll: "140000000", wins: "900", price_per_win: "4666667", price_per_81_wins: "1728395" },
+  { season: "2025", teams: "30", average_payroll: "160000000", wins: "2430", price_per_win: "1975309", price_per_81_wins: "1975309" },
+  { season: "2026", teams: "30", average_payroll: "170000000", wins: "", price_per_win: "", price_per_81_wins: "2098765" },
 ]
 
 test("formats money, ratios and signed numbers", () => {
@@ -77,7 +79,8 @@ test("hero tiles name the best and worst value and the price of a win", () => {
   assert.match(out, /Least value Yankees 0\.40/)
   assert.match(out, /Price of a win \$2\.0M/)
   assert.match(out, /miss by 9\.4 wins/)
-  assert.match(text(p.payHeroHtml(p.paySeasonRows(SEASONS, 2026), LEAGUE, 2026, null)), /Average payroll \$170\.0M 30 teams · season not played yet/)
+  assert.match(out, /average payroll \$160\.0M ÷ 81 wins/)
+  assert.match(text(p.payHeroHtml(p.paySeasonRows(SEASONS, 2026), LEAGUE, 2026, null)), /Price of a win \$2\.1M average payroll \$170\.0M ÷ 81 wins/)
 })
 
 test("model miss is the mean absolute wins vs. expected per 162", () => {
@@ -120,8 +123,11 @@ test("grids: years by team with tied ranks averaged; final seasons only", () => 
   assert.match(text(p.payGridTabsHtml("payrank_wae")), /By team By payroll rank By wins rank Effectiveness Wins vs\. expected Front office score Wins rank/)
 })
 
-test("league chart plots each season's price of a win", () => {
-  assert.match(p.payLeagueChartSvg(LEAGUE), /2025: \$2\.0M of payroll per win/)
+test("league chart plots each played season's price of a win over 81 wins", () => {
+  const svg = p.payLeagueChartSvg(LEAGUE)
+  assert.match(svg, /2025: \$2\.0M of payroll per win \(average payroll ÷ 81\)/)
+  assert.match(svg, /2020: \$1\.7M of payroll per win/)
+  assert.doesNotMatch(svg, /2026:/)
 })
 
 test("workbook: the original's sheets, neighbours spelled out, grid colour scales", () => {
@@ -140,4 +146,17 @@ test("workbook: the original's sheets, neighbours spelled out, grid colour scale
   const winRank = sheets.find(s => s.name === "Team By Year Win Rank")
   assert.equal(winRank.gridScale.higherIsGreen, false)
   assert.deepEqual(winRank.rows.map(r => r[0]), [2003, 2004, 2025])
+})
+
+test("colour runs green (value) through grey to red (overspending), inked to read", () => {
+  assert.equal(p.payColor(100), "rgb(71,171,79)")
+  assert.equal(p.payColor(50), "rgb(91,98,112)")
+  assert.equal(p.payColor(0), "rgb(165,50,52)")
+  assert.equal(p.payInk(100), "#0b0d10")
+  assert.equal(p.payInk(0), "#fff")
+  assert.equal(p.payInk(50), "#fff")
+  const chip = p.paySeasonTableHtml(p.paySeasonRows(SEASONS, 2025), "pe_index")
+  // Three teams: the best sits on the green side, the worst on the red.
+  assert.match(chip, /background:rgb\(78,146,90\);color:#0b0d10">2\.20/)
+  assert.match(chip, /background:rgb\(140,66,72\);color:#fff">0\.40/)
 })

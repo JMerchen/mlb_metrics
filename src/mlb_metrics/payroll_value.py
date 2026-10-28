@@ -119,7 +119,10 @@ def _recent_mean(df: pd.DataFrame, col: str) -> pd.Series:
 
 def league_seasons(seasons: pd.DataFrame) -> pd.DataFrame:
     """Per season: teams, total and average payroll, and the league's price
-    per win and per game (unplayed seasons: per scheduled game)."""
+    per win and per game (unplayed seasons: per scheduled game).
+    `price_per_81_wins` is the average payroll over 81 wins - the price of
+    a win as if every season were 162 games (2020's 60 and the strike-cut
+    1994-95 seasons otherwise look several times dearer or cheaper)."""
     g = seasons.groupby("season")
     league = pd.DataFrame({
         "teams": g.size(), "total_payroll": g["payroll"].sum(), "average_payroll": g["payroll"].mean(),
@@ -127,6 +130,7 @@ def league_seasons(seasons: pd.DataFrame) -> pd.DataFrame:
     })
     league["price_per_win"] = league["total_payroll"] / league["wins"]
     league["price_per_game"] = league["total_payroll"] / league["games"]
+    league["price_per_81_wins"] = league["average_payroll"] / (FULL_SEASON_GAMES / 2)
     return league.reset_index()
 
 
