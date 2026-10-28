@@ -3,9 +3,11 @@
 // so node tests can check them; payroll.js loads the CSVs and wires the DOM.
 //
 // The data comes from scripts/build_payroll_value.py (payroll_value.py has
-// the definitions). Colour is mlb_render.js's diverging blue / orange pair
-// with a grey midpoint, by percentile within what's on screen - blue the
-// better side. The downloaded workbook keeps the original's red-yellow-green.
+// the definitions). Colour runs green (more value) through grey to red
+// (less value, overspending), by percentile within what's on screen -
+// checked with the dataviz palette validator on --bg-card (colour-blind
+// separation ΔE 16), and every coloured mark carries its number. The
+// downloaded workbook keeps the original's red-yellow-green.
 
 // Division order, as the original workbook's grids had it.
 const PAY_TEAM_ORDER = ["NYY", "BOS", "TB", "BAL", "TOR", "KC", "MIN", "DET", "CWS", "CLE", "TEX", "HOU", "SEA", "ATH",
@@ -13,6 +15,26 @@ const PAY_TEAM_ORDER = ["NYY", "BOS", "TB", "BAL", "TOR", "KC", "MIN", "DET", "C
 
 // Nicknames the franchises went by before their current one.
 const PAY_OLD_NAMES = [["WSH", 2004, "Expos"], ["TB", 2007, "Devil Rays"], ["CLE", 2021, "Indians"]]
+
+const PAY_GOOD = [71, 171, 79], PAY_MID = [91, 98, 112], PAY_BAD = [165, 50, 52]
+
+// Fill for a percentile (100 = best value), and the ink that reads on it.
+function payFill(p){
+if(p === null){ return PAY_MID }
+const mix = (a, b, t) => a.map((c, i) => Math.round(c + (b[i] - c) * t))
+return p >= 50 ? mix(PAY_MID, PAY_GOOD, (p - 50) / 50) : mix(PAY_BAD, PAY_MID, p / 50)
+}
+
+function payColor(p){
+return `rgb(${payFill(p).join(",")})`
+}
+
+// Dark ink on the light greens, white elsewhere (whichever contrasts more).
+function payInk(p){
+const lum = payFill(p).map(c => { c /= 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 })
+const L = 0.2126 * lum[0] + 0.7152 * lum[1] + 0.0722 * lum[2]
+return (L + 0.05) / 0.0548 > 1.05 / (L + 0.05) ? "#0b0d10" : "#fff"
+}
 
 function payTeamName(code, season){
 const old = PAY_OLD_NAMES.find(([c, last]) => c === code && Number(season) <= last)
@@ -89,7 +111,7 @@ return ascending ? va - vb : vb - va
 // A coloured chip for a value, by its percentile in `pool`.
 function payChip(value, pool, text, higherIsBetter = true){
 const p = mlbPercentile(pool, value, higherIsBetter ? 1 : -1)
-return `<span class="payChip" style="background:${mlbPercentileColor(p)}">${mlbEsc(text)}</span>`
+return `<span class="payChip" style="background:${payColor(p)};color:${payInk(p)}">${mlbEsc(text)}</span>`
 }
 
 function paySeasonTableHtml(rows, sortKey = "pe_index", selected = null){
@@ -178,7 +200,7 @@ const cx = x(Number(r.relative_payroll)), cy = y(payPer162(r))
 const name = payTeamName(r.franchise, r.season)
 const tip = `${name}: ${payRecord(r)} on ${payMoney(r.payroll)} (${payRatio(r.relative_payroll)}× the average payroll) - effectiveness ${payRatio(r.pe_index)}${mlbNum(r.expected_wins) === null ? "" : `, expected ${Math.round(r.expected_wins)} wins`}`
 const label = labelled.has(r.franchise) ? `<text x="${f(cx + 9)}" y="${f(cy + 4)}" class="payDotLabel">${mlbEsc(r.franchise)}</text>` : ""
-return `<g data-tip="${mlbEsc(tip)}" data-pay-team="${mlbEsc(r.franchise)}" tabindex="0" class="payDot${r.franchise === selected ? " paySelectedDot" : ""}"><circle cx="${f(cx)}" cy="${f(cy)}" r="12" class="payHit"/><circle cx="${f(cx)}" cy="${f(cy)}" r="6" style="fill:${mlbPercentileColor(p)}"/>${label}</g>`
+return `<g data-tip="${mlbEsc(tip)}" data-pay-team="${mlbEsc(r.franchise)}" tabindex="0" class="payDot${r.franchise === selected ? " paySelectedDot" : ""}"><circle cx="${f(cx)}" cy="${f(cy)}" r="12" class="payHit"/><circle cx="${f(cx)}" cy="${f(cy)}" r="6" style="fill:${payColor(p)}"/>${label}</g>`
 }).join("")
 const summary = `${pts.length} teams' wins per 162 games against payroll next to the league average, with the break-even value curve`
 return `<svg class="payChart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${mlbEsc(summary)}">
@@ -325,7 +347,7 @@ const v = g.cell(y, c)
 if(v === null){ return `<td></td>` }
 const p = mlbPercentile(values, v, higher ? 1 : -1)
 const who = rowsBy === "franchise" ? `${y} ${payTeamName(c, y)}` : `${y}, ${mlbOrdinal(c)} in ${rowsBy === "payroll_rank" ? "payroll" : "wins"}`
-return `<td class="payCell" style="background:${mlbPercentileColor(p)}" data-tip="${mlbEsc(`${who}: ${label.toLowerCase()} ${payGridValue(v, measure)}`)}">${payGridValue(v, measure)}</td>`
+return `<td class="payCell" style="background:${payColor(p)};color:${payInk(p)}" data-tip="${mlbEsc(`${who}: ${label.toLowerCase()} ${payGridValue(v, measure)}`)}">${payGridValue(v, measure)}</td>`
 }).join("")}</tr>`).join("")
 return `<div class="scrollbox payGridBox"><table class="payGridTable"><thead>${head}</thead><tbody>${body}</tbody></table></div>`
 }
@@ -451,7 +473,7 @@ return sheets
 
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
-payTeamName, payMoney, payRatio, paySigned, payPer162, paySeasons, paySeasonRows, payDefaultSeason, paySortRows,
+payColor, payInk, payTeamName, payMoney, payRatio, paySigned, payPer162, paySeasons, paySeasonRows, payDefaultSeason, paySortRows,
 paySeasonTableHtml, payHeroHtml, payModelMiss, payScatterSvg, payTeamChartSvg, payNeighborsHtml, payFranchiseTableHtml,
 payGrid, payGridHtml, payGridTabsHtml, payLeagueChartSvg, payWorkbookSheets, PAY_GRIDS, PAY_GRID_SHEETS,
 }

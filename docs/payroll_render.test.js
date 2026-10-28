@@ -141,3 +141,16 @@ test("workbook: the original's sheets, neighbours spelled out, grid colour scale
   assert.equal(winRank.gridScale.higherIsGreen, false)
   assert.deepEqual(winRank.rows.map(r => r[0]), [2003, 2004, 2025])
 })
+
+test("colour runs green (value) through grey to red (overspending), inked to read", () => {
+  assert.equal(p.payColor(100), "rgb(71,171,79)")
+  assert.equal(p.payColor(50), "rgb(91,98,112)")
+  assert.equal(p.payColor(0), "rgb(165,50,52)")
+  assert.equal(p.payInk(100), "#0b0d10")
+  assert.equal(p.payInk(0), "#fff")
+  assert.equal(p.payInk(50), "#fff")
+  const chip = p.paySeasonTableHtml(p.paySeasonRows(SEASONS, 2025), "pe_index")
+  // Three teams: the best sits on the green side, the worst on the red.
+  assert.match(chip, /background:rgb\(78,146,90\);color:#0b0d10">2\.20/)
+  assert.match(chip, /background:rgb\(140,66,72\);color:#fff">0\.40/)
+})
