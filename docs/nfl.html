@@ -70,6 +70,7 @@ this block isn't in the shared stylesheet. */
 <button class="tabButton" data-nfl-tab="stats" onclick="selectNflTab('stats')">Stats</button>
 <button class="tabButton" data-nfl-tab="playerprops" onclick="selectNflTab('playerprops')">Player Props</button>
 <button class="tabButton" data-nfl-tab="prospects" onclick="selectNflTab('prospects')">Prospects</button>
+<button class="tabButton" data-nfl-tab="payroll" onclick="selectNflTab('payroll')">Payroll</button>
 </div>
 
 <div id="gamePicksSection" style="display:none">
@@ -248,6 +249,18 @@ id="nflUnitByes">
 
 </div>
 
+<div id="nflPayrollSection" style="display:none">
+
+<h3>
+Payroll value
+</h3>
+
+<p class="sectionIntro">Winning isn't the only measure of success - winning for the money is. Each team's season is measured against its own league year. Spending is summed from OverTheCap's player contracts, 2014 on: <b>cash paid</b> (what teams actually paid, signing bonuses counted when paid - it varies most) or <b>cap spending</b> (the cap charges; the hard cap keeps everyone close). Dead money - players since released - isn't included. Effectiveness above 1 means a team bought more wins per dollar than the league did; expected wins are what the seasons that spent most like it won (any earlier season, from 2015).</p>
+
+<div id="nflPayrollView"></div>
+
+</div>
+
 <div id="draftBoardSection" style="display:none">
 
 <h3>
@@ -327,6 +340,10 @@ Loading...
 <script src="./nfl_stats.js"></script>
 
 <script src="./nfl_whatif.js"></script>
+
+<script src="./payroll_render.js"></script>
+
+<script src="./payroll.js"></script>
 
 <script src="./nfl.js"></script>
 

@@ -1797,7 +1797,9 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 /* ---- MLB Payroll page (docs/payroll_render.js) ----
    Green (value) to red (overspending) through grey - not the other MLB
    pages' blue / orange, which reads as hot and cold here. Chips and grid
-   cells carry their value, inked for contrast in payroll_render.js. */
+   cells carry their value, inked for contrast in payroll_render.js. Lines
+   (wins, the price of a win) take the text ink, not the page accent -
+   the NFL page's accent is green, which here means value. */
 :root{
 --pay-good:#47ab4f;
 --pay-bad:#a53234;
@@ -1829,8 +1831,8 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 .payChart .paySelectedDot circle:not(.payHit){stroke:var(--text);stroke-width:2.5;}
 .payChart .payDot{cursor:pointer;}
 .payChart .payDotLabel{fill:var(--text);font-size:11px;font-weight:700;font-family:var(--font);}
-.payChart .payActualLine{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;}
-.payChart .payActualDot{fill:var(--accent);stroke:var(--bg-card);stroke-width:1.5;}
+.payChart .payActualLine{fill:none;stroke:var(--text);stroke-width:2;stroke-linejoin:round;}
+.payChart .payActualDot{fill:var(--text);stroke:var(--bg-card);stroke-width:1.5;}
 .payChart .payExpectedLine{fill:none;stroke:var(--text-dim);stroke-width:2;stroke-dasharray:5 4;}
 .payChart .payActualLabel{fill:var(--text);}
 .payChart [data-pay-season]{cursor:pointer;}
@@ -1838,7 +1840,7 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 .vizKey .payKeyGood{background:var(--pay-good);}
 .vizKey .payKeyMid{background:var(--mlb-mid);}
 .vizKey .payKeyBad{background:var(--pay-bad);}
-.vizKey .payKeyActual{width:12px;height:3px;background:var(--accent);}
+.vizKey .payKeyActual{width:12px;height:3px;background:var(--text);}
 .vizKey .payKeyExpected{width:14px;height:0;border-top:2px dashed var(--text-dim);}
 .payNeighbors{margin:0 0 20px;}
 .payNeighbor{display:inline-flex;align-items:center;gap:5px;margin:0 6px 6px 0;padding:3px 8px;border:1px solid var(--border);border-radius:999px;background:var(--bg-raised);font-size:12px;color:var(--text-dim);font-variant-numeric:tabular-nums;}

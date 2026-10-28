@@ -151,9 +151,10 @@ PAGE_JS_PATCHERS = {
     "mlb_render.js": _patch_mlb_render_js,
     "nfl_stats.js": _patch_nfl_stats_js,
     "app.js": _patch_app_js,
+    # payroll.js before nfl.js: the NFL page's Payroll tab starts its view.
+    "payroll.js": lambda js: _patch_loadcsv(js, "payroll.js"),
     "nfl.js": lambda js: _patch_loadcsv(js, "nfl.js"),
     "age-curves.js": lambda js: _patch_loadcsv(js, "age-curves.js"),
-    "payroll.js": lambda js: _patch_loadcsv(js, "payroll.js"),
 }
 
 # Verbatim - no loadCSV/network/image dependency to patch. Each file gets

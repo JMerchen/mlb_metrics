@@ -122,9 +122,9 @@ def test_league_price_of_a_win_over_81_wins():
     df.loc[df["season"] == 2020, "wins"] = [33, 30, 27]  # a 60-game season
     df.loc[df["season"] == 2020, "losses"] = [27, 30, 33]
     league = pv.league_seasons(pv.season_metrics(df)).set_index("season")
-    assert league.loc[2019, "price_per_81_wins"] == pytest.approx(league.loc[2019, "price_per_win"])
+    assert league.loc[2019, "price_per_win_full_season"] == pytest.approx(league.loc[2019, "price_per_win"])
     assert league.loc[2020, "price_per_win"] == pytest.approx(1200 / 90)
-    assert league.loc[2020, "price_per_81_wins"] == pytest.approx(400 / 81)
+    assert league.loc[2020, "price_per_win_full_season"] == pytest.approx(400 / 81)
 
 
 def test_franchise_summary_and_model_error():
