@@ -3,12 +3,12 @@ name: Payroll source probe (temporary)
 on:
   push:
     branches: [claude/baseball-hot-cold-eval-juiywk]
-    paths: [.github/workflows/payroll_probe.yml]
+    paths: [.github/workflows/payroll_probe.yml, payroll_probe/browser_fetch.py]
 
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
@@ -17,18 +17,19 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Fetch every season from The Baseball Cube
         run: |
-          mkdir -p payroll_probe
-          python -u scripts/fetch_payrolls.py --seasons 1988-2026 --report payroll_probe/changes.csv | tee payroll_probe/fetch_log.txt
+          pip install -r requirements.txt playwright
+          python -m playwright install --with-deps chromium
+      - name: Fetch 2024-2026 from The Baseball Cube
+        run: |
+          python -u payroll_probe/browser_fetch.py | tee payroll_probe/fetch_log.txt
       - name: Commit
         if: always()
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add -A payroll_probe data/payroll
-          git commit -m "Payroll probe: every season from The Baseball Cube" || echo "nothing"
+          git commit -m "Payroll probe: 2024-2026 from The Baseball Cube" || echo "nothing"
           for attempt in 1 2 3 4 5; do
             git push && exit 0
             git pull --rebase origin claude/baseball-hot-cold-eval-juiywk

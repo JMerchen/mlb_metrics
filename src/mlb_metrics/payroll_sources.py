@@ -48,14 +48,16 @@ def parse_cube_payrolls(page: str, season: int) -> pd.DataFrame:
 
 
 def _get(session, url, **kwargs):
-    for attempt in range(4):
+    for attempt in range(3):
         try:
             response = session.get(url, timeout=60, **kwargs)
             if response.status_code == 200:
                 return response
             print(f"  {response.status_code} from {url}", flush=True)
-            if response.status_code == 429:  # the archive's rate limit
-                time.sleep(60 * (attempt + 1))
+            if response.status_code == 429:  # the archive's rate limit: back off once, then give up
+                if attempt:
+                    return None
+                time.sleep(30)
                 continue
         except requests.RequestException as e:
             print(f"  {type(e).__name__} from {url}", flush=True)
