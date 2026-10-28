@@ -150,8 +150,7 @@ const tile = (label, value, sub, team) => `<div class="payTile">${team ? mlbLogo
 if(best){ tiles.push(tile("Best value", payTeamName(best.franchise, season), `${payRatio(best.pe_index)} effectiveness · ${payRecord(best)} on ${payMoney(best.payroll)}`, best.franchise)) }
 if(over){ tiles.push(tile("Most above expected", payTeamName(over.franchise, season), `${paySigned(over.wins_above_expected)} wins (expected ${Math.round(over.expected_wins)})`, over.franchise)) }
 if(worst){ tiles.push(tile("Least value", payTeamName(worst.franchise, season), `${payRatio(worst.pe_index)} effectiveness · ${payRecord(worst)} on ${payMoney(worst.payroll)}`, worst.franchise)) }
-if(lg && mlbNum(lg.price_per_win) !== null){ tiles.push(tile("Price of a win", payMoney(lg.price_per_win), `league payroll ÷ league wins · average payroll ${payMoney(lg.average_payroll)}`)) }
-else if(lg){ tiles.push(tile("Average payroll", payMoney(lg.average_payroll), `${lg.teams} teams · season not played yet`)) }
+if(lg && mlbNum(lg.price_per_81_wins) !== null){ tiles.push(tile("Price of a win", payMoney(lg.price_per_81_wins), `average payroll ${payMoney(lg.average_payroll)} ÷ 81 wins`)) }
 const note = modelMiss === null ? "" : `<p class="payNote">Expected wins miss by ${modelMiss.toFixed(1)} wins a season on average (every final season since 1999).</p>`
 return `<div class="payTiles">${tiles.join("")}</div>${note}`
 }
@@ -363,9 +362,10 @@ const measureTabs = PAY_GRIDS.filter(g => g[1] === spec[1]).map(g =>
 return `<div class="tabGroup">${rowTabs}</div><div class="tabGroup payMeasureTabs">${measureTabs}</div>`
 }
 
-// League price of a win by season (final seasons).
+// League price of a win by season: the average payroll over 81 wins, as if
+// every season were 162 games (2020 played 60). Seasons with games played.
 function payLeagueChartSvg(league, width = 720){
-const pts = (league || []).filter(l => mlbNum(l.price_per_win) !== null).map(l => ({ season: Number(l.season), v: Number(l.price_per_win) }))
+const pts = (league || []).filter(l => mlbNum(l.wins) !== null && mlbNum(l.price_per_81_wins) !== null).map(l => ({ season: Number(l.season), v: Number(l.price_per_81_wins) }))
 if(pts.length < 2){ return "" }
 const H = 220, left = 56, right = 16, top = 14, bottom = 30
 const W = Math.max(300, width)
@@ -383,7 +383,7 @@ for(let s = Math.ceil(first / 5) * 5; s <= last; s += 5){
 ticks.push(`<text x="${f(x(s))}" y="${H - 10}" class="payTick" text-anchor="middle">${s}</text>`)
 }
 const d = pts.map((p, i) => `${i ? "L" : "M"}${f(x(p.season))},${f(y(p.v))}`).join("")
-const dots = pts.map(p => `<g data-tip="${mlbEsc(`${p.season}: ${payMoney(p.v)} of payroll per win`)}" tabindex="0"><circle cx="${f(x(p.season))}" cy="${f(y(p.v))}" r="9" class="payHit"/><circle cx="${f(x(p.season))}" cy="${f(y(p.v))}" r="3" class="payActualDot"/></g>`).join("")
+const dots = pts.map(p => `<g data-tip="${mlbEsc(`${p.season}: ${payMoney(p.v)} of payroll per win (average payroll ÷ 81)`)}" tabindex="0"><circle cx="${f(x(p.season))}" cy="${f(y(p.v))}" r="9" class="payHit"/><circle cx="${f(x(p.season))}" cy="${f(y(p.v))}" r="3" class="payActualDot"/></g>`).join("")
 return `<svg class="payChart" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="League payroll per win by season, ${first} to ${last}">${ticks.join("")}<path d="${d}" class="payActualLine"/>${dots}</svg>`
 }
 
@@ -456,6 +456,7 @@ sheets.push(sheet("Franchises", [
 sheets.push(sheet("League", [
 ["Year", "season", "0"], ["Teams", "teams", "0"], ["Total Payroll", "total_payroll", PAY_MONEY_FMT],
 ["Average Payroll", "average_payroll", PAY_MONEY_FMT], ["Average Price/Win", "price_per_win", PAY_MONEY_FMT],
+["Price/Win (81-win average)", "price_per_81_wins", PAY_MONEY_FMT],
 ["Average Price/Game", "price_per_game", PAY_MONEY_FMT]], league))
 
 PAY_GRIDS.forEach(([key, rowsBy, measure, , higher]) => {
