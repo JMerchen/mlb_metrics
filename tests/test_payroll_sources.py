@@ -96,3 +96,33 @@ def test_script_updates_the_file_and_reports_changes(tmp_path, monkeypatch):
     report = pd.read_csv(tmp_path / "r.csv")
     assert len(report) == 30
     assert report.set_index("franchise").loc["NYY", "change"] == 268954047 - 2
+
+
+CSV_EXPORT = '''year,team,roster,league,division,team payroll,w,l,rank,lg rk,mlb rk,last year payroll,top salary
+2026,Los Angeles Dodgers,team roster,NL,West,"415,212,461",100,62,1,2,2,"331,013,580",Kyle Tucker (1)
+2026,Athletics,team roster,AL,West,"136,029,542",64,98,4,14,28,"74,036,474",Luis Severino (58)
+2 record(s),,,,,,,,,,,,
+'''
+
+
+def test_parses_the_csv_export():
+    t = ps.parse_cube_csv(CSV_EXPORT)
+    assert t[["season", "franchise", "payroll", "wins", "losses"]].values.tolist() == [
+        [2026, "LAD", 415212461, 100, 62], [2026, "ATH", 136029542, 64, 98]]
+
+
+def test_script_imports_a_csv_export(tmp_path, monkeypatch):
+    module = _load_script()
+    table = ps.parse_cube_payrolls(PAGE, 2023)
+    lines = ["year,team,roster,league,division,team payroll,w,l"] + [
+        f'2023,{r.team},team roster,NL,East,"{r.payroll:,}",{r.wins},{r.losses}' for r in table.itertuples()]
+    export = tmp_path / "payroll_2023.csv"
+    export.write_text("\n".join(lines + ["30 record(s),,,,,,,"]) + "\n")
+    path = tmp_path / "team_payroll.csv"
+    pd.DataFrame({"season": [2023], "franchise": ["NYY"], "payroll": [2], "wins": [82], "losses": [80]}).to_csv(path, index=False)
+    monkeypatch.setattr(module.payroll_sources, "fetch_season", lambda *a, **k: pytest.fail("no fetching with --csv"))
+    monkeypatch.setattr("sys.argv", ["fetch", "--payrolls", str(path), "--csv", str(export)])
+    module.main()
+    out = pd.read_csv(path).set_index("franchise")
+    assert len(out) == 30 and out.loc["NYY", "payroll"] == 268954047 and out.loc["NYY", "wins"] == 82
+    assert out.loc["NYY", "payroll_source"] == "thebaseballcube.com CSV export (payroll_2023.csv)"

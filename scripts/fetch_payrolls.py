@@ -3,9 +3,13 @@
 what's there, and a season not in the file yet is added with wins and
 losses blank (build_payroll_value.py fills those in).
 
+Or from the page's own "Payrolls by Team CSV" export, saved in a browser
+(the site turns automated requests away; one file per season):
+
 Usage:
     python scripts/fetch_payrolls.py                    # the current season
-    python scripts/fetch_payrolls.py --seasons 1988-2026 --report changes.csv
+    python scripts/fetch_payrolls.py --seasons 2024-2025 --report changes.csv
+    python scripts/fetch_payrolls.py --csv payroll_2026.csv
 """
 
 import argparse
@@ -35,9 +39,12 @@ def main():
     parser.add_argument("--seasons", default=None, help="e.g. 1988-2026 or 2025,2026 (default: the current season)")
     parser.add_argument("--capture", action="store_true", help="ask the Wayback Machine for a fresh capture when it has none")
     parser.add_argument("--report", default=None, help="write every payroll that changed to this CSV")
+    parser.add_argument("--csv", nargs="+", default=None, help="The Baseball Cube's CSV export(s) to import instead of fetching")
     args = parser.parse_args()
 
-    if args.seasons:
+    if args.csv:
+        seasons = []
+    elif args.seasons:
         seasons = parse_seasons(args.seasons)
     else:
         with open(args.season_dates) as f:
@@ -46,6 +53,14 @@ def main():
     payrolls = payroll_value.load_payrolls(args.payrolls)
     before = payrolls.set_index(["season", "franchise"])["payroll"]
     missing = []
+    for path in args.csv or []:
+        with open(path) as f:
+            table = payroll_sources.parse_cube_csv(f.read())
+        season = int(table["season"].iloc[0])
+        if len(table) != payroll_sources.expected_teams(season) or table["franchise"].nunique() != len(table):
+            sys.exit(f"{path}: {len(table)} teams for {season} - expected {payroll_sources.expected_teams(season)}")
+        payrolls = payroll_sources.apply_payrolls(payrolls, table, source=f"thebaseballcube.com CSV export ({os.path.basename(path)})")
+        print(f"{season}: {len(table)} teams from {path}")
     for season in seasons:
         table, snapshot = payroll_sources.fetch_season(season, capture=args.capture)
         if table is None:
@@ -70,7 +85,7 @@ def main():
     out.to_csv(args.payrolls, index=False)
     # A season asked for by name that couldn't be fetched is an error; the
     # weekly run's current season just may not be published yet.
-    if args.seasons and len(missing) == len(seasons):
+    if args.seasons and seasons and len(missing) == len(seasons):
         sys.exit(1)
 
 

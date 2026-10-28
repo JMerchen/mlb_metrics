@@ -10,6 +10,7 @@ none for a season yet.
 """
 
 import html
+import io
 import re
 import time
 
@@ -107,16 +108,28 @@ def fetch_season(season: int, session=None, capture: bool = False):
     return None, None
 
 
-def apply_payrolls(payrolls: pd.DataFrame, fetched: pd.DataFrame, snapshot: str) -> pd.DataFrame:
+def parse_cube_csv(text: str) -> pd.DataFrame:
+    """The page's "Payrolls by Team CSV" export (a season's file, as saved
+    from a browser) -> the same table as parse_cube_payrolls."""
+    raw = pd.read_csv(io.StringIO(text), thousands=",", dtype={"year": str})
+    raw = raw[raw["year"].astype(str).str.fullmatch(r"\d{4}")]
+    out = pd.DataFrame({"season": raw["year"].astype(int), "team": raw["team"].str.strip(),
+                        "payroll": raw["team payroll"].astype("int64"),
+                        "wins": pd.to_numeric(raw["w"], errors="coerce"), "losses": pd.to_numeric(raw["l"], errors="coerce")})
+    out.insert(2, "franchise", out["team"].map(payroll_value.franchise_code))
+    return out.reset_index(drop=True)
+
+
+def apply_payrolls(payrolls: pd.DataFrame, fetched: pd.DataFrame, snapshot: str = None, source: str = None) -> pd.DataFrame:
     """Replace the season's payrolls with `fetched` (adding any team-season
-    not there yet, wins and losses blank), recording the capture each came
-    from in `payroll_source`."""
+    not there yet, wins and losses blank), recording where each came from
+    in `payroll_source` (the Wayback `snapshot`, or `source` as given)."""
     season = int(fetched["season"].iloc[0])
     out = payrolls.copy()
     if "payroll_source" not in out.columns:
         out["payroll_source"] = pd.NA
     out["payroll_source"] = out["payroll_source"].astype(object)
-    source = f"thebaseballcube.com via web.archive.org/web/{snapshot}"
+    source = source or f"thebaseballcube.com via web.archive.org/web/{snapshot}"
     keyed = fetched.set_index("franchise")["payroll"]
     mask = out["season"] == season
     known = out.loc[mask, "franchise"]

@@ -3071,7 +3071,11 @@ that workbook (same sheets and colour scales) in the browser.
   fresh capture when there's none. The Payroll Update workflow runs it
   weekly for the current season - a new season's payrolls arrive as a
   preseason forecast (wins and losses blank) - and by hand with
-  `seasons` (e.g. `1988-2026`) for earlier years.
+  `seasons` (e.g. `1988-2026`) for earlier years. The archive throttles heavy use, so
+  for a season it doesn't have, save the page's "Payrolls by Team CSV" in
+  a browser, put it in `data/payroll/cube_exports/` and run
+  `python scripts/fetch_payrolls.py --csv data/payroll/cube_exports/payroll_<season>.csv`
+  (2026 came in this way).
 - `data/payroll/team_payroll.csv` holds one row per team-season:
   `season,franchise,payroll,wins,losses,payroll_source` (the capture each
   payroll came from). Franchise codes are the site's (`ATH`, `AZ`, `CWS`,
