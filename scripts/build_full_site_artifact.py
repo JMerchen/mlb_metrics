@@ -1,5 +1,5 @@
 """Builds the standalone HTML for the full-site Claude Artifact - the
-whole real docs/ dashboard (MLB Picks and Stats, Age Curves,
+whole real docs/ dashboard (MLB Picks and Stats, Age Curves, Payroll,
 NFL, Methodology) plus the Beat the Streak Assistant chat, all under one
 claude.ai URL. Ports the real docs/*.js/*.html/*.css almost verbatim
 (same code) rather than reimplementing:
@@ -153,6 +153,7 @@ PAGE_JS_PATCHERS = {
     "app.js": _patch_app_js,
     "nfl.js": lambda js: _patch_loadcsv(js, "nfl.js"),
     "age-curves.js": lambda js: _patch_loadcsv(js, "age-curves.js"),
+    "payroll.js": lambda js: _patch_loadcsv(js, "payroll.js"),
 }
 
 # Verbatim - no loadCSV/network/image dependency to patch. Each file gets
@@ -165,7 +166,7 @@ PAGE_JS_PATCHERS = {
 VERBATIM_JS = [
     "teams.js", "summary_render.js",
     "age_render.js", "consensus_board.js", "player_props.js", "nfl_units.js", "prop_cards.js",
-    "nfl_whatif.js",
+    "nfl_whatif.js", "payroll_render.js",
 ]
 
 
@@ -252,6 +253,7 @@ def build_html(docs_dir: str) -> str:
     stats_content = _extract_page_content(read("stats.html"), "stats.html")
     nfl_content = _extract_page_content(read("nfl.html"), "nfl.html")
     age_curves_content = _extract_page_content(read("age-curves.html"), "age-curves.html")
+    payroll_content = _extract_page_content(read("payroll.html"), "payroll.html")
     methodology_html = read("methodology.html")
     methodology_content = _extract_page_content(methodology_html, "methodology.html")
     methodology_style = _extract_methodology_style(methodology_html)
@@ -287,6 +289,7 @@ def build_html(docs_dir: str) -> str:
     template = template.replace("<!--__STATS_CONTENT__-->", stats_content)
     template = template.replace("<!--__NFL_CONTENT__-->", nfl_content)
     template = template.replace("<!--__AGE_CURVES_CONTENT__-->", age_curves_content)
+    template = template.replace("<!--__PAYROLL_CONTENT__-->", payroll_content)
     template = template.replace("<!--__METHODOLOGY_CONTENT__-->", methodology_content)
     template = template.replace("<!--__ASSISTANT_CONTENT__-->", assistant_content)
     # Each file gets its OWN <script> tag, matching the real site's

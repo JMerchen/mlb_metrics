@@ -1793,3 +1793,57 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 .reportKey span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-2px;}
 .reportKey .before::before{border:2px solid var(--report-before);}
 .reportKey .after::before{border:2px solid var(--report-after);}
+
+/* ---- MLB Payroll page (docs/payroll_render.js) ----
+   Same diverging blue / orange pair as the other MLB pages, grey at the
+   midpoint; chips and grid cells keep the value in text ink on top. */
+.payControls{align-items:center;}
+.payField{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--text-dim);}
+.payField select{margin:0;}
+.payTiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin:8px 0 6px;}
+.payTile{display:flex;gap:10px;align-items:center;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;}
+.payTile > div{display:flex;flex-direction:column;gap:2px;min-width:0;}
+.payTileLabel{font-size:12px;color:var(--text-dim);}
+.payTileValue{font-size:20px;font-weight:700;}
+.payTile small{font-size:12px;color:var(--text-dim);}
+.payNote{font-size:13px;color:var(--text-dim);margin:6px 0 14px;}
+.payNote b{color:var(--text);}
+.payChip{display:inline-block;min-width:44px;padding:2px 6px;border-radius:4px;color:#fff;font-weight:600;text-align:center;font-variant-numeric:tabular-nums;}
+.payTable .payTeamBtn{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;}
+.payTable .payTeamBtn:hover b{text-decoration:underline;}
+.payTable .payTeamBtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.payTable .rankNo{min-width:18px;}
+.payTable tr.paySelected td{background:var(--bg-hover);}
+.payChart{display:block;max-width:100%;height:auto;}
+.payChart .payGrid{stroke:var(--border);stroke-width:1;}
+.payChart .payTick{fill:var(--text-dim);font-size:11px;font-family:var(--font);}
+.payChart .payAvgLine{stroke:var(--border-strong);stroke-width:1;stroke-dasharray:3 3;}
+.payChart .payCurve{fill:none;stroke:var(--text-dim);stroke-width:1.5;stroke-dasharray:6 4;}
+.payChart .payHit{fill:transparent;}
+.payChart .payDot circle:not(.payHit){stroke:var(--bg-card);stroke-width:2;}
+.payChart .paySelectedDot circle:not(.payHit){stroke:var(--text);stroke-width:2.5;}
+.payChart .payDot{cursor:pointer;}
+.payChart .payDotLabel{fill:var(--text);font-size:11px;font-weight:700;font-family:var(--font);}
+.payChart .payActualLine{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;}
+.payChart .payActualDot{fill:var(--accent);stroke:var(--bg-card);stroke-width:1.5;}
+.payChart .payExpectedLine{fill:none;stroke:var(--text-dim);stroke-width:2;stroke-dasharray:5 4;}
+.payChart .payActualLabel{fill:var(--text);}
+.payChart [data-pay-season]{cursor:pointer;}
+.vizKey .payKeyGood,.vizKey .payKeyMid,.vizKey .payKeyBad{width:10px;height:10px;border-radius:50%;}
+.vizKey .payKeyGood{background:var(--mlb-better);}
+.vizKey .payKeyMid{background:var(--mlb-mid);}
+.vizKey .payKeyBad{background:var(--mlb-worse);}
+.vizKey .payKeyActual{width:12px;height:3px;background:var(--accent);}
+.vizKey .payKeyExpected{width:14px;height:0;border-top:2px dashed var(--text-dim);}
+.payNeighbors{margin:0 0 20px;}
+.payNeighbor{display:inline-flex;align-items:center;gap:5px;margin:0 6px 6px 0;padding:3px 8px;border:1px solid var(--border);border-radius:999px;background:var(--bg-raised);font-size:12px;color:var(--text-dim);font-variant-numeric:tabular-nums;}
+.payNeighbor b{color:var(--text);}
+.payMeasureTabs{margin:6px 0 10px;}
+.payGridBox{max-height:640px;overflow:auto;margin-bottom:24px;}
+.payGridTable{border-collapse:separate;border-spacing:2px;font-size:11.5px;}
+.payGridTable th{font-weight:600;color:var(--text-dim);background:var(--bg-raised);padding:4px 5px;white-space:nowrap;}
+.payGridTable thead th span{display:block;}
+.payGridTable thead th .mlbLogo{margin:0 auto 2px;display:flex;}
+.payGridTable tbody th{position:sticky;left:0;z-index:1;}
+.payGridTable .payCell{color:#fff;text-align:center;padding:4px 5px;min-width:34px;border-radius:3px;font-variant-numeric:tabular-nums;}
+.payGridTable td:empty{background:transparent;}

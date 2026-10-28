@@ -3053,6 +3053,42 @@ original KNN comparable search. See `config.py`'s Age Curves section for
 the model's selected hyperparameters and `age_curve_ml.py`'s module
 docstring for the full methodology.
 
+## Payroll value (`docs/payroll.html`, `payroll_value.py`)
+
+The MLB Payroll tab: which teams get the most winning for their money,
+every season since 1988 - payroll effectiveness, expected wins from
+payroll (the Front Office model), wins against them, franchise averages
+and the year-by-year grids. It automates the hand-built
+Payroll_Effectiveness workbook, and the page's Download button rebuilds
+that workbook (same sheets and colour scales) in the browser.
+
+- **Every payroll comes from one source: The Baseball Cube's opening-day
+  payrolls** (`thebaseballcube.com/content/payroll_year/<season>`, players
+  under contract on opening day), the source the original workbook was
+  built from. The site blocks automated requests, so
+  `scripts/fetch_payrolls.py` (`payroll_sources.py`) reads the Wayback
+  Machine's newest complete capture of each season's page, asking for a
+  fresh capture when there's none. The Payroll Update workflow runs it
+  weekly for the current season - a new season's payrolls arrive as a
+  preseason forecast (wins and losses blank) - and by hand with
+  `seasons` (e.g. `1988-2026`) for earlier years. The archive throttles heavy use, so
+  for a season it doesn't have, save the page's "Payrolls by Team CSV" in
+  a browser, put it in `data/payroll/cube_exports/` and run
+  `python scripts/fetch_payrolls.py --csv data/payroll/cube_exports/payroll_<season>.csv`
+  (2026 came in this way).
+- `data/payroll/team_payroll.csv` holds one row per team-season:
+  `season,franchise,payroll,wins,losses,payroll_source` (the capture each
+  payroll came from). Franchise codes are the site's (`ATH`, `AZ`, `CWS`,
+  `WSH`, ...); older names such as "Montreal Expos" map to them
+  (`payroll_value.FRANCHISE_ALIASES`).
+- **Wins and losses fill themselves in**: the daily update runs
+  `scripts/build_payroll_value.py`, which takes the current season's
+  records (and any earlier season left blank) from the MLB standings,
+  falling back to the Stats page's game log, writes them back to that
+  file and rebuilds `docs/data/payroll_*.csv`.
+- Expected wins compare only with other franchises' seasons 11 or more
+  years earlier, so seasons before 1999 have none.
+
 ## NFL Automated Game Picks (`docs/nfl.html`'s Picks tab)
 
 > **Predicted point totals (2026-10-12, improved 2026-10-13).** Each game
