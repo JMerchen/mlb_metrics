@@ -314,7 +314,7 @@ const report = p.injury_report === "after" ? "after" : "before"
 const changed = report === "after" && p.before_report_winner
 && (p.before_report_winner !== p.predicted_winner || Math.round(Number(p.before_report_probability) * 100) !== Math.round(Number(p.predicted_probability) * 100))
 const reportNote = report === "after"
-? `<div class="reportNote"><b>After the final injury report</b>${p.injury_note ? ` &middot; Out: ${mlbEsc(p.injury_note)}` : " &middot; no regulars out"}${changed ? ` &middot; before it: ${teamName(p.before_report_winner, "nfl")} ${pct0(p.before_report_probability)}` : ""}</div>`
+? `<div class="reportNote"><b>After the final injury report</b>${changed ? ` &middot; before it: ${teamName(p.before_report_winner, "nfl")} ${pct0(p.before_report_probability)}` : ""}</div>`
 : `<div class="reportNote"><b>Before the final injury report</b></div>`
 
 return `

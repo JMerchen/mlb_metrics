@@ -46,7 +46,9 @@ test("NFL game row: outlined and labelled by the injury report; MLB rows aren't"
     injury_report: "after", injury_note: "Patrick Mahomes (QB; Gardner Minshew starts)",
   }, "nfl")
   assert.match(after, /class="game report-after"/)
-  assert.match(text(after), /After the final injury report · Out: Patrick Mahomes \(QB; Gardner Minshew starts\)/)
+  // Who's out is left to the What if? panel; the pick just says which side of the report it's on.
+  assert.match(text(after), /After the final injury report/)
+  assert.doesNotMatch(text(after), /Out:|Mahomes/)
   assert.match(gamePickRowHtml({ home_team: "KC", away_team: "DEN", predicted_winner: "KC" }, "nfl"), /class="game report-before"/)
   const mlb = gamePickRowHtml({ home_team: "NYY", away_team: "BOS", predicted_winner: "NYY" }, "mlb")
   assert.match(mlb, /class="game"/)
