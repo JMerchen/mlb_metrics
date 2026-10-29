@@ -18,11 +18,26 @@ on:
     - cron: "17 15 * * 4"
     - cron: "17 15 * * 6"
     - cron: "17 15 * * 1"
+    # Backups for those three, 4.5 hours later (19:47 UTC, 12:47 PM
+    # Arizona - still before the earliest kickoff). GitHub can start a
+    # scheduled run hours late or skip it (2026-10-29: Thursday's 15:17 run
+    # hadn't started by 17:05, and Tuesday's started 5 hours late), and
+    # re-running is harmless - a repriced pick keeps its latest version - so
+    # the report reaches the pick even when the first run doesn't happen.
+    - cron: "47 19 * * 4"
+    - cron: "47 19 * * 6"
+    - cron: "47 19 * * 1"
   workflow_dispatch:
     inputs:
       season:
         description: "Season to run (defaults to config.NFL_SEASON)"
         required: false
+
+# A late scheduled run and its backup (or a manual run) queue rather than
+# overlap.
+concurrency:
+  group: nfl-weekly-update
+  cancel-in-progress: false
 
 jobs:
   update:
