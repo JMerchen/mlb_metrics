@@ -173,11 +173,18 @@ def season_wave_cave(statcast: pd.DataFrame) -> pd.DataFrame:
     hitters.compute_game_hit_probability with carry_forward, so a window a
     hitter has no at-bats in (hurt, benched, or no lefties lately) takes his
     next-longer window instead of counting as zero. That makes them views of
-    his season; the pick models still read wave.csv's original versions."""
-    from . import data, hitters
+    his season; the pick models still read wave.csv's original versions.
+
+    WAVE here counts at-bats only, so it reads on the batting-average scale
+    the site describes it on. wave.csv's (the picks') counts walks and
+    hit-by-pitches as trials too - hits per plate appearance, about 10%
+    lower (2026's league: .220 against a .244 batting average) - and its
+    pick settings were tuned on that."""
+    from . import data, helpers, hitters
 
     regular = statcast[statcast["game_type"] == "R"] if "game_type" in statcast.columns else statcast
     dt = data.completed_events(regular, ["game_date", "batter", "p_throws", "events"])
+    dt = dt[~dt["events"].isin(helpers.NON_AT_BAT_EVENTS)]
     wave = hitters.compute_wave(dt, carry_forward=True)[["key_mlbam", "WAVE"]]
     cave = hitters.compute_game_hit_probability(data.assign_game_ids(regular), carry_forward=True)
     cave = cave[["key_mlbam", "Game_Hit_Probability"]].rename(columns={"Game_Hit_Probability": "CAVE"})
