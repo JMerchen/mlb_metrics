@@ -81,3 +81,14 @@ def test_carry_forward_is_opt_in_and_only_fills_missed_windows():
     assert carried.loc[1, "WAVE"] == pytest.approx(plain.loc[1, "WAVE"])
     # ... while one who sat out the recent windows no longer reads them as zero.
     assert carried.loc[3, "WAVE"] > plain.loc[3, "WAVE"]
+
+
+def test_wave_is_on_the_batting_average_scale_walks_left_out():
+    """A walk isn't an at-bat: two hitters who go 1-for-4 every game read
+    the same WAVE whether or not one also walks (the picks' wave.csv rate
+    still counts the walk as a trial)."""
+    season = _season()
+    walks = [_pa(day, pd.Timestamp("2026-05-01") + pd.Timedelta(days=day), 2, 901, "walk", 9)
+             for day in range(1, 41)]
+    views = hitter_views.season_wave_cave(pd.concat([season, pd.DataFrame(walks)], ignore_index=True)).set_index("key_mlbam")
+    assert views.loc[2, "WAVE"] == pytest.approx(views.loc[1, "WAVE"])
