@@ -131,7 +131,8 @@ def blend_windows(
     return result, full_counts
 
 
-def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None, carry_forward: bool | None = None) -> pd.DataFrame:
+def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None, carry_forward: bool | None = None,
+                 at_bats_only: bool | None = None) -> pd.DataFrame:
     """Recency-weighted at-bat hit rate vs L/R pitching, converted to a
     per-game hit probability. Returns key_mlbam, WAVE, WAVE_L, WAVE_R,
     l_at_bat, r_at_bat, probability, probability_L, probability_R,
@@ -162,6 +163,9 @@ def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None, carr
     strictly increasing over [0,1])."""
     strength = config.WAVE_SHRINKAGE_STRENGTH if shrinkage_strength is None else shrinkage_strength
     carry_forward = config.HITTER_WINDOW_CARRY_FORWARD if carry_forward is None else carry_forward
+    at_bats_only = config.WAVE_AT_BATS_ONLY if at_bats_only is None else at_bats_only
+    if at_bats_only:  # walks and hit-by-pitches aren't at-bats
+        dt = dt[~dt["events"].isin(helpers.NON_AT_BAT_EVENTS)]
     league_rate = helpers.is_hit(dt["events"]).sum() / len(dt) if len(dt) else 0.0
     stat_fns = {"hit": lambda df: helpers.is_hit(df["events"])}
     rate_fns = {"rate": lambda agg: helpers.shrink_rate(agg["hit"], agg["n"], league_rate, strength)}

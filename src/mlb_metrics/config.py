@@ -77,6 +77,11 @@ WAVE_WINDOWS = [
 # Trials-per-game used to convert an at-bat hit rate into a game hit
 # probability: probability = 1 - (1 - rate) ** WAVE_TRIALS_PER_GAME.
 WAVE_TRIALS_PER_GAME = 3.5
+# WAVE counts at-bats only (True) - the batting-average scale, matching
+# PAVE (also per at-bat) in the matchup's log5 - or every plate appearance
+# with walks and hit-by-pitches as hitless trials (False), the version the
+# picks were built on. scripts/backtest_wave_at_bats.py compares them.
+WAVE_AT_BATS_ONLY = False
 
 # Quant-analytics item #3, slice 1 ("uncertainty quantification" -
 # Bayesian shrinkage for small-sample hitters): real-unit (at-bats)
