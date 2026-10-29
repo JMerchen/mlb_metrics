@@ -175,11 +175,10 @@ def season_wave_cave(statcast: pd.DataFrame) -> pd.DataFrame:
     next-longer window instead of counting as zero. That makes them views of
     his season; the pick models still read wave.csv's original versions.
 
-    WAVE here counts at-bats only, so it reads on the batting-average scale
-    the site describes it on. wave.csv's (the picks') counts walks and
-    hit-by-pitches as trials too - hits per plate appearance, about 10%
-    lower (2026's league: .220 against a .244 batting average) - and its
-    pick settings were tuned on that."""
+    WAVE counts at-bats only (config.WAVE_AT_BATS_ONLY, which the picks'
+    wave.csv uses too), so it reads on the batting-average scale the site
+    describes it on - not hits per plate appearance, about 10% lower
+    (2026's league: .220 against a .244 batting average)."""
     from . import data, hitters
 
     regular = statcast[statcast["game_type"] == "R"] if "game_type" in statcast.columns else statcast

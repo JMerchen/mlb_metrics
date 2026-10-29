@@ -80,8 +80,12 @@ WAVE_TRIALS_PER_GAME = 3.5
 # WAVE counts at-bats only (True) - the batting-average scale, matching
 # PAVE (also per at-bat) in the matchup's log5 - or every plate appearance
 # with walks and hit-by-pitches as hitless trials (False), the version the
-# picks were built on. scripts/backtest_wave_at_bats.py compares them.
-WAVE_AT_BATS_ONLY = False
+# picks were built on until 2026-10-29. scripts/backtest_wave_at_bats.py
+# (86 test days, Jul-Sep 2026): the model's top pick hit 80.2% vs 68.6%,
+# the live rule's 67.4% vs 65.1% and both of its top two 48.8% vs 45.3%,
+# for a hair worse log loss (0.6728 vs 0.6720) - every pick measure the
+# same way, so it's on.
+WAVE_AT_BATS_ONLY = True
 
 # Quant-analytics item #3, slice 1 ("uncertainty quantification" -
 # Bayesian shrinkage for small-sample hitters): real-unit (at-bats)

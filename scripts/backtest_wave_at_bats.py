@@ -12,7 +12,23 @@ variant's earlier months and scored on the next - log loss, Brier, AUC, and
 the share of days the top pick / both of the top two hit, by the model, the
 live rule (model shortlist ranked by Matchup_Approach) and CAVE.
 
-RESULT: see the bottom of the run's output (filled in after the run).
+RESULT (2026-10-29; features for 147 dates, May 1 - Sep 27 2026; models
+refit monthly and tested on 86 days, Jul - Sep, ~24,400 hitter-games):
+
+                                    per PA   at-bats only
+    log loss                        0.6720      0.6728
+    Brier score                     0.2396      0.2400
+    ROC AUC                         0.5873      0.5839
+    model's top pick hit             68.6%       80.2%   (days only one hit: 16 vs 6)
+    model's top two both hit         48.8%       48.8%   (13 vs 13)
+    live rule, top pick hit          65.1%       67.4%   (13 vs 11)
+    live rule, both of top two hit   45.3%       48.8%   (9 vs 6)
+
+The hit model itself is a hair worse, but every pick measure is the same
+or better - the model's top pick clearly (sign test p = 0.05), the live
+rule's modestly (not significant). Counting at-bats only also puts WAVE on
+the same scale as PAVE in the matchup's log5, and matches the WAVE the
+Stats page shows, so config.WAVE_AT_BATS_ONLY is on.
 
 Usage:
     python scripts/backtest_wave_at_bats.py [--start 2026-05-01] [--end 2026-09-27] [--workers 3]
