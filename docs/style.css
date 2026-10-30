@@ -1970,3 +1970,52 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 .simAverages li{grid-template-columns:1fr;}
 .simAxis{font-size:20px;}
 }
+
+/* MLB game simulation (mlb_sim.js, mlb_sim_view.js) on MLB Picks. */
+.mlbSetup{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:12px;}
+.mlbSetupSide h4{margin:0 0 8px;}
+.mlbSlots{display:grid;gap:4px;margin-bottom:8px;}
+.mlbSlot{display:grid;grid-template-columns:20px minmax(0,1fr);align-items:center;gap:6px;font-size:13px;}
+.mlbSlot span{color:var(--text-dim);font-variant-numeric:tabular-nums;text-align:right;}
+.mlbSlot select{margin:0;width:100%;}
+.mlbSmall{font-size:12px;padding:4px 10px;}
+.mlbLine{border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums;width:100%;}
+.mlbLine th,.mlbLine td{padding:4px 6px;text-align:center;border-bottom:1px solid var(--border);min-width:18px;}
+.mlbLine th:first-child{text-align:left;white-space:nowrap;}
+.mlbLine .mlbTot{font-weight:800;border-left:1px solid var(--border-strong);}
+.mlbStage{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:14px;margin-top:10px;}
+.mlbSituation{display:flex;align-items:center;gap:14px;margin-bottom:8px;}
+.mlbDiamond{width:76px;height:56px;}
+.mlbBase{fill:none;stroke:var(--border-strong);stroke-width:1.5;}
+.mlbBaseOn{fill:#ffd400;stroke:#ffd400;stroke-width:1.5;}
+.mlbCount{display:flex;flex-direction:column;gap:3px;font:700 12px var(--font-mono, var(--font));color:var(--text-dim);}
+.mlbCount i{display:inline-block;width:9px;height:9px;border-radius:50%;border:1px solid var(--border-strong);margin-left:3px;vertical-align:-1px;}
+.mlbCount i.mlbOn{background:var(--text);border-color:var(--text);}
+.mlbInning{font-weight:800;font-size:18px;}
+.mlbMatchup{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--text-dim);margin-bottom:6px;}
+.mlbMatchup b{color:var(--text);}
+.mlbPitch{font-size:14px;margin-bottom:6px;}
+.mlbResult{font-weight:700;margin-bottom:8px;}
+.mlbResult.simScoring{color:var(--accent-strong);}
+.mlbZone{width:100%;max-width:220px;height:auto;display:block;}
+.mlbZoneBox{fill:rgba(255,255,255,.03);stroke:var(--text-dim);stroke-width:1.5;}
+.mlbZoneGrid{stroke:var(--border-strong);stroke-width:1;}
+.mlbPlate{fill:var(--text-dim);}
+.mlbBatterSide{fill:var(--text-dim);font:600 10px var(--font);text-anchor:middle;}
+.mlbZone circle{stroke:var(--bg-card);stroke-width:1.5;}
+.mlbZone text{fill:#fff;font:700 9px var(--font);text-anchor:middle;}
+.mlbBall circle{fill:#47ab4f;}
+.mlbStrike circle{fill:#e66767;}
+.mlbInPlay circle{fill:#3987e5;}
+.mlbLast circle{stroke:#fff;stroke-width:2;}
+.mlbChange{color:var(--text-dim);font-style:italic;}
+.mlbBoxes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px;}
+.mlbBox td:not(:first-child),.mlbBox th:not(:first-child){text-align:right;}
+.mlbBox td:first-child{white-space:nowrap;}
+.mlbBox small{color:var(--text-dim);}
+@media (max-width:700px){
+.mlbSetup,.mlbBoxes{grid-template-columns:1fr;}
+.mlbStage{grid-template-columns:1fr;}
+.mlbStageRight{order:-1;display:flex;justify-content:center;}
+.mlbZone{max-width:180px;}
+}

@@ -327,6 +327,27 @@ players reprice each game the morning of, or the day before, it.</p>
 </div>
 
 <div class="methodCard">
+<h3>MLB game simulation</h3>
+<p>Every pitch is drawn from the stored Statcast pitches of the last two
+seasons. The pitcher picks a pitch as he does in that count against that
+side of the plate, at his speed for it. Its result - a ball, called strike,
+swinging strike, foul, ball in play or hit batter - is the league's rate
+for that pitch type in that count, times the pitcher's own rate for that
+pitch, the hitter's against everything he's seen (each measured against
+what the league would have done with the same pitches in the same counts,
+and pulled toward average until there are a few hundred pitches), the
+platoon edge and the times through the order. A ball in play becomes a
+groundout, flyout, lineout, single, double, triple or home run the same
+way, and the runners move as they did after that kind of play with those
+runners on and that many outs - double plays, sacrifice flies and taking
+the extra base included. Starters go about as many pitches as they have
+lately; relievers come in by role, the closer for a save. Extra innings
+start with a runner on second. Run over many games it scores about 4.3
+runs a team, strikes out 23% of hitters and walks 9.6%, against the
+league's 4.5, 22% and 10%.</p>
+</div>
+
+<div class="methodCard">
 <h3>Game simulation</h3>
 <p>Every snap is drawn from the teams' own play-by-play this season: how
 often each throws on early downs, how its runs and completions are spread,

@@ -154,6 +154,8 @@ PAGE_JS_PATCHERS = {
     # payroll.js before nfl.js: the NFL page's Payroll tab starts its view.
     "payroll.js": lambda js: _patch_loadcsv(js, "payroll.js"),
     "nfl.js": lambda js: _patch_loadcsv(js, "nfl.js"),
+    # mlb_sim_view.js after app.js: it reads probable starters with app.js's loadCSV.
+    "mlb_sim_view.js": lambda js: js,
     "age-curves.js": lambda js: _patch_loadcsv(js, "age-curves.js"),
 }
 
@@ -167,7 +169,7 @@ PAGE_JS_PATCHERS = {
 VERBATIM_JS = [
     "teams.js", "summary_render.js",
     "age_render.js", "consensus_board.js", "player_props.js", "nfl_units.js", "prop_cards.js",
-    "nfl_whatif.js", "nfl_sim.js", "payroll_render.js",
+    "nfl_whatif.js", "nfl_sim.js", "payroll_render.js", "mlb_sim.js",
 ]
 
 
