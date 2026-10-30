@@ -378,12 +378,21 @@ el.innerHTML = btsPickCardsHtml(todays, wavePlayersById)
 let btsPicks = []
 let btsProgression = []
 
-function renderStreakLog(limit){
-document.getElementById("streakHistoryTable").innerHTML = btsLogHtml(btsPicks, btsProgression, limit)
-const days = new Set(btsPicks.map(p => p.date)).size
-const more = document.getElementById("streakHistoryMore")
-more.style.display = days > limit ? "" : "none"
-more.onclick = () => renderStreakLog(limit + 30)
+const LOG_START = 5
+const LOG_STEP = 25
+
+// A results log showing its latest few rows, with buttons to show more or
+// fewer. html(limit) draws the first `limit` of `total` rows.
+function renderExpandableLog(listId, buttonsId, html, total, unit, limit = LOG_START){
+setHtml(listId, html(limit))
+const buttons = byId(buttonsId)
+if(!buttons){ return }
+buttons.innerHTML = (total > limit ? `<button class="showMore" data-log="more">Show more ${unit}</button>` : "")
++ (limit > LOG_START ? `<button class="showMore" data-log="fewer">Show fewer</button>` : "")
+buttons.querySelectorAll("[data-log]").forEach(button => {
+button.addEventListener("click", () => renderExpandableLog(listId, buttonsId, html, total, unit,
+button.dataset.log === "more" ? limit + LOG_STEP : LOG_START))
+})
 }
 
 async function loadBeatTheStreak(){
@@ -398,7 +407,8 @@ btsProgression = progression
 renderStreakStats(summary)
 renderTodaysPicks(picks, summary)
 document.getElementById("streakChart").innerHTML = streakChartHtml(progression, picks)
-renderStreakLog(14)
+renderExpandableLog("streakHistoryTable", "streakHistoryMore", limit => btsLogHtml(btsPicks, btsProgression, limit),
+new Set(btsPicks.map(p => p.date)).size, "days")
 }
 
 // ---- Game picks ----
@@ -493,7 +503,8 @@ renderGamePickStats(summary)
 }
 renderTodaysGamePicks(picks)
 document.getElementById("gamePickCharts").innerHTML = versusVegasChartHtml(picks) + confidenceBucketsHtml(picks)
-document.getElementById("gamePickHistoryTable").innerHTML = gameHistoryHtml(picks, 30)
+renderExpandableLog("gamePickHistoryTable", "gamePickHistoryMore", limit => gameHistoryHtml(picks, limit),
+picks.length, "games")
 }
 
 // ---- Stats page: hitter table ----
