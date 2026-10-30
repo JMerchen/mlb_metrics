@@ -3139,6 +3139,22 @@ and 3.75 timeouts per team, against the league's ~22 points, 61 plays,
 65 snaps, 5.6 penalties and 3.85 timeouts; calibrated scales run about
 1.05-1.2.
 
+Late-game and short-yardage play calling (checked against 2025-26
+play-by-play): 3rd and 4th and 1 throw 25% (real teams run 77%) and a
+run there is stuffed for no gain 12% of the time on top of its draw, so
+it converts 72% (real 73%); ahead in the last four minutes a team throws
+on 6% of first downs, 20% of seconds and 25%/55% of short/long thirds
+(real 6/21/42%; simulated overall 28% against 23%); in short yardage, at
+the goal line and late in close games carries go by shares squared, so a
+back with 83% of the carries gets about 98% (`simSharpen`). Fourth down
+goes on 4th and 1 from the 30 on (real: 86% between the 40s), 4th and 2
+from midfield on (52%), 4th and 3 from the opponent's 45, and - behind
+by 1-8 with 8 minutes or less - 4th and 2 or less past the 25 or 4 or
+less past the 40 (72% near midfield). A team kneels only when
+`kneelsRunOut` shows kneeling on every down left ends the game, counting
+the defense's timeouts (as `runClock` would call them) and the two-minute
+warning.
+
 Kicks and returns (`_kickoff_model`, `_punt_model`): kickoffs are a
 touchback (35), out of bounds (40) or a real [caught at, returned] pair,
 600 of them taken as the middle of equal slices of the 2025-26 returns

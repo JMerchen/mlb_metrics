@@ -26,6 +26,7 @@ const SIM_OT_TIMEOUTS = 2
 const SIM_OTHER_TIMEOUT_RATE = 0.025
 // Seconds a flag that wipes out the snap takes (the clock restarts on the
 // referee's signal; real median 11-13), and in a hurry-up.
+const SIM_SHORT_YARDAGE_STUFF = 0.12
 const SIM_FLAG_SECONDS = 12
 const SIM_FLAG_HURRY_SECONDS = 6
 const SIM_SIDES = ["home", "away"]
@@ -103,6 +104,13 @@ left -= item.share
 if(left < 0){ return item }
 }
 return list[list.length - 1]
+}
+
+// A list's shares squared and renormalized: the leaders get more.
+function simSharpen(list){
+if(!list || list.length < 2){ return list }
+const total = list.reduce((sum, item) => sum + item.share * item.share, 0)
+return total > 0 ? list.map(item => ({...item, share: item.share * item.share / total})) : list
 }
 
 // "J. Love" from "Jordan Love".
@@ -340,6 +348,27 @@ notes.push({kind: "timeout", text: `Timeout ${code[caller]} (${timeouts[caller]}
 // quarter: in the last two minutes or so, or with four left when it needs
 // more than a score - as teams do. Most fail and hand the other side the
 // ball near midfield.
+// Whether kneeling on every down left runs out the clock: each kneel is
+// 2 seconds when the defense stops it with a timeout (as runClock would
+// call one), 40 otherwise, and the two-minute warning stops the clock.
+const kneelsRunOut = (defense, margin) => {
+let c = clock
+let left = timeouts[defense]
+for(let k = down; k <= 4; k++){
+const after = c - 2
+if(after <= 0){ return true }
+if(left > 0 && margin <= 16 && after <= 180 && !(qtr === 4 && c > 120 && after < 120)){
+left -= 1
+c = after
+continue
+}
+let used = Math.min(c, 40)
+if((qtr === 2 || qtr === 4) && c > 120 && c - used < 120){ used = c - 120 >= 6 ? c - 120 : Math.min(used, 6) }
+c -= used
+if(c <= 0){ return true }
+}
+return false
+}
 const kickoff = (kicker, how = "Kickoff") => {
 if(over){ return }
 const receiver = other(kicker)
@@ -484,12 +513,10 @@ const hurry = (qtr === 2 && clock <= 120) || (late && margin < 0) || (qtr === 5 
 const fgDistance = 117 - ball
 const fgChance = 1 / (1 + Math.exp(-(fg.a + fg.b * fgDistance)))
 
-// Kneel out a won game: each kneel runs 40 seconds, but the defense
-// stops the clock after one while it has timeouts (if it's close) - so
-// kneel only when the last one runs the clock out.
-const kneels = 5 - down
-const stops = margin <= 16 ? Math.min(timeouts[def], kneels) : 0
-if(qtr >= 4 && margin > 0 && clock <= 40 * (kneels - stops) + 2 * stops){
+// Kneel out a won game - only when kneeling on every down left runs the
+// clock out, counting the defense's timeouts and the two-minute warning
+// (otherwise a kneel at 2:01 stops at 1:55 and the plan falls apart).
+if(qtr >= 4 && margin > 0 && kneelsRunOut(def, margin)){
 drive.plays += 1
 runClock(2, 38)
 const qbLine = line(poss, (lineups[poss] || {}).qb)
@@ -516,13 +543,20 @@ continue
 // Field goal as time runs out, or on 4th down.
 const lastKick = clock <= 12 && fgDistance <= 58 && (qtr === 2 || ((qtr === 4 || qtr === 5) && margin <= 0 && margin >= -3))
 let fourth = null
+// Fourth down, as teams decide now: 4th and 1 between the 40s goes 86%
+// of the time, 4th and 2 about half; behind by a score or less in the 4th
+// quarter, 4th and 3 or less near midfield goes 72%.
 if(down === 4 && !lastKick){
 const needTd = late && margin < -3
 const desperate = qtr >= 4 && clock <= 150 && margin < 0
+const behindLate = qtr >= 4 && margin < 0 && margin >= -8 && clock <= 480
+const fgTiesOrWins = margin >= -3 && fgDistance <= 50
 if(desperate && !(margin >= -3 && fgDistance <= 55)){ fourth = "go" }
 else if(needTd && ball >= 40){ fourth = "go" }
-else if(togo <= 1 && ball >= 35){ fourth = "go" }
+else if(behindLate && !(fgTiesOrWins && clock <= 120) && ((togo <= 2 && ball >= 25) || (togo <= 4 && ball >= 40))){ fourth = "go" }
+else if(togo <= 1 && ball >= 30){ fourth = "go" }
 else if(fgDistance <= 57 && fgChance >= 0.35){ fourth = "fg" }
+else if(togo <= 2 && ball >= 50){ fourth = "go" }
 else if(togo <= 3 && ball >= 55){ fourth = "go" }
 else{ fourth = "punt" }
 if(fourth === "fg" && qtr >= 4 && clock <= 150 && margin < -3){ fourth = "go" }
@@ -624,13 +658,18 @@ turnover(poss, 100 - ball, "Downs")
 continue
 }
 
-// A play from scrimmage: run or pass.
+// A play from scrimmage: run or pass. Short yardage runs (3rd and 1:
+// 77% runs in real games); ahead late, a team runs the clock - in the last
+// four minutes real teams throw on 6% of first downs, 21% of seconds and
+// 42% of thirds - and an incompletion would stop it.
 let passRate = p.neutral_pass_rate
-if(down === 3 || down === 4){ passRate = togo <= 2 ? 0.4 : togo <= 4 ? 0.65 : 0.85 }
+if(down === 3 || down === 4){ passRate = togo <= 1 ? 0.25 : togo <= 2 ? 0.4 : togo <= 4 ? 0.65 : 0.85 }
 else if(down === 2 && togo >= 8){ passRate += 0.1 }
 else if(down === 2 && togo <= 3){ passRate -= 0.1 }
 if(hurry){ passRate += 0.3 }
-if(qtr >= 4 && margin >= 9){ passRate -= 0.25 }
+const protecting = qtr >= 4 && margin > 0 && clock <= 240
+if(protecting){ passRate = down === 1 ? 0.06 : down === 2 ? 0.2 : togo <= 3 ? 0.25 : 0.55 }
+else if(qtr >= 4 && margin >= 9){ passRate -= 0.25 }
 if(qtr >= 3 && margin <= -14){ passRate += 0.15 }
 const from = ball
 const isPass = rng() < Math.min(0.95, Math.max(0.1, passRate))
@@ -706,9 +745,15 @@ clockUsed = 6
 }
 }else{
 kind = "run"
-carrier = simPick(lineup.rushers, rng())
+// Short yardage, at the goal line, or late in a close game, the lead back
+// gets the ball: shares squared (83% of the carries becomes about 98%).
+const leverage = togo <= 2 || ball >= 95 || (qtr >= 4 && Math.abs(margin) <= 8 && clock <= 300)
+carrier = simPick(leverage ? simSharpen(lineup.rushers) : lineup.rushers, rng())
 const raw = simDraw(p.rush_yards, probs, rng())
 yards = Math.min(100 - ball, Math.round(raw > 0 ? raw * factors[poss].run * (carrier ? carrier.ypc : 1) : raw))
+// Against a stacked box on 3rd or 4th and short a run is stuffed more
+// often: real ones convert 73% of the time.
+if((down === 3 || down === 4) && togo <= 2 && rng() < SIM_SHORT_YARDAGE_STUFF){ yards = Math.min(yards, 0) }
 b.rush_att += 1
 b.rush_yards += yards
 const cLine = line(poss, carrier)
@@ -1206,7 +1251,7 @@ return `<div class="simFinal"><div class="whatIfHeadline">Final: ${headline}</di
 
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
-simRng, simDraw, simFactors, simPunt, simPick, simShortName, simLineup, simulateGame, simAverage, simCalibrate, simSpot, simClock,
+simRng, simDraw, simFactors, simPunt, simPick, simSharpen, simShortName, simLineup, simulateGame, simAverage, simCalibrate, simSpot, simClock,
 simSummary, simMarginBins, simMarginChartHtml, simSummaryHtml, simPlayerStatsHtml,
 simFieldSvg, simScoreboardHtml, simDriveChartHtml, simTickerHtml, simBoxScoreHtml, simCalibrationNote, simFinalHtml,
 }
