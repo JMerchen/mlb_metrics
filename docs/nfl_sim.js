@@ -80,7 +80,7 @@ pass_att: 0, pass_comp: 0, pass_yards: 0, pass_td: 0, ints: 0, sacks: 0, sack_ya
 rush_att: 0, rush_yards: 0, rush_td: 0,
 third_att: 0, third_conv: 0, fourth_att: 0, fourth_conv: 0,
 fumbles_lost: 0, turnovers: 0, punts: 0, fg_att: 0, fg_made: 0, possession: 0,
-penalties: 0, penalty_yards: 0, timeouts: 0,
+penalties: 0, penalty_yards: 0, timeouts: 0, return_td: 0,
 }
 }
 
@@ -167,6 +167,45 @@ function simQuarterLabel(qtr){
 return qtr > 4 ? "OT" : `Q${qtr}`
 }
 
+// A punt from ball (yards from the punting team's goal): a real punt
+// kicked from about there - how far, and whether it was returned, fair
+// caught, downed, out of bounds or a touchback. Returns {gross, landing,
+// at (where the other side starts), ret, touchdown, text(spot, side)}.
+function simPunt(lg, ball, rng){
+const buckets = (lg.punts || {}).buckets
+if(!buckets){
+let net = Math.round(simDraw(lg.punt_net, lg.quantile_probs, rng()))
+const tb = ball + net >= 100 || rng() < (lg.punt_touchback_rate || 0.07) * (ball > 50 ? 2 : 0.5)
+const at = tb ? 20 : Math.max(1, 100 - (ball + Math.max(net, 0)))
+return {gross: net, landing: 100 - at, at, ret: 0, touchdown: false,
+text: (spot, side) => `punt, ${tb ? "touchback; " : ""}taken over at the ${spot(at, side)}`}
+}
+let key = Math.min(9, Math.max(0, Math.floor(ball / 10)))
+while(!(buckets[key] || []).length && key > 0){ key -= 1 }
+const list = buckets[key] || buckets[Object.keys(buckets)[0]]
+const [gross0, end, ret0] = list[Math.floor(rng() * list.length)]
+let gross = gross0
+let ending = end
+// Into the end zone (or a touchback where this punt was kicked from).
+if(ball + gross >= 100 || ending === "t"){
+gross = Math.max(gross, 100 - ball)
+return {gross, landing: 100, at: 20, ret: 0, touchdown: false,
+text: () => `punts ${gross} yards into the end zone, touchback`}
+}
+const landing = ball + gross
+const caughtAt = 100 - landing
+if(ending !== "r"){
+const how = {f: "fair catch", d: "downed", o: "out of bounds"}[ending] || "downed"
+return {gross, landing, at: Math.max(1, caughtAt), ret: 0, touchdown: false,
+text: (spot, side) => `punts ${gross} yards to the ${spot(caughtAt, side)}, ${how}`}
+}
+const ret = ret0
+const at = caughtAt + ret
+if(at >= 100){ return {gross, landing, at: 99, ret, touchdown: true, text: () => ""} }
+return {gross, landing, at: Math.max(1, at), ret, touchdown: false,
+text: (spot, side) => `punts ${gross} yards to the ${spot(caughtAt, side)}, returned ${ret} yard${ret === 1 ? "" : "s"} to the ${spot(Math.max(1, at), side)}`}
+}
+
 // opts: {seed, edge, scale, unitPcts: {home: {unit: pct}, away: {...}},
 // lineups: {home: simLineup(...), away: ...}}. Returns {home, away, plays,
 // drives, box, final, players}. A play: {qtr, clock (left in the quarter
@@ -226,8 +265,9 @@ const spot = (b, side) => simSpot(b, code[side], code[other(side)])
 const lead = side => score[side] - score[other(side)]
 const record = (kind, yards, text, extra = {}) => {
 const play = {
-qtr, clock, poss, down, togo, ball: extra.ball ?? ball, end: extra.end ?? ball, kind, yards: Math.round(yards), text,
+qtr, clock, poss, down: extra.down ?? down, togo: extra.togo ?? togo, ball: extra.ball ?? ball, end: extra.end ?? ball, kind, yards: Math.round(yards), text,
 home: score.home, away: score.away, drive: drives.length - 1, scoring: extra.scoring || null, timeouts: {...timeouts},
+change: !!extra.change,
 }
 plays.push(play)
 return play
@@ -315,10 +355,57 @@ record("kickoff", 0, recovered
 : `${code[kicker]} onside kick, ${code[receiver]} recover at ${spot(ball, receiver)}`)
 return
 }
+const kicks = lg.kickoffs
+if(!kicks || !(kicks.returns || []).length){
 const start = simDraw(lg.kickoff_start, probs, rng())
 startDrive(receiver, start, how)
 tick(5)
 record("kickoff", 0, `${code[kicker]} kicks off; ${code[receiver]} start at ${spot(ball, receiver)}`)
+return
+}
+// A real kickoff: a touchback, out of bounds, or a catch and a return.
+const u = rng()
+if(u < kicks.touchback_rate || u < kicks.touchback_rate + kicks.out_of_bounds_rate){
+const tb = u < kicks.touchback_rate
+startDrive(receiver, tb ? kicks.touchback_spot : kicks.out_of_bounds_spot, how)
+tick(5)
+record("kickoff", 0, `${code[kicker]} kicks off, ${tb ? "touchback" : "out of bounds"}; ${code[receiver]} start at ${spot(ball, receiver)}`)
+return
+}
+const [caught, ret] = kicks.returns[Math.floor(rng() * kicks.returns.length)]
+const where = caught < 0 ? `${-caught} yard${caught === -1 ? "" : "s"} deep in the end zone` : caught === 0 ? "the goal line" : `the ${spot(caught, receiver)}`
+const kickText = `${code[kicker]} kicks off, caught at ${where}`
+if(caught + ret >= 100){
+returnTouchdown(receiver, "kickoff", `${kickText}, returned ${ret} yards`, how)
+return
+}
+startDrive(receiver, caught + ret, how)
+tick(caught + ret > 50 ? 10 : 6)
+// A kick landing short of the landing zone is spotted at the 40.
+record("kickoff", 0, ret === 0 && caught >= 35
+? `${code[kicker]} kicks off short of the landing zone; ${code[receiver]} start at the ${spot(ball, receiver)}`
+: ret === 0
+? `${kickText}, no return`
+: `${kickText}, returned ${ret} yard${ret === 1 ? "" : "s"} to the ${spot(ball, receiver)}`)
+}
+// A kick or punt returned all the way: six points (and the try) for the
+// returning team, which then kicks off.
+function returnTouchdown(side, kind, text, how){
+startDrive(side, 99, how)
+tick(12)
+score[side] += 6
+const good = rng() < (lg.xp_rate || 0.95)
+if(good){ score[side] += 1 }
+const kicker = line(side, (lineups[side] || {}).kicker)
+if(kicker){
+kicker.xpa += 1
+kicker.xpm += good ? 1 : 0
+}
+box[side].return_td += 1
+record(kind, 0, `${text}, TOUCHDOWN ${code[side]}; extra point ${good ? "is good" : "is no good"}`, {end: 100, scoring: "TD"})
+ball = 100
+endDrive("Return TD")
+kickoff(side)
 }
 const scoreTouchdown = how => {
 score[poss] += 6
@@ -398,10 +485,11 @@ const fgDistance = 117 - ball
 const fgChance = 1 / (1 + Math.exp(-(fg.a + fg.b * fgDistance)))
 
 // Kneel out a won game: each kneel runs 40 seconds, but the defense
-// stops the clock after one while it has timeouts (if it's close).
+// stops the clock after one while it has timeouts (if it's close) - so
+// kneel only when the last one runs the clock out.
 const kneels = 5 - down
 const stops = margin <= 16 ? Math.min(timeouts[def], kneels) : 0
-if(qtr >= 4 && margin > 0 && clock <= 42 * (kneels - stops) + 3 * stops){
+if(qtr >= 4 && margin > 0 && clock <= 40 * (kneels - stops) + 2 * stops){
 drive.plays += 1
 runClock(2, 38)
 const qbLine = line(poss, (lineups[poss] || {}).qb)
@@ -419,6 +507,7 @@ drive.yards -= 1
 down += 1
 togo += 1
 if(down > 4){
+plays[plays.length - 1].change = true
 turnover(poss, ball, "Downs")
 }
 continue
@@ -456,7 +545,7 @@ endDrive("Field goal")
 kickoff(poss)
 }else{
 const at = Math.max(20, 100 - (ball - 7))
-record("field_goal", 0, `${name(poss, (lineups[poss] || {}).kicker)} ${Math.round(fgDistance)}-yard field goal is NO GOOD`)
+record("field_goal", 0, `${name(poss, (lineups[poss] || {}).kicker)} ${Math.round(fgDistance)}-yard field goal is NO GOOD`, {change: true})
 endDrive("Missed FG")
 startDrive(def, at, "Missed FG")
 }
@@ -465,17 +554,17 @@ continue
 if(fourth === "punt"){
 b.punts += 1
 tick(8)
-let at
-let net = Math.round(simDraw(lg.punt_net, probs, rng()))
-if(ball + net >= 100 || rng() < (lg.punt_touchback_rate || 0.07) * (ball > 50 ? 2 : 0.5)){
-at = 20
-net = 80 - ball
-}else{
-at = Math.max(1, 100 - (ball + Math.max(net, 0)))
-}
-record("punt", 0, `${code[poss]} punt, ${code[def]} take over at ${spot(at, def)}`)
+const punt = simPunt(lg, ball, rng)
+const kicker = code[poss]
+if(punt.touchdown){
+record("punt", 0, `${kicker} punts ${punt.gross} yards to the ${spot(100 - punt.landing, def)}`, {change: true})
 endDrive("Punt")
-startDrive(def, at, "Punt")
+returnTouchdown(def, "punt", `${code[def]} return the punt ${punt.ret} yards`, "Punt")
+continue
+}
+record("punt", 0, `${kicker} ${punt.text(spot, def)}`, {change: true})
+endDrive("Punt")
+startDrive(def, punt.at, "Punt")
 continue
 }
 
@@ -493,6 +582,7 @@ flag = simPick(flags[side], rng())
 }
 if(flag && !flag.after){
 const before = ball
+const downBefore = down, togoBefore = togo
 const by = flag.side === "O" ? poss : def
 const situation = `${simOrdinal(down)} & ${ball + togo >= 100 ? "goal" : togo}`
 let yds
@@ -524,10 +614,13 @@ drive.yards += flag.side === "O" ? -yds : yds
 tick(hurry ? SIM_FLAG_HURRY_SECONDS : SIM_FLAG_SECONDS)
 const play = record("penalty", flag.side === "O" ? -yds : yds,
 `${situation}: PENALTY ${code[by]}, ${flag.name}, ${yds ? `${yds} yard${yds === 1 ? "" : "s"}` : "half the distance to the goal"}${first ? ", first down" : ""}`,
-{ball: before, end: ball})
+{ball: before, end: ball, down: downBefore, togo: togoBefore})
 play.first_down = first
 play.line = ball + togo
-if(down > 4){ turnover(poss, 100 - ball, "Downs") }
+if(down > 4){
+play.change = true
+turnover(poss, 100 - ball, "Downs")
+}
 continue
 }
 
@@ -581,7 +674,7 @@ b.ints += 1
 b.turnovers += 1
 if(qb){ qb.ints += 1 }
 lost = {at: Math.min(99, Math.max(1, 100 - caught + ret)), result: "Interception"}
-text = `${name(poss, lineup.qb)} pass${target ? ` for ${target.short}` : ""} INTERCEPTED by ${code[def]}`
+text = `${name(poss, lineup.qb)} pass${target ? ` for ${target.short}` : ""} INTERCEPTED by ${code[def]} at the ${spot(100 - caught, def)}, returned ${ret} yard${ret === 1 ? "" : "s"}`
 clockUsed = 8
 }else if(rng() < Math.min(0.95, p.comp_rate * (target ? target.catch : 1))){
 kind = "pass"
@@ -640,7 +733,7 @@ b.fumbles_lost += lost.result === "Fumble" ? 1 : 0
 b.turnovers += lost.result === "Fumble" ? 1 : 0
 tick(clockUsed === 6 ? 6 : 8)
 ball += yards
-record(kind, yards, `${situation}: ${text}`, {ball: from, end: ball})
+record(kind, yards, `${situation}: ${text}`, {ball: from, end: ball, change: true})
 turnover(poss, 100 - lost.at, lost.result)
 continue
 }
@@ -712,6 +805,7 @@ play.text += `; PENALTY ${code[def]}, ${flag.name}, ${yds ? `${yds} yards` : "ha
 }
 play.line = ball + togo
 if(down > 4){
+play.change = true
 turnover(poss, 100 - ball, "Downs")
 }
 }
@@ -1054,7 +1148,7 @@ yards = sofar.reduce((sum, p) => sum + p.yards, 0)
 time = "…"
 result = "…"
 }
-const cls = over && (result === "Touchdown" || result === "Field goal") ? " class=\"simScoreDrive\"" : !over ? " class=\"simLiveDrive\"" : ""
+const cls = over && (result === "Touchdown" || result === "Return TD" || result === "Field goal") ? " class=\"simScoreDrive\"" : !over ? " class=\"simLiveDrive\"" : ""
 rows.push(`<tr${cls}><td>${simEsc(team)}</td><td>${simQuarterLabel(d.qtr)} ${simClock(d.clock)}</td><td>${simEsc(simSpot(d.start, team, opp))}</td><td>${count}</td><td>${yards}</td><td>${time}</td><td>${simEsc(result)}</td></tr>`)
 })
 if(!rows.length){ return "" }
@@ -1066,7 +1160,7 @@ function simTickerHtml(game, playIndex, count){
 const upTo = game.plays.slice(0, playIndex + 1)
 const shown = count ? upTo.slice(-count) : upTo
 return `<ol class="simTicker">${shown.reverse().map(p =>
-`<li${p.scoring ? " class=\"simScoring\"" : ""}><span class="simWhen">${simQuarterLabel(p.qtr)} ${simClock(p.clock)}</span> ${simEsc(p.text)}</li>`).join("")}</ol>`
+`<li${p.scoring ? " class=\"simScoring\"" : p.change ? " class=\"simChange\"" : ""}><span class="simWhen">${simQuarterLabel(p.qtr)} ${simClock(p.clock)}</span> ${simEsc(p.text)}</li>`).join("")}</ol>`
 }
 
 function simBoxScoreHtml(game){
@@ -1080,7 +1174,7 @@ const rows = [
 ["Passing (comp-att, yards)", `${a.pass_comp}-${a.pass_att}, ${a.pass_yards - a.sack_yards}`, `${h.pass_comp}-${h.pass_att}, ${h.pass_yards - h.sack_yards}`],
 ["Sacked (yards)", `${a.sacks} (${a.sack_yards})`, `${h.sacks} (${h.sack_yards})`],
 ["Rushing (att, yards)", `${a.rush_att}, ${a.rush_yards}`, `${h.rush_att}, ${h.rush_yards}`],
-["Touchdowns (pass, rush)", `${a.pass_td}, ${a.rush_td}`, `${h.pass_td}, ${h.rush_td}`],
+["Touchdowns (pass, rush, return)", `${a.pass_td}, ${a.rush_td}, ${a.return_td}`, `${h.pass_td}, ${h.rush_td}, ${h.return_td}`],
 ["Field goals", pct(a.fg_made, a.fg_att), pct(h.fg_made, h.fg_att)],
 ["3rd down", pct(a.third_conv, a.third_att), pct(h.third_conv, h.third_att)],
 ["4th down", pct(a.fourth_conv, a.fourth_att), pct(h.fourth_conv, h.fourth_att)],
@@ -1112,7 +1206,7 @@ return `<div class="simFinal"><div class="whatIfHeadline">Final: ${headline}</di
 
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
-simRng, simDraw, simFactors, simPick, simShortName, simLineup, simulateGame, simAverage, simCalibrate, simSpot, simClock,
+simRng, simDraw, simFactors, simPunt, simPick, simShortName, simLineup, simulateGame, simAverage, simCalibrate, simSpot, simClock,
 simSummary, simMarginBins, simMarginChartHtml, simSummaryHtml, simPlayerStatsHtml,
 simFieldSvg, simScoreboardHtml, simDriveChartHtml, simTickerHtml, simBoxScoreHtml, simCalibrationNote, simFinalHtml,
 }

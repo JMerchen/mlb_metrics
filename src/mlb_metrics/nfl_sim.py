@@ -55,7 +55,10 @@ PBP_COLUMNS = [
     "passer_player_id", "passer_player_name", "receiver_player_id", "receiver_player_name",
     "rusher_player_id", "rusher_player_name", "kicker_player_id", "kicker_player_name",
     "penalty", "penalty_team", "penalty_type", "penalty_yards", "first_down_penalty", "desc",
+    "yardline_100", "punt_fair_catch", "punt_downed", "punt_out_of_bounds", "kickoff_out_of_bounds",
 ]
+KICK_SAMPLES = 600
+PUNT_SAMPLES_PER_BUCKET = 150
 ROSTER_COLUMNS = ["season", "week", "team", "position", "full_name", "gsis_id", "pfr_id", "status"]
 
 
@@ -144,6 +147,70 @@ def _drive_starts(pbp: pd.DataFrame, transition: str, skip: pd.DataFrame | None 
     return np.asarray(out, dtype=float)
 
 
+def _even_rows(rows: list, n: int) -> list:
+    """n rows standing for rows (sorted): the middle one of each of n equal
+    slices, so a rare extreme (a 95-yard return) is kept only as often as
+    it happens (all rows if there are fewer than n)."""
+    if len(rows) <= n:
+        return rows
+    idx = ((np.arange(n) + 0.5) * len(rows) / n).astype(int)
+    return [rows[i] for i in idx]
+
+
+def _kickoff_model(pbp: pd.DataFrame) -> dict | None:
+    """Kickoffs (onside ones left out): how often each is a touchback or
+    goes out of bounds and where the receiving team then starts, and real
+    [caught at, returned] pairs - yards from the receiving team's goal
+    (negative: deep in the end zone) and return yards - picked evenly by
+    where the return ended, so a draw keeps a deep catch's longer return."""
+    if not {"kick_distance", "kickoff_out_of_bounds"} <= set(pbp.columns):
+        return None
+    kicks = pbp[(pbp["play_type"] == "kickoff") & pbp["kick_distance"].notna()]
+    kicks = kicks[~kicks["desc"].astype("string").fillna("").str.contains("onside", case=False)]
+    if len(kicks) < 100:
+        return None
+    touchback = kicks["touchback"].fillna(0) == 1
+    out = kicks["kickoff_out_of_bounds"].fillna(0) == 1
+    returned = kicks[~touchback & ~out]
+    # From the kicking team's 35, 65 yards from the receiver's goal: where
+    # it's caught, in receiver yards ("kicks 64 yards from TB 35 to NO 1").
+    caught = (65 - returned["kick_distance"]).to_numpy(dtype=float)
+    ret = returned["return_yards"].fillna(0).to_numpy(dtype=float)
+    pairs = sorted(([round(float(c)), round(float(r))] for c, r in zip(caught, ret)), key=lambda p: (p[0] + p[1], p[0]))
+    return {
+        "touchback_rate": round(float(touchback.mean()), 4),
+        "out_of_bounds_rate": round(float(out.mean()), 4),
+        "touchback_spot": 35,
+        "out_of_bounds_spot": 40,
+        "returns": _even_rows(pairs, KICK_SAMPLES),
+    } if len(pairs) >= 50 else None
+
+
+def _punt_model(pbp: pd.DataFrame) -> dict | None:
+    """Real punts, [gross yards, how it ended, return yards], in buckets of
+    where they were kicked from (yards from the punting team's goal, by
+    tens) - a punt from midfield is aimed short of the end zone, one from
+    its own 20 isn't. Endings: r returned, f fair catch, d downed, o out of
+    bounds, t touchback."""
+    needed = {"kick_distance", "yardline_100", "punt_fair_catch", "punt_downed", "punt_out_of_bounds", "touchback"}
+    if not needed <= set(pbp.columns):
+        return None
+    punts = pbp[(pbp["play_type"] == "punt") & pbp["kick_distance"].notna() & pbp["yardline_100"].notna()]
+    if len(punts) < 200:
+        return None
+    end = np.select(
+        [punts["touchback"].fillna(0) == 1, punts["punt_fair_catch"].fillna(0) == 1,
+         punts["punt_downed"].fillna(0) == 1, punts["punt_out_of_bounds"].fillna(0) == 1],
+        ["t", "f", "d", "o"], "r")
+    frm = (100 - punts["yardline_100"]).to_numpy(dtype=float)
+    rows = sorted(zip(frm, punts["kick_distance"].to_numpy(dtype=float), end, punts["return_yards"].fillna(0).to_numpy(dtype=float)),
+                  key=lambda r: (r[1] - (r[3] if r[2] == "r" else 0), r[1]))
+    buckets = {}
+    for f, gross, e, r in rows:
+        buckets.setdefault(str(int(min(9, max(0, f // 10)))), []).append([round(float(gross)), str(e), round(float(r)) if e == "r" else 0])
+    return {"buckets": {k: _even_rows(v, PUNT_SAMPLES_PER_BUCKET) for k, v in sorted(buckets.items())}}
+
+
 def _field_goal_curve(pbp: pd.DataFrame) -> dict:
     """Make probability by distance: 1 / (1 + exp(-(a + b * distance)))."""
     kicks = pbp[(pbp["play_type"] == "field_goal") & pbp["kick_distance"].notna()]
@@ -192,7 +259,10 @@ def _penalty_league(snaps: pd.DataFrame, flags: pd.DataFrame) -> dict:
                 "name": name, "side": side, "share": round(float(row["n"] / by["n"].sum()), 4),
                 "yards": int(round(float(row["yards"]))), # An automatic first down; a pre-snap foul's 5 yards give one
                 # only when they reach the line, which the simulation sees.
-                "first_down": round(float(row["first_down"]) if side == "D" and name not in PRESNAP_PENALTIES else 0.0, 3),
+                # Measured at 0.94-1.0 for the automatic ones (the rest are
+                # flags on plays that already made the line): call them 1.
+                "first_down": (1.0 if row["first_down"] >= 0.9 else round(float(row["first_down"]), 3))
+                if side == "D" and name not in PRESNAP_PENALTIES else 0.0,
                 "presnap": name in PRESNAP_PENALTIES,
                 "after": bool(side == "D" and row["nullified"] < 0.5),
             })
@@ -326,6 +396,8 @@ def build_profiles(pbp: pd.DataFrame, season: int, rosters: pd.DataFrame | None 
     }
     lg = {
         "onside": lg_onside,
+        "kickoffs": _kickoff_model(recent),
+        "punts": _punt_model(recent),
         "penalties": _penalty_league(snaps, flags),
         "neutral_pass_rate": round(league["neutral_pass"] / max(1, league["neutral"]), 4),
         "sack_rate": round(league["sacks"] / max(1, league["dropbacks"]), 4),

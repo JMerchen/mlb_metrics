@@ -363,3 +363,94 @@ test("no penalty or play puts the ball past the goal line without a score", () =
     }
   }
 })
+
+// The league with real-style kickoffs and punts (catch spot and return).
+const KICKS = {
+  ...PROFILES,
+  league: {
+    ...LEAGUE,
+    kickoffs: {
+      touchback_rate: 0.2, out_of_bounds_rate: 0.01, touchback_spot: 35, out_of_bounds_spot: 40,
+      returns: [[-5, 25], [0, 22], [3, 24], [5, 30], [-2, 20], [8, 18], [5, 95], [4, 21], [1, 26], [6, 27]],
+    },
+    punts: { buckets: {
+      0: [[45, "r", 8], [40, "f", 0], [50, "o", 0], [38, "d", 0]], 2: [[46, "r", 10], [44, "f", 0], [48, "r", 3]],
+      4: [[42, "f", 0], [40, "d", 0], [45, "r", 6]], 6: [[35, "d", 0], [30, "f", 0], [38, "t", 0]],
+    } },
+  },
+}
+
+test("kickoffs and punts say where the ball was caught and how far it came back", () => {
+  let returnTds = 0
+  for (let seed = 1; seed <= 300; seed++) {
+    const g = simulateGame(KICKS, "GB", "CAR", { seed })
+    for (const p of g.plays) {
+      if (p.kind === "kickoff" && !/onside/.test(p.text)) {
+        assert.match(p.text, /touchback|out of bounds|short of the landing zone|no return|caught at .*returned \d+ yards?/)
+        if (p.scoring) { returnTds += 1 } else {
+          const m = p.text.match(/caught at (?:(\d+) yards? deep in the end zone|the goal line|the (\w+) (\d+)).*returned (\d+) yards?/)
+          if (m) {
+            const caught = m[1] ? -Number(m[1]) : m[3] ? Number(m[3]) : 0
+            assert.equal(p.ball, caught + Number(m[4]))
+          }
+        }
+      }
+      if (p.kind === "punt" && !p.scoring) {
+        assert.match(p.text, /fair catch|downed|out of bounds|touchback|returned \d+ yards?|punts \d+ yards to the/)
+        assert.ok(p.change)
+      }
+    }
+    assert.equal(g.box.home.points, g.final.home)
+    assert.equal(g.box.home.return_td + g.box.away.return_td, g.plays.filter(p => p.scoring === "TD" && (p.kind === "kickoff" || p.kind === "punt")).length)
+  }
+  assert.ok(returnTds > 0)
+})
+
+test("every change of possession is marked: turnovers, downs, punts and missed field goals", () => {
+  for (let seed = 1; seed <= 200; seed++) {
+    const g = simulateGame(PROFILES, "GB", "CAR", { seed })
+    for (let i = 0; i + 1 < g.plays.length; i++) {
+      const p = g.plays[i]
+      if (/INTERCEPTED|FUMBLE/.test(p.text) || p.kind === "punt" || /NO GOOD/.test(p.text)) { assert.ok(p.change, p.text) }
+      if (p.scoring) { assert.ok(!p.change) }
+    }
+    // A drive that ends on downs ends on a marked play.
+    g.drives.forEach((d, i) => {
+      if (d.result !== "Downs") { return }
+      const last = g.plays.filter(p => p.drive === i).pop()
+      assert.ok(last.change, last.text)
+    })
+  }
+  const g = simulateGame(PROFILES, "GB", "CAR", { seed: 3 })
+  const changed = g.plays.findIndex(p => p.change)
+  assert.match(simTickerHtml(g, changed, 1), /class="simChange"/)
+})
+
+test("a defensive foul that gives an automatic first down resets the downs, even at the goal line", () => {
+  let checked = 0
+  for (let seed = 1; seed <= 600; seed++) {
+    const g = simulateGame(PROFILES, "GB", "CAR", { seed })
+    g.plays.forEach((p, i) => {
+      if (p.kind !== "penalty") { return }
+      const next = g.plays.slice(i + 1).find(q => q.kind !== "timeout" && q.kind !== "warning")
+      const defensive = /Defensive Pass Interference/.test(p.text)
+      if (!defensive || !next || next.drive !== p.drive) { return }
+      checked += 1
+      assert.equal(next.down, 1, `${p.text} -> ${next.down} & ${next.togo}`)
+      assert.equal(next.togo, Math.min(10, 100 - next.ball))
+    })
+  }
+  assert.ok(checked > 0)
+})
+
+test("a kneel-down finish runs the clock out instead of handing the ball back", () => {
+  for (let seed = 1; seed <= 800; seed++) {
+    const g = simulateGame(PROFILES, "GB", "CAR", { seed })
+    const kneels = g.plays.filter(p => p.kind === "kneel")
+    if (!kneels.length) { continue }
+    const last = kneels[kneels.length - 1]
+    const after = g.plays.slice(g.plays.indexOf(last) + 1).filter(p => p.kind !== "timeout" && p.kind !== "warning")
+    // Nothing more is snapped in that half once the leader starts kneeling.
+    assert.ok(!after.some(p => p.qtr === last.qtr && p.poss !== last.poss && SCRIMMAGE.has(p.kind)), `seed ${seed}`)
+  }
+})
