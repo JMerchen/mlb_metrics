@@ -110,17 +110,24 @@ gap:14px;
 
 }
 
-.brandMark{
+/* The SR badge: a ball split baseball (S) / football (R). */
+.brandBadge{
 
-width:38px;
+width:46px;
 
-height:38px;
+height:46px;
 
 flex-shrink:0;
 
-filter:drop-shadow(0 2px 6px rgba(242,169,60,.35));
+filter:drop-shadow(0 2px 6px rgba(242,169,60,.3));
 
 }
+
+.brandText{display:flex;flex-direction:column;gap:2px;}
+
+.brandText h1{line-height:1.05;}
+
+.brandTag{font-size:12.5px;font-weight:500;color:var(--text-dim);}
 
 h1{
 
@@ -1221,8 +1228,9 @@ stat tiles and pick cards kept desktop padding. */
 of wrapping. */
 .siteHeader{gap:10px;padding:12px 0 12px;margin-bottom:14px;}
 .brandRow{gap:10px;}
-.brandMark{width:28px;height:28px;}
+.brandBadge{width:36px;height:36px;}
 h1{font-size:20px;}
+.brandTag{font-size:11.5px;}
 .pageTabs{display:flex;flex-wrap:nowrap;overflow-x:auto;width:100%;gap:6px;-webkit-overflow-scrolling:touch;}
 .tabButton{padding:7px 12px;font-size:13px;}
 /* Small enough that all four site tabs fit a 390px screen. */
