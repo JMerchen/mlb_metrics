@@ -50,6 +50,9 @@ jobs:
       - name: Run nfl_sim.js unit tests
         run: node --test docs/nfl_sim.test.js
 
+      - name: Run mlb_sim.js unit tests
+        run: node --test docs/mlb_sim.test.js
+
       - name: Run payroll_render.js unit tests
         run: node --test docs/payroll_render.test.js
 

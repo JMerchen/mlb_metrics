@@ -70,6 +70,10 @@ jobs:
         run: |
           python scripts/build_hitter_stats.py
 
+      - name: Build MLB game simulation profiles (Statcast pitches)
+        run: |
+          python scripts/build_mlb_sim_profiles.py || echo "::warning::MLB simulation profiles not rebuilt"
+
       - name: Build team schedules
         run: |
           python scripts/build_team_schedules.py

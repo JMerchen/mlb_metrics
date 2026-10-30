@@ -3116,6 +3116,46 @@ which writes `data/nfl_payroll/team_payroll.csv` and
 `docs/data/nfl_payroll_*.csv`; the tab shares `docs/payroll_render.js` and
 `docs/payroll.js` with the MLB page.
 
+## MLB game simulation (`docs/predictive.html`'s "Simulate a game", `mlb_sim.py`)
+
+Pick two teams, their starting pitchers and batting orders (defaults: the
+latest probable starters and each team's regulars - the nine with the most
+recent starts, in their usual spots) and watch the game pitch by pitch
+over about five minutes in `docs/mlb_sim.js` / `docs/mlb_sim_view.js`:
+line score, count and runners, each pitch in the zone, the play-by-play,
+then the box score. `scripts/build_mlb_sim_profiles.py` (in the daily
+update) writes `docs/data/mlb_sim_profiles.json` (~0.5 MB, loaded only when
+the simulator is opened) from the stored Statcast pitches of this season
+and last:
+
+- the league's rate of each pitch result (ball, called strike, swinging
+  strike incl. foul tips, foul, in play, hit batter) for each pitch type in
+  each count, and of each contact result (groundout, flyout, lineout, 1B,
+  2B, 3B, HR);
+- each pitcher's pitches (3%+ of his mix), velocity, mix by count bucket
+  and batter side, and ratios to the league for each pitch's results (250
+  pseudo-pitches) and his contact results (200 balls in play); each
+  hitter's (400 pitches, 150 balls in play) - all against what the league
+  would have done with the same pitch types in the same counts;
+- platoon and times-through-the-order ratios, and calibration multipliers
+  (all within 0.5% of 1) that make the product add up to what happened
+  between profiled players;
+- base-running transitions: for each play, base state and outs, how
+  often it ended in each base state, outs and runs (walk-offs dropped);
+- rosters (latest 2026 team), regular lineups, starters (real ones -
+  three starts or more - first) and bullpens (late-inning arms first).
+
+Starters go a drawn number of pitches around their recent average; the
+closer comes in for 9th-inning saves, the setup man in a close 8th, other
+relievers as often as each really pitches. Simulated with default lineups
+over 2,000 games: 4.33 runs, 38.0 PA and 148 pitches a team, .239/K 22.9%/
+BB 9.6%/HR 3.05% a PA, starters 84 pitches and 5.1 innings; the league
+(profiled players, 2025-26): 4.46, 37.8, 147, .243/22.2%/9.8%/3.0%, 84.
+One plate appearance at a time, real 2026 matchups strike out 22.7%
+against 22.1% actual - the remaining gap is pitch-sequence effects the
+per-pitch model doesn't see; intentional walks, steals and pickoffs aren't
+modeled yet.
+
 ## NFL game simulation (`docs/nfl.html`'s What if? panel, `nfl_sim.py`)
 
 "Simulate this game", under the What if? panel, plays the chosen game out
