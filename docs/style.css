@@ -1417,6 +1417,7 @@ td,th{padding:7px 8px;font-size:12px;}
 .logStreak{font-size:12px;text-align:right;color:var(--text-dim);font-variant-numeric:tabular-nums;}
 .logStreakReset{color:var(--text);}
 .showMore{margin:4px 0 0;}
+.logButtons{display:flex;gap:8px;flex-wrap:wrap;}
 
 /* Ranked lists: hit streaks, best chances, leaderboards. */
 .rankList{display:grid;gap:2px;}
