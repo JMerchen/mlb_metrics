@@ -116,11 +116,23 @@ def _offense_rates(plays: pd.DataFrame) -> dict:
     }
 
 
-def _drive_starts(pbp: pd.DataFrame, transition: str) -> np.ndarray:
+def _onside_kicks(pbp: pd.DataFrame) -> pd.DataFrame:
+    """Onside kickoffs; each row's (game_id, drive) is the drive it started."""
+    if "desc" not in pbp.columns:
+        return pbp.iloc[0:0]
+    kicks = pbp[pbp["play_type"] == "kickoff"]
+    return kicks[kicks["desc"].astype("string").fillna("").str.contains("onside", case=False)]
+
+
+def _drive_starts(pbp: pd.DataFrame, transition: str, skip: pd.DataFrame | None = None) -> np.ndarray:
     """Yards from its own goal where the receiving team's drive started
-    ("ARI 30" for ARI = 30; for the other team, 100 - 30)."""
+    ("ARI 30" for ARI = 30; for the other team, 100 - 30), leaving out the
+    drives in skip (rows with game_id and drive)."""
     starts = pbp[(pbp["drive_start_transition"] == transition) & pbp["drive_start_yard_line"].notna() & pbp["posteam"].notna()]
     starts = starts.drop_duplicates(["game_id", "drive"])
+    if skip is not None and len(skip):
+        keys = set(zip(skip["game_id"], skip["drive"]))
+        starts = starts[[k not in keys for k in zip(starts["game_id"], starts["drive"])]]
     out = []
     for side, posteam in zip(starts["drive_start_yard_line"], starts["posteam"]):
         parts = str(side).split()
@@ -296,7 +308,24 @@ def build_profiles(pbp: pd.DataFrame, season: int, rosters: pd.DataFrame | None 
     games = max(1, recent["game_id"].nunique())
 
     snaps, flags = _snaps_with_flags(recent)
+    # Onside kicks come only from a team behind late, and most hand the
+    # other side the ball near midfield: kept out of the kickoff starts (they
+    # were half of all kickoff drives starting past midfield) and modeled on
+    # their own.
+    onside = _onside_kicks(recent)
+    recovered = int(onside["drive_start_transition"].eq("ONSIDE_KICK").sum()) if "drive_start_transition" in onside else 0
+    failed = set(zip(onside["game_id"], onside["drive"]))
+    after_failed = recent[[k in failed for k in zip(recent["game_id"], recent["drive"])]]
+    failed_starts = _drive_starts(after_failed, "KICKOFF")
+    lg_onside = {
+        # One pseudo-recovery in ten pseudo-tries keeps a short sample honest.
+        "recovery_rate": round((recovered + 1) / (len(onside) + 10), 4),
+        "attempts": int(len(onside)),
+        # Where the receiving team starts after one fails.
+        "failed_start": _quantiles(failed_starts) if len(failed_starts) >= 20 else [],
+    }
     lg = {
+        "onside": lg_onside,
         "penalties": _penalty_league(snaps, flags),
         "neutral_pass_rate": round(league["neutral_pass"] / max(1, league["neutral"]), 4),
         "sack_rate": round(league["sacks"] / max(1, league["dropbacks"]), 4),
@@ -307,7 +336,7 @@ def build_profiles(pbp: pd.DataFrame, season: int, rosters: pd.DataFrame | None 
         "sack_yards": round(float(np.mean(league["sack_yards"])) if len(league["sack_yards"]) else -7.0, 2),
         "rush_yards": _quantiles(league["rush_yards"]),
         "completion_yards": _quantiles(league["completion_yards"]),
-        "kickoff_start": _quantiles(_drive_starts(recent, "KICKOFF")),
+        "kickoff_start": _quantiles(_drive_starts(recent, "KICKOFF", onside)),
         "punt_net": _quantiles(punt_net),
         "punt_touchback_rate": round(float(punts["touchback"].fillna(0).mean()) if len(punts) else 0.07, 4),
         "field_goal": _field_goal_curve(recent),

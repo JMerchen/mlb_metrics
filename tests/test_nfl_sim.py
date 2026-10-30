@@ -190,3 +190,21 @@ def test_penalty_profile_rates_types_and_how_each_is_enforced():
     assert by["Unnecessary Roughness"]["after"] and not by["Defensive Pass Interference"]["after"]
     assert by["Defensive Pass Interference"]["first_down"] == 1.0
     assert len(league["dpi_yards"]) == len(nfl_sim.QUANTILES)
+
+
+def test_onside_kicks_stay_out_of_the_kickoff_starts():
+    rows = []
+    for d in range(1, 41):
+        onside = d <= 10
+        rows.append(_play(game_id="g", drive=d, posteam="KC", defteam="BUF", play_type="kickoff",
+                          desc=("BUF kicks onside" if onside else "BUF kicks 64 yards") + " to KC 35",
+                          drive_start_transition="ONSIDE_KICK" if d == 1 else "KICKOFF",
+                          drive_start_yard_line="BUF 47" if onside else "KC 35"))
+    pbp = pd.DataFrame(rows)
+    onside = nfl_sim._onside_kicks(pbp)
+    assert len(onside) == 10
+    starts = nfl_sim._drive_starts(pbp, "KICKOFF", onside)
+    assert len(starts) == 30 and set(starts) == {35}
+    # Without leaving them out, the failed onside kicks read as returns to
+    # the BUF 47.
+    assert (nfl_sim._drive_starts(pbp, "KICKOFF") == 53).sum() == 9

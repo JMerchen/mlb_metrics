@@ -20,6 +20,7 @@ const LEAGUE = {
   rush_yards: spread(-3, 20), completion_yards: spread(-1, 32),
   kickoff_start: spread(15, 45, 1), punt_net: spread(25, 60, 1), punt_touchback_rate: 0.07,
   field_goal: { a: 6.1, b: -0.098 }, xp_rate: 0.95, scrimmage_plays_per_team_game: 61, quantile_probs: PROBS,
+  onside: { recovery_rate: 0.1, attempts: 50, failed_start: spread(48, 60, 1) },
   penalties: {
     offense_rate: 0.05, defense_rate: 0.035, dpi_yards: spread(2, 45, 1),
     types: [
@@ -328,4 +329,37 @@ test("late and close, the defense spends its timeouts; the leader kneels only wh
     for (const k of kneels) { assert.ok(k.qtr >= 4) }
   }
   assert.ok(defenseLate > 0)
+})
+
+test("onside kicks come only from a team behind in the 4th quarter; normal kickoffs rarely start past midfield", () => {
+  let normal = 0, deep = 0, onside = 0
+  for (let seed = 1; seed <= 600; seed++) {
+    const g = simulateGame(PROFILES, "GB", "CAR", { seed })
+    g.plays.forEach((p, i) => {
+      if (p.kind !== "kickoff") { return }
+      if (/onside/.test(p.text)) {
+        onside += 1
+        // The score as the ball was kicked (the kick itself scores nothing).
+        const kicker = p.text.startsWith("GB") ? "home" : "away"
+        const kickerMargin = kicker === "home" ? p.home - p.away : p.away - p.home
+        assert.equal(p.qtr, 4)
+        assert.ok(kickerMargin < 0 && kickerMargin >= -24, `${kickerMargin}`)
+        return
+      }
+      normal += 1
+      if (p.ball > 50) { deep += 1 }
+    })
+  }
+  assert.ok(onside > 0)
+  assert.ok(deep / normal < 0.04, `${deep}/${normal}`)
+})
+
+test("no penalty or play puts the ball past the goal line without a score", () => {
+  for (let seed = 1; seed <= 400; seed++) {
+    const g = simulateGame(PROFILES, "GB", "CAR", { seed, edge: 0.3, scale: 1.4 })
+    for (const p of g.plays) {
+      if (p.end >= 100) { assert.equal(p.scoring, "TD", p.text) }
+      if (p.kind === "penalty") { assert.ok(p.end <= 99 && p.end >= 1, p.text) }
+    }
+  }
 })

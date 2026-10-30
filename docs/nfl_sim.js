@@ -296,9 +296,25 @@ box[caller].timeouts += 1
 tick(playTime)
 notes.push({kind: "timeout", text: `Timeout ${code[caller]} (${timeouts[caller]} left)`})
 }
+// An onside kick only from a team behind (by 24 or less) in the 4th
+// quarter: in the last two minutes or so, or with four left when it needs
+// more than a score - as teams do. Most fail and hand the other side the
+// ball near midfield.
 const kickoff = (kicker, how = "Kickoff") => {
 if(over){ return }
 const receiver = other(kicker)
+const behind = -lead(kicker)
+const onside = lg.onside && qtr === 4 && behind > 0 && behind <= 24 && (clock <= 130 || (clock <= 240 && behind > 8))
+if(onside){
+const recovered = rng() < (lg.onside.recovery_rate || 0.075)
+const failedStart = (lg.onside.failed_start || []).length ? simDraw(lg.onside.failed_start, probs, rng()) : 52
+startDrive(recovered ? kicker : receiver, recovered ? 45 + Math.floor(5 * rng()) : failedStart, recovered ? "Onside kick" : how)
+tick(5)
+record("kickoff", 0, recovered
+? `${code[kicker]} onside kick RECOVERED by ${code[kicker]} at ${spot(ball, kicker)}`
+: `${code[kicker]} onside kick, ${code[receiver]} recover at ${spot(ball, receiver)}`)
+return
+}
 const start = simDraw(lg.kickoff_start, probs, rng())
 startDrive(receiver, start, how)
 tick(5)

@@ -3139,6 +3139,16 @@ and 3.75 timeouts per team, against the league's ~22 points, 61 plays,
 65 snaps, 5.6 penalties and 3.85 timeouts; calibrated scales run about
 1.05-1.2.
 
+Kickoff starts leave out drives after onside kicks (`_onside_kicks`):
+55 of the 122 real kickoff drives that started past midfield in 2025-26
+followed a failed onside kick, so drawing every kickoff from them handed
+teams short fields at random. Onside kicks are modeled on their own
+(`league.onside`: recovery rate with one pseudo-recovery in ten
+pseudo-tries, 7.5%; where the receiving team starts after a failed one):
+only a team behind by 24 or less in the 4th quarter tries one, with
+2:10 left or less, or 4:00 when it needs more than a score - about 0.15
+a game, against the league's 0.19.
+
 Penalties (`_penalty_league`, team `offense_penalty_rate` /
 `defense_penalty_rate`): accepted flags on scrimmage snaps (declined and
 offsetting ones dropped) a snap for each side, each team's shrunk with
