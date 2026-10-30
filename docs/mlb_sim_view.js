@@ -7,7 +7,8 @@
 
 const MLB_SIM_SECONDS = 300
 const MLB_SIM_SPEEDS = [1, 4, 16]
-const mlbSim = {profiles: null, setup: null, run: null, probables: []}
+const mlbSim = {profiles: null, setup: null, run: null, probables: [], picks: []}
+const MLB_SIM_SUMMARY_GAMES = 1000
 
 function mlbSimEl(){
 return document.getElementById("mlbSim")
@@ -23,7 +24,7 @@ return response.json()
 function mlbSimStart(){
 const el = mlbSimEl()
 if(!el){ return }
-el.innerHTML = `<p class="simIntro">Pick two teams, their starting pitchers and batting orders, and watch the game play out pitch by pitch - about five minutes, with the box score at the end. Every pitch comes from the pitcher's real pitch mix and each matchup's real tendencies.</p>
+el.innerHTML = `<p class="simIntro">Pick two teams, their starting pitchers and batting orders, and watch the game play out pitch by pitch - about five minutes, with the box score at the end - or play it 1,000 times at once for how often each side wins and what each player does on average. Every pitch comes from the pitcher's real pitch mix and each matchup's real tendencies.</p>
 <button class="whatIfAction" data-mlbsim="open">Set up a game</button>`
 el.addEventListener("click", onMlbSimClick)
 el.addEventListener("change", onMlbSimChange)
@@ -43,6 +44,11 @@ try{
 mlbSim.probables = typeof loadCSV === "function" ? await loadCSV("./data/probable_pitchers.csv") : []
 }catch(e){
 mlbSim.probables = []
+}
+try{
+mlbSim.picks = typeof loadCSV === "function" ? await loadCSV("./data/game_picks_picks.csv") : []
+}catch(e){
+mlbSim.picks = []
 }
 mlbSim.setup = mlbSimDefaultSetup()
 mlbSimRenderSetup()
@@ -120,7 +126,8 @@ const dupes = ["away", "home"].some(side => new Set(mlbSim.setup[side].lineup).s
 mlbSimEl().innerHTML = `<p class="simIntro">Players and tendencies through ${mlbEsc(P.through)}. Relievers come in on their own - the closer for a save, the setup man in the 8th of a close game.</p>
 <div class="mlbSetup">${mlbSimSideHtml("away")}${mlbSimSideHtml("home")}</div>
 ${dupes ? `<p class="statusNote">A player is in a batting order twice.</p>` : ""}${note ? `<p class="statusNote">${mlbEsc(note)}</p>` : ""}
-<div class="simControls"><button class="whatIfAction" data-mlbsim="play"${dupes ? " disabled" : ""}>Play ball</button></div>`
+<div class="simControls"><button class="whatIfAction" data-mlbsim="play"${dupes ? " disabled" : ""}>Play ball</button>
+<button class="whatIfAction" data-mlbsim="summary"${dupes ? " disabled" : ""}>Simulate it ${MLB_SIM_SUMMARY_GAMES.toLocaleString()} times</button></div>`
 }
 
 function onMlbSimChange(event){
@@ -156,6 +163,7 @@ mlbSim.setup[side].lineup = ((mlbSim.profiles.teams[mlbSim.setup[side].team] || 
 mlbSimRenderSetup()
 }
 else if(action === "play"){ mlbSimPlay() }
+else if(action === "summary"){ mlbSimSummary() }
 else if(action === "setup"){ mlbSimRenderSetup() }
 else if(!run){ return }
 else if(action === "pause"){
@@ -189,6 +197,32 @@ mlbSimEl().innerHTML = `<h4>${mlbEsc(mlbSimTeamName(setup.away.team))} at ${mlbE
 <div class="mlbLive"></div>`
 mlbSimFrame()
 mlbSimSchedule()
+}
+
+// Our pick model's chance for this matchup, when it's on the latest slate.
+function mlbSimModelPick(setup){
+const rows = (mlbSim.picks || []).filter(r => r.home_team === setup.home.team && r.away_team === setup.away.team)
+if(!rows.length){ return null }
+const row = rows.sort((a, b) => String(a.date).localeCompare(String(b.date))).pop()
+const latest = (mlbSim.picks || []).map(r => r.date).sort().pop()
+const p = Number(row.predicted_probability)
+return row.date === latest && Number.isFinite(p) ? {team: row.predicted_winner, probability: p} : null
+}
+
+function mlbSimSummary(){
+const setup = JSON.parse(JSON.stringify(mlbSim.setup))
+mlbSimStop()
+const el = mlbSimEl()
+el.innerHTML = `<h4>${mlbEsc(mlbSimTeamName(setup.away.team))} at ${mlbEsc(mlbSimTeamName(setup.home.team))}</h4><p class="simIntro">Playing ${MLB_SIM_SUMMARY_GAMES.toLocaleString()} games…</p>`
+// Let the message paint before the second or so of games.
+setTimeout(() => {
+const summary = simulateMlbSummary(mlbSim.profiles, setup, MLB_SIM_SUMMARY_GAMES, Math.floor(Math.random() * 2147483647))
+mlbSim.run = null
+el.innerHTML = `<h4>${mlbEsc(mlbSimTeamName(setup.away.team))} at ${mlbEsc(mlbSimTeamName(setup.home.team))}, ${MLB_SIM_SUMMARY_GAMES.toLocaleString()} times</h4>
+<div class="simControls"><button class="whatIfAction" data-mlbsim="play">Watch one game</button>
+<button class="whatIfAction" data-mlbsim="setup">Change the lineups</button></div>
+${mlbSummaryHtml(mlbSim.profiles, summary, mlbSimModelPick(setup))}`
+}, 30)
 }
 
 function mlbSimStop(){
@@ -232,6 +266,7 @@ if(run.index >= game.pitches.length - 1){
 el.innerHTML = `<h4>${mlbEsc(mlbSimTeamName(game.away))} at ${mlbEsc(mlbSimTeamName(game.home))}</h4>
 ${mlbFinalHtml(game)}
 <div class="simControls"><button class="whatIfAction" data-mlbsim="play">Play it again</button>
+<button class="whatIfAction" data-mlbsim="summary">Simulate it ${MLB_SIM_SUMMARY_GAMES.toLocaleString()} times</button>
 <button class="whatIfAction" data-mlbsim="setup">Change the lineups</button></div>
 <div class="scrollbox">${mlbLineScoreHtml(game)}</div>
 <h3 class="simSubhead">Box score</h3>${mlbBoxHtml(mlbSim.profiles, game)}

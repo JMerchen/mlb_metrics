@@ -3184,19 +3184,40 @@ and last:
   between profiled players;
 - base-running transitions: for each play, base state and outs, how
   often it ended in each base state, outs and runs (walk-offs dropped);
+- between pitches (`between_pitches`): for each base state and outs, how
+  often the runners move, are thrown out or score between two pitches of
+  the same plate appearance (steals, caught stealing, pickoffs, wild
+  pitches, passed balls, balks), and to what;
+- intentional walks (`intentional_walks`): how often a plate appearance
+  is one, by base state (first base open), outs and whether it's the 7th
+  inning on within two runs;
 - rosters (latest 2026 team), regular lineups, starters (real ones -
   three starts or more - first) and bullpens (late-inning arms first).
 
 Starters go a drawn number of pitches around their recent average; the
 closer comes in for 9th-inning saves, the setup man in a close 8th, other
-relievers as often as each really pitches. Simulated with default lineups
-over 2,000 games: 4.33 runs, 38.0 PA and 148 pitches a team, .239/K 22.9%/
-BB 9.6%/HR 3.05% a PA, starters 84 pitches and 5.1 innings; the league
-(profiled players, 2025-26): 4.46, 37.8, 147, .243/22.2%/9.8%/3.0%, 84.
-One plate appearance at a time, real 2026 matchups strike out 22.7%
-against 22.1% actual - the remaining gap is pitch-sequence effects the
-per-pitch model doesn't see; intentional walks, steals and pickoffs aren't
-modeled yet.
+relievers as often as each really pitches. Between a hitter's pitches the
+runners can move; when every runner moves up a base it's a steal 75% of
+the time (`MLB_STEAL_SHARE`), otherwise a wild pitch. A caught stealing
+for the third out leaves the hitter to lead off the next inning.
+Simulated with default lineups over 2,000 games: 4.44 runs, 38.0 PA and
+148 pitches a team, .240/K 22.9%/BB 9.9%/HR 3.0% a PA, starters 5.0
+innings, 0.74 steals, 0.13 caught stealing, 0.41 wild pitches and 0.09
+intentional walks; the league (profiled players, 2025-26): 4.46, 37.8,
+147, .243/22.2%/9.8%/3.0%, 0.74 steals, about 0.4 wild pitches, passed
+balls and balks and 0.1 intentional walks. One plate appearance at a
+time, real 2026 matchups strike out 22.7% against 22.1% actual - the
+remaining gap is pitch-sequence effects the per-pitch model doesn't see.
+
+"Simulate it 1,000 times" (`simulateMlbSummary`, about a second) plays
+the matchup 1,000 times from one seed and shows each team's wins, the
+average score, median margin and total (with the middle 80%), extra
+innings and shutouts, the margin as a chart, the commonest finals, our
+pick model's chance for the same game (the latest matching row of
+`game_picks_picks.csv`), and each player's averages: a hitter's hits,
+RBI, walks and strikeouts and his chance of a hit, two or more and a
+homer; a pitcher's share of games pitched, innings, strikeouts and runs,
+and a starter's quality starts.
 
 ## NFL game simulation (`docs/nfl.html`'s What if? panel, `nfl_sim.py`)
 

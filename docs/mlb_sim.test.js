@@ -5,6 +5,7 @@ global.teamName = require("./teams.js").teamName
 const {
   mlbRng, mlbPick, mlbBucket, mlbShortName, mlbPitchProbs, simulateMlbGame,
   mlbLineScoreHtml, mlbSituationHtml, mlbZoneSvg, mlbPlaysHtml, mlbBoxHtml, mlbFinalHtml, mlbInningsPitched,
+  simulateMlbSummary, mlbSummaryHtml,
 } = require("./mlb_sim.js")
 const P = require("./data/mlb_sim_profiles.json")
 
@@ -118,4 +119,44 @@ test("the page's pieces: line score, count, zone, plays, box and final", () => {
   assert.match(box, /batting AB R H RBI BB K/)
   assert.match(box, /pitching IP H R BB K HR P/)
   assert.match(text(mlbFinalHtml(g)), /^Final: .+ win \d+-\d+/)
+})
+
+test("between pitches: steals, caught stealing and wild pitches happen at about real rates", () => {
+  let sb = 0, cs = 0, ibb = 0
+  const n = 300
+  for (let seed = 1; seed <= n; seed++) {
+    const g = game(seed)
+    for (const side of ["away", "home"]) { for (const l of g.batting[side]) { sb += l.sb; cs += l.cs } }
+    ibb += g.plays.filter(p => /intentionally walked/.test(p.text)).length
+    // Runners move only between a hitter's pitches, never before his first.
+    for (const p of g.plays.filter(p => p.kind === "run")) {
+      const next = g.pitches[p.pitch + 1]
+      if (next && p.outs < 3) { assert.ok(next.balls + next.strikes > 0, `seed ${seed}: ${p.text} before a first pitch`) }
+    }
+    // A caught stealing that ends an inning leaves that batter to lead off
+    // the next one: no plate appearance is counted for him.
+    for (const side of ["away", "home"]) {
+      assert.ok(g.batting[side].every(l => l.pa === l.ab + l.bb + l.hbp + l.sf))
+    }
+  }
+  assert.ok(sb / (2 * n) > 0.5 && sb / (2 * n) < 1, `SB ${sb / (2 * n)}`)
+  assert.ok(cs / (2 * n) > 0.05 && cs / (2 * n) < 0.3, `CS ${cs / (2 * n)}`)
+  assert.ok(ibb > 0)
+})
+
+test("a thousand games: wins add up, averages are sensible, and the page reads them", () => {
+  const sum = simulateMlbSummary(P, { away: { team: TEAMS[0] }, home: { team: TEAMS[1] } }, 200, 3)
+  assert.equal(sum.wins.home + sum.wins.away, 200)
+  assert.equal(sum.margins.length, 200)
+  assert.ok(sum.margins.every(m => m !== 0))
+  assert.ok(sum.runs.home > 2 && sum.runs.home < 7)
+  const regular = sum.hitters.find(h => h.games === 200)
+  assert.ok(regular && regular.hit / regular.games > 0.3 && regular.hit / regular.games < 0.95)
+  const starter = sum.pitchers.find(p => p.starts === 200)
+  assert.ok(starter && starter.outs / starter.games > 9)
+  const html = text(mlbSummaryHtml(P, sum, { team: TEAMS[1], probability: 0.55 }))
+  assert.match(html, /win [\d,]+ of 200/)
+  assert.match(html, /Our pick model gives .+ 55%/)
+  assert.match(html, /get a hit/)
+  assert.match(html, /quality starts/)
 })

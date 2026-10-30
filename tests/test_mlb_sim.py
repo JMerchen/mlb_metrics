@@ -113,3 +113,26 @@ def test_priors_start_small_samples_from_their_grades_and_fade():
     assert np.allclose(mlb_sim._ratio(np.zeros(2), np.zeros(2), 250, prior), [1, 1])
     assert np.allclose(mlb_sim._ratio(np.array([0.0, 0.0]), np.array([1e-9, 1e-9]), 250, prior)[0], 1.2, atol=0.01)
     assert mlb_sim._fade(0, 600) == 1 and mlb_sim._fade(300, 600) == 0.5 and mlb_sim._fade(900, 600) == 0
+
+
+def test_between_pitches_counts_runner_moves_inside_a_plate_appearance_only():
+    rows = []
+    for ab in range(1, 301):
+        # Runner on 1st, two pitches; every tenth plate appearance he steals
+        # second between them. A move before the next batter isn't counted.
+        steal = ab % 10 == 0
+        rows.append(_pitch(game_pk=ab, at_bat_number=1, pitch_number=1, on_1b=5))
+        rows.append(_pitch(game_pk=ab, at_bat_number=1, pitch_number=2, balls=1,
+                           on_1b=np.nan if steal else 5, on_2b=5 if steal else np.nan))
+        rows.append(_pitch(game_pk=ab, at_bat_number=2, pitch_number=1, on_2b=5))
+    t = mlb_sim.between_pitches(mlb_sim.prepare(pd.DataFrame(rows)))
+    assert t["1|0"]["rate"] == 0.1
+    assert t["1|0"]["moves"] == [[1.0, 2, 0, 0]]
+
+
+def test_intentional_walks_by_base_state_outs_and_lateness():
+    rows = [_pitch(game_pk=g, at_bat_number=1, pitch_number=1, on_2b=5, outs_when_up=1, pitch_type=np.nan,
+                   events="intent_walk" if g % 4 == 0 else "field_out") for g in range(400)]
+    rows += [_pitch(game_pk=1000 + g, at_bat_number=1, pitch_number=1, on_1b=5, events="intent_walk") for g in range(300)]
+    ibb = mlb_sim.intentional_walks(pd.DataFrame(rows))
+    assert ibb == {"2|1|0": 0.25}
