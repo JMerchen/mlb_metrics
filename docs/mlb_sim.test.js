@@ -121,6 +121,30 @@ test("the page's pieces: line score, count, zone, plays, box and final", () => {
   assert.match(text(mlbFinalHtml(g)), /^Final: .+ win \d+-\d+/)
 })
 
+test("the notes under each batting box list its extra-base hits, double plays and steals", () => {
+  let seen = 0
+  for (let seed = 1; seed <= 60; seed++) {
+    const g = game(seed)
+    const box = text(mlbBoxHtml(P, g))
+    for (const side of ["away", "home"]) {
+      const l = g.batting[side]
+      const sum = k => l.reduce((a, b) => a + b[k], 0)
+      // Grounding into a double play is the play-by-play's own.
+      const gidp = g.plays.filter(p => p.half === (side === "away" ? "top" : "bottom") && /grounds into a double play/.test(p.text)).length
+      assert.equal(sum("gidp"), gidp)
+      for (const [k, label] of [["d", "2B"], ["t", "3B"], ["hr", "HR"], ["gidp", "GIDP"], ["sb", "SB"], ["cs", "CS"]]) {
+        if (sum(k)) { assert.match(box, new RegExp(`${label} ?: `)); seen++ }
+      }
+    }
+    if (!g.batting.away.some(l => l.hr) && !g.batting.home.some(l => l.hr)) { assert.doesNotMatch(box, /HR ?: /) }
+  }
+  assert.ok(seen > 100)
+  // A player with two of something is listed once, with the count.
+  const g = game(5)
+  const multi = g.batting.away.concat(g.batting.home).find(l => l.d > 1 || l.hr > 1 || l.sb > 1)
+  if (multi) { assert.match(text(mlbBoxHtml(P, g)), new RegExp(`${mlbShortName(P.batters[multi.id]?.name || "").split(" ").pop()} 2`)) }
+})
+
 test("between pitches: steals, caught stealing and wild pitches happen at about real rates", () => {
   let sb = 0, cs = 0, ibb = 0
   const n = 300

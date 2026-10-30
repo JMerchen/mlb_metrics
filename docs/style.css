@@ -2014,6 +2014,8 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 .mlbBox td:not(:first-child),.mlbBox th:not(:first-child){text-align:right;}
 .mlbBox td:first-child{white-space:nowrap;}
 .mlbBox small{color:var(--text-dim);}
+.mlbBoxNotes{font-size:0.85em;color:var(--text-dim);margin:6px 8px 4px;line-height:1.5;}
+.mlbBoxNotes abbr{font-weight:600;color:var(--text);text-decoration:none;}
 @media (max-width:700px){
 .mlbSetup,.mlbBoxes{grid-template-columns:1fr;}
 .mlbStage{grid-template-columns:1fr;}

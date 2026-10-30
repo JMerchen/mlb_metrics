@@ -96,7 +96,7 @@ return {team, order, starter, pen, apps, used: [starter]}
 }
 
 function mlbEmptyBat(id){
-return {id, pa: 0, ab: 0, r: 0, h: 0, d: 0, t: 0, hr: 0, rbi: 0, bb: 0, hbp: 0, k: 0, sf: 0, sb: 0, cs: 0}
+return {id, pa: 0, ab: 0, r: 0, h: 0, d: 0, t: 0, hr: 0, rbi: 0, bb: 0, hbp: 0, k: 0, sf: 0, sb: 0, cs: 0, gidp: 0}
 }
 
 function mlbEmptyPitch(id){
@@ -413,10 +413,12 @@ if(kind === "3B"){ bl.t += 1 }
 if(kind === "HR"){ bl.hr += 1; pl.hr += 1 }
 }
 if(moved.outsAdded < 2 && kind !== "K"){ bl.rbi += moved.runs }
+if(kind === "GO" && moved.outsAdded === 2){ bl.gidp += 1 }
 pl.outs += moved.outsAdded
 const reached = kind[1] === "O" && moved.outsAdded === 0
 const verb = ending === "HBP" ? "is hit by a pitch" : ending === "IBB" ? "is intentionally walked" : ending === "BB" ? "walks" : kind === "K" ? (pitches[pitches.length - 1].result === "C" ? "strikes out looking" : "strikes out swinging")
-: reached ? "reaches on a fielder's choice or error" : moved.outsAdded >= 2 ? "grounds into a double play" : sac ? "hits a sacrifice fly" : MLB_PLAY_TEXT[kind]
+: reached ? "reaches on a fielder's choice or error" : moved.outsAdded >= 3 ? "hits into a triple play"
+: moved.outsAdded === 2 ? `${{GO: "grounds", FO: "flies", LO: "lines"}[kind] || "hits"} into a double play` : sac ? "hits a sacrifice fly" : MLB_PLAY_TEXT[kind]
 const runText = moved.runs ? `; ${moved.runs} run${moved.runs > 1 ? "s" : ""} score${moved.runs > 1 ? "" : "s"}` : ""
 const text = `${name(batId)} ${verb}${runText}`
 // The plate appearance's last pitch carries its result (an intentional
@@ -541,15 +543,30 @@ return `<ol class="simTicker mlbPlays">${list.reverse().map(p =>
 `<li${p.scoring ? " class=\"simScoring\"" : p.kind === "change" ? " class=\"mlbChange\"" : ""}><span class="simWhen">${p.half === "top" ? "▲" : "▼"}${p.inning}</span> ${mlbEsc(p.text)}</li>`).join("")}</ol>`
 }
 
+// The notes under a team's batting, as in a newspaper box score:
+// "2B: W. Contreras, J. Chourio 2." - one line per stat anyone had.
+const MLB_BOX_NOTES = [
+["d", "2B", "Doubles"], ["t", "3B", "Triples"], ["hr", "HR", "Home runs"], ["sf", "SF", "Sacrifice flies"],
+["gidp", "GIDP", "Grounded into a double play"], ["sb", "SB", "Stolen bases"], ["cs", "CS", "Caught stealing"],
+]
+
+function mlbBoxNotesHtml(profiles, lines){
+const notes = MLB_BOX_NOTES.map(([key, label, title]) => {
+const who = lines.filter(l => l[key] > 0)
+.map(l => `${mlbEsc(mlbShortName(mlbPlayerName(profiles, l.id)))}${l[key] > 1 ? ` ${l[key]}` : ""}`)
+return who.length ? `<div><abbr title="${title}">${label}</abbr>: ${who.join(", ")}.</div>` : ""
+}).join("")
+return notes ? `<div class="mlbBoxNotes">${notes}</div>` : ""
+}
+
 function mlbBoxHtml(profiles, game){
 const team = s => mlbEsc(typeof teamName === "function" ? teamName(game[s], "mlb") : game[s])
 const nm = id => mlbEsc(mlbPlayerName(profiles, id))
 const bat = s => {
-const rows = game.batting[s].filter(l => l.pa > 0).map(l => {
-const notes = [l.d ? `${l.d > 1 ? l.d : ""}2B` : "", l.t ? `${l.t > 1 ? l.t : ""}3B` : "", l.hr ? `${l.hr > 1 ? l.hr : ""}HR` : ""].filter(Boolean).join(", ")
-return `<tr><td>${nm(l.id)}${notes ? ` <small>${notes}</small>` : ""}</td><td>${l.ab}</td><td>${l.r}</td><td>${l.h}</td><td>${l.rbi}</td><td>${l.bb + l.hbp}</td><td>${l.k}</td></tr>`
-}).join("")
-return `<table class="simBox mlbBox"><thead><tr><th>${team(s)} batting</th><th>AB</th><th>R</th><th>H</th><th>RBI</th><th>BB</th><th>K</th></tr></thead><tbody>${rows}</tbody></table>`
+const lines = game.batting[s].filter(l => l.pa > 0)
+const rows = lines.map(l => `<tr><td>${nm(l.id)}</td><td>${l.ab}</td><td>${l.r}</td><td>${l.h}</td><td>${l.rbi}</td><td>${l.bb + l.hbp}</td><td>${l.k}</td></tr>`).join("")
+return `<table class="simBox mlbBox"><thead><tr><th>${team(s)} batting</th><th>AB</th><th>R</th><th>H</th><th>RBI</th><th>BB</th><th>K</th></tr></thead><tbody>${rows}</tbody></table>
+${mlbBoxNotesHtml(profiles, lines)}`
 }
 const pit = s => {
 const rows = game.pitching[s].map(l => `<tr><td>${nm(l.id)}</td><td>${mlbInningsPitched(l.outs)}</td><td>${l.h}</td><td>${l.r}</td><td>${l.bb + l.hbp}</td><td>${l.k}</td><td>${l.hr}</td><td>${l.pitches}</td></tr>`).join("")
