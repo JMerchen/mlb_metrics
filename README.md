@@ -3133,9 +3133,30 @@ league's mean, so profiles carry style only. Strength comes at runtime:
 seeded games so the average lands on the panel's win chance (as a margin,
 `logodds_per_point`) and the pick's predicted total; the panel's unit
 percents multiply each side's run and pass yards. With no adjustments the
-engine averages about 19.5 points, 61 plays, 5.1 net yards a play, 40% on
-third down and one turnover per team (no penalties), a little under the
-league's scoring, so calibrated scales run about 1.05-1.2.
+engine averages about 20 points, 62 plays (67 snaps counting ones a flag
+wiped out), 40% on third down, one turnover, 5.7 penalties for 44 yards
+and 3.75 timeouts per team, against the league's ~22 points, 61 plays,
+65 snaps, 5.6 penalties and 3.85 timeouts; calibrated scales run about
+1.05-1.2.
+
+Penalties (`_penalty_league`, team `offense_penalty_rate` /
+`defense_penalty_rate`): accepted flags on scrimmage snaps (declined and
+offsetting ones dropped) a snap for each side, each team's shrunk with
+2,700 snaps of league average (a half-season's rate correlates 0.16 with
+the other half's), and the league's mix of types (each at 1% of its
+side's flags or more): typical yards, the chance of an automatic first
+down, pre-snap or not, and whether the play stands with the yards added
+on (personal fouls whose play mostly stood). Offensive flags are walked
+back half the distance at most, defensive ones forward (pass
+interference spotted from its yardage distribution); a flag that wipes
+out the snap takes 12 seconds (the measured median is 11-13). Timeouts:
+three a half, two in overtime; the defense calls one after an in-bounds
+play late when it's within 16, or at the end of the half when the
+offense is pinned; the offense when it's behind late (7 in 10 times) or
+driving at the half; other timeouts at 2.5% of running-clock plays. The
+two-minute warning stops the clock, and the kneel-down rule counts the
+defense's timeouts. In-bounds plays take 40 seconds (the measured median),
+incompletions 6.
 
 Each team's profile also lists its players (`nfl_sim.team_players`): its
 starting QB and kicker, and each active skill player's share of targets

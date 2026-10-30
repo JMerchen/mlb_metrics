@@ -18,6 +18,16 @@
 const SIM_QUARTER_SECONDS = 900
 const SIM_OT_SECONDS = 600
 const SIM_CALIBRATION_GAMES = 300
+const SIM_TIMEOUTS = 3
+const SIM_OT_TIMEOUTS = 2
+// Timeouts outside the end-of-half and late-game rules (to save a play
+// clock, before a big fourth down...): about 1.3 a team a game, so this
+// often after a play that keeps the clock running.
+const SIM_OTHER_TIMEOUT_RATE = 0.025
+// Seconds a flag that wipes out the snap takes (the clock restarts on the
+// referee's signal; real median 11-13), and in a hurry-up.
+const SIM_FLAG_SECONDS = 12
+const SIM_FLAG_HURRY_SECONDS = 6
 const SIM_SIDES = ["home", "away"]
 
 function simEsc(value){
@@ -70,6 +80,7 @@ pass_att: 0, pass_comp: 0, pass_yards: 0, pass_td: 0, ints: 0, sacks: 0, sack_ya
 rush_att: 0, rush_yards: 0, rush_td: 0,
 third_att: 0, third_conv: 0, fourth_att: 0, fourth_conv: 0,
 fumbles_lost: 0, turnovers: 0, punts: 0, fg_att: 0, fg_made: 0, possession: 0,
+penalties: 0, penalty_yards: 0, timeouts: 0,
 }
 }
 
@@ -204,13 +215,19 @@ let ball = 25, down = 1, togo = 10
 let drive = null
 let over = false
 let ot = {on: false, possessions: 0}
+let timeouts = {home: SIM_TIMEOUTS, away: SIM_TIMEOUTS}
+// Timeouts and the two-minute warning, written into the play-by-play
+// once the play that set them off is.
+const notes = []
+const flags = {O: [], D: []}
+for(const t of (lg.penalties || {}).types || []){ flags[t.side].push({...t}) }
 
 const spot = (b, side) => simSpot(b, code[side], code[other(side)])
 const lead = side => score[side] - score[other(side)]
 const record = (kind, yards, text, extra = {}) => {
 const play = {
 qtr, clock, poss, down, togo, ball: extra.ball ?? ball, end: extra.end ?? ball, kind, yards: Math.round(yards), text,
-home: score.home, away: score.away, drive: drives.length - 1, scoring: extra.scoring || null,
+home: score.home, away: score.away, drive: drives.length - 1, scoring: extra.scoring || null, timeouts: {...timeouts},
 }
 plays.push(play)
 return play
@@ -236,12 +253,48 @@ ot.possessions += 1
 if(ot.possessions >= 2 && score.home !== score.away){ over = true }
 }
 }
-// Runs the clock off a play (the main loop ends the period at 0:00).
+// Runs the clock off a play (the main loop ends the period at 0:00). The
+// two-minute warning stops it at 2:00 - or right after a play running
+// at the time.
 const tick = seconds => {
-const used = Math.min(clock, seconds)
+let used = Math.min(clock, seconds)
+if((qtr === 2 || qtr === 4) && clock > 120 && clock - used < 120){
+used = clock - 120 >= 6 ? clock - 120 : Math.min(used, 6)
+notes.push({kind: "warning", text: "Two-minute warning"})
+}
 clock -= used
 box[poss].possession += used
 if(drive){ drive.seconds += used }
+}
+// A play that ends in bounds: the play's own seconds, then the runoff to
+// the next snap - unless someone calls time. The defense does when it's
+// behind by two scores or less late in the game, or the offense is pinned
+// deep near the end of the half (to get the ball back); the offense does
+// when it's behind late, or driving at the end of the half.
+const runClock = (playTime, runoff) => {
+const after = clock - playTime
+const defense = other(poss)
+const margin = lead(poss)
+let caller = null
+if(after > 0 && !(qtr === 4 && clock > 120 && after < 120)){
+if(timeouts[defense] > 0 && qtr >= 4 && margin > 0 && margin <= 16 && after <= 180){ caller = defense }
+else if(timeouts[poss] > 0 && qtr >= 4 && margin < 0 && after <= 120 && rng() < 0.7){ caller = poss }
+else if(timeouts[poss] > 0 && qtr === 5 && margin <= 0 && after <= 120){ caller = poss }
+else if(timeouts[poss] > 0 && qtr === 2 && after <= 60 && ball >= 35){ caller = poss }
+else if(timeouts[defense] > 0 && qtr === 2 && after <= 110 && ball < 40){ caller = defense }
+else if(!(qtr === 2 && after <= 120) && !(qtr >= 4 && after <= 300) && rng() < SIM_OTHER_TIMEOUT_RATE){
+const who = rng() < 0.5 ? poss : defense
+if(timeouts[who] > 1){ caller = who }
+}
+}
+if(!caller){
+tick(playTime + runoff)
+return
+}
+timeouts[caller] -= 1
+box[caller].timeouts += 1
+tick(playTime)
+notes.push({kind: "timeout", text: `Timeout ${code[caller]} (${timeouts[caller]} left)`})
 }
 const kickoff = (kicker, how = "Kickoff") => {
 if(over){ return }
@@ -284,6 +337,7 @@ if(qtr === 2){
 endDrive("End of half")
 qtr = 3
 clock = SIM_QUARTER_SECONDS
+timeouts = {home: SIM_TIMEOUTS, away: SIM_TIMEOUTS}
 kickoff(firstReceiver, "Second-half kickoff")
 return
 }
@@ -298,6 +352,7 @@ if(qtr === 4 && score.home === score.away){
 qtr = 5
 clock = SIM_OT_SECONDS
 ot = {on: true, possessions: 0}
+timeouts = {home: SIM_OT_TIMEOUTS, away: SIM_OT_TIMEOUTS}
 kickoff(rng() < 0.5 ? "home" : "away", "Overtime kickoff")
 return
 }
@@ -307,8 +362,12 @@ over = true
 kickoff(other(firstReceiver), "Opening kickoff")
 
 let guard = 0
-while(!over && guard < 400){
+while(!over && guard < 500){
 guard += 1
+while(notes.length){
+const note = notes.shift()
+record(note.kind, 0, note.text)
+}
 if(clock <= 0){
 endOfPeriod()
 continue
@@ -322,10 +381,13 @@ const hurry = (qtr === 2 && clock <= 120) || (late && margin < 0) || (qtr === 5 
 const fgDistance = 117 - ball
 const fgChance = 1 / (1 + Math.exp(-(fg.a + fg.b * fgDistance)))
 
-// Kneel out a won game.
-if(qtr >= 4 && margin > 0 && clock <= 42 * (5 - down)){
+// Kneel out a won game: each kneel runs 40 seconds, but the defense
+// stops the clock after one while it has timeouts (if it's close).
+const kneels = 5 - down
+const stops = margin <= 16 ? Math.min(timeouts[def], kneels) : 0
+if(qtr >= 4 && margin > 0 && clock <= 42 * (kneels - stops) + 3 * stops){
 drive.plays += 1
-tick(40)
+runClock(2, 38)
 const qbLine = line(poss, (lineups[poss] || {}).qb)
 if(qbLine){
 qbLine.rush_att += 1
@@ -401,6 +463,58 @@ startDrive(def, at, "Punt")
 continue
 }
 
+// A flag on the snap: by the offense (at its rate a snap) or the defense
+// (at its own). Most wipe out the play and are walked off from the line,
+// half the distance to the goal at most; a few personal fouls by the
+// defense are added on after the play instead.
+let flag = null
+const flagU = rng()
+const offRate = p.offense_penalty_rate ?? (lg.penalties || {}).offense_rate ?? 0
+const defRate = prof[def].defense_penalty_rate ?? (lg.penalties || {}).defense_rate ?? 0
+if(flagU < offRate + defRate){
+const side = flagU < offRate ? "O" : "D"
+flag = simPick(flags[side], rng())
+}
+if(flag && !flag.after){
+const before = ball
+const by = flag.side === "O" ? poss : def
+const situation = `${simOrdinal(down)} & ${ball + togo >= 100 ? "goal" : togo}`
+let yds
+let first = false
+if(flag.side === "O"){
+yds = Math.min(flag.yards, Math.floor(ball / 2))
+ball -= yds
+togo += yds
+// Intentional grounding also costs the down.
+if(flag.name === "Intentional Grounding"){ down += 1 }
+}else{
+const dpi = /Pass Interference/.test(flag.name) && ((lg.penalties || {}).dpi_yards || []).length
+yds = dpi ? Math.max(1, Math.round(simDraw(lg.penalties.dpi_yards, probs, rng()))) : flag.yards
+// Never into the end zone: at the 1, half the distance is nothing.
+yds = Math.max(0, dpi ? Math.min(yds, 99 - ball) : Math.min(yds, Math.floor((100 - ball) / 2), 99 - ball))
+ball += yds
+first = rng() < flag.first_down || yds >= togo
+if(first){
+down = 1
+togo = Math.min(10, 100 - ball)
+b.first_downs += 1
+}else{
+togo -= yds
+}
+}
+box[by].penalties += 1
+box[by].penalty_yards += yds
+drive.yards += flag.side === "O" ? -yds : yds
+tick(hurry ? SIM_FLAG_HURRY_SECONDS : SIM_FLAG_SECONDS)
+const play = record("penalty", flag.side === "O" ? -yds : yds,
+`${situation}: PENALTY ${code[by]}, ${flag.name}, ${yds ? `${yds} yard${yds === 1 ? "" : "s"}` : "half the distance to the goal"}${first ? ", first down" : ""}`,
+{ball: before, end: ball})
+play.first_down = first
+play.line = ball + togo
+if(down > 4){ turnover(poss, 100 - ball, "Downs") }
+continue
+}
+
 // A play from scrimmage: run or pass.
 let passRate = p.neutral_pass_rate
 if(down === 3 || down === 4){ passRate = togo <= 2 ? 0.4 : togo <= 4 ? 0.65 : 0.85 }
@@ -419,7 +533,7 @@ const situation = `${simOrdinal(down)} & ${ball + togo >= 100 ? "goal" : togo}`
 let yards = 0
 let kind
 let text
-let clockUsed = hurry ? 16 : 38
+let clockUsed = hurry ? 16 : 40
 let lost = null
 const lineup = lineups[poss] || {}
 const qb = line(poss, lineup.qb)
@@ -508,7 +622,7 @@ const fumbler = line(poss, kind === "run" ? carrier : target)
 if(fumbler && lost.result === "Fumble"){ fumbler.fumbles += 1 }
 b.fumbles_lost += lost.result === "Fumble" ? 1 : 0
 b.turnovers += lost.result === "Fumble" ? 1 : 0
-tick(clockUsed)
+tick(clockUsed === 6 ? 6 : 8)
 ball += yards
 record(kind, yards, `${situation}: ${text}`, {ball: from, end: ball})
 turnover(poss, 100 - lost.at, lost.result)
@@ -547,7 +661,7 @@ startDrive(def, start, "Free kick")
 }
 continue
 }
-tick(clockUsed)
+if(clockUsed === 6){ tick(6) }else{ runClock(6, clockUsed - 6) }
 const play = record(kind, yards, `${situation}: ${text}`, {ball: from, end: ball})
 if(yards >= togo){
 if(down === 3){ b.third_conv += 1 }
@@ -559,9 +673,30 @@ play.first_down = true
 }else{
 down += 1
 togo -= yards
+}
+// A personal foul after the play: 15 more yards, nearly always a first down.
+if(flag && flag.after){
+const yds = Math.max(0, Math.min(flag.yards, Math.floor((100 - ball) / 2), 99 - ball))
+ball += yds
+box[def].penalties += 1
+box[def].penalty_yards += yds
+drive.yards += yds
+if(!play.first_down && (rng() < flag.first_down || yds >= togo)){
+b.first_downs += 1
+play.first_down = true
+}
+if(play.first_down){
+down = 1
+togo = Math.min(10, 100 - ball)
+}else{
+togo -= yds
+}
+play.end = ball
+play.text += `; PENALTY ${code[def]}, ${flag.name}, ${yds ? `${yds} yards` : "half the distance to the goal"}`
+}
+play.line = ball + togo
 if(down > 4){
 turnover(poss, 100 - ball, "Downs")
-}
 }
 }
 for(const side of SIM_SIDES){ box[side].points = score[side] }
@@ -834,7 +969,7 @@ const toRight = play.poss === "home"
 const at = b => x(toRight ? b : 100 - b)
 const ball = at(play.end ?? play.ball)
 const marker = play.kind === "kickoff" || play.kind === "punt" || play.kind === "field_goal" || play.scoring
-? null : at(Math.min(100, (play.end ?? play.ball) + (play.first_down ? 10 : Math.max(0, play.togo - play.yards))))
+? null : at(Math.min(100, play.line ?? ((play.end ?? play.ball) + (play.first_down ? 10 : Math.max(0, play.togo - play.yards)))))
 const lines = []
 for(let y = 10; y <= 90; y += 10){
 lines.push(`<line x1="${x(y)}" y1="6" x2="${x(y)}" y2="74" class="simYardLine"/>`)
@@ -860,7 +995,14 @@ return typeof teamName === "function" ? teamName(code, "nfl") : code
 function simScoreboardHtml(game, play, next){
 const p = play || {qtr: 1, clock: SIM_QUARTER_SECONDS, home: 0, away: 0}
 const poss = next ? next.poss : null
-const side = s => `<div class="simTeam${poss === s ? " simHasBall" : ""}"><span class="simTeamName"><span class="simLong">${simEsc(simTeamName(game[s]))}</span><span class="simShort">${simEsc(game[s])}</span></span><span class="simPoints">${p[s]}</span></div>`
+// Timeouts left, as three dots under the name.
+const dots = s => {
+const left = (p.timeouts || {})[s]
+if(left === undefined){ return "" }
+return `<span class="simTimeouts" aria-label="${left} timeout${left === 1 ? "" : "s"} left">${
+[0, 1, 2].map(i => `<i class="${i < left ? "simTo" : "simToUsed"}"></i>`).join("")}</span>`
+}
+const side = s => `<div class="simTeam${poss === s ? " simHasBall" : ""}"><span class="simTeamName"><span class="simLong">${simEsc(simTeamName(game[s]))}</span><span class="simShort">${simEsc(game[s])}</span>${dots(s)}</span><span class="simPoints">${p[s]}</span></div>`
 const final = !next && play === game.plays[game.plays.length - 1]
 const when = final
 ? `<span class="simQuarter">&nbsp;</span><span class="simClock">Final${game.final.overtime ? "/OT" : ""}</span>`
@@ -928,6 +1070,7 @@ const rows = [
 ["4th down", pct(a.fourth_conv, a.fourth_att), pct(h.fourth_conv, h.fourth_att)],
 ["Turnovers (INT, fumbles)", `${a.turnovers} (${a.ints}, ${a.fumbles_lost})`, `${h.turnovers} (${h.ints}, ${h.fumbles_lost})`],
 ["Punts", a.punts, h.punts],
+["Penalties (yards)", `${a.penalties} (${a.penalty_yards})`, `${h.penalties} (${h.penalty_yards})`],
 ["Time of possession", simClock(a.possession), simClock(h.possession)],
 ]
 return `<table class="simBox"><thead><tr><th></th><th>${simEsc(game.away)}</th><th>${simEsc(game.home)}</th></tr></thead><tbody>${

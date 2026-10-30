@@ -161,3 +161,32 @@ def test_team_players_split_recent_targets_and_carries_among_the_active():
     assert by_name["QB"]["role"] == "QB" and by_name["QB"]["carries"] == round(2 / 6, 4)
     # Rice catches half his targets, as the team does: a catch rate of 1x.
     assert rice["catch"] == 1.0
+
+
+def test_penalty_profile_rates_types_and_how_each_is_enforced():
+    rows = []
+    for i in range(400):
+        row = _play(posteam="KC", defteam="BUF", play_type="run", yards_gained=4.0, desc="run", game_id=f"g{i // 50}")
+        rows.append(row)
+    def flag(team, kind, yards, play_type="no_play", first=0, desc="PENALTY"):
+        return _play(posteam="KC", defteam="BUF", play_type=play_type, penalty=1, penalty_team=team,
+                     penalty_type=kind, penalty_yards=float(yards), first_down_penalty=first, desc=desc)
+    rows += [flag("KC", "False Start", 5) for _ in range(20)]
+    rows += [flag("KC", "Offensive Holding", 10) for _ in range(10)]
+    rows += [flag("BUF", "Defensive Pass Interference", y, first=1) for y in [8, 12, 15, 20, 30] * 4]
+    rows += [flag("BUF", "Unnecessary Roughness", 15, play_type="run", first=1) for _ in range(8)]
+    rows += [flag("BUF", "Defensive Holding", 5, desc="PENALTY declined") for _ in range(30)]
+    snaps, flags = nfl_sim._snaps_with_flags(pd.DataFrame(rows))
+    league = nfl_sim._penalty_league(snaps, flags)
+    n = len(snaps)
+    assert league["offense_rate"] == round(30 / n, 4)
+    # Declined flags don't count.
+    assert league["defense_rate"] == round(28 / n, 4)
+    by = {t["name"]: t for t in league["types"]}
+    assert set(by) == {"False Start", "Offensive Holding", "Defensive Pass Interference", "Unnecessary Roughness"}
+    assert by["False Start"]["presnap"] and by["False Start"]["share"] == round(20 / 30, 4)
+    assert by["Offensive Holding"]["yards"] == 10 and not by["Offensive Holding"]["presnap"]
+    # A personal foul on a play that stood is added on after it.
+    assert by["Unnecessary Roughness"]["after"] and not by["Defensive Pass Interference"]["after"]
+    assert by["Defensive Pass Interference"]["first_down"] == 1.0
+    assert len(league["dpi_yards"]) == len(nfl_sim.QUANTILES)

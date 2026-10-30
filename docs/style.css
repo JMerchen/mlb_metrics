@@ -1881,8 +1881,14 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 .simScoreboard{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:10px;background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin:0 0 10px;}
 .simTeam{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;}
 .simTeam:last-child{flex-direction:row-reverse;}
-.simTeamName{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.simHasBall .simTeamName::after{content:" \25CF";color:var(--accent);font-size:10px;vertical-align:middle;}
+.simTeamName{display:flex;flex-direction:column;font-weight:700;overflow:hidden;white-space:nowrap;min-width:0;}
+.simTeamName > span:not(.simTimeouts){overflow:hidden;text-overflow:ellipsis;}
+.simTeam:last-child .simTeamName{align-items:flex-end;}
+.simTimeouts{display:flex;gap:3px;margin-top:4px;}
+.simTeam:last-child .simTimeouts{justify-content:flex-end;}
+.simTimeouts i{width:12px;height:4px;border-radius:2px;background:var(--accent);}
+.simTimeouts i.simToUsed{background:var(--border-strong);}
+.simHasBall .simLong::after,.simHasBall .simShort::after{content:" \25CF";color:var(--accent);font-size:10px;vertical-align:middle;}
 .simPoints{font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;}
 .simClockBox{display:flex;flex-direction:column;align-items:center;font-variant-numeric:tabular-nums;min-width:96px;}
 .simQuarter{font-size:12px;color:var(--text-dim);font-weight:700;}
@@ -1912,11 +1918,11 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 .simStale{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;border:1px solid var(--accent);border-radius:var(--radius-sm);padding:8px 10px;margin:0 0 12px;}
 .simStale .whatIfAction{margin:0;}
 .simAllPlays summary{cursor:pointer;font-size:13px;color:var(--text-dim);margin-bottom:6px;}
-.simShort{display:none;}
+.simTeamName .simShort{display:none;}
 .simBox td:first-child{white-space:normal;}
 @media (max-width:600px){
-.simLong{display:none;}
-.simShort{display:inline;}
+.simTeamName .simLong{display:none;}
+.simTeamName .simShort{display:inline;}
 .simPoints{font-size:22px;}
 .simClockBox{min-width:80px;}
 }
