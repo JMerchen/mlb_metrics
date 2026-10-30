@@ -167,7 +167,7 @@ PAGE_JS_PATCHERS = {
 VERBATIM_JS = [
     "teams.js", "summary_render.js",
     "age_render.js", "consensus_board.js", "player_props.js", "nfl_units.js", "prop_cards.js",
-    "nfl_whatif.js", "payroll_render.js",
+    "nfl_whatif.js", "nfl_sim.js", "payroll_render.js",
 ]
 
 

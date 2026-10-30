@@ -3116,6 +3116,27 @@ which writes `data/nfl_payroll/team_payroll.csv` and
 `docs/data/nfl_payroll_*.csv`; the tab shares `docs/payroll_render.js` and
 `docs/payroll.js` with the MLB page.
 
+## NFL game simulation (`docs/nfl.html`'s What if? panel, `nfl_sim.py`)
+
+"Simulate this game", under the What if? panel, plays the chosen game out
+snap by snap in `docs/nfl_sim.js` and shows it over about five minutes
+(4x, 16x or skip to the final), with a live drive chart and, at the end,
+each team's box score. `scripts/build_nfl_sim_profiles.py` (run by the
+weekly NFL update) writes `docs/data/nfl_sim_profiles.json` from the
+persisted play-by-play: each offense's early-down pass rate, sack,
+completion, interception and fumble rates and the spread of its runs and
+completions (as quantiles), pulled toward the league's with 150 plays;
+plus the league's kickoff starts, punt nets, field-goal curve and
+extra-point rate from the last two seasons. Team gains are scaled to the
+league's mean, so profiles carry style only. Strength comes at runtime:
+`simCalibrate` solves a home yards edge and an overall scale over 300
+seeded games so the average lands on the panel's win chance (as a margin,
+`logodds_per_point`) and the pick's predicted total; the panel's unit
+percents multiply each side's run and pass yards. With no adjustments the
+engine averages about 19.5 points, 61 plays, 5.1 net yards a play, 40% on
+third down and one turnover per team (no penalties), a little under the
+league's scoring, so calibrated scales run about 1.05-1.2.
+
 ## NFL Automated Game Picks (`docs/nfl.html`'s Picks tab)
 
 > **Predicted point totals (2026-10-12, improved 2026-10-13).** Each game

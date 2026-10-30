@@ -47,6 +47,9 @@ jobs:
       - name: Run nfl_whatif.js unit tests
         run: node --test docs/nfl_whatif.test.js
 
+      - name: Run nfl_sim.js unit tests
+        run: node --test docs/nfl_sim.test.js
+
       - name: Run payroll_render.js unit tests
         run: node --test docs/payroll_render.test.js
 

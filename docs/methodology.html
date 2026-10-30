@@ -232,7 +232,8 @@ pick came before the final injury report (Tuesday) or after it (the
 morning of, or the day before, the game). <b>What if?</b>: swap a starting
 QB, mark players out or set any unit's efficiency and see the chance move;
 last week's games can be replayed to test your settings against how they
-finished.</p>
+finished. <b>Simulate this game</b> plays the game out snap by snap over
+about five minutes, with a drive chart and a final box score.</p>
 </div>
 
 <div class="methodCard">
@@ -322,6 +323,23 @@ goes through the model with the new QB's rating. Yards become points (0.07
 a yard) and points become win chance (0.137 log-odds a point, from how
 Vegas turns spreads into odds). The final injury report's Out and Doubtful
 players reprice each game the morning of, or the day before, it.</p>
+</div>
+
+<div class="methodCard">
+<h3>Game simulation</h3>
+<p>Every snap is drawn from the teams' own play-by-play this season: how
+often each throws on early downs, how its runs and completions are spread,
+and how often it's sacked, picked off or fumbles, pulled toward the
+league's with 150 plays of league average. Kickoffs, punts, field goals by
+distance and extra points use the league's last two seasons. The profiles
+carry style, not strength: each team's gains are scaled to the league's
+average, and the game is then tuned, from 300 seeded simulations, so the
+average simulated game lands on the What if? panel's win chance (as a
+point margin, 0.137 log-odds a point) and our predicted total. Unit
+settings move the yards where they belong - a pass defense at 80% gives up
+more through the air. Fourth downs, two-minute drills, kneel-downs and
+overtime (both teams get the ball) follow simple rules; there are no
+penalties, timeouts or player stats yet.</p>
 </div>
 
 <div class="methodCard">
