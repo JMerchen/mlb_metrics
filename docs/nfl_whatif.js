@@ -303,6 +303,40 @@ return `${modes}${replay}${picker}${whatifResultHtml(game, result)}
 <div class="whatIfTeams">${whatifTeamHtml("away", game, data, state)}${whatifTeamHtml("home", game, data, state)}</div>`
 }
 
+// A state as a string, to tell whether anything was changed since.
+function whatifStateKey(state){
+const sorted = set => [...set].sort()
+return JSON.stringify({
+homeQb: state.homeQb, awayQb: state.awayQb,
+out: {home: sorted(state.out.home), away: sorted(state.out.away)},
+playerPct: state.playerPct, unitPct: state.unitPct,
+})
+}
+
+// What a state changes from the game as listed, in words: QB swaps,
+// players out and units typed over ("Packers QB Tyrod Taylor", "Packers
+// without Josh Jacobs", "Panthers pass defense 80%"). The units the
+// absences lower go unsaid - the names already say it.
+function whatifSettingsSummary(game, data, state){
+const out = []
+for(const side of ["away", "home"]){
+const team = game[side]
+const name = typeof teamName === "function" ? teamName(team.team, "nfl") : team.team
+const qb = side === "home" ? state.homeQb : state.awayQb
+if(qb && qb !== whatifListedQb(team)){
+const q = (team.qbs || []).find(x => x.id === qb)
+out.push(`${name} QB ${q ? q.name : qb}`)
+}
+const missing = whatifOutPlayers(team, state.out[side], data).map(p => p.name || `an average ${WHATIF_GROUP_LABELS[p.group] ? WHATIF_GROUP_LABELS[p.group].toLowerCase() : p.group} regular`)
+if(missing.length){ out.push(`${name} without ${missing.join(", ")}`) }
+for(const unit of WHATIF_UNITS){
+const typed = state.unitPct[side][unit]
+if(typed !== undefined){ out.push(`${name} ${WHATIF_UNIT_LABELS[unit].toLowerCase()} ${Math.round(typed * 100)}%`) }
+}
+}
+return out
+}
+
 // A typed percent ("" clears it) as a fraction, or undefined.
 function whatifParsePct(text){
 const value = String(text ?? "").trim()
@@ -315,6 +349,6 @@ if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 whatifProbability, whatifPanelHtml, whatifEmptyState, whatifListedQb, whatifPoints, whatifUnitPcts,
 whatifUnitPoints, whatifDefaultPct, whatifMissedState, whatifWeekSummary, whatifParsePct, whatifOutPlayers,
-whatifPostedState,
+whatifPostedState, whatifStateKey, whatifSettingsSummary,
 }
 }

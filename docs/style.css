@@ -1871,3 +1871,52 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 .installTip ol{margin:8px 0 8px 20px;padding:0;}
 .installTip li{margin:4px 0;}
 .installTip p{color:var(--text-dim);font-size:13px;margin:0 0 10px;}
+
+/* NFL game simulation (nfl_sim.js), below the What if? panel. */
+.simPanel h4{margin:0 0 8px;}
+.simPanel h4 + .simControls{margin-top:4px;}
+.simIntro{font-size:13px;color:var(--text-dim);margin:0 0 10px;line-height:1.5;}
+.simControls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px;}
+.simControls .whatIfAction{margin:0;}
+.simScoreboard{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:10px;background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin:0 0 10px;}
+.simTeam{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;}
+.simTeam:last-child{flex-direction:row-reverse;}
+.simTeamName{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.simHasBall .simTeamName::after{content:" \25CF";color:var(--accent);font-size:10px;vertical-align:middle;}
+.simPoints{font-size:28px;font-weight:800;font-variant-numeric:tabular-nums;}
+.simClockBox{display:flex;flex-direction:column;align-items:center;font-variant-numeric:tabular-nums;min-width:96px;}
+.simQuarter{font-size:12px;color:var(--text-dim);font-weight:700;}
+.simClock{font-size:18px;font-weight:700;}
+.simDown{font-size:12px;color:var(--accent);min-height:15px;white-space:nowrap;}
+.simField{display:block;width:100%;height:auto;margin:0 0 10px;}
+.simGrass{fill:#1f4d2b;}
+.simEndZone{fill:#173a21;}
+.simEndText{fill:rgba(255,255,255,.55);font:700 12px var(--font);text-anchor:middle;}
+.simYardLine{stroke:rgba(255,255,255,.28);stroke-width:1;}
+.simYardNum{fill:rgba(255,255,255,.5);font:600 9px var(--font);text-anchor:middle;}
+.simFirstDown{stroke:var(--accent);stroke-width:2;}
+.simBall{fill:#8a5230;stroke:#fff;stroke-width:1;}
+.simTicker{list-style:none;margin:0 0 12px;padding:0;font-size:13px;}
+.simTicker li{padding:4px 0;border-bottom:1px solid var(--border);}
+.simTicker li:first-child{font-weight:600;}
+.simTicker li.simScoring{color:var(--accent-strong);}
+.simWhen{color:var(--text-dim);font-variant-numeric:tabular-nums;margin-right:4px;}
+.simDrives,.simBox{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums;}
+.simDrives th,.simDrives td,.simBox th,.simBox td{padding:4px 8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
+.simBox td:not(:first-child),.simBox th:not(:first-child){text-align:right;}
+.simScoreDrive td{color:var(--accent-strong);}
+.simLiveDrive td{color:var(--text-dim);}
+.simFinal .whatIfHeadline{margin-bottom:4px;}
+.simAllPlays{margin-top:10px;}
+.simSettings{color:var(--text);}
+.simStale{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;border:1px solid var(--accent);border-radius:var(--radius-sm);padding:8px 10px;margin:0 0 12px;}
+.simStale .whatIfAction{margin:0;}
+.simAllPlays summary{cursor:pointer;font-size:13px;color:var(--text-dim);margin-bottom:6px;}
+.simShort{display:none;}
+.simBox td:first-child{white-space:normal;}
+@media (max-width:600px){
+.simLong{display:none;}
+.simShort{display:inline;}
+.simPoints{font-size:22px;}
+.simClockBox{min-width:80px;}
+}

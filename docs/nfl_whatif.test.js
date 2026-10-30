@@ -4,7 +4,7 @@ const assert = require("node:assert/strict")
 global.teamName = require("./teams.js").teamName
 const {
   whatifProbability, whatifPanelHtml, whatifEmptyState, whatifPoints, whatifUnitPcts, whatifDefaultPct,
-  whatifMissedState, whatifWeekSummary, whatifParsePct, whatifPostedState,
+  whatifMissedState, whatifWeekSummary, whatifParsePct, whatifPostedState, whatifStateKey, whatifSettingsSummary,
 } = require("./nfl_whatif.js")
 
 const text = html => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
@@ -186,4 +186,23 @@ test("a game repriced after its injury report opens on that report", () => {
   assert.match(out, /Posted after the final injury report \(out: Jordan Love \(QB; Tyrod Taylor starts\), Josh Jacobs\)/)
   assert.match(out, /Packers' chance: 60% before the injury report → /)
   assert.match(out, /Without the injury report/)
+})
+
+test("the settings a simulation ran with read in words, and any change shows", () => {
+  const state = whatifEmptyState()
+  assert.deepEqual(whatifSettingsSummary(GAME, DATA, state), [])
+  const before = whatifStateKey(state)
+  state.homeQb = "taylor"
+  state.out.home.add("rb1")
+  state.unitPct.away.pass_defense = 0.8
+  assert.deepEqual(whatifSettingsSummary(GAME, DATA, state), [
+    "Panthers pass defense 80%",
+    "Packers QB Tyrod Taylor", "Packers without Josh Jacobs",
+  ])
+  assert.notEqual(whatifStateKey(state), before)
+  // The order players were marked in doesn't matter.
+  const a = whatifEmptyState(), b = whatifEmptyState()
+  a.out.home.add("rb1"); a.out.home.add("lt")
+  b.out.home.add("lt"); b.out.home.add("rb1")
+  assert.equal(whatifStateKey(a), whatifStateKey(b))
 })
