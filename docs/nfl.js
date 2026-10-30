@@ -159,6 +159,7 @@ el.innerHTML = whatifPanelHtml(nflWhatIf.data[mode], nflWhatIf.game[mode], nflWh
 // Re-rendering replaces the control that changed; keep keyboard focus on it.
 const again = focusSelector ? el.querySelector(focusSelector) : null
 if(again){ again.focus() }
+nflSimSyncSettings()
 
 }
 
@@ -259,7 +260,7 @@ function renderNflSimIdle(){
 stopNflSim()
 nflSim.run = null
 document.getElementById("nflSim").innerHTML = `<h4>Simulate the game</h4>
-<p class="simIntro">Play the game picked above out snap by snap, with its QBs, absences and unit settings as they're set now. It takes about five minutes: a drive chart builds as it goes, and the final score comes with each team's box score. Speed it up or skip to the end anytime.</p>
+<p class="simIntro">Play the game picked above out snap by snap, with its QBs, players out and unit settings as they're set now. It takes about five minutes: a drive chart builds as it goes, and the final score comes with each team's box score. Speed it up or skip to the end anytime - then mark someone else out above and run it again.</p>
 <button class="whatIfAction" data-sim-action="start">Simulate this game</button>`
 
 }
@@ -277,6 +278,10 @@ margin: Math.log(p / (1 - p)) / (Number(data.logodds_per_point) || 0.137),
 total: nflSim.totals[game.game_id] || 45,
 }
 const unitPcts = {home: whatifUnitPcts(game, "home", data, state), away: whatifUnitPcts(game, "away", data, state)}
+const settings = {
+mode, gameId: game.game_id, key: whatifStateKey(state), probability: p,
+changes: whatifSettingsSummary(game, data, state), home: game.home.team,
+}
 const el = document.getElementById("nflSim")
 stopNflSim()
 el.innerHTML = `<h4>${whatifEsc(whatifGameLabel(game))}</h4><p class="simIntro">Setting up the game…</p>`
@@ -286,7 +291,7 @@ const calibration = simCalibrate(nflSim.profiles, game.home.team, game.away.team
 const sim = simulateGame(nflSim.profiles, game.home.team, game.away.team, {
 seed: Math.floor(Math.random() * 2147483647), edge: calibration.edge, scale: calibration.scale, unitPcts,
 })
-nflSim.run = {sim, calibration, target, label: whatifGameLabel(game), index: 0, speed: nflSim.run ? nflSim.run.speed : 1, paused: false, timer: null}
+nflSim.run = {sim, calibration, target, settings, label: whatifGameLabel(game), index: 0, speed: nflSim.run ? nflSim.run.speed : 1, paused: false, timer: null}
 renderNflSimShell()
 renderNflSimFrame()
 scheduleNflSim()
@@ -327,7 +332,9 @@ document.getElementById("nflSim").innerHTML = `<h4>${whatifEsc(run.label)}</h4>
 <div class="simControls"><div class="tabGroup">${speeds}</div>
 <button class="whatIfAction" data-sim-action="pause">${run.paused ? "Resume" : "Pause"}</button>
 <button class="whatIfAction" data-sim-action="skip">Skip to the final</button></div>
+${nflSimSettingsHtml(run)}
 <div class="simLive"></div>`
+nflSimSyncSettings()
 
 }
 
@@ -342,18 +349,56 @@ if(run.index >= sim.plays.length - 1){
 el.innerHTML = `<h4>${whatifEsc(run.label)}</h4>
 ${simFinalHtml(sim)}
 <p class="simIntro">${simCalibrationNote(sim, run.calibration, run.target)}</p>
+${nflSimSettingsHtml(run)}
 <div class="simControls"><button class="whatIfAction" data-sim-action="start">Simulate it again</button>
 <button class="whatIfAction" data-sim-action="close">Done</button></div>
 ${simScoreboardHtml(sim, play)}
 <h4>Team stats</h4><div class="scrollbox">${simBoxScoreHtml(sim)}</div>
 <h4>Drive chart</h4><div class="scrollbox">${simDriveChartHtml(sim)}</div>
 <details class="simAllPlays"><summary>Every play</summary>${simTickerHtml(sim, run.index)}</details>`
+nflSimSyncSettings()
 return
 }
 live.innerHTML = `${simScoreboardHtml(sim, play, sim.plays[run.index + 1])}
 ${simFieldSvg(play, sim.home, sim.away)}
 ${simTickerHtml(sim, run.index, 5)}
 <h4>Drive chart</h4><div class="scrollbox">${simDriveChartHtml(sim, run.index)}</div>`
+
+}
+
+// Which What if? settings a simulation was run with, and a slot for the
+// note that they've since changed.
+function nflSimSettingsHtml(run){
+
+const s = run.settings
+const home = typeof teamName === "function" ? teamName(s.home, "nfl") : s.home
+return `<p class="simIntro simSettings">${s.changes.length
+? `Simulated with ${whatifEsc(s.changes.join("; "))}`
+: "Simulated as posted, with no What if? changes"} (${whatifEsc(home)} ${whatifPct(s.probability)} in the panel).</p>
+<div class="simNotice"></div>`
+
+}
+
+// After any What if? change: a different game (or view) puts the
+// simulation back to its button; new settings for the same game offer a
+// rerun with them.
+function nflSimSyncSettings(){
+
+const run = nflSim.run
+const el = document.getElementById("nflSim")
+if(!run || !el){ return }
+const mode = nflWhatIf.mode
+const game = nflWhatIfGameData(mode)
+if(mode !== run.settings.mode || !game || game.game_id !== run.settings.gameId){
+renderNflSimIdle()
+return
+}
+const notice = el.querySelector(".simNotice")
+if(!notice){ return }
+const changed = whatifStateKey(nflWhatIf.state[mode]) !== run.settings.key
+notice.innerHTML = changed
+? `<div class="simStale">The What if? settings have changed since this game was simulated. <button class="whatIfAction" data-sim-action="start">Simulate again with them</button></div>`
+: ""
 
 }
 
