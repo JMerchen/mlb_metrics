@@ -36,6 +36,17 @@ PLAYER_GAMES = 4
 SHRINK_TARGETS = 25
 SHRINK_CARRIES = 30
 SHRINK_CATCHES = 12
+# A team's flags a snap barely carry over within a season (a half-season's
+# rate correlates 0.16 with the other half's), so it takes this many snaps
+# of league average to pull it in.
+SHRINK_PENALTY_SNAPS = 2700
+# Penalties called before the snap (no play, no clock).
+PRESNAP_PENALTIES = {
+    "False Start", "Delay of Game", "Defensive Offside", "Neutral Zone Infraction", "Encroachment",
+    "Defensive Too Many Men on Field", "Offensive Too Many Men on Field", "Offensive Offside",
+    "Defensive Delay of Game", "Illegal Substitution",
+}
+MIN_PENALTY_SHARE = 0.01
 PBP_COLUMNS = [
     "game_id", "season", "season_type", "week", "posteam", "defteam", "play_type", "down", "ydstogo", "qtr",
     "score_differential", "yards_gained", "pass_attempt", "sack", "interception", "complete_pass",
@@ -43,6 +54,7 @@ PBP_COLUMNS = [
     "drive", "drive_start_yard_line", "drive_start_transition",
     "passer_player_id", "passer_player_name", "receiver_player_id", "receiver_player_name",
     "rusher_player_id", "rusher_player_name", "kicker_player_id", "kicker_player_name",
+    "penalty", "penalty_team", "penalty_type", "penalty_yards", "first_down_penalty", "desc",
 ]
 ROSTER_COLUMNS = ["season", "week", "team", "position", "full_name", "gsis_id", "pfr_id", "status"]
 
@@ -104,11 +116,23 @@ def _offense_rates(plays: pd.DataFrame) -> dict:
     }
 
 
-def _drive_starts(pbp: pd.DataFrame, transition: str) -> np.ndarray:
+def _onside_kicks(pbp: pd.DataFrame) -> pd.DataFrame:
+    """Onside kickoffs; each row's (game_id, drive) is the drive it started."""
+    if "desc" not in pbp.columns:
+        return pbp.iloc[0:0]
+    kicks = pbp[pbp["play_type"] == "kickoff"]
+    return kicks[kicks["desc"].astype("string").fillna("").str.contains("onside", case=False)]
+
+
+def _drive_starts(pbp: pd.DataFrame, transition: str, skip: pd.DataFrame | None = None) -> np.ndarray:
     """Yards from its own goal where the receiving team's drive started
-    ("ARI 30" for ARI = 30; for the other team, 100 - 30)."""
+    ("ARI 30" for ARI = 30; for the other team, 100 - 30), leaving out the
+    drives in skip (rows with game_id and drive)."""
     starts = pbp[(pbp["drive_start_transition"] == transition) & pbp["drive_start_yard_line"].notna() & pbp["posteam"].notna()]
     starts = starts.drop_duplicates(["game_id", "drive"])
+    if skip is not None and len(skip):
+        keys = set(zip(skip["game_id"], skip["drive"]))
+        starts = starts[[k not in keys for k in zip(starts["game_id"], starts["drive"])]]
     out = []
     for side, posteam in zip(starts["drive_start_yard_line"], starts["posteam"]):
         parts = str(side).split()
@@ -131,6 +155,54 @@ def _field_goal_curve(pbp: pd.DataFrame) -> dict:
 
     fit = sm.Logit(y, sm.add_constant(x)).fit(disp=0)
     return {"a": round(float(fit.params[0]), 4), "b": round(float(fit.params[1]), 5)}
+
+
+def _snaps_with_flags(pbp: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """(every scrimmage snap, including ones a penalty wiped out; the
+    accepted penalties on them, each with side "O" or "D")."""
+    snaps = pbp[(pbp["season_type"] == "REG") & pbp["play_type"].isin(["pass", "run", "no_play"])
+                & pbp["down"].notna() & pbp["posteam"].notna()]
+    if "penalty_type" not in snaps.columns:
+        return snaps, snaps.iloc[0:0].assign(side=pd.Series(dtype=str))
+    declined = snaps["desc"].astype("string").fillna("").str.contains("declined|offsetting", case=False)
+    flags = snaps[(snaps["penalty"] == 1) & snaps["penalty_yards"].notna() & snaps["penalty_type"].notna() & ~declined]
+    side = np.where(flags["penalty_team"] == flags["posteam"], "O", np.where(flags["penalty_team"] == flags["defteam"], "D", ""))
+    flags = flags.assign(side=side)
+    return snaps, flags[flags["side"] != ""]
+
+
+def _penalty_league(snaps: pd.DataFrame, flags: pd.DataFrame) -> dict:
+    """Rates a snap for each side, and each side's penalties (those at
+    MIN_PENALTY_SHARE or more, renormalized): {name, side, share, yards
+    (typical), first_down (chance it gives one), presnap (no play), after
+    (the play stands and the yards are added - personal fouls)}. DPI is
+    a spot foul: dpi_yards holds its quantiles."""
+    n = max(1, len(snaps))
+    types = []
+    for side in ("O", "D"):
+        mine = flags[flags["side"] == side]
+        if mine.empty:
+            continue
+        by = mine.groupby("penalty_type").agg(
+            n=("penalty_yards", "size"), yards=("penalty_yards", "median"),
+            first_down=("first_down_penalty", "mean"), nullified=("play_type", lambda x: (x == "no_play").mean()))
+        by = by[by["n"] / by["n"].sum() >= MIN_PENALTY_SHARE]
+        for name, row in by.iterrows():
+            types.append({
+                "name": name, "side": side, "share": round(float(row["n"] / by["n"].sum()), 4),
+                "yards": int(round(float(row["yards"]))), # An automatic first down; a pre-snap foul's 5 yards give one
+                # only when they reach the line, which the simulation sees.
+                "first_down": round(float(row["first_down"]) if side == "D" and name not in PRESNAP_PENALTIES else 0.0, 3),
+                "presnap": name in PRESNAP_PENALTIES,
+                "after": bool(side == "D" and row["nullified"] < 0.5),
+            })
+    dpi = flags.loc[flags["penalty_type"] == "Defensive Pass Interference", "penalty_yards"]
+    return {
+        "offense_rate": round(float((flags["side"] == "O").sum() / n), 4),
+        "defense_rate": round(float((flags["side"] == "D").sum() / n), 4),
+        "types": types,
+        "dpi_yards": _quantiles(dpi) if len(dpi) >= 20 else [],
+    }
 
 
 def _active_roster(rosters: pd.DataFrame | None, season: int) -> pd.DataFrame | None:
@@ -235,7 +307,26 @@ def build_profiles(pbp: pd.DataFrame, season: int, rosters: pd.DataFrame | None 
     xps = recent[recent["play_type"] == "extra_point"]
     games = max(1, recent["game_id"].nunique())
 
+    snaps, flags = _snaps_with_flags(recent)
+    # Onside kicks come only from a team behind late, and most hand the
+    # other side the ball near midfield: kept out of the kickoff starts (they
+    # were half of all kickoff drives starting past midfield) and modeled on
+    # their own.
+    onside = _onside_kicks(recent)
+    recovered = int(onside["drive_start_transition"].eq("ONSIDE_KICK").sum()) if "drive_start_transition" in onside else 0
+    failed = set(zip(onside["game_id"], onside["drive"]))
+    after_failed = recent[[k in failed for k in zip(recent["game_id"], recent["drive"])]]
+    failed_starts = _drive_starts(after_failed, "KICKOFF")
+    lg_onside = {
+        # One pseudo-recovery in ten pseudo-tries keeps a short sample honest.
+        "recovery_rate": round((recovered + 1) / (len(onside) + 10), 4),
+        "attempts": int(len(onside)),
+        # Where the receiving team starts after one fails.
+        "failed_start": _quantiles(failed_starts) if len(failed_starts) >= 20 else [],
+    }
     lg = {
+        "onside": lg_onside,
+        "penalties": _penalty_league(snaps, flags),
         "neutral_pass_rate": round(league["neutral_pass"] / max(1, league["neutral"]), 4),
         "sack_rate": round(league["sacks"] / max(1, league["dropbacks"]), 4),
         "comp_rate": round(league["completions"] / max(1, league["attempts"]), 4),
@@ -245,7 +336,7 @@ def build_profiles(pbp: pd.DataFrame, season: int, rosters: pd.DataFrame | None 
         "sack_yards": round(float(np.mean(league["sack_yards"])) if len(league["sack_yards"]) else -7.0, 2),
         "rush_yards": _quantiles(league["rush_yards"]),
         "completion_yards": _quantiles(league["completion_yards"]),
-        "kickoff_start": _quantiles(_drive_starts(recent, "KICKOFF")),
+        "kickoff_start": _quantiles(_drive_starts(recent, "KICKOFF", onside)),
         "punt_net": _quantiles(punt_net),
         "punt_touchback_rate": round(float(punts["touchback"].fillna(0).mean()) if len(punts) else 0.07, 4),
         "field_goal": _field_goal_curve(recent),
@@ -256,6 +347,12 @@ def build_profiles(pbp: pd.DataFrame, season: int, rosters: pd.DataFrame | None 
 
     teams = {}
     roster = _active_roster(rosters, season)
+    pen = lg["penalties"]
+    cur_snaps = snaps[snaps["season"] == season]
+    cur_flags = flags[flags["season"] == season]
+    off_snaps, def_snaps = cur_snaps["posteam"].value_counts(), cur_snaps["defteam"].value_counts()
+    off_flags = cur_flags[cur_flags["side"] == "O"]["posteam"].value_counts()
+    def_flags = cur_flags[cur_flags["side"] == "D"]["defteam"].value_counts()
     scrimmage = _scrimmage(current)
     for team, plays in scrimmage.groupby("posteam"):
         r = _offense_rates(plays)
@@ -269,6 +366,8 @@ def build_profiles(pbp: pd.DataFrame, season: int, rosters: pd.DataFrame | None 
             "catch_fumble_rate": round(_shrunk_rate(r["catch_fumbles"], r["completions"], lg["catch_fumble_rate"]), 4),
             "rush_yards": _shrunk_shape(r["rush_yards"], lg["rush_yards"]),
             "completion_yards": _shrunk_shape(r["completion_yards"], lg["completion_yards"]),
+            "offense_penalty_rate": round(_shrunk_rate(off_flags.get(team, 0), off_snaps.get(team, 0), pen["offense_rate"], SHRINK_PENALTY_SNAPS), 4),
+            "defense_penalty_rate": round(_shrunk_rate(def_flags.get(team, 0), def_snaps.get(team, 0), pen["defense_rate"], SHRINK_PENALTY_SNAPS), 4),
             **(team_players(current, team, roster) if "receiver_player_id" in current.columns else {}),
         }
     weeks = current["week"].dropna()

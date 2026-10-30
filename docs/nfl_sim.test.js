@@ -20,6 +20,18 @@ const LEAGUE = {
   rush_yards: spread(-3, 20), completion_yards: spread(-1, 32),
   kickoff_start: spread(15, 45, 1), punt_net: spread(25, 60, 1), punt_touchback_rate: 0.07,
   field_goal: { a: 6.1, b: -0.098 }, xp_rate: 0.95, scrimmage_plays_per_team_game: 61, quantile_probs: PROBS,
+  onside: { recovery_rate: 0.1, attempts: 50, failed_start: spread(48, 60, 1) },
+  penalties: {
+    offense_rate: 0.05, defense_rate: 0.035, dpi_yards: spread(2, 45, 1),
+    types: [
+      { name: "False Start", side: "O", share: 0.5, yards: 5, first_down: 0, presnap: true, after: false },
+      { name: "Offensive Holding", side: "O", share: 0.4, yards: 10, first_down: 0, presnap: false, after: false },
+      { name: "Intentional Grounding", side: "O", share: 0.1, yards: 10, first_down: 0, presnap: false, after: false },
+      { name: "Defensive Pass Interference", side: "D", share: 0.3, yards: 14, first_down: 1, presnap: false, after: false },
+      { name: "Defensive Offside", side: "D", share: 0.4, yards: 5, first_down: 0, presnap: true, after: false },
+      { name: "Unnecessary Roughness", side: "D", share: 0.3, yards: 15, first_down: 0.95, presnap: false, after: true },
+    ],
+  },
 }
 const player = (gsis, pfr, name, pos, targets, carries, more = {}) =>
   ({ gsis, pfr, name, pos, targets, carries, catch: 1, ypr: 1, ypc: 1, ...more })
@@ -262,4 +274,92 @@ test("one game's player tables list who played", () => {
   assert.match(html, /Panthers Passing C\/Att/)
   assert.match(html, /Packers Passing C\/Att Yds TD INT Sk Jordan Love/)
   assert.ok(g.plays.some(p => / pass (to|incomplete for) [A-Z]\. /.test(p.text)))
+})
+
+test("penalties: flags at about the set rates, walked off within the field, in the box score", () => {
+  let flagsSeen = 0, snaps = 0
+  for (let seed = 1; seed <= 300; seed++) {
+    const g = simulateGame(PROFILES, "GB", "CAR", { seed })
+    const wiped = g.plays.filter(p => p.kind === "penalty")
+    const added = g.plays.filter(p => p.kind !== "penalty" && /PENALTY/.test(p.text))
+    assert.equal(g.box.home.penalties + g.box.away.penalties, wiped.length + added.length)
+    for (const p of wiped) {
+      assert.ok(p.end >= 1 && p.end <= 99, `${p.ball} -> ${p.end}`)
+      // Half the distance to the goal at most (DPI goes to the 1).
+      if (/False Start|Holding/.test(p.text)) { assert.ok(p.ball - p.end <= Math.max(1, p.ball / 2) + 1e-9) }
+    }
+    flagsSeen += wiped.length + added.length
+    snaps += g.plays.filter(p => SCRIMMAGE.has(p.kind) || p.kind === "penalty").length
+  }
+  const rate = flagsSeen / snaps
+  assert.ok(rate > 0.06 && rate < 0.11, `${rate}`)
+})
+
+test("timeouts: three a half (two in overtime), never below zero; one two-minute warning a half", () => {
+  for (let seed = 1; seed <= 300; seed++) {
+    const g = simulateGame(PROFILES, "GB", "CAR", { seed })
+    for (const p of g.plays) {
+      for (const side of ["home", "away"]) {
+        assert.ok(p.timeouts[side] >= 0 && p.timeouts[side] <= (p.qtr >= 5 ? 2 : 3))
+      }
+    }
+    const used = g.box.home.timeouts + g.box.away.timeouts
+    assert.equal(used, g.plays.filter(p => p.kind === "timeout").length)
+    assert.ok(used <= 12 + (g.final.overtime ? 4 : 0))
+    for (const q of [2, 4]) {
+      assert.ok(g.plays.filter(p => p.kind === "warning" && p.qtr === q).length <= 1)
+    }
+  }
+})
+
+test("late and close, the defense spends its timeouts; the leader kneels only when it can run out the clock", () => {
+  let defenseLate = 0
+  for (let seed = 1; seed <= 400; seed++) {
+    const g = simulateGame(PROFILES, "GB", "CAR", { seed })
+    for (const p of g.plays) {
+      if (p.kind === "timeout" && p.qtr === 4 && p.clock <= 180) {
+        const caller = p.text.includes("GB") ? "home" : "away"
+        const callerMargin = caller === "home" ? p.home - p.away : p.away - p.home
+        if (caller !== p.poss) { defenseLate += 1; assert.ok(callerMargin < 0) }
+      }
+    }
+    // A kneel-down never hands the ball back with the leader's lead in danger
+    // of more than one possession of clock.
+    const kneels = g.plays.filter(p => p.kind === "kneel")
+    for (const k of kneels) { assert.ok(k.qtr >= 4) }
+  }
+  assert.ok(defenseLate > 0)
+})
+
+test("onside kicks come only from a team behind in the 4th quarter; normal kickoffs rarely start past midfield", () => {
+  let normal = 0, deep = 0, onside = 0
+  for (let seed = 1; seed <= 600; seed++) {
+    const g = simulateGame(PROFILES, "GB", "CAR", { seed })
+    g.plays.forEach((p, i) => {
+      if (p.kind !== "kickoff") { return }
+      if (/onside/.test(p.text)) {
+        onside += 1
+        // The score as the ball was kicked (the kick itself scores nothing).
+        const kicker = p.text.startsWith("GB") ? "home" : "away"
+        const kickerMargin = kicker === "home" ? p.home - p.away : p.away - p.home
+        assert.equal(p.qtr, 4)
+        assert.ok(kickerMargin < 0 && kickerMargin >= -24, `${kickerMargin}`)
+        return
+      }
+      normal += 1
+      if (p.ball > 50) { deep += 1 }
+    })
+  }
+  assert.ok(onside > 0)
+  assert.ok(deep / normal < 0.04, `${deep}/${normal}`)
+})
+
+test("no penalty or play puts the ball past the goal line without a score", () => {
+  for (let seed = 1; seed <= 400; seed++) {
+    const g = simulateGame(PROFILES, "GB", "CAR", { seed, edge: 0.3, scale: 1.4 })
+    for (const p of g.plays) {
+      if (p.end >= 100) { assert.equal(p.scoring, "TD", p.text) }
+      if (p.kind === "penalty") { assert.ok(p.end <= 99 && p.end >= 1, p.text) }
+    }
+  }
 })
