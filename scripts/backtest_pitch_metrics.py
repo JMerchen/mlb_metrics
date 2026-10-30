@@ -137,16 +137,26 @@ def add_features(log: pd.DataFrame, p: pd.DataFrame, stuff_pred: np.ndarray, val
     return log
 
 
-def evaluate(trainer, rows: pd.DataFrame, features: list[str], label: str) -> dict:
+def evaluate(trainer, rows: pd.DataFrame, features: list[str], label: str) -> tuple[dict, np.ndarray, np.ndarray]:
+    """The production model's spec (the trainer's last pick: gradient
+    boosting, depth 3, learning rate 0.03, 50-row leaves, isotonic) fit on
+    the train pool and scored on the trainer's final holdout dates - the
+    full grid search runs for hours with the new columns."""
+    from sklearn.ensemble import HistGradientBoostingClassifier
+
     dfs_ml.HITTER_FEATURE_COLUMNS = features
     train_pool, holdout, _ = trainer._split_holdout(rows, config.ML_FINAL_HOLDOUT_DATES)
     X_train = dfs_ml.hitter_feature_matrix(train_pool)
-    best = trainer._select_best_model(X_train, train_pool["Got_Hit"], train_pool["date"])
-    probs = best.best_estimator_.predict_proba(dfs_ml.hitter_feature_matrix(holdout))[:, 1]
+    model = ml_models.fit_calibrated(
+        HistGradientBoostingClassifier(learning_rate=0.03, max_depth=3, min_samples_leaf=50, random_state=0),
+        X_train, train_pool["Got_Hit"], train_pool["date"], "isotonic",
+        config.ML_WALK_FORWARD_MIN_TRAIN_DATES_HITTER, config.ML_WALK_FORWARD_TEST_BLOCK_DATES_HITTER,
+    )
+    probs = model.predict_proba(dfs_ml.hitter_feature_matrix(holdout))[:, 1]
     result = ml_models.evaluate_classifier_predictions(holdout["Got_Hit"], probs)
     print(f"  {label}: holdout log_loss={result['log_loss']:.5f}, brier={result['brier_score']:.5f}, "
           f"roc_auc={result['roc_auc']:.4f} (n={result['n']})")
-    return result
+    return result, holdout["Got_Hit"].to_numpy(dtype=float), probs
 
 
 def lineups(p: pd.DataFrame) -> pd.DataFrame:
@@ -252,12 +262,19 @@ def main():
         fit = sm.Logit(rows["Got_Hit"].astype(float), sm.add_constant(z)).fit(disp=0)
         print(f"  {feature}: coef {fit.params.iloc[1]:+.4f} per SD, p = {fit.pvalues.iloc[1]:.2g}")
     base = list(dfs_ml.HITTER_FEATURE_COLUMNS)
-    print("\n=== Holdout comparison (the trainer's own walk-forward model selection) ===")
-    before = evaluate(trainer, rows, base, "production features")
-    after = evaluate(trainer, rows, base + NEW_FEATURES, "plus Decision_RV, Opp_Stuff_RV")
+    print("\n=== Holdout comparison (the production model's spec, final holdout dates) ===")
+    before, y, p0 = evaluate(trainer, rows, base, "production features")
+    after, _, p1 = evaluate(trainer, rows, base + NEW_FEATURES, "plus Decision_RV, Opp_Stuff_RV")
     dfs_ml.HITTER_FEATURE_COLUMNS = base
+    rng = np.random.default_rng(0)
+    diffs = []
+    for _ in range(1000):
+        i = rng.integers(0, len(y), len(y))
+        diffs.append(np.mean((p1[i] - y[i]) ** 2) - np.mean((p0[i] - y[i]) ** 2))
+    lo, hi = np.percentile(diffs, [2.5, 97.5])
     print(f"\nRESULT: log loss {before['log_loss']:.5f} -> {after['log_loss']:.5f} "
-          f"({after['log_loss'] - before['log_loss']:+.5f}); brier {before['brier_score']:.5f} -> {after['brier_score']:.5f}")
+          f"({after['log_loss'] - before['log_loss']:+.5f}); brier {before['brier_score']:.5f} -> "
+          f"{after['brier_score']:.5f} ({after['brier_score'] - before['brier_score']:+.5f}, 95% CI {lo:+.5f} to {hi:+.5f})")
 
 
 if __name__ == "__main__":
