@@ -5,7 +5,8 @@
                                       rosters, the league's base running
 
 Needs the stored Statcast pitches (data/raw/statcast_<season>_<month>.parquet)
-for this season and last.
+for this season and last; uses Stuff+ and Decision+ from
+scripts/build_pitch_metrics.py (data/pitch_metrics/) when they're there.
 
 Usage:
     python scripts/build_mlb_sim_profiles.py [--season 2026]
@@ -42,6 +43,7 @@ def main():
     parser.add_argument("--raw-dir", default="data/raw")
     parser.add_argument("--data-dir", default="docs/data")
     parser.add_argument("--season", type=int, default=pd.Timestamp.today().year)
+    parser.add_argument("--metrics-dir", default="data/pitch_metrics")
     args = parser.parse_args()
 
     pitches = load_pitches(args.raw_dir, args.season)
@@ -53,7 +55,12 @@ def main():
     except Exception as e:  # noqa: BLE001 - names are a nicety; ids still work
         print(f"No name register ({e}); hitters keep their ids.")
         names = None
-    profiles = mlb_sim.build_profiles(pitches, args.season, names)
+    def optional(name):
+        path = os.path.join(args.metrics_dir, name)
+        return pd.read_csv(path) if os.path.exists(path) else None
+
+    profiles = mlb_sim.build_profiles(pitches, args.season, names, stuff=optional("stuff_by_type.csv"),
+                                      decision=optional("decision_by_batter.csv"))
     mlb_sim.write_profiles(profiles, os.path.join(args.data_dir, "mlb_sim_profiles.json"))
     print(f"Wrote MLB simulation profiles: {len(profiles['teams'])} teams, {len(profiles['pitchers'])} pitchers, "
           f"{len(profiles['batters'])} hitters, through {profiles['through']}.")

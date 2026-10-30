@@ -3116,6 +3116,48 @@ which writes `data/nfl_payroll/team_payroll.csv` and
 `docs/data/nfl_payroll_*.csv`; the tab shares `docs/payroll_render.js` and
 `docs/payroll.js` with the MLB page.
 
+## Stuff+ and Decision+ (`pitch_metrics.py`, `scripts/build_pitch_metrics.py`)
+
+Built daily (about 1.5 minutes) from the stored 2025-26 Statcast pitches into
+`docs/data/stuff_plus.csv` / `decision_plus.csv` (this season, shown on the
+Stats page: a "Best stuff" leaderboard, a Decision+ column in the hitter
+table, both as percentiles on player cards, Stuff+ by pitch on pitcher
+cards) and `data/pitch_metrics/` (both seasons pooled, for the simulation).
+
+**Stuff+.** Features: velocity, horizontal/induced vertical break (inches,
+mirrored for lefties), spin rate and axis, extension, release side and
+height, arm angle, vertical approach angle at the plate (from vy0/vz0/ay/az),
+and velocity/break differences from the pitcher's main fastball that
+season. Target: delta_run_exp with balls in play replaced by a model of
+their value from exit velocity, launch angle, count and base-out state
+(2025 Stuff+ vs 2026 whiff rate: r = 0.36 with that target, 0.30 with raw
+run value). HistGradientBoosting per pitch group, 5-fold cross-fitted by
+pitcher. Grades: 100 + 10 per weighted SD of qualified pitchers (300+
+pitches; pitch types 100+ within their type), shrunk with 100 pitches.
+Checks (2025 -> 2026, 324 pitchers with 500+ pitches each season): split-half
+r 0.91 (actual run value 0.24); 2026 run value r 0.257 with 2025 Stuff+
+vs 0.226 with 2025 run value; adding Stuff+ to 2025 expected run value
+lifts the prediction of 2026 run value from r 0.294 to 0.344.
+
+**Decision+.** Pitches with a swing or take (no bunts), located by
+plate_x (toward the batter) and height within his zone, with count, outs,
+base state, pitch group and same/opposite hand. League HistGradientBoosting
+models of swing chance and of delta_run_exp for swings and for takes; a
+pitch's value is its choice's expected runs minus the league mix's
+(p x swing + (1 - p) x take). Per 100 pitches, 100 + 10 per weighted SD of
+hitters with 400+ pitches, shrunk with 300 pitches. Checks: split-half r
+0.78; 2025 -> 2026 r 0.75 (BB% 0.61, K% 0.83); 2026 BB% r 0.48; adds to
+2025 BB%/K%/run value for 2026 BB% (0.639 -> 0.651) and run value
+(0.398 -> 0.418); none for K% (r -0.00).
+
+**In the simulation.** Small samples start from their grade instead of
+league average: each pitch result's ratio moves with z = (grade - 100)/10
+by slopes fitted across players (pitch group for Stuff+), and that start
+fades out linearly by 600 pitches of a pitch type / 1,500 for a hitter.
+Scored on 2026 rates from 2025 data: pitch types thrown 100-400 times 0.8%
+less error, hitters with 400-1,000 pitches 2.0%, established players
+unchanged (without the fade, established hitters got 1.4% worse).
+
 ## MLB game simulation (`docs/predictive.html`'s "Simulate a game", `mlb_sim.py`)
 
 Pick two teams, their starting pitchers and batting orders (defaults: the

@@ -543,6 +543,31 @@ p.WOPS = s.WOPS
 })
 }
 
+// Stuff+ (stuff_plus.csv: overall and stuff_<type> / pitches_<type>
+// columns) onto pitchers, Decision+ (decision_plus.csv) onto hitters.
+function usePitchGrades(hitters, pitchers, stuffRows, decisionRows){
+const stuff = {}
+;(stuffRows || []).forEach(r => { stuff[playerKey(r.key_mlbam)] = r })
+pitchers.forEach(p => {
+const s = stuff[playerKey(p.key_mlbam)]
+if(!s){ return }
+p.STUFF_PLUS = s.stuff_plus
+p.STUFF_PITCHES = s.pitches
+p.STUFF_TYPES = {}
+Object.keys(s).filter(k => k.startsWith("stuff_") && k !== "stuff_plus" && k !== "stuff_rv").forEach(k => {
+const type = k.slice(6)
+const grade = Number(s[k]), n = Number(s[`pitches_${type}`])
+if(s[k] !== "" && s[k] !== undefined && Number.isFinite(grade) && n > 0){ p.STUFF_TYPES[type] = { grade, pitches: n } }
+})
+})
+const decision = {}
+;(decisionRows || []).forEach(r => { decision[playerKey(r.key_mlbam)] = r })
+hitters.forEach(p => {
+const d = decision[playerKey(p.key_mlbam)]
+if(d){ p.DECISION_PLUS = d.decision_plus }
+})
+}
+
 // ---- Stats page: team schedules ----
 // Picking a team crumples the sheet on show, then unfolds the new one
 // panel by panel (CSS animations in style.css; skipped when the reader
@@ -599,7 +624,7 @@ return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String
 // ---- Everything that needs the player files ----
 
 async function loadAll(){
-const [waveRows, paveRows, confidenceRows, predictions, streaks, probables, statRows, schedule] = await Promise.all([
+const [waveRows, paveRows, confidenceRows, predictions, streaks, probables, statRows, schedule, stuffRows, decisionRows] = await Promise.all([
 loadOptionalCSV("./data/wave.csv"),
 loadOptionalCSV("./data/pave.csv"),
 loadOptionalCSV("./data/confidence.csv"),
@@ -608,6 +633,8 @@ loadOptionalCSV("./data/hit_streaks.csv"),
 byId("probablePitchersTable") ? loadOptionalCSV("./data/probable_pitchers.csv") : [],
 byId("hitterStatsTable") ? loadOptionalCSV("./data/hitter_stats.csv") : [],
 byId("scheduleSheet") ? loadOptionalCSV("./data/team_schedule.csv") : [],
+byId("hitterStatsTable") ? loadOptionalCSV("./data/stuff_plus.csv") : [],
+byId("hitterStatsTable") ? loadOptionalCSV("./data/decision_plus.csv") : [],
 ])
 wave = waveRows
 pave = paveRows
@@ -618,6 +645,7 @@ hitterHitPredictions = predictions.filter(r => r.date === localIsoDate())
 hitStreaks = streaks
 hitterStats = statRows
 if(hitterStats.length){ useSeasonViews(wave, hitterStats) }
+usePitchGrades(wave, pave, stuffRows, decisionRows)
 qualifyPlayers()
 
 setHtml("hitStreaksTable", hitStreakListHtml(hitStreaks))
@@ -631,6 +659,7 @@ setHtml("probablePitchersTable",
 pitcherDuelsHtml(probables.map(r => r.key_mlbam ? r : Object.assign({}, r, { key_mlbam: byName[r.pitcher_name] || "" }))))
 
 renderHitterStats()
+setHtml("stuffTable", stuffLeadersHtml(pave))
 setHtml("paveTable", pitcherLeadersHtml(
 qualifiedPitchers.slice().sort((a, b) => Number(b.PAVE) - Number(a.PAVE))))
 

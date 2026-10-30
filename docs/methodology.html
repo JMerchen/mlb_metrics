@@ -327,6 +327,38 @@ players reprice each game the morning of, or the day before, it.</p>
 </div>
 
 <div class="methodCard">
+<h3>Stuff+</h3>
+<p>A grade for every pitch from how it's thrown, never where it went or
+what happened: velocity, movement, spin and spin axis, release height,
+side and extension, arm angle, approach angle at the plate, and its
+difference in speed and movement from the pitcher's own fastball. A
+gradient-boosted model per pitch group (fastballs, breaking balls,
+off-speed) learns what pitches like it are worth in runs - with balls in
+play valued by their exit velocity and launch angle, not by where the
+fielders stood. Each pitcher is graded by a model that never saw him, so
+it can't simply remember his results. 100 is league average, every 10
+points one standard deviation between pitchers, pulled toward 100 for
+small samples. It holds up: a pitcher's grade in odd games matches his
+grade in even games at r = 0.91 (his actual runs allowed, 0.24), and
+2025 Stuff+ adds to what his 2025 results say about 2026.</p>
+</div>
+
+<div class="methodCard">
+<h3>Decision+</h3>
+<p>A grade for a hitter's swing-or-take choices. Every pitch he saw is
+placed by where it crossed his own strike zone, the count, the outs, the
+runners, the pitch type and the pitcher's hand. League models give, for
+that spot, how often hitters swing and what swinging and taking are each
+worth in runs - league-average results, so it's the decision being graded,
+not his contact. Each pitch scores what his choice was worth over the
+league's usual mix there. 100 is average, every 10 points one standard
+deviation between hitters. It's one of the steadiest things a hitter does
+(r = 0.75 from 2025 to 2026, more than walk rate's 0.61), it predicts next
+season's walk rate (r = 0.48) and adds to it, and it says nothing about
+strikeouts - whether he makes contact is a separate skill.</p>
+</div>
+
+<div class="methodCard">
 <h3>MLB game simulation</h3>
 <p>Every pitch is drawn from the stored Statcast pitches of the last two
 seasons. The pitcher picks a pitch as he does in that count against that
@@ -335,7 +367,8 @@ swinging strike, foul, ball in play or hit batter - is the league's rate
 for that pitch type in that count, times the pitcher's own rate for that
 pitch, the hitter's against everything he's seen (each measured against
 what the league would have done with the same pitches in the same counts,
-and pulled toward average until there are a few hundred pitches), the
+and, for small samples, started from what his Stuff+ or Decision+ says
+until a few hundred pitches of his own take over), the
 platoon edge and the times through the order. A ball in play becomes a
 groundout, flyout, lineout, single, double, triple or home run the same
 way, and the runners move as they did after that kind of play with those
@@ -423,6 +456,7 @@ QB+ and the rest) describe; only the Picks pages predict.</p>
 <dt>Cash flow / spending change</dt><dd>A team's relative payroll minus its average over the previous three seasons - positive means it spent up.</dd>
 <dt>Cash paid / cap spending</dt><dd>On the NFL Payroll tab: the dollars a team actually paid its players that season (signing bonuses counted when paid), or the cap charges of its contracts. Dead money isn't included.</dd>
 <dt>CAVE (Carried Average)</dt><dd>The share of a hitter's games with at least one hit - a 1-for-4 and a 4-for-4 count the same.</dd>
+<dt>Decision+</dt><dd>A hitter's swing-or-take choices graded against the league's in the same spot (location, count, outs, runners, pitch type). 100 is average; 10 points is one standard deviation.</dd>
 <dt>De-vig</dt><dd>Removing the sportsbook's margin from both sides' odds so they add to 100% - what "Vegas" means on this site.</dd>
 <dt>EPA (expected points added)</dt><dd>How many points a play adds compared with what was expected from the down, distance and field position. Per play, per dropback or per target.</dd>
 <dt>Expected wins</dt><dd>On the Payroll page, the wins per game of the 10 seasons whose relative payroll was closest (other franchises, 11 or more years earlier), plus the team's front office score.</dd>
@@ -442,6 +476,7 @@ QB+ and the rest) describe; only the Picks pages predict.</p>
 <dt>Regular</dt><dd>A player on at least half his side's snaps over his last 4 active games (What if? lists anyone at 30%).</dd>
 <dt>Relative payroll</dt><dd>A team's payroll per game over the league's that season - 2.0 spent twice the average.</dd>
 <dt>Snap share</dt><dd>The share of his side's plays a player was on the field for.</dd>
+<dt>Stuff+</dt><dd>A pitch's grade from how it's thrown (velocity, movement, spin, release, approach angle, how it plays off the fastball), not from results. 100 is league average; 10 points is one standard deviation between pitchers.</dd>
 <dt>Strength of schedule</dt><dd>How good the opponents a team has played were.</dd>
 <dt>Unit %</dt><dd>In What if?, a unit's yards per play as a percent of its normal; a defense at 90% allows 10% more.</dd>
 <dt>vs. pitchers faced / vs. defenses faced</dt><dd>A player's numbers adjusted for how tough his opponents were, from what each allowed all season.</dd>

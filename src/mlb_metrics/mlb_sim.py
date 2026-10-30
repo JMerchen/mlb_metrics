@@ -18,8 +18,17 @@ of play, base state and number of outs, how often it ended with each base
 state, outs and runs (double plays, sacrifice flies, taking the extra base,
 reaching on an error all fall out of it).
 
-Rosters are each player's latest 2026 team; the default lineup is a team's
-latest batting order; starters and relievers come from who started.
+Where a player's sample is small, the pull isn't toward league average but
+toward what his Stuff+ (each pitch) or Decision+ (each hitter) says he
+should be (pitch_metrics.py): each grade moves each pitch result by a slope
+fitted across players, and that start fades out as his own pitches pile up
+(gone by 600 pitches of a pitch type, 1,500 for a hitter). Scored 2025 to
+2026, that cuts the error in next season's rates 0.8% for pitch types
+thrown 100-400 times and 2.0% for hitters with 400-1,000 pitches, and
+leaves established players as they were.
+
+Rosters are each player's latest team; the default lineup is a team's
+regulars; starters and relievers come from who started.
 """
 
 import json
@@ -67,6 +76,10 @@ MIN_TYPE_SHARE = 0.03
 LOCATION_SAMPLES = 60
 TRANSITION_COVER = 0.995
 RECENT_DAYS = 45
+PRIOR_FADE_PITCHER = 600
+PRIOR_FADE_BATTER = 1500
+PRIOR_FIT_MIN_PITCHER = 300
+PRIOR_FIT_MIN_BATTER = 800
 
 
 def _bases(on1, on2, on3) -> np.ndarray:
@@ -119,12 +132,32 @@ def _expected(p: pd.DataFrame, table: dict) -> np.ndarray:
     return np.array([table[t][c] for t, c in keys])
 
 
-def _ratio(observed: np.ndarray, expected: np.ndarray, k: float) -> np.ndarray:
-    """Observed over expected for each outcome, pulled toward 1 with k
-    pseudo-observations at the expected rate."""
+def _ratio(observed: np.ndarray, expected: np.ndarray, k: float, prior=None) -> np.ndarray:
+    """Observed over expected for each outcome, pulled toward `prior` (1,
+    league average, if not given) with k pseudo-observations at the
+    expected rate."""
     n = max(1.0, expected.sum())
     rate = expected / n
-    return _divide(observed + k * rate, expected + k * rate)
+    prior = np.ones_like(rate) if prior is None else np.asarray(prior, dtype=float)
+    return _divide(observed + k * rate * prior, expected + k * rate)
+
+
+def _fade(n: float, full: float) -> float:
+    return max(0.0, 1.0 - n / full)
+
+
+def fit_prior_slopes(groups: dict, grades: dict, min_n: int) -> np.ndarray | None:
+    """The slope of each pitch result's ratio on a grade's z (its distance
+    from 100 in tens): ratio - 1 = slope * z, fitted through the origin over
+    `groups` ({key: (observed, expected, n)}) with min_n pitches, weighted
+    by pitches."""
+    rows = [(o / np.maximum(e, 1e-9) - 1, n, grades[k]) for k, (o, e, n) in groups.items() if k in grades and n >= min_n]
+    if len(rows) < 10:
+        return None
+    r = np.array([x[0] for x in rows])
+    w = np.array([x[1] for x in rows], dtype=float)
+    z = np.array([x[2] for x in rows])
+    return (w[:, None] * z[:, None] * r).sum(0) / max(1e-9, (w * z * z).sum())
 
 
 def _divide(a, b) -> np.ndarray:
@@ -214,7 +247,49 @@ def _mix(df: pd.DataFrame, types: list[str], prior: pd.Series, k: float) -> list
     return [round(float(v), 3) for v in mixed]
 
 
-def pitcher_profiles(p: pd.DataFrame, expected: np.ndarray, contact_league: pd.Series) -> dict:
+def _sums(p: pd.DataFrame, expected: np.ndarray, keys) -> dict:
+    """{key: (observed result counts, expected, pitches)}."""
+    obs = pd.get_dummies(p["result"]).reindex(columns=PITCH_RESULTS, fill_value=0).to_numpy(dtype=float)
+    q = p.assign(_row=np.arange(len(p)))
+    out = {}
+    for k, g in q.groupby(keys):
+        rows = g["_row"].to_numpy()
+        out[k] = (obs[rows].sum(0), expected[rows].sum(0), len(rows))
+    return out
+
+
+def pitcher_priors(p: pd.DataFrame, expected: np.ndarray, stuff: dict | None) -> tuple[dict, dict]:
+    """({(pitcher, type): prior ratios}, {group: slopes}) from Stuff+
+    ({(pitcher, type): z})."""
+    if not stuff:
+        return {}, {}
+    sums = _sums(p, expected, ["pitcher", "ptype"])
+    slopes = {}
+    for g in ("FB", "BR", "OS"):
+        mine = {k: v for k, v in sums.items() if PITCH_GROUP.get(k[1]) == g}
+        slope = fit_prior_slopes(mine, stuff, PRIOR_FIT_MIN_PITCHER)
+        if slope is not None:
+            slopes[g] = slope
+    priors = {}
+    for k, (_, _, n) in sums.items():
+        g = PITCH_GROUP.get(k[1])
+        if k in stuff and g in slopes:
+            priors[k] = 1 + slopes[g] * stuff[k] * _fade(n, PRIOR_FADE_PITCHER)
+    return priors, slopes
+
+
+def batter_priors(p: pd.DataFrame, expected: np.ndarray, decision: dict | None) -> tuple[dict, np.ndarray | None]:
+    """({batter: prior ratios}, slopes) from Decision+ ({batter: z})."""
+    if not decision:
+        return {}, None
+    sums = _sums(p, expected, "batter")
+    slope = fit_prior_slopes(sums, decision, PRIOR_FIT_MIN_BATTER)
+    if slope is None:
+        return {}, None
+    return {k: 1 + slope * decision[k] * _fade(n, PRIOR_FADE_BATTER) for k, (_, _, n) in sums.items() if k in decision}, slope
+
+
+def pitcher_profiles(p: pd.DataFrame, expected: np.ndarray, contact_league: pd.Series, priors: dict | None = None) -> dict:
     """{pitcher id: {name, throws, types, velo [[mean, sd]], ratios
     {type: [PITCH_RESULTS]}, mix {stand: {bucket: [types]}}, contact
     [CONTACT_RESULTS]}}."""
@@ -229,7 +304,7 @@ def pitcher_profiles(p: pd.DataFrame, expected: np.ndarray, contact_league: pd.S
         ratios, velo = {}, []
         for t in types:
             mine = (g["ptype"] == t).to_numpy()
-            r = _ratio(obs[rows[mine]].sum(0), expected[rows[mine]].sum(0), SHRINK_PITCHER_PITCHES)
+            r = _ratio(obs[rows[mine]].sum(0), expected[rows[mine]].sum(0), SHRINK_PITCHER_PITCHES, (priors or {}).get((pid, t)))
             ratios[t] = [round(float(v), 3) for v in r]
             speed = g.loc[mine, "release_speed"].dropna()
             velo.append([round(float(speed.mean()), 1) if len(speed) else None, round(float(speed.std()), 1) if len(speed) > 2 else 1.0])
@@ -252,7 +327,7 @@ def pitcher_profiles(p: pd.DataFrame, expected: np.ndarray, contact_league: pd.S
     return out
 
 
-def batter_profiles(p: pd.DataFrame, expected: np.ndarray, contact_league: pd.Series) -> dict:
+def batter_profiles(p: pd.DataFrame, expected: np.ndarray, contact_league: pd.Series, priors: dict | None = None) -> dict:
     """{batter id: {bats {L: stand vs lefties, R: vs righties}, ratios
     [PITCH_RESULTS], contact [CONTACT_RESULTS]}}."""
     obs = pd.get_dummies(p["result"]).reindex(columns=PITCH_RESULTS, fill_value=0).to_numpy(dtype=float)
@@ -269,7 +344,8 @@ def batter_profiles(p: pd.DataFrame, expected: np.ndarray, contact_league: pd.Se
             bats[hand] = vs.mode().iloc[0] if len(vs) else g["stand"].mode().iloc[0]
         out[str(int(bid))] = {
             "bats": bats,
-            "ratios": [round(float(v), 3) for v in _ratio(obs[rows].sum(0), expected[rows].sum(0), SHRINK_BATTER_PITCHES)],
+            "ratios": [round(float(v), 3) for v in _ratio(obs[rows].sum(0), expected[rows].sum(0), SHRINK_BATTER_PITCHES,
+                                                          (priors or {}).get(bid))],
             "contact": [round(float(v), 3) for v in _ratio(seen, exp, SHRINK_BATTER_BIP)],
         }
     return out
@@ -387,7 +463,11 @@ def calibration(p: pd.DataFrame, expected: np.ndarray, effects: dict, pitchers: 
     return [round(float(v), 4) for v in pitch_cal], [round(float(v), 4) for v in _divide(seen, cpred.sum(0))]
 
 
-def build_profiles(pitches: pd.DataFrame, season: int, names: pd.DataFrame | None = None, seed: int = 7) -> dict:
+def build_profiles(pitches: pd.DataFrame, season: int, names: pd.DataFrame | None = None, seed: int = 7,
+                   stuff: pd.DataFrame | None = None, decision: pd.DataFrame | None = None) -> dict:
+    """stuff (pitcher, pitch_type, stuff_plus) and decision (key_mlbam,
+    decision_plus), pooled over the seasons used, set the priors for small
+    samples (see the module docstring)."""
     p = prepare(pitches)
     table = league_pitch_table(p)
     expected = _expected(p, table)
@@ -397,8 +477,14 @@ def build_profiles(pitches: pd.DataFrame, season: int, names: pd.DataFrame | Non
     rosters = team_rosters(p, season)
     on_roster = {pid for team in rosters.values() for pid in team["hitters"] + team["lineup"]}
     arms = {s["id"] for team in rosters.values() for s in team["starters"]} | {r["id"] for team in rosters.values() for r in team["bullpen"]}
-    pitchers = pitcher_profiles(p[p["pitcher"].isin(arms)], expected[p["pitcher"].isin(arms).to_numpy()], contact)
-    batters = batter_profiles(p[p["batter"].isin(on_roster)], expected[p["batter"].isin(on_roster).to_numpy()], contact)
+    stuff_z = None if stuff is None or stuff.empty else {
+        (int(r.pitcher), r.pitch_type): (r.stuff_plus - 100) / 10 for r in stuff.itertuples() if pd.notna(r.stuff_plus)}
+    decision_z = None if decision is None or decision.empty else {
+        int(r.key_mlbam): (r.decision_plus - 100) / 10 for r in decision.itertuples() if pd.notna(r.decision_plus)}
+    p_priors, p_slopes = pitcher_priors(p, expected, stuff_z)
+    b_priors, b_slope = batter_priors(p, expected, decision_z)
+    pitchers = pitcher_profiles(p[p["pitcher"].isin(arms)], expected[p["pitcher"].isin(arms).to_numpy()], contact, p_priors)
+    batters = batter_profiles(p[p["batter"].isin(on_roster)], expected[p["batter"].isin(on_roster).to_numpy()], contact, b_priors)
     stamina = starter_stamina(p)
     for pid, prof in pitchers.items():
         if pid in stamina:
@@ -416,6 +502,8 @@ def build_profiles(pitches: pd.DataFrame, season: int, names: pd.DataFrame | Non
         "contact": [round(float(v), 4) for v in contact],
         "platoon": effects["platoon"], "order": effects["order"],
         "calibration": pitch_cal, "contact_calibration": contact_cal,
+        "prior_slopes": {"stuff": {g: [round(float(v), 4) for v in s] for g, s in p_slopes.items()},
+                         "decision": [round(float(v), 4) for v in b_slope] if b_slope is not None else None},
         "transitions": transitions(p),
         "locations": locations(p, rng),
         "stamina": [round(float(np.mean([v[0] for v in stamina.values()])), 1), 15.0] if stamina else [90.0, 15.0],
