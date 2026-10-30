@@ -123,3 +123,41 @@ def test_build_without_play_by_play_writes_nothing(tmp_path, monkeypatch):
     monkeypatch.setattr("sys.argv", ["build", "--raw-dir", str(tmp_path), "--data-dir", str(tmp_path), "--season", "2026"])
     _load_script().main()
     assert not (tmp_path / "nfl_sim_profiles.json").exists()
+
+
+def test_team_players_split_recent_targets_and_carries_among_the_active():
+    rows = []
+    for week in range(1, 7):
+        gid = f"2026_{week:02d}_KC"
+        for i in range(10):
+            # Rice gets 6 of 10 targets; Kelce 4 - but Kelce has been cut.
+            receiver, name = ("r1", "R.Rice") if i < 6 else ("t1", "T.Kelce")
+            rows.append(_play(game_id=gid, week=week, posteam="KC", play_type="pass", pass_attempt=1,
+                              passer_player_id="q1", passer_player_name="P.Mahomes",
+                              receiver_player_id=receiver, receiver_player_name=name,
+                              complete_pass=int(i % 2 == 0), yards_gained=12.0 if i % 2 == 0 else 0.0))
+        for i in range(6):
+            rusher, name = ("b1", "I.Pacheco") if i < 4 else ("q1", "P.Mahomes")
+            rows.append(_play(game_id=gid, week=week, posteam="KC", play_type="run",
+                              rusher_player_id=rusher, rusher_player_name=name, yards_gained=5.0))
+        rows.append(_play(game_id=gid, week=week, posteam="KC", play_type="field_goal", kick_distance=40.0,
+                          field_goal_result="made", kicker_player_id="k1", kicker_player_name="H.Butker"))
+    current = pd.DataFrame(rows)
+    roster = pd.DataFrame([
+        {"season": 2026, "week": 6, "team": "KC", "position": p, "full_name": n, "gsis_id": g, "pfr_id": f, "status": st}
+        for g, n, p, f, st in [("q1", "Patrick Mahomes", "QB", "MahoPa00", "ACT"), ("r1", "Rashee Rice", "WR", "RiceRa00", "ACT"),
+                               ("t1", "Travis Kelce", "TE", "KelcTr00", "CUT"), ("b1", "Isiah Pacheco", "RB", "PachIs00", "ACT"),
+                               ("k1", "Harrison Butker", "K", "ButkHa00", "ACT")]
+    ])
+    out = nfl_sim.team_players(current, "KC", nfl_sim._active_roster(roster, 2026))
+    assert out["qb"] == {"gsis": "q1", "name": "Patrick Mahomes"}
+    assert out["kicker"]["name"] == "Harrison Butker"
+    by_name = {p["name"]: p for p in out["players"]}
+    assert "Travis Kelce" not in by_name
+    rice = by_name["Rashee Rice"]
+    assert rice["pfr"] == "RiceRa00" and rice["targets"] == 1.0
+    # Pacheco has 4 of the 6 carries a game, the QB's own runs the other 2.
+    assert by_name["Isiah Pacheco"]["carries"] == round(4 / 6, 4)
+    assert by_name["QB"]["role"] == "QB" and by_name["QB"]["carries"] == round(2 / 6, 4)
+    # Rice catches half his targets, as the team does: a catch rate of 1x.
+    assert rice["catch"] == 1.0

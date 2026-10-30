@@ -3,7 +3,8 @@
     docs/data/nfl_sim_profiles.json   each offense's play style and the
                                       league's kicking game
 
-Needs data/raw/nfl/pbp_<season>.parquet (and last season's), which
+Needs data/raw/nfl/pbp_<season>.parquet (and last season's), and
+rosters_weekly_<season>.parquet for who's active where, which
 scripts/nfl_pipeline.py persists each week.
 
 Usage:
@@ -36,7 +37,10 @@ def main():
     if not tables:
         print(f"No persisted {args.season} play-by-play - nothing to write.")
         return
-    profiles = nfl_sim.build_profiles(pd.concat(tables, ignore_index=True), args.season)
+    rosters = nfl_data.load_persisted_table(args.raw_dir, "rosters_weekly", args.season)
+    if rosters is not None:
+        rosters = rosters[[c for c in nfl_sim.ROSTER_COLUMNS if c in rosters.columns]]
+    profiles = nfl_sim.build_profiles(pd.concat(tables, ignore_index=True), args.season, rosters)
     nfl_sim.write_profiles(profiles, os.path.join(args.data_dir, "nfl_sim_profiles.json"))
     print(f"Wrote simulation profiles: {len(profiles['teams'])} teams through week {profiles['through_week']}.")
 

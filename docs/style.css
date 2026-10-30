@@ -1920,3 +1920,46 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 .simPoints{font-size:22px;}
 .simClockBox{min-width:80px;}
 }
+
+/* The simulation's player stat lines and 1,000-game summary. Home and
+   away take the first two categorical slots (validated for the dark
+   surface): blue and orange. */
+.simPanel{--sim-home:#3987e5;--sim-away:#d95926;}
+.simSubhead{margin:16px 0 8px;}
+.simLines{margin-bottom:10px;}
+.simLines td:not(:first-child),.simLines th:not(:first-child){text-align:right;}
+.simAverages{list-style:none;margin:0 0 12px;padding:0;}
+.simAverages li{display:grid;grid-template-columns:minmax(150px,220px) 1fr;gap:4px 12px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.simAvgName{font-weight:600;}
+.simAvgName small{color:var(--text-dim);font-weight:400;}
+.simAvgLine{color:var(--text-dim);font-variant-numeric:tabular-nums;}
+.simSummary .whatIfHeadline{margin-bottom:4px;}
+.simStats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:10px 0 14px;}
+.simStats div{background:var(--bg-raised);border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;}
+.simStats b{display:block;font-size:18px;font-variant-numeric:tabular-nums;}
+.simStats span{font-size:12px;color:var(--text-dim);}
+.simChart{margin:0 0 14px;}
+.simChart figcaption{font-size:13px;font-weight:700;margin-bottom:4px;}
+.simChart svg{display:block;width:100%;max-width:720px;height:auto;}
+.simLegend{display:flex;gap:14px;font-size:12px;color:var(--text-dim);margin-bottom:4px;}
+.simLegend span{display:inline-flex;align-items:center;gap:6px;}
+.simSwatch{display:inline-block;width:10px;height:10px;border-radius:2px;}
+.simSwatch.simBar-home{background:var(--sim-home);}
+.simSwatch.simBar-away{background:var(--sim-away);}
+.simBar-home{fill:var(--sim-home);}
+.simBar-away{fill:var(--sim-away);}
+.simBar-tie{fill:var(--text-dim);}
+.simHit{fill:transparent;}
+.simBin:hover .simBar{opacity:.8;}
+.simBaseline{stroke:var(--border-strong);stroke-width:1;}
+.simTieLine{stroke:var(--border-strong);stroke-width:1;}
+.simAxis{fill:var(--text-dim);font:11px var(--font);text-anchor:middle;}
+.simAxisStart{text-anchor:start;}
+.simAxisEnd{text-anchor:end;}
+.simCommon{max-width:360px;margin-bottom:10px;}
+.simPanel .scrollbox{max-height:none;overflow-x:auto;}
+.simPanel .scrollbox.simDriveBox{max-height:400px;}
+@media (max-width:600px){
+.simAverages li{grid-template-columns:1fr;}
+.simAxis{font-size:20px;}
+}
