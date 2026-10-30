@@ -70,6 +70,10 @@ jobs:
         run: |
           python scripts/build_hitter_stats.py
 
+      - name: Build Stuff+ and Decision+ (Statcast pitches)
+        run: |
+          python scripts/build_pitch_metrics.py || echo "::warning::Stuff+ and Decision+ not rebuilt"
+
       - name: Build MLB game simulation profiles (Statcast pitches)
         run: |
           python scripts/build_mlb_sim_profiles.py || echo "::warning::MLB simulation profiles not rebuilt"
@@ -99,7 +103,7 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
 
-          git add docs/data/ data/raw/ data/predictions/ data/payroll/ data/season_dates.json
+          git add docs/data/ data/raw/ data/predictions/ data/payroll/ data/pitch_metrics/ data/season_dates.json
 
           git commit -m "Daily update" || echo "No changes"
 

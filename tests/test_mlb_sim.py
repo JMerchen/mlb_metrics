@@ -101,3 +101,15 @@ def test_build_profiles_end_to_end():
     assert len(top["mix"]["R"]["first"]) == 3
     assert len(profiles["league"]["calibration"]) == len(mlb_sim.PITCH_RESULTS)
     assert all(len(v) == 6 for v in profiles["league"]["pitch_table"]["FF"].values())
+
+
+def test_priors_start_small_samples_from_their_grades_and_fade():
+    # Grade z = +1 for every key; each pitch result's ratio rises 10% per z.
+    groups = {k: (np.array([110.0, 100.0]), np.array([100.0, 100.0]), 500) for k in range(20)}
+    slope = mlb_sim.fit_prior_slopes(groups, {k: 1.0 for k in range(20)}, min_n=300)
+    assert np.allclose(slope, [0.1, 0.0])
+    # With no pitches of his own, a ratio is its prior; with many, his own.
+    prior = np.array([1.2, 1.0])
+    assert np.allclose(mlb_sim._ratio(np.zeros(2), np.zeros(2), 250, prior), [1, 1])
+    assert np.allclose(mlb_sim._ratio(np.array([0.0, 0.0]), np.array([1e-9, 1e-9]), 250, prior)[0], 1.2, atol=0.01)
+    assert mlb_sim._fade(0, 600) == 1 and mlb_sim._fade(300, 600) == 0.5 and mlb_sim._fade(900, 600) == 0

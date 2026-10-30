@@ -495,6 +495,7 @@ case "pct1": return mlbPct(n, 1)
 case "index": return mlbIndex(n)
 case "fixed1": return n.toFixed(1)
 case "fixed2": return n.toFixed(2)
+case "plus": return String(Math.round(n))
 default: return String(n)
 }
 }
@@ -587,6 +588,7 @@ const HITTER_PERCENTILE_STATS = [
 ["Barrel_Rate", "Barrel rate", "pct1", 1],
 ["Whiff_Rate", "Swing-and-miss rate", "pct1", -1],
 ["Chase_Rate", "Chase rate", "pct1", -1],
+["DECISION_PLUS", "Decision+ (swing decisions)", "plus", 1],
 ]
 
 const HITTER_SPLITS = [
@@ -595,6 +597,7 @@ const HITTER_SPLITS = [
 ]
 
 const PITCHER_PERCENTILE_STATS = [
+["STUFF_PLUS", "Stuff+", "plus", 1],
 ["PAVE", "Hit rate allowed", "pct1", -1],
 ["Power_A_PLUS", "Power allowed", "index", -1],
 ]
@@ -628,6 +631,20 @@ return `<div class="pctRow" data-tip="${mlbEsc(`${r.label}: ${mlbPct(r.value, 1)
 <span class="pctTrack splitTrack">${r.avg === null ? "" : `<span class="splitAvg" style="left:${pos(r.avg)}%"></span>`}<span class="splitDot" style="left:${pos(r.value)}%;background:${better ? "var(--mlb-better)" : "var(--mlb-worse)"}"></span></span>
 <span class="pctValue">${mlbPct(r.value, 1)}</span></div>`
 }).join("")}</div>`
+}
+
+const PITCH_TYPE_NAMES = {
+FF: "Four-seam", SI: "Sinker", FC: "Cutter", SL: "Slider", ST: "Sweeper", CU: "Curveball", KC: "Knuckle curve",
+SV: "Slurve", CH: "Changeup", FS: "Splitter", FO: "Forkball", KN: "Knuckleball", EP: "Eephus", FA: "Fastball", CS: "Slow curve", SC: "Screwball",
+}
+
+// Stuff+ for each pitch he throws enough (100+ this season), most-thrown
+// first: a bar from the middle, right for better than average.
+function stuffByPitchHtml(player){
+const pitches = Object.entries(player.STUFF_TYPES || {}).sort((a, b) => b[1].pitches - a[1].pitches)
+if(!pitches.length){ return "" }
+return `<div class="profileGroup"><div class="profileGroupTitle">Stuff+ by pitch <span class="vizKey">100 = league average for that pitch</span></div>
+${pitches.map(([type, g]) => `<div class="pctRow" data-tip="${mlbEsc(`${PITCH_TYPE_NAMES[type] || type}: Stuff+ ${Math.round(g.grade)} (${g.pitches} thrown)`)}" tabindex="0"><span class="pctLabel">${mlbEsc(PITCH_TYPE_NAMES[type] || type)}</span>${mlbMeter((g.grade - 100) / 60, true)}<span class="pctValue">${Math.round(g.grade)}</span></div>`).join("")}</div>`
 }
 
 function pitchMixHtml(player){
@@ -667,7 +684,7 @@ return `<div class="vizCard playerCard">
 <div><div class="teamHeadName">${mlbEsc(name)}</div><div class="teamHeadMeta">${mlbLogo(player.team, "xs")} ${mlbEsc(mlbTeam(player.team))} · ${mlbEsc(meta)}</div>
 ${chips.length ? `<div class="factChips">${chips.join("")}</div>` : ""}</div></div>
 <div class="profileGrid"><div class="profileGroup"><div class="profileGroupTitle">Percentile among ${poolName}</div>${mlbScaleRow("Worst", "Best")}${bars || "<span class=\"dim\">Not enough data yet</span>"}</div>
-${hitter ? hitterSplitsHtml(player, pool) : pitchMixHtml(player)}</div>
+${hitter ? hitterSplitsHtml(player, pool) : pitchMixHtml(player) + stuffByPitchHtml(player)}</div>
 </div>`
 }
 
@@ -688,6 +705,22 @@ return `<div class="rankRow" data-tip="${mlbEsc(`${name}: allows ${mlbPct(p.PAVE
 <span class="rankNo">${i + 1}</span>${mlbAvatar(p.key_mlbam, name, "sm")}
 <span class="rankWho"><b>${mlbEsc(name)}</b><small>${mlbLogo(p.team, "xs")} ${mlbEsc(mlbTeam(p.team))} · ${p.Throws === "L" ? "lefty" : "righty"}</small></span>
 ${ratio === null ? "<span></span>" : mlbMeter(ratio - 1, false)}<span class="rankValue">${mlbPct(p.PAVE)}</span>
+</div>`
+}).join("")}</div>`
+}
+
+// Pitchers by Stuff+ (stuff_plus.csv merged onto pave.csv's rows).
+function stuffLeadersHtml(rows, limit = 15){
+const ranked = rows.filter(p => mlbNum(p.STUFF_PLUS) !== null).sort((a, b) => mlbNum(b.STUFF_PLUS) - mlbNum(a.STUFF_PLUS))
+if(!ranked.length){ return "No data" }
+return `<div class="rankList">${ranked.slice(0, limit).map((p, i) => {
+const name = `${p.name_first} ${p.name_last}`
+const grade = mlbNum(p.STUFF_PLUS)
+const best = Object.entries(p.STUFF_TYPES || {}).sort((a, b) => b[1].grade - a[1].grade)[0]
+return `<div class="rankRow" data-tip="${mlbEsc(`${name}: Stuff+ ${Math.round(grade)} over ${p.STUFF_PITCHES} pitches${best ? ` - best pitch: ${PITCH_TYPE_NAMES[best[0]] || best[0]} (${Math.round(best[1].grade)})` : ""}`)}" tabindex="0">
+<span class="rankNo">${i + 1}</span>${mlbAvatar(p.key_mlbam, name, "sm")}
+<span class="rankWho"><b>${mlbEsc(name)}</b><small>${mlbLogo(p.team, "xs")} ${mlbEsc(mlbTeam(p.team))}${best ? ` · best: ${mlbEsc(PITCH_TYPE_NAMES[best[0]] || best[0])}` : ""}</small></span>
+${mlbMeter((grade - 100) / 60, true)}<span class="rankValue">${Math.round(grade)}</span>
 </div>`
 }).join("")}</div>`
 }
@@ -720,6 +753,7 @@ key_mlbam: p.key_mlbam, name: `${p.name_first} ${p.name_last}`, team: p.team,
 WAVE: wave, hitChance: hitChanceFromWave(wave),
 CAVE: mlbNum(s[`CAVE${suffix}`]) ?? (view === "faced" ? null : mlbNum(p.Game_Hit_Probability)),
 WOPS: mlbNum(s[`WOPS${suffix}`]),
+decision: mlbNum(p.DECISION_PLUS),
 // The plain season numbers, to show how far the adjustment moved them.
 base: { WAVE: mlbNum(s.WAVE), CAVE: mlbNum(s.CAVE), WOPS: mlbNum(s.WOPS) },
 }
@@ -733,12 +767,14 @@ const HITTER_STAT_COLUMNS = [
 ["hitChance", "Hit chance (3.5 AB)", "Hit %"],
 ["CAVE", "CAVE", "CAVE"],
 ["WOPS", "WOPS", "WOPS"],
+["decision", "Decision+", "Dec+"],
 ]
 
 const HITTER_STAT_TIPS = {
 WAVE: "WAVE: at-bat hit rate, recent games counting more",
 CAVE: "CAVE (Carried Average): share of games with a hit, recent games counting more",
 WOPS: "WOPS: OPS, recent games counting more",
+decision: "Decision+: his swing-or-take choices against the league's in the same spot (100 = average, 10 = one standard deviation)",
 }
 
 function sortHitterStatRows(rows, key = "hitChance"){
@@ -771,6 +807,7 @@ const body = sortHitterStatRows(rows, sortKey).slice(0, limit).map((r, i) => `<t
 <td class="num"><span class="statBar">${mlbChanceBar(r.hitChance)}<b>${mlbPct(r.hitChance)}</b></span></td>
 <td class="num"><b>${r.CAVE === null ? "-" : mlbPct(r.CAVE, 1)}</b>${faced ? adjustmentNote(r.CAVE, r.base.CAVE, "pct") : ""}</td>
 <td class="num"><b>${mlbRate(r.WOPS)}</b>${faced ? adjustmentNote(r.WOPS, r.base.WOPS) : ""}</td>
+<td class="num"><b>${r.decision === null ? "-" : Math.round(r.decision)}</b></td>
 </tr>`).join("")
 return `<div class="scrollbox statTableBox"><table class="statTable"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
 }
@@ -908,7 +945,7 @@ streakChartHtml, btsPickCardsHtml, btsLogHtml, hitStreakListHtml, bestChancesHtm
 pitcherVsAverage, pitcherDuelsHtml,
 gamePickCardHtml, gamesVersusVegas, versusVegasChartHtml, confidenceBucketsHtml, gameHistoryHtml,
 TEAM_PROFILE_GROUPS, teamRank, teamRecord, teamStatText, powerRankingsHtml, teamProfileHtml,
-playerCardHtml, playerSuggestionsHtml, hitterSplitsHtml, pitcherLeadersHtml,
+playerCardHtml, playerSuggestionsHtml, hitterSplitsHtml, pitcherLeadersHtml, stuffLeadersHtml, stuffByPitchHtml,
 hitChanceFromWave, hitterStatRows, sortHitterStatRows, hitterStatsTableHtml, adjustmentNote,
 scheduleInk, scheduleSeries, scheduleSheetHtml, scheduleTeamPickerHtml,
 }
