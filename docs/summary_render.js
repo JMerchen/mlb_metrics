@@ -159,7 +159,7 @@ const bet = units > 0
 // report (outlined in different colors).
 const report = sport === "nfl" ? (g.injury_report === "after" ? "after" : "before") : ""
 const reportNote = report
-? `<span class="reportNote"><b>${report === "after" ? "After" : "Before"} the final injury report</b>${report === "after" && g.injury_note ? ` &middot; Out: ${srEsc(g.injury_note)}` : ""}</span>`
+? `<span class="reportNote"><b>${report === "after" ? "After" : "Before"} the final injury report</b></span>`
 : ""
 return `<div class="game${report ? ` report-${report}` : ""}">
 <div class="btsMatchup">

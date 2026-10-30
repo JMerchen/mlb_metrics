@@ -92,3 +92,17 @@ def test_wave_is_on_the_batting_average_scale_walks_left_out():
              for day in range(1, 41)]
     views = hitter_views.season_wave_cave(pd.concat([season, pd.DataFrame(walks)], ignore_index=True)).set_index("key_mlbam")
     assert views.loc[2, "WAVE"] == pytest.approx(views.loc[1, "WAVE"])
+
+
+def test_compute_wave_at_bats_only_switch():
+    from mlb_metrics import data, hitters
+
+    walks = [_pa(day, pd.Timestamp("2026-05-01") + pd.Timedelta(days=day), 2, 901, "walk", 9) for day in range(1, 41)]
+    season = pd.concat([_season(), pd.DataFrame(walks)], ignore_index=True).query("game_type == 'R'")
+    dt = data.completed_events(season, ["game_date", "batter", "p_throws", "events"])
+    per_pa = hitters.compute_wave(dt, at_bats_only=False).set_index("key_mlbam")   # walks count as hitless trials
+    assert per_pa.loc[2, "WAVE"] < per_pa.loc[1, "WAVE"]
+    assert config.WAVE_AT_BATS_ONLY                                                 # the default, picks included
+    per_ab = hitters.compute_wave(dt).set_index("key_mlbam")
+    assert per_ab.loc[2, "WAVE"] == pytest.approx(per_ab.loc[1, "WAVE"])
+    assert per_ab.loc[1, "WAVE"] > per_pa.loc[1, "WAVE"]
