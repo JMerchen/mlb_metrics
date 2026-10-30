@@ -226,6 +226,50 @@ def transitions(p: pd.DataFrame) -> dict:
     return out
 
 
+def between_pitches(p: pd.DataFrame) -> dict:
+    """{"bases|outs": {"rate": chance something happens before a pitch,
+    "moves": [[share, bases after, outs added, runs], ...]}}: steals,
+    caught stealing, pickoffs, wild pitches and passed balls, as the change
+    in base state between consecutive pitches of the same plate
+    appearance."""
+    q = p.sort_values(["game_pk", "at_bat_number", "pitch_number"])
+    bases = _bases(q["on_1b"], q["on_2b"], q["on_3b"])
+    nxt = q.shift(-1)
+    same = ((nxt["game_pk"] == q["game_pk"]) & (nxt["at_bat_number"] == q["at_bat_number"])).fillna(False).to_numpy(dtype=bool)
+    after = _bases(nxt["on_1b"], nxt["on_2b"], nxt["on_3b"])
+    pairs = pd.DataFrame({"bases": bases, "outs": q["outs_when_up"].to_numpy(), "after": after,
+                          "outs_added": (nxt["outs_when_up"] - q["outs_when_up"]).to_numpy(),
+                          "runs": (nxt["bat_score"] - q["bat_score"]).to_numpy()})[same]
+    pairs = pairs[(pairs["bases"] > 0) & pairs["outs_added"].between(0, 2) & pairs["runs"].between(0, 3)]
+    changed = (pairs["after"] != pairs["bases"]) | (pairs["outs_added"] > 0) | (pairs["runs"] > 0)
+    out = {}
+    for (b, o), g in pairs.groupby(["bases", "outs"]):
+        moves = g[changed.loc[g.index]]
+        if len(g) < 200 or moves.empty:
+            continue
+        counts = moves.groupby(["after", "outs_added", "runs"]).size().sort_values(ascending=False)
+        share = counts / counts.sum()
+        share = share[share >= 0.01]
+        share = share / share.sum()
+        out[f"{int(b)}|{int(o)}"] = {"rate": round(float(len(moves) / len(g)), 5),
+                                     "moves": [[round(float(v), 4), int(a), int(oa), int(r)] for (a, oa, r), v in share.items()]}
+    return out
+
+
+def intentional_walks(p: pd.DataFrame) -> dict:
+    """{"bases|outs|late": chance a plate appearance is an intentional
+    walk} with first base open (late: 7th inning on, within two runs)."""
+    pa = p[p["events"].notna()].drop_duplicates(["game_pk", "at_bat_number"])
+    bases = _bases(pa["on_1b"], pa["on_2b"], pa["on_3b"])
+    late = ((pa["inning"] >= 7) & ((pa["bat_score"] - pa["fld_score"]).abs() <= 2)).astype(int).to_numpy()
+    t = pd.DataFrame({"bases": bases, "outs": pa["outs_when_up"].to_numpy(), "late": late,
+                      "ibb": (pa["events"] == "intent_walk").to_numpy()})
+    t = t[(t["bases"] & 1) == 0]
+    rates = t.groupby(["bases", "outs", "late"])["ibb"].agg(["mean", "size"])
+    return {f"{int(b)}|{int(o)}|{int(l)}": round(float(r["mean"]), 4)
+            for (b, o, l), r in rates.iterrows() if r["size"] >= 200 and r["mean"] > 0}
+
+
 def locations(p: pd.DataFrame, rng: np.random.Generator) -> dict:
     """{result: {group: [[x, z], ...]}}: where real pitches with that result
     crossed the plate - x in feet from the middle, positive toward the
@@ -505,6 +549,9 @@ def build_profiles(pitches: pd.DataFrame, season: int, names: pd.DataFrame | Non
         "prior_slopes": {"stuff": {g: [round(float(v), 4) for v in s] for g, s in p_slopes.items()},
                          "decision": [round(float(v), 4) for v in b_slope] if b_slope is not None else None},
         "transitions": transitions(p),
+        "between": between_pitches(p),
+        # From every regular-season row: an intentional walk has no pitch type.
+        "intentional_walks": intentional_walks(pitches[pitches["game_type"] == "R"]),
         "locations": locations(p, rng),
         "stamina": [round(float(np.mean([v[0] for v in stamina.values()])), 1), 15.0] if stamina else [90.0, 15.0],
         "runs_per_team_game": round(float(pa_ends.groupby(["game_pk", "bat_team"])["post_bat_score"].max().mean()), 2),
