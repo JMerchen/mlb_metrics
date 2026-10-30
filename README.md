@@ -3137,6 +3137,21 @@ engine averages about 19.5 points, 61 plays, 5.1 net yards a play, 40% on
 third down and one turnover per team (no penalties), a little under the
 league's scoring, so calibrated scales run about 1.05-1.2.
 
+Each team's profile also lists its players (`nfl_sim.team_players`): its
+starting QB and kicker, and each active skill player's share of targets
+and carries over its last 4 games, with his catch rate, yards per catch
+and yards per carry over the team's (shrunk with 25 targets, 12 catches
+and 30 carries). Players carry gsis and pfr ids, so `simLineup` drops
+anyone marked out in What if? and spreads his share over the rest; the
+chosen QB throws and gets the QB's own runs. Multipliers are normalized
+over who plays, so a lineup moves stats between players without moving
+the team's totals (the unit percents and calibration do that). The final
+screen shows each player's line; "Simulate it 1,000 times"
+(`simSummary`) reports win share, average score, the 10th/50th/90th
+percentile margin and total, a margin chart, the commonest finals and
+every player's averages, touchdown chance and 100-yard chance - about
+0.2 s in the browser.
+
 ## NFL Automated Game Picks (`docs/nfl.html`'s Picks tab)
 
 > **Predicted point totals (2026-10-12, improved 2026-10-13).** Each game

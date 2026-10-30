@@ -5,6 +5,7 @@ global.teamName = require("./teams.js").teamName
 const {
   simRng, simDraw, simFactors, simulateGame, simAverage, simCalibrate, simSpot, simClock,
   simScoreboardHtml, simDriveChartHtml, simBoxScoreHtml, simTickerHtml, simFieldSvg, simFinalHtml,
+  simPick, simShortName, simLineup, simSummary, simMarginBins, simSummaryHtml, simPlayerStatsHtml,
 } = require("./nfl_sim.js")
 
 const text = html => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
@@ -20,9 +21,21 @@ const LEAGUE = {
   kickoff_start: spread(15, 45, 1), punt_net: spread(25, 60, 1), punt_touchback_rate: 0.07,
   field_goal: { a: 6.1, b: -0.098 }, xp_rate: 0.95, scrimmage_plays_per_team_game: 61, quantile_probs: PROBS,
 }
+const player = (gsis, pfr, name, pos, targets, carries, more = {}) =>
+  ({ gsis, pfr, name, pos, targets, carries, catch: 1, ypr: 1, ypc: 1, ...more })
+const GB_PLAYERS = {
+  qb: { gsis: "q1", name: "Jordan Love" }, kicker: { gsis: "k1", name: "Brandon McManus" },
+  players: [
+    player("w1", "GoldMa02", "Matthew Golden", "WR", 0.4, 0, { catch: 0.9, ypr: 1.3 }),
+    player("w2", "WatsCh00", "Christian Watson", "WR", 0.3, 0),
+    player("r1", "JacoJo01", "Josh Jacobs", "RB", 0.1, 0.6, { ypc: 1.1 }),
+    player("t1", "KrafTu00", "Tucker Kraft", "TE", 0.2, 0.1),
+    { role: "QB", gsis: null, pfr: null, name: "QB", pos: "QB", targets: 0, carries: 0.3, catch: 1, ypr: 1, ypc: 1.2 },
+  ],
+}
 const PROFILES = {
   season: 2026, through_week: 7, league: LEAGUE,
-  teams: { GB: { neutral_pass_rate: 0.45 }, CAR: { neutral_pass_rate: 0.62, sack_rate: 0.09 } },
+  teams: { GB: { neutral_pass_rate: 0.45, ...GB_PLAYERS }, CAR: { neutral_pass_rate: 0.62, sack_rate: 0.09 } },
 }
 const SCRIMMAGE = new Set(["run", "pass", "incomplete", "sack", "interception", "kneel"])
 
@@ -162,4 +175,91 @@ test("the scoreboard shows what's next, then Final; the box and final read right
   assert.match(headline, f.home === f.away ? /Tie/ : f.home > f.away ? /Packers win/ : /Panthers win/)
   assert.equal((simTickerHtml(g, 20, 5).match(/<li/g) || []).length, 5)
   assert.match(simFieldSvg(g.plays[k], "GB", "CAR"), /<svg[^>]*aria-label="Ball at /)
+})
+
+test("short names and picks by share", () => {
+  assert.equal(simShortName("Jordan Love"), "J. Love")
+  assert.equal(simShortName("Marvin Harrison Jr."), "M. Harrison")
+  assert.equal(simShortName("Bijan"), "Bijan")
+  const list = [{ key: "a", share: 0.25 }, { key: "b", share: 0.75 }]
+  assert.equal(simPick(list, 0.1).key, "a")
+  assert.equal(simPick(list, 0.3).key, "b")
+  assert.equal(simPick([], 0.3), null)
+})
+
+test("a lineup splits targets and carries among who plays, keeping the team's average", () => {
+  const full = simLineup(PROFILES, "GB")
+  assert.equal(full.qb.name, "Jordan Love")
+  assert.equal(full.kicker.short, "B. McManus")
+  const sum = (xs, f) => xs.reduce((a, x) => a + f(x), 0)
+  assert.ok(Math.abs(sum(full.receivers, r => r.share) - 1) < 1e-9)
+  assert.ok(Math.abs(sum(full.rushers, r => r.share) - 1) < 1e-9)
+  // Share-weighted, the catch and gain multipliers average 1.
+  assert.ok(Math.abs(sum(full.receivers, r => r.share * r.catch) - 1) < 1e-9)
+  assert.ok(Math.abs(sum(full.rushers, r => r.share * r.ypc) - 1) < 1e-9)
+  // Jacobs out (by his What if? id): his carries go to the rest, the QB's
+  // runs go to whoever starts.
+  const out = simLineup(PROFILES, "GB", new Set(["JacoJo01"]), { id: "q2", name: "Malik Willis" })
+  assert.ok(!out.rushers.some(r => r.name === "Josh Jacobs") && !out.receivers.some(r => r.name === "Josh Jacobs"))
+  const qbRuns = out.rushers.find(r => r.pos === "QB")
+  assert.equal(qbRuns.name, "Malik Willis")
+  assert.ok(Math.abs(qbRuns.share - 0.75) < 1e-9)
+  assert.equal(out.qb.short, "M. Willis")
+  // A team without player profiles still plays, credited to the team.
+  const bare = simLineup(PROFILES, "CAR")
+  assert.equal(bare.receivers.length, 0)
+  assert.equal(bare.qb.name, "CAR QB")
+})
+
+test("players' stat lines add up to the team box score", () => {
+  const lineups = { home: simLineup(PROFILES, "GB", new Set(["JacoJo01"])), away: simLineup(PROFILES, "CAR") }
+  for (let seed = 1; seed <= 150; seed++) {
+    const g = simulateGame(PROFILES, "GB", "CAR", { seed, lineups })
+    const ps = g.players.home
+    const total = k => ps.reduce((a, p) => a + p[k], 0)
+    const b = g.box.home
+    assert.equal(total("att"), b.pass_att)
+    assert.equal(total("cmp"), b.pass_comp)
+    assert.equal(total("pass_yds"), b.pass_yards)
+    assert.equal(total("rec_yds"), b.pass_yards)
+    assert.equal(total("tgt"), b.pass_att)
+    assert.equal(total("rush_yds"), b.rush_yards)
+    assert.equal(total("rush_att"), b.rush_att)
+    assert.equal(total("pass_td"), b.pass_td)
+    assert.equal(total("rec_td") + total("rush_td"), b.pass_td + b.rush_td)
+    assert.equal(total("ints"), b.ints)
+    assert.equal(total("sacks"), b.sacks)
+    assert.equal(total("fga"), b.fg_att)
+    assert.ok(!ps.some(p => p.name === "Josh Jacobs"))
+  }
+})
+
+test("a thousand games: wins add up, players average sensible lines", () => {
+  const lineups = { home: simLineup(PROFILES, "GB"), away: simLineup(PROFILES, "CAR") }
+  const sum = simSummary(PROFILES, "GB", "CAR", { seed: 3, lineups }, 400)
+  assert.equal(sum.homeWins + sum.awayWins + sum.ties, 400)
+  assert.equal(sum.margins.length, 400)
+  assert.ok(sum.marginRange[0] <= sum.marginRange[1] && sum.marginRange[1] <= sum.marginRange[2])
+  const love = sum.players.home.find(p => p.role === "QB")
+  assert.ok(love.att > 20 && love.att < 50, `${love.att}`)
+  const golden = sum.players.home.find(p => p.name === "Matthew Golden")
+  const watson = sum.players.home.find(p => p.name === "Christian Watson")
+  assert.ok(golden.tgt > watson.tgt)
+  assert.ok(golden.td_games > 0 && golden.td_games < 1)
+  const bins = simMarginBins(sum.margins)
+  assert.ok(Math.abs(bins.reduce((a, b) => a + b.share, 0) - 1) < 1e-9)
+  assert.equal(bins.find(b => b.bin === 0).side, "tie")
+  const html = text(simSummaryHtml(sum, { margin: 3, total: 44, probability: 0.6 }))
+  assert.match(html, /^(Packers|Panthers) win [\d,]+ of 400/)
+  assert.match(html, /Matthew Golden WR/)
+  assert.match(html, /score a TD/)
+})
+
+test("one game's player tables list who played", () => {
+  const lineups = { home: simLineup(PROFILES, "GB"), away: simLineup(PROFILES, "CAR") }
+  const g = simulateGame(PROFILES, "GB", "CAR", { seed: 2, lineups })
+  const html = text(simPlayerStatsHtml(g))
+  assert.match(html, /Panthers Passing C\/Att/)
+  assert.match(html, /Packers Passing C\/Att Yds TD INT Sk Jordan Love/)
+  assert.ok(g.plays.some(p => / pass (to|incomplete for) [A-Z]\. /.test(p.text)))
 })
