@@ -208,3 +208,40 @@ def test_onside_kicks_stay_out_of_the_kickoff_starts():
     # Without leaving them out, the failed onside kicks read as returns to
     # the BUF 47.
     assert (nfl_sim._drive_starts(pbp, "KICKOFF") == 53).sum() == 9
+
+
+def test_kickoff_and_punt_models_keep_where_the_ball_was_caught_and_the_return():
+    rows = []
+    for i in range(200):
+        tb = i % 5 == 0
+        rows.append(_play(play_type="kickoff", kick_distance=float(60 + i % 10), touchback=float(tb),
+                          kickoff_out_of_bounds=0.0, return_yards=0.0 if tb else float(20 + i % 15),
+                          desc="kicks", yardline_100=35.0))
+    rows.append(_play(play_type="kickoff", kick_distance=12.0, touchback=0.0, kickoff_out_of_bounds=0.0,
+                      return_yards=0.0, desc="BUF kicks onside", yardline_100=35.0))
+    for i in range(300):
+        frm = 10 + (i % 7) * 10
+        end = ["r", "f", "d", "o", "t"][i % 5]
+        rows.append(_play(play_type="punt", kick_distance=float(40 + i % 12), yardline_100=float(100 - frm),
+                          touchback=float(end == "t"), punt_fair_catch=float(end == "f"), punt_downed=float(end == "d"),
+                          punt_out_of_bounds=float(end == "o"), return_yards=float(8 if end == "r" else 0)))
+    pbp = pd.DataFrame(rows)
+    kicks = nfl_sim._kickoff_model(pbp)
+    assert kicks["touchback_rate"] == 0.2 and kicks["touchback_spot"] == 35
+    # "Kicks 64 yards from the 35" is caught at the 1; the onside kick isn't
+    # among them.
+    caught = [c for c, _ in kicks["returns"]]
+    assert min(caught) == -4 and max(caught) == 4
+    assert all(20 <= r <= 34 for _, r in kicks["returns"])
+    punts = nfl_sim._punt_model(pbp)
+    assert set(punts["buckets"]) == {str(b) for b in range(1, 8)}
+    ends = {row[1] for bucket in punts["buckets"].values() for row in bucket}
+    assert ends == {"r", "f", "d", "o", "t"}
+    assert all(row[2] == 0 for bucket in punts["buckets"].values() for row in bucket if row[1] != "r")
+
+
+def test_even_rows_keep_extremes_only_as_often_as_they_happen():
+    rows = list(range(1000))
+    picked = nfl_sim._even_rows(rows, 100)
+    assert len(picked) == 100 and picked[0] == 5 and picked[-1] == 995
+    assert nfl_sim._even_rows(rows[:10], 100) == rows[:10]

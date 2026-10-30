@@ -3139,6 +3139,21 @@ and 3.75 timeouts per team, against the league's ~22 points, 61 plays,
 65 snaps, 5.6 penalties and 3.85 timeouts; calibrated scales run about
 1.05-1.2.
 
+Kicks and returns (`_kickoff_model`, `_punt_model`): kickoffs are a
+touchback (35), out of bounds (40) or a real [caught at, returned] pair,
+600 of them taken as the middle of equal slices of the 2025-26 returns
+sorted by where they ended (catch spot and return length correlate
+-0.45, so they're drawn together); punts are real [gross, ending,
+return] rows in buckets by where they were kicked from (by tens of
+yards; 150 each). A return reaching the end zone scores. Simulated: kick
+returns start at the 31 on average (real 30.7), return touchdowns 0.014
+kick / 0.035 punt a game (real 0.016 / 0.042), punts 43% returned, 26%
+fair caught, 11% downed, 9% out of bounds. Defensive flags that the data
+gives a first down 90% of the time or more (pass interference, holding,
+illegal contact and use of hands, roughing, face mask, unnecessary
+roughness) are automatic first downs - 1st and 10, or 1st and goal
+inside the 10.
+
 Kickoff starts leave out drives after onside kicks (`_onside_kicks`):
 55 of the 122 real kickoff drives that started past midfield in 2025-26
 followed a failed onside kick, so drawing every kickoff from them handed

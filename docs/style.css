@@ -1900,12 +1900,13 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 .simEndText{fill:rgba(255,255,255,.55);font:700 12px var(--font);text-anchor:middle;}
 .simYardLine{stroke:rgba(255,255,255,.28);stroke-width:1;}
 .simYardNum{fill:rgba(255,255,255,.5);font:600 9px var(--font);text-anchor:middle;}
-.simFirstDown{stroke:var(--accent);stroke-width:2;}
+.simFirstDown{stroke:#ffd400;stroke-width:2.5;}
 .simBall{fill:#8a5230;stroke:#fff;stroke-width:1;}
 .simTicker{list-style:none;margin:0 0 12px;padding:0;font-size:13px;}
 .simTicker li{padding:4px 0;border-bottom:1px solid var(--border);}
 .simTicker li:first-child{font-weight:600;}
 .simTicker li.simScoring{color:var(--accent-strong);}
+.simTicker li.simChange{color:var(--danger);}
 .simWhen{color:var(--text-dim);font-variant-numeric:tabular-nums;margin-right:4px;}
 .simDrives,.simBox{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums;}
 .simDrives th,.simDrives td,.simBox th,.simBox td{padding:4px 8px;border-bottom:1px solid var(--border);text-align:left;white-space:nowrap;}
