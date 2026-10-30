@@ -19,11 +19,11 @@ on 2025 alone and applied to 2026 pitches (2025 pitches are graded by
 models cross-fitted by pitcher within 2025), and each day's grades use only
 earlier pitches.
 
-Then it runs scripts/train_hitter_hit_model.py's own model selection
-(walk-forward grid search over logistic regression and gradient boosting,
-the same untouched final holdout) twice - the production feature list, and
-the list plus the two new features - and prints both holdout scores and
-each new feature's univariate significance.
+Then it fits the production hit model's spec (gradient boosting, isotonic,
+the trainer's untouched final holdout dates) twice - the production
+feature list, and the list plus the two new features - and prints both
+holdout scores, a paired bootstrap of the Brier difference and each new
+feature's univariate significance.
 
 Second, the game model (mlb_game_model: run differential, starter K-BB,
 bullpen xwOBA): each game gets the starters' Stuff difference and the two
@@ -31,6 +31,21 @@ lineups' average Decision (the nine who started, each through the day
 before), and the model's own monthly walk-forward (fit on everything
 before the month, history from 2021 - earlier games carry 0, no
 information) predicts every 2026 month with and without them.
+
+RESULT (2026-10-30, hit log 48,804 rows, 2,429 games of 2026): neither
+earns a place in production.
+- Hit model: both features are real on their own (Opp_Stuff_RV +0.050 per
+  SD, p = 5e-8 - worse stuff, more hits; Decision_RV -0.019, p = 0.03 -
+  patient hitters walk more and so have fewer at-bats to get a hit in), but
+  on the 3,257-row holdout log loss moves 0.67392 -> 0.67370 and Brier
+  0.24052 -> 0.24043 (95% CI -0.00070 to +0.00047), with AUC 0.6035 ->
+  0.6020: no measurable gain over what the model already knows about the
+  pitcher.
+- Game model: Brier 0.24378 base; + starter Stuff +0.00020 (CI -0.00003 to
+  +0.00044), + lineup Decision +0.00006 (-0.00008 to +0.00017), + both
+  +0.00032 (+0.00003 to +0.00057) - worse. Starter K-BB already carries
+  what Stuff knows.
+The grades stay where they help: the simulation's priors for small samples.
 
 Usage:
     python scripts/backtest_pitch_metrics.py [--skip-hits] [--skip-games]
