@@ -454,3 +454,41 @@ test("a kneel-down finish runs the clock out instead of handing the ball back", 
     assert.ok(!after.some(p => p.qtr === last.qtr && p.poss !== last.poss && SCRIMMAGE.has(p.kind)), `seed ${seed}`)
   }
 })
+
+test("late-game sense: ahead late a team runs, short yardage goes to the lead back, 4th and 1 near midfield goes", () => {
+  const lineups = { home: simLineup(PROFILES, "GB"), away: simLineup(PROFILES, "CAR") }
+  let late = 0, latePass = 0, short = 0, jacobs = 0, fourthShort = 0, punted = 0
+  for (let seed = 1; seed <= 800; seed++) {
+    const g = simulateGame(PROFILES, "GB", "CAR", { seed, lineups })
+    g.plays.forEach((p, i) => {
+      const lead = p.poss === "home" ? p.home - p.away : p.away - p.home
+      if (p.qtr === 4 && p.clock <= 240 && lead > 0 && SCRIMMAGE.has(p.kind) && p.kind !== "kneel") {
+        late += 1
+        if (p.kind !== "run") { latePass += 1 }
+      }
+      if (p.poss === "home" && p.kind === "run" && (p.down === 3 || p.down === 4) && p.togo <= 2) {
+        short += 1
+        if (/J\. Jacobs/.test(p.text)) { jacobs += 1 }
+      }
+      if (p.down === 4 && p.togo <= 1 && p.ball >= 40 && p.ball <= 60 && p.kind !== "penalty" && p.kind !== "timeout" && p.kind !== "warning") {
+        fourthShort += 1
+        if (p.kind === "punt") { punted += 1 }
+      }
+    })
+  }
+  assert.ok(latePass / late < 0.35, `${latePass}/${late}`)
+  // Jacobs has 60% of the carries; in short yardage he gets about 78%.
+  assert.ok(jacobs / short > 0.7, `${jacobs}/${short}`)
+  assert.ok(fourthShort > 0 && punted === 0, `${punted}/${fourthShort}`)
+})
+
+test("once a team starts kneeling it kneels out the clock - the two-minute warning included", () => {
+  for (let seed = 1; seed <= 1500; seed++) {
+    const g = simulateGame(PROFILES, "GB", "CAR", { seed })
+    g.plays.forEach((p, i) => {
+      if (p.kind !== "kneel") { return }
+      const next = g.plays.slice(i + 1).find(q => q.kind !== "timeout" && q.kind !== "warning")
+      if (next && next.drive === p.drive) { assert.equal(next.kind, "kneel", `seed ${seed}: ${next.text}`) }
+    })
+  }
+})
