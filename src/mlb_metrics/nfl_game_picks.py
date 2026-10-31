@@ -229,6 +229,81 @@ def qb_games_from_weekly(weekly_df: pd.DataFrame) -> pd.DataFrame:
     })
 
 
+# The schedule feed's listed starters are often stale (2026-10-31: "Jalen
+# Hurts is likely out for the season, and that's not on the injury
+# report"). Hurts went on injured reserve in week 6 - which takes a player
+# off the weekly injury report - yet the feed kept listing him for weeks 7
+# and 8 while Tanner McKee threw every pass; it also listed Drew Lock for
+# Seattle in weeks 3-6 (Sam Darnold started all four). A listed QB is
+# trusted only if he's active on the team's latest roster; otherwise the
+# team's current starter (the most dropbacks in its latest game, among
+# those still active) takes his place. Also replacing a listed QB who
+# hadn't started for his team yet was tried and dropped: replaying 2026,
+# it fixed two games and broke two (Kyler Murray's and J.J. McCarthy's
+# first starts for new teams), and still missed Lock, who started for
+# Seattle in 2025.
+def _game_starters(weekly_df: pd.DataFrame) -> pd.DataFrame:
+    """[season, week, team, qb, name]: each team's QB with the most
+    dropbacks in each regular-season game it played."""
+    rows = weekly_df
+    if "season_type" in rows.columns:
+        rows = rows[rows["season_type"] == "REG"]
+    if rows.empty or "team" not in rows.columns:
+        return pd.DataFrame(columns=["season", "week", "team", "qb", "name"])
+    sacks = rows["sacks_suffered"].fillna(0) if "sacks_suffered" in rows.columns else 0
+    rows = rows.assign(dropbacks=rows["attempts"].fillna(0) + sacks)
+    rows = rows[rows["dropbacks"] > 0]
+    names = rows["player_display_name"] if "player_display_name" in rows.columns else rows["player_id"]
+    starters = pd.DataFrame({"season": rows["season"], "week": rows["week"], "team": nfl_totals._canonical(rows["team"]),
+                             "qb": rows["player_id"], "name": names, "dropbacks": rows["dropbacks"]})
+    starters = starters.sort_values("dropbacks").drop_duplicates(["season", "week", "team"], keep="last")
+    return starters.drop(columns="dropbacks").sort_values(["season", "week"]).reset_index(drop=True)
+
+
+def correct_listed_starters(games: pd.DataFrame, weekly_df: pd.DataFrame, rosters: pd.DataFrame | None) -> pd.DataFrame:
+    """`games` with each side's home_qb_id/away_qb_id (and _qb_name)
+    replaced by the team's current starter when the listed one isn't active
+    on its latest roster (as of the game's week): injured reserve,
+    inactive, released, practice squad. Prints each change; a team with no
+    starts this season, or no roster, keeps its listed QB."""
+    games = games.copy()
+    starters = _game_starters(weekly_df)
+    rosters = rosters if rosters is not None else pd.DataFrame()
+    have_rosters = {"season", "week", "team", "gsis_id", "status"} <= set(rosters.columns)
+    for index, g in games.iterrows():
+        season, week = g["season"], g["week"]
+        for side in ("home", "away"):
+            listed = g.get(f"{side}_qb_id")
+            team = nfl_totals._canonical(pd.Series([g[f"{side}_team"]])).iloc[0]
+            earlier = starters[(starters["team"] == team) & ((starters["season"] < season)
+                                                             | ((starters["season"] == season) & (starters["week"] < week)))]
+            this_season = earlier[earlier["season"] == season]
+            if this_season.empty:
+                continue
+            active = None
+            if have_rosters:
+                roster = rosters[(rosters["season"] == season) & (rosters["week"] <= week)
+                                 & (nfl_totals._canonical(rosters["team"]) == team)]
+                if not roster.empty:
+                    latest = roster[roster["week"] == roster["week"].max()]
+                    active = set(latest.loc[latest["status"] == "ACT", "gsis_id"].dropna())
+            if active is None or (isinstance(listed, str) and listed in active):
+                continue
+            # The latest starter, or the most recent one still active.
+            candidates = this_season.iloc[::-1]
+            if active is not None:
+                candidates = candidates[candidates["qb"].isin(active)]
+            if candidates.empty or candidates.iloc[0]["qb"] == listed:
+                continue
+            new = candidates.iloc[0]
+            old_name = g.get(f"{side}_qb_name") if isinstance(g.get(f"{side}_qb_name"), str) else listed
+            print(f"  Listed starter corrected: {g[f'{side}_team']} week {week} - {old_name} -> {new['name']}")
+            games.at[index, f"{side}_qb_id"] = new["qb"]
+            if f"{side}_qb_name" in games.columns:
+                games.at[index, f"{side}_qb_name"] = new["name"]
+    return games
+
+
 def build_game_features_qb_plus(
     master: pd.DataFrame, qb_continuity: pd.DataFrame, weekly_df: pd.DataFrame, schedule_games_df: pd.DataFrame,
 ) -> pd.DataFrame:

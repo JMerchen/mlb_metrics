@@ -296,7 +296,10 @@ enough, sized by fractional Kelly in units.</p>
 <h3>NFL game picks</h3>
 <p>A logistic regression on each team's Pythagorean strength,
 schedule-adjusted confidence, offensive and defensive EPA edges, turnover
-margin and points per drive, plus each starting QB's QB+. Trained on every
+margin and points per drive, plus each starting QB's QB+. The starter comes
+from the schedule, checked against the latest roster: one on injured reserve
+or otherwise inactive (who won't be on the injury report) is replaced by
+whoever has been starting. Trained on every
 game since 2016 with each week predicted only from earlier games, the
 feature set chosen by walk-forward validation and checked on a season it
 never saw. When we disagree sharply with Vegas we defer to it (it's

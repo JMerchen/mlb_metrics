@@ -3430,6 +3430,25 @@ real added engineering cost, not add new information; real ESPN Total
 QBR itself is proprietary and isn't in `nflreadpy` at all, so it
 couldn't be reproduced exactly regardless.
 
+**Listed starters are checked against the roster**
+(`nfl_game_picks.correct_listed_starters`, 2026-10-31). The schedule
+feed's `home_qb_id`/`away_qb_id` can be stale: it kept listing Jalen Hurts
+for weeks 7 and 8 after he went on injured reserve in week 6 - which also
+takes a player off the weekly injury report, so the report repricing never
+swapped him - while Tanner McKee threw every pass. Before any pricing
+(picks, What if?, report repricing, the last-week replay), a listed QB who
+isn't `ACT` on his team's latest weekly roster (reserve, inactive,
+released, practice squad) is replaced by the team's latest starter still
+active (most dropbacks in its latest game). Replaying 2026 weeks 1-8 with
+only what was known before each week, it made three changes (Atlanta week
+2, Philadelphia weeks 7 and 8), all matching who actually started; the
+feed's wrong starters in played games went from 12 to 10 (the rest name an
+active backup, which the roster can't reveal). Also replacing a listed QB
+who hadn't started for his team yet was tried and dropped: it broke two
+real first starts for new teams (Kyler Murray, J.J. McCarthy) for every
+two it fixed. Repricing week 8's PHI @ WAS with McKee moved it from PHI
+50% to WAS 58% (Vegas: WAS 69%).
+
 **QB continuity** (`nfl_team_strength.compute_qb_continuity_adjustment` +
 `nfl_game_picks.py`'s own comparison) is the real NFL-specific signal
 with no clean MLB analog - no MLB pitcher swings a team's win probability

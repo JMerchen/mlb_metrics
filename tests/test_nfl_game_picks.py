@@ -556,3 +556,47 @@ def test_apply_market_tiebreak_default_threshold_matches_config():
 
     # 0.25 disagreement clears config.NFL_GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD (0.20).
     assert result.iloc[0]["home_win_probability"] == pytest.approx(0.60)
+
+
+def _qb_week(player, team, week, attempts, name=None, season=2026):
+    return {"player_id": player, "player_display_name": name or player, "team": team, "season": season,
+            "week": week, "season_type": "REG", "attempts": attempts, "sacks_suffered": 0}
+
+
+def _roster(player, team, week, status, season=2026):
+    return {"gsis_id": player, "team": team, "season": season, "week": week, "status": status, "position": "QB"}
+
+
+def test_a_listed_starter_on_injured_reserve_is_replaced_by_the_current_starter():
+    # Hurts starts weeks 1-5, goes on reserve, McKee starts week 6; the feed
+    # still lists Hurts for week 7.
+    weekly = pd.DataFrame([_qb_week("hurts", "PHI", w, 30, "Jalen Hurts") for w in range(1, 6)]
+                          + [_qb_week("mckee", "PHI", 6, 40, "Tanner McKee"), _qb_week("hurts", "PHI", 6, 0)]
+                          + [_qb_week("daniels", "WAS", w, 30, "Jayden Daniels") for w in range(1, 7)])
+    rosters = pd.DataFrame([_roster("hurts", "PHI", 7, "RES"), _roster("mckee", "PHI", 7, "ACT"),
+                            _roster("daniels", "WAS", 7, "ACT")])
+    games = pd.DataFrame([{"season": 2026, "week": 7, "home_team": "WAS", "away_team": "PHI",
+                           "home_qb_id": "daniels", "away_qb_id": "hurts",
+                           "home_qb_name": "Jayden Daniels", "away_qb_name": "Jalen Hurts"}])
+    out = nfl_game_picks.correct_listed_starters(games, weekly, rosters)
+    assert out.loc[0, "away_qb_id"] == "mckee" and out.loc[0, "away_qb_name"] == "Tanner McKee"
+    # An active listed starter stays, even one who hasn't started yet (a new
+    # signing or a QB back from injury).
+    assert out.loc[0, "home_qb_id"] == "daniels"
+    games.loc[0, "home_qb_id"] = "newguy"
+    rosters = pd.concat([rosters, pd.DataFrame([_roster("newguy", "WAS", 7, "ACT")])], ignore_index=True)
+    assert nfl_game_picks.correct_listed_starters(games, weekly, rosters).loc[0, "home_qb_id"] == "newguy"
+    # The original frame isn't changed.
+    assert games.loc[0, "away_qb_id"] == "hurts"
+
+
+def test_listed_starters_stay_without_a_roster_or_any_starts_this_season():
+    weekly = pd.DataFrame([_qb_week("hurts", "PHI", 17, 30, season=2025)])
+    games = pd.DataFrame([{"season": 2026, "week": 1, "home_team": "PHI", "away_team": "DAL",
+                           "home_qb_id": "hurts", "away_qb_id": "dak"}])
+    rosters = pd.DataFrame([_roster("hurts", "PHI", 1, "RES")])
+    # Week 1: no 2026 starts yet, so nothing to replace him with.
+    assert nfl_game_picks.correct_listed_starters(games, weekly, rosters).equals(games)
+    weekly = pd.concat([weekly, pd.DataFrame([_qb_week("hurts", "PHI", 1, 30)])], ignore_index=True)
+    games.loc[0, "week"] = 2
+    assert nfl_game_picks.correct_listed_starters(games, weekly, None).equals(games)
