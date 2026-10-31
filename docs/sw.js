@@ -5,7 +5,7 @@
 // Icons and the pinned-version CDN libraries (Papa Parse, ExcelJS) come
 // from the cache first. Bump SW_VERSION to drop everything kept.
 
-const SW_VERSION = "v2"
+const SW_VERSION = "v3"
 const SW_CACHE = `dg-metrics-${SW_VERSION}`
 const SW_PRECACHE = ["./", "./index.html", "./style.css", "./install.js", "./manifest.webmanifest", "./icons/icon-192.png"]
 

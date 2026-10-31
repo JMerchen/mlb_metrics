@@ -1,7 +1,7 @@
 {
   "name": "Stats Reference",
   "short_name": "Stats Reference",
-  "description": "MLB and NFL picks, stats, age curves, prospects and payroll value.",
+  "description": "The numbers driving the leagues, by Jackson Merchen: picks, stats, age curves, prospects and payroll value.",
   "id": "./index.html",
   "start_url": "./index.html",
   "scope": "./",
