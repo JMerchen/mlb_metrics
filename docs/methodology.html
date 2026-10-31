@@ -32,16 +32,23 @@ href="./style.css">
 <meta name="apple-mobile-web-app-title" content="Stats Reference">
 
 <style>
-/* This page's own documentation-layout styles - a reference/glossary
+/* This page's own documentation-layout styles - a reference/teaching
 page shaped very differently from every other page's data tables, so
 these live here rather than in the shared stylesheet. Built entirely
 from style.css's shared :root tokens (--bg-card, --border, --text-dim,
 --accent, --radius) so it still visually matches every other page. */
-.methodPart{margin:48px 0 0;font-size:22px;}
-.glossary{display:grid;grid-template-columns:minmax(160px,240px) minmax(0,1fr);gap:8px 20px;margin:0;}
-.glossary dt{font-weight:700;}
-.glossary dd{margin:0;color:var(--text-dim);}
-@media (max-width:640px){.glossary{grid-template-columns:1fr;gap:2px 0;}.glossary dd{margin-bottom:10px;}}
+.howTabs{margin:16px 0 8px;}
+.terms{display:grid;grid-template-columns:minmax(150px,220px) minmax(0,1fr);margin:0;}
+.terms dt,.terms dd{padding:14px 0;border-top:1px solid var(--border);}
+.terms dt{font-weight:700;padding-right:18px;scroll-margin-top:16px;}
+.terms dd{margin:0;color:var(--text-dim);font-size:14px;line-height:1.55;}
+.terms dt:first-of-type,.terms dt:first-of-type + dd{border-top:0;}
+.terms dd p{margin:0 0 6px;}
+.terms dd p:last-child{margin-bottom:0;}
+.terms code{font-family:var(--font-mono);font-size:12.5px;background:var(--bg-raised);border-radius:4px;padding:1px 4px;color:var(--text);overflow-wrap:anywhere;}
+.terms .lbl{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-right:6px;}
+.terms .where{font-size:12.5px;}
+@media (max-width:640px){.terms{grid-template-columns:1fr;}.terms dd{border-top:0;padding-top:4px;}}
 .methodologyIntro{
 opacity:.75;
 max-width:760px;
@@ -101,36 +108,11 @@ color:var(--text);
 text-transform:none;
 letter-spacing:normal;
 }
-.methodLabel{
-font-size:11px;
-font-weight:600;
-text-transform:uppercase;
-letter-spacing:.05em;
-color:var(--text-dim);
-margin:10px 0 4px;
-}
-.methodLabel:first-of-type{
-margin-top:0;
-}
 .methodCard p{
 margin:0 0 4px;
 font-size:13.5px;
 line-height:1.5;
 color:var(--text);
-}
-.methodCard code{
-font-family:var(--font-mono);
-font-size:12.5px;
-background:var(--bg-raised);
-border-radius:4px;
-padding:1px 4px;
-word-break:break-word;
-overflow-wrap:anywhere;
-}
-.methodLink{
-display:inline-block;
-margin-top:10px;
-font-size:13px;
 }
 </style>
 
@@ -162,16 +144,23 @@ font-size:13px;
 </div>
 
 <p class="methodologyIntro">
-What each part of the site does, how our models work, and what the terms
-mean - then the statistics underneath, technique by technique, for anyone
-who wants the theory. Backtest numbers and implementation detail live in
-the <a href="https://github.com/JMerchen/mlb_metrics#readme" style="color:inherit">README</a>.
+What each part of the site does, what our numbers mean, and the statistics behind them - taught through
+sports, so you can pick up the ideas as you go. Backtest results and implementation detail live in the
+<a href="https://github.com/JMerchen/mlb_metrics#readme" style="color:inherit">README</a>.
 </p>
+
+<div class="tabGroup howTabs" id="howTabs">
+<button class="tabButton active" data-panel="using-the-site">Using the site</button>
+<button class="tabButton" data-panel="metrics">Metrics</button>
+<button class="tabButton" data-panel="methods">Statistical methods</button>
+</div>
+
+<div class="howPanel" id="using-the-site">
 
 <ul class="toc">
 <li><a href="#tools">What each tool does</a></li>
 <li><a href="#our-models">Our models</a></li>
-<li><a href="#glossary">Glossary</a></li>
+<li><a href="#site-terms">Site terms</a></li>
 </ul>
 
 <section class="methodCategory" id="tools">
@@ -290,7 +279,7 @@ bullpen's PAVE and the park - in a model trained on past seasons and
 calibrated so its percentages mean what they say. A hitter qualifies only
 if both his hit chance and his games-with-a-hit rate clear 70%; the best
 Approach is the pick. Whether to risk the streak today is an
-optimal-stopping decision (Bellman, below).</p>
+optimal-stopping decision (see <a href="#optimal-stopping">Optimal stopping</a>).</p>
 </div>
 
 <div class="methodCard">
@@ -451,770 +440,696 @@ QB+ and the rest) describe; only the Picks pages predict.</p>
 </div>
 </section>
 
-<section class="methodCategory" id="glossary">
-<h2>Glossary</h2>
-<dl class="glossary">
-<dt>Approach</dt><dd>A hitter's games-with-a-hit rate times his hit chance - how Beat the Streak ranks qualified hitters.</dd>
-<dt>Average regular / average starter</dt><dd>In What if?, a typical regular at a position (or a typical starting QB) - for someone not listed or whose role isn't known yet.</dd>
-<dt>Beat the Streak</dt><dd>MLB's contest: pick a hitter each day; the streak grows when he gets a hit and resets when he doesn't.</dd>
-<dt>Brier score</dt><dd>The average squared gap between a probability and what happened (1 or 0). Lower is better.</dd>
-<dt>Calibration</dt><dd>Adjusting a model's probabilities so its 60% calls win about 60% of the time.</dd>
-<dt>Cash flow / spending change</dt><dd>A team's relative payroll minus its average over the previous three seasons - positive means it spent up.</dd>
-<dt>Cash paid / cap spending</dt><dd>On the NFL Payroll tab: the dollars a team actually paid its players that season (signing bonuses counted when paid), or the cap charges of its contracts. Dead money isn't included.</dd>
-<dt>CAVE (Carried Average)</dt><dd>The share of a hitter's games with at least one hit - a 1-for-4 and a 4-for-4 count the same.</dd>
-<dt>Decision+</dt><dd>A hitter's swing-or-take choices graded against the league's in the same spot (location, count, outs, runners, pitch type). 100 is average; 10 points is one standard deviation.</dd>
-<dt>De-vig</dt><dd>Removing the sportsbook's margin from both sides' odds so they add to 100% - what "Vegas" means on this site.</dd>
-<dt>EPA (expected points added)</dt><dd>How many points a play adds compared with what was expected from the down, distance and field position. Per play, per dropback or per target.</dd>
-<dt>Expected wins</dt><dd>On the Payroll page, the wins per game of the 10 seasons whose relative payroll was closest (other franchises, 11 or more years earlier), plus the team's front office score.</dd>
-<dt>Floor</dt><dd>The fewest a player has put up in a single game this season.</dd>
-<dt>Front office score</dt><dd>How many wins a franchise beat its payroll's expectation by, averaged over its previous three seasons.</dd>
-<dt>Hit chance</dt><dd>A hitter's chance of at least one hit in 3.5 at-bats at his WAVE.</dd>
-<dt>Injury report: before / after</dt><dd>An NFL pick logged Tuesday, before the final injury report (purple outline), or repriced with it the morning of, or the day before, the game (blue).</dd>
-<dt>Kelly / units</dt><dd>A bet-sizing rule that stakes more the bigger our edge over the odds; a unit is one standard stake.</dd>
-<dt>Log loss</dt><dd>A score for probabilities that punishes confident misses hardest. Lower is better.</dd>
-<dt>Net EPA per play</dt><dd>A team's offensive EPA per play minus the EPA per play its defense allows.</dd>
-<dt>PAVE / PAVE+</dt><dd>The batting average hitters manage against a pitcher, blended like WAVE; PAVE+ compares it with the league (below 1 is tougher). Bullpen PAVE is the same for a team's relievers.</dd>
-<dt>Park factor</dt><dd>How much a ballpark helps or hurts hitting compared with an average park.</dd>
-<dt>Payroll effectiveness</dt><dd>Wins over average divided by payroll per win over the league's. Above 1 bought more winning per dollar than the league did.</dd>
-<dt>Pythagorean strength</dt><dd>The winning percentage a team's points (or runs) scored and allowed would predict.</dd>
-<dt>QB+</dt><dd>A quarterback's EPA per dropback over his last 16 games, pulled toward a replacement-level backup when he has few. On the Stats tab, on the 100 scale.</dd>
-<dt>Receiving+, Rushing+, Pass D+, Run D+</dt><dd>Team unit ratings: 100 is league average, higher is always stronger, 30 points is one standard deviation.</dd>
-<dt>Regular</dt><dd>A player on at least half his side's snaps over his last 4 active games (What if? lists anyone at 30%).</dd>
-<dt>Relative payroll</dt><dd>A team's payroll per game over the league's that season - 2.0 spent twice the average.</dd>
-<dt>Snap share</dt><dd>The share of his side's plays a player was on the field for.</dd>
-<dt>Stuff+</dt><dd>A pitch's grade from how it's thrown (velocity, movement, spin, release, approach angle, how it plays off the fastball), not from results. 100 is league average; 10 points is one standard deviation between pitchers.</dd>
-<dt>Strength of schedule</dt><dd>How good the opponents a team has played were.</dd>
-<dt>Unit %</dt><dd>In What if?, a unit's yards per play as a percent of its normal; a defense at 90% allows 10% more.</dd>
-<dt>vs. pitchers faced / vs. defenses faced</dt><dd>A player's numbers adjusted for how tough his opponents were, from what each allowed all season.</dd>
-<dt>Walk-forward</dt><dd>Testing a model only on games after everything it learned from - never peeking ahead.</dd>
-<dt>WAVE</dt><dd>A hitter's batting average blended over the season and his last 81, 30 and 10 days, pulled toward the league for small samples.</dd>
-<dt>WOPS</dt><dd>A hitter's OPS (on-base plus slugging), blended the same way.</dd>
+<section class="methodCategory" id="site-terms">
+<h2>Site terms</h2>
+<dl class="terms">
+<dt id="beat-the-streak">Beat the Streak</dt>
+<dd><p>MLB's contest: pick a hitter each day; the streak grows when he gets a hit and resets when he doesn't.
+57 in a row wins the grand prize - one more than Joe DiMaggio's record.</p></dd>
+
+<dt id="injury-report">Injury report: before / after</dt>
+<dd><p>An NFL pick logged Tuesday, before the final injury report (purple outline), or repriced with it the
+morning of, or the day before, the game.</p></dd>
+
+<dt id="regular">Regular</dt>
+<dd><p>A player on at least half his side's snaps over his last four active games. What if? lists anyone at
+30%.</p></dd>
+
+<dt id="average-regular">Average regular / average starter</dt>
+<dd><p>In What if?, a typical regular at a position (or a typical starting QB) - for someone not listed, or
+not yet rated.</p></dd>
+
+<dt id="unit-pct">Unit %</dt>
+<dd><p>In What if?, a unit's yards per play as a percent of its normal; a defense at 90% allows 10% more.</p></dd>
 </dl>
 </section>
 
-<h2 class="methodPart">The statistics underneath</h2>
+</div>
+
+<div class="howPanel" id="metrics" hidden>
+
+<p class="methodologyIntro">Every number the site shows, grouped by what it measures. Each comes with
+an example, and where you'll find it.</p>
 
 <ul class="toc">
-<li><a href="#estimation">Statistical Estimation &amp; Smoothing</a></li>
-<li><a href="#models">Regression &amp; Classification Models</a></li>
-<li><a href="#validation">Model Validation</a></li>
-<li><a href="#calibration">Probability Calibration</a></li>
-<li><a href="#significance">Statistical Significance Testing</a></li>
-<li><a href="#metrics">Evaluation Metrics</a></li>
-<li><a href="#resampling">Resampling</a></li>
-<li><a href="#decision">Decision Theory</a></li>
-<li><a href="#risk">Portfolio &amp; Risk Concepts</a></li>
-<li><a href="#sabermetrics">Sabermetric Domain Formulas</a></li>
-<li><a href="#betting">Sports-Betting Math</a></li>
-<li><a href="#engineering">Data &amp; Feature Engineering</a></li>
+<li><a href="#metrics-hitting">Hitting</a></li>
+<li><a href="#metrics-pitching">Pitching</a></li>
+<li><a href="#metrics-teams">Teams and games</a></li>
+<li><a href="#metrics-football">Football</a></li>
+<li><a href="#metrics-money">Payroll</a></li>
+<li><a href="#metrics-betting">Betting</a></li>
 </ul>
 
-<section class="methodCategory" id="estimation">
-<h2>Statistical Estimation &amp; Smoothing</h2>
-<div class="methodGrid">
+<section class="methodCategory" id="metrics-hitting">
+<h2>Hitting</h2>
+<dl class="terms">
+<dt id="wave">WAVE</dt>
+<dd><p>A hitter's batting average - hits per at-bat - blended over the full season and his last 81, 30
+and 10 days, so recent games count more, and pulled toward the league average when he has few at-bats
+(see <a href="#shrinkage">shrinkage</a>). Walks don't count as at-bats, so they neither help nor hurt it.</p>
+<p class="where">On the site: <a href="./stats.html">MLB Stats</a>, and underneath every Beat the Streak pick.</p></dd>
 
-<div class="methodCard" id="shrinkage">
-<h3>Empirical-Bayes (Beta-Binomial) Shrinkage</h3>
-<p class="methodLabel">What it is</p>
-<p>A way to estimate a rate (like a hit rate) from a small sample without
-over-trusting it. Instead of using the raw observed rate, it's pulled
-toward a "prior" rate (usually the population/league average), weighted
-by how many real observations back it up - a batter with 3 at-bats gets
-pulled hard toward league average; one with 300 barely moves. The prior
-itself is estimated from the data ("empirical"), not asserted from
-theory.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>helpers.shrink_rate</code> shrinks every small-sample hitter hit
-rate toward the league rate, weighted by <code>config.WAVE_SHRINKAGE_STRENGTH</code>
-real pseudo-observations. Used in <code>hitters.compute_wave</code> and
-<code>compute_game_hit_probability</code> so a hitter with 5 at-bats
-against lefties doesn't get an absurd extreme rate just from noise.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Empirical_Bayes_method" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="hit-chance">Hit chance</dt>
+<dd><p>His chance of at least one hit in a typical game of 3.5 at-bats at his WAVE: one minus the chance he
+misses every time, <code>1 - (1 - WAVE)^3.5</code>. A .280 hitter gets about 68%
+(see <a href="#complement">the complement rule</a>).</p>
+<p class="where">On the site: <a href="./stats.html">MLB Stats</a>.</p></dd>
 
-<div class="methodCard" id="wilson-ci">
-<h3>Wilson Score Confidence Interval</h3>
-<p class="methodLabel">What it is</p>
-<p>A confidence interval for a proportion (a rate out of n trials) that
-stays well-behaved at small n and near 0%/100% - unlike the simpler
-normal-approximation interval, which can produce nonsense bounds outside
-[0, 1] on small samples.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>helpers.wilson_ci</code> wraps <code>statsmodels</code>'s Wilson
-implementation. Computed on the raw (unshrunk) hit/at-bat counts in
-<code>hitters.compute_wave</code>/<code>compute_game_hit_probability</code> -
-deliberately never on the shrunk point estimate above, since shrinkage
-already borrows strength from the prior and isn't a plain sample
-proportion anymore. The same formula also backs
-<code>evaluation.wilson_confidence_interval</code> (a scalar wrapper for
-one aggregate backtest rate rather than a per-row Series) - applied to
-<code>day_survival_rate</code>, <code>market_accuracy</code>,
-<code>beat_closing_line_rate</code>, and
-<code>win_rate_on_advised_bets</code>, so a bare percentage on the
-dashboard is never read as more certain than its real sample size
-supports. Quant-analytics item #5, "backtest scope and statistical
-significance."</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Binomial_proportion_confidence_interval" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="cave">CAVE (Carried Average)</dt>
+<dd><p>The share of a hitter's games with at least one hit. A 1-for-4 and a 4-for-4 count the same - it
+measures how steadily he hits, not how much.</p>
+<p class="where">On the site: <a href="./stats.html">MLB Stats</a>.</p></dd>
 
-<div class="methodCard" id="moving-window">
-<h3>Weighted Moving-Window Averaging</h3>
-<p class="methodLabel">What it is</p>
-<p>Blending several time windows of different lengths (e.g. last 7 days,
-last 30 days, full season) into one number using fixed weights, so a
-signal reflects both recent form and a larger, more stable sample. A
-simplified relative of exponential smoothing, using a handful of discrete
-windows with hand-set weights rather than one continuously-decaying
-weight.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>hitters._blend_windows</code>/<code>_side_window_agg</code> is
-the shared engine behind WAVE, WTB/WHOPS, pitch-family rates,
-plate-discipline rates, and batted-ball-quality signals - each computes a
-rate per <code>config.WAVE_WINDOWS</code> window, split by opposing
-throwing hand, then blends by fixed weight.</p>
-<p>The Stats page shows three such views of a hitter's season: <b>WAVE</b>
-(hits per at-bat), <b>CAVE</b> - Carried Average - (the share of games
-with at least one hit) and <b>WOPS</b> (OPS: on-base per plate appearance
-plus total bases per at-bat), each blending the full season with the last
-81, 30 and 10 days. A window a hitter has no at-bats in, because he was
-hurt or benched, carries his next-longer window rather than counting as
-zero. Their <b>vs. pitchers faced</b> versions compare what he did with
-what a league-average hitter would have done against the same pitchers
-(each pitcher's season hits, on-base and total bases allowed, shrunk
-toward the league), so hits off tough pitching count for more. WAVE
-counts at-bats only - walks and hit-by-pitches aren't at-bats - here and
-in the picks alike: replaying the 2026 season, the picks hit more often
-that way than counting every plate appearance.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Moving_average" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="wops">OPS and WOPS</dt>
+<dd><p>OPS is on-base percentage (how often he reaches base) plus slugging (total bases per at-bat), a quick
+measure of overall hitting. WOPS is his OPS blended over the same windows as WAVE.</p>
+<p class="where">On the site: <a href="./stats.html">MLB Stats</a>.</p></dd>
 
-<div class="methodCard" id="zscore">
-<h3>Z-Score Standardization</h3>
-<p class="methodLabel">What it is</p>
-<p>Rescaling a value to "how many standard deviations from the mean" it
-is: <code>(x - mean) / std</code>. Puts variables of very different raw
-scales onto one comparable axis.</p>
-<p class="methodLabel">How we use it</p>
-<p>Two real uses: <code>teams.py</code>'s <code>normalize()</code> helper
-puts team-strength composites (Pythagorean strength, SOS, confidence) on
-a common ~1.0-centered scale before they're blended into one game-pick
-signal; separately, <code>scripts/train_hitter_hit_model.py</code>/
-<code>train_game_pick_model.py</code> z-score features before fitting
-<code>statsmodels.Logit</code> purely so the resulting coefficients are
-comparable across features of very different natural scales.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Standard_score" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="faced">vs. pitchers faced</dt>
+<dd><p>A hitter's numbers next to what a league-average hitter would have done against the same pitchers.
+Two hitters can both hit .270; the one who did it against aces did more.</p>
+<p class="where">On the site: the <a href="./stats.html">MLB Stats</a> hitter table's second view.</p></dd>
 
-</div>
+<dt id="approach">Approach</dt>
+<dd><p>A hitter's games-with-a-hit rate times his hit chance - how Beat the Streak ranks the hitters who
+qualify (both above 70%).</p>
+<p class="where">On the site: <a href="./predictive.html">MLB Picks</a>.</p></dd>
+
+<dt id="decision-plus">Decision+</dt>
+<dd><p>A grade for a hitter's swing-or-take choices: each pitch he saw is placed by where it crossed his
+strike zone, the count, outs, runners and pitch type, and scored by what his choice was worth over what
+the league usually does there. 100 is average; every 10 points is one
+<a href="#standard-deviation">standard deviation</a>. It grades the decision, not the contact.</p>
+<p class="where">On the site: <a href="./stats.html">MLB Stats</a>; it also starts the simulator's estimate
+for hitters with few pitches.</p></dd>
+
+<dt id="woba">wOBA and xwOBA</dt>
+<dd><p>wOBA weights each way of reaching base by the runs it's worth - a home run counts about twice a
+single, not four times. xwOBA is the wOBA a batted ball "should" have produced from its exit velocity and
+launch angle, whether or not a fielder made a great play.</p>
+<p class="where">On the site: Stuff+ values balls in play the same way, by exit velocity and launch angle.</p></dd>
+</dl>
 </section>
 
-<section class="methodCategory" id="models">
-<h2>Regression &amp; Classification Models</h2>
-<p class="methodCategoryNote">
-Every model here is grid-searched against at least one real alternative
-on identical, no-lookahead cross-validation, and only shipped if it also
-beats a naive baseline and the existing heuristic on an untouched
-holdout - see Model Validation below.
-</p>
-<div class="methodGrid">
+<section class="methodCategory" id="metrics-pitching">
+<h2>Pitching</h2>
+<dl class="terms">
+<dt id="pave">PAVE and PAVE+</dt>
+<dd><p>PAVE is the batting average hitters manage against a pitcher, blended over the same windows as WAVE.
+PAVE+ compares it with the league: below 1 is tougher than average.</p>
+<p class="where">On the site: <a href="./stats.html">MLB Stats</a> (today's starters, pitchers giving up the
+most hits).</p></dd>
 
-<div class="methodCard" id="logistic-regression">
-<h3>Logistic Regression</h3>
-<p class="methodLabel">What it is</p>
-<p>A linear model for binary outcomes: it fits a weighted sum of features
-and squashes it through the sigmoid function into a 0-1 probability. The
-workhorse baseline classifier in applied statistics - simple, fast, and
-its coefficients are directly interpretable.</p>
-<p class="methodLabel">How we use it</p>
-<p>A candidate model (vs. gradient boosting) for "does this hitter get a
-hit today" (<code>scripts/train_hitter_hit_model.py</code>) and for
-game-level home-win probability (<code>scripts/train_game_pick_model.py</code>).</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Logistic_regression" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="stuff-plus">Stuff+</dt>
+<dd><p>A grade for how a pitch is thrown - velocity, movement, spin, release, approach angle and how it plays
+off the pitcher's fastball - never where it went or what happened. 100 is league average; every 10 points
+is one standard deviation between pitchers, so a 120 is about two above.</p>
+<p class="where">On the site: <a href="./stats.html">MLB Stats</a> (Best stuff), and the simulator.</p></dd>
 
-<div class="methodCard" id="ridge-regression">
-<h3>Ridge Regression</h3>
-<p class="methodLabel">What it is</p>
-<p>Ordinary linear regression with an L2 penalty added on the
-coefficients, shrinking them toward zero. Trades a little bias for lower
-variance - useful when features are correlated or numerous relative to
-the sample size, both common here.</p>
-<p class="methodLabel">How we use it</p>
-<p>A candidate model (vs. gradient boosting) for the Age Curves page's
-next-season HR9 projection
-(<code>scripts/train_age_curve_hr9_model.py</code>).</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Ridge_regression" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="fip">FIP (Fielding Independent Pitching)</dt>
+<dd><p>An ERA-like number built only from what a pitcher controls without his fielders: home runs, walks and
+hit batters, and strikeouts - <code>(13 HR + 3 (BB + HBP) - 2 K) / IP</code> plus a constant that puts it on
+ERA's scale.</p>
+<p class="where">On the site: <a href="./age-curves.html">Age Curves</a>' pitcher projections.</p></dd>
 
-<div class="methodCard" id="gradient-boosting">
-<h3>Gradient Boosting (Histogram-Based)</h3>
-<p class="methodLabel">What it is</p>
-<p>An ensemble method that builds many shallow decision trees in
-sequence, each one fitting the residual errors of the ones before it. Can
-capture nonlinear relationships and feature interactions that a linear
-model can't, at the cost of interpretability. "Histogram-based" bins
-continuous features first, trading a little precision for large speed
-gains on bigger datasets.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>sklearn.ensemble.HistGradientBoostingClassifier</code>/
-<code>Regressor</code> is the alternative candidate in every model
-selection above - it's the one that actually won and shipped for HR9
-projection (beating the KNN baseline, see below), while logistic
-regression/Ridge have won the others so far.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Gradient_boosting" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="platoon">Platoon edge</dt>
+<dd><p>Hitters do better against pitchers who throw from the other side - a lefty against a righty sees the
+ball longer. The simulator applies the league's measured edge to every pitch.</p>
+<p class="where">On the site: the MLB game simulation.</p></dd>
 
-<div class="methodCard" id="knn">
-<h3>k-Nearest Neighbors</h3>
-<p class="methodLabel">What it is</p>
-<p>A non-parametric method that predicts by finding the k most similar
-historical examples (by distance on some metric) and looking at what
-actually happened to them, rather than fitting any equation. Simple, and
-naturally gives a real empirical distribution of outcomes, not just one
-point estimate.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>age_curve.find_comparables</code> is a hand-implemented 1-D KNN:
-for a given player-age-metric, it finds the k closest historical Lahman
-seasons by that one metric and reports what those comparable players
-actually did the next season (mean, 25th/75th percentile) -
-<code>project_next_season</code>. Deliberately hand-rolled rather than
-pulling in <code>sklearn.neighbors</code> for one simple 1-D lookup.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
-
-</div>
+<dt id="tto">Times through the order</dt>
+<dd><p>Hitters do better each time they see the same pitcher in a game. It's one reason starters come out
+around the third time through.</p>
+<p class="where">On the site: the MLB game simulation.</p></dd>
+</dl>
 </section>
 
-<section class="methodCategory" id="validation">
-<h2>Model Validation</h2>
-<div class="methodGrid">
+<section class="methodCategory" id="metrics-teams">
+<h2>Teams and games</h2>
+<dl class="terms">
+<dt id="run-differential">Run differential</dt>
+<dd><p>Runs scored minus runs allowed. Over a season it says more about a team than its record, which close
+games and luck push around.</p>
+<p class="where">On the site: <a href="./stats.html">MLB Stats</a> (team schedules and profiles).</p></dd>
 
-<div class="methodCard" id="walk-forward">
-<h3>Walk-Forward (Time-Blocked) Cross-Validation</h3>
-<p class="methodLabel">What it is</p>
-<p>Cross-validation adapted for time-ordered data: instead of randomly
-shuffling rows into folds (which would let a model "see the future"),
-each fold trains only on an earlier block of time and tests on the block
-immediately after it, then the training window rolls forward. The only
-CV scheme that doesn't leak future information into training for
-sequential data.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>ml_models.WalkForwardDateSplit</code> blocks by calendar date
-(used for every daily hitter/game model); <code>age_curve_ml.YearBlockedSplit</code>
-does the identical thing blocked by season instead, for year-level
-Lahman data. Both plug directly into <code>sklearn.model_selection.GridSearchCV</code>
-as a custom <code>cv=</code> splitter.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Cross-validation_(statistics)" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="pythagorean">Pythagorean strength</dt>
+<dd><p>The winning percentage a team's runs (or points) scored and allowed predict:
+<code>RS^x / (RS^x + RA^x)</code>. With baseball's exponent of 1.83, a team scoring 750 and allowing 650
+"should" win about 56.5%, or 92 games. Bill James named it for its resemblance to the Pythagorean theorem.</p>
+<p class="where">On the site: both game-pick models and the team profiles.</p></dd>
 
-<div class="methodCard" id="holdout">
-<h3>Train / Holdout Split</h3>
-<p class="methodLabel">What it is</p>
-<p>Setting aside a final chunk of data that no amount of model selection
-or hyperparameter tuning is ever allowed to touch, then evaluating the
-already-chosen model on it exactly once. The single honest estimate of
-real-world performance - anything tuned using the holdout itself isn't a
-real holdout anymore.</p>
-<p class="methodLabel">How we use it</p>
-<p>Every <code>scripts/train_*.py</code> carves off the LAST N distinct
-dates (<code>config.ML_FINAL_HOLDOUT_DATES</code> and its per-model
-variants) before any grid search runs, and reports final numbers only
-from that untouched block - not from cross-validation folds reused for
-reporting.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Training,_validation,_and_test_data_sets" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="sos">Strength of schedule</dt>
+<dd><p>How good a team's opponents have been. A 10-5 start against the league's best is worth more than one
+against its worst.</p>
+<p class="where">On the site: team profiles, and the pick models' schedule-adjusted ratings.</p></dd>
 
-<div class="methodCard" id="leakage">
-<h3>Data Leakage Prevention</h3>
-<p class="methodLabel">What it is</p>
-<p>A named failure mode, not a technique in itself: a model that
-accidentally has access to information it wouldn't have in the real
-world at prediction time (most often, something from the future).
-Leakage inflates validation numbers in a way that quietly disappears the
-moment the model is used for real - the single most common way a
-backtest lies.</p>
-<p class="methodLabel">How we use it</p>
-<p>The whole pipeline is built around an explicit "as of date" cutoff
-(<code>pipeline.run()</code>'s own module docstring) - every feature is
-computed strictly before the date being predicted, walk-forward CV never
-trains on a later date than it tests, and the holdout dates are excluded
-from every stage of model selection, not just final scoring.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Leakage_(machine_learning)" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="park-factor">Park factor</dt>
+<dd><p>How much a ballpark adds to or takes away from scoring compared with an average park - each park's
+runs a game over the league's. Coors Field's thin air is the famous high one.</p>
+<p class="where">On the site: team profiles, and the hit chances in Beat the Streak.</p></dd>
 
-</div>
+<dt id="team-rating">Overall rating and recent form</dt>
+<dd><p>Our blend of a team's strength measures into one number (1.00 is average), and the same over its
+recent games.</p>
+<p class="where">On the site: <a href="./stats.html">MLB Stats</a> (Teams).</p></dd>
+</dl>
 </section>
 
-<section class="methodCategory" id="calibration">
-<h2>Probability Calibration</h2>
-<p class="methodCategoryNote">
-A model can rank outcomes well (good AUC) while still being over- or
-under-confident in its actual probability numbers. Calibration fixes the
-numbers without touching the ranking.
-</p>
-<div class="methodGrid">
+<section class="methodCategory" id="metrics-football">
+<h2>Football</h2>
+<dl class="terms">
+<dt id="epa">EPA (expected points added)</dt>
+<dd><p>Every down, distance and spot on the field is worth some number of points on average to the team with
+the ball - 1st and 10 at the opponent's 20 is worth far more than at your own 20. A play's EPA is how much
+it changed that. A 3rd-and-8 completion for 6 yards gains yards but loses expected points.</p>
+<p class="where">On the site: <a href="./nfl.html">NFL</a> Stats and Picks.</p></dd>
 
-<div class="methodCard" id="isotonic">
-<h3>Isotonic Regression</h3>
-<p class="methodLabel">What it is</p>
-<p>A non-parametric calibration method: it fits the best possible
-non-decreasing (monotonic) step function mapping raw model scores to
-corrected probabilities. Flexible - it can fix almost any shape of
-miscalibration - but needs more data than a parametric method to avoid
-overfitting the correction itself.</p>
-<p class="methodLabel">How we use it</p>
-<p>One of two candidate calibration methods in
-<code>ml_models.fit_calibrated</code>
-(<code>sklearn.calibration.CalibratedClassifierCV(method="isotonic")</code>),
-refit through the same walk-forward splitter as the underlying model.
-Selected in <code>scripts/train_hitter_hit_model.py:_select_calibration</code>
-by comparing holdout Brier score against the uncalibrated and sigmoid
-options.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Isotonic_regression" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="net-epa">Net EPA per play</dt>
+<dd><p>A team's offensive EPA per play minus the EPA per play its defense allows - one number for how much
+better it is than its opponents, play by play.</p>
+<p class="where">On the site: NFL power rankings.</p></dd>
 
-<div class="methodCard" id="platt">
-<h3>Platt Scaling (Sigmoid Calibration)</h3>
-<p class="methodLabel">What it is</p>
-<p>A parametric calibration method: fits a single logistic (sigmoid)
-curve mapping raw model scores to corrected probabilities. Needs less
-data than isotonic regression to calibrate reliably, but can only correct
-a sigmoid-shaped miscalibration pattern.</p>
-<p class="methodLabel">How we use it</p>
-<p>The other candidate in <code>ml_models.fit_calibrated</code>
-(<code>method="sigmoid"</code>), same selection process as isotonic
-above.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Platt_scaling" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="qb-plus">QB+</dt>
+<dd><p>A quarterback's EPA per dropback over his last 16 games, pulled toward a replacement-level backup when
+he has few.</p>
+<p class="where">On the site: NFL game picks, What if? and the Stats tab.</p></dd>
 
-</div>
+<dt id="units">Receiving+, Rushing+, Pass D+, Run D+</dt>
+<dd><p>Team unit ratings from EPA per play, each credited for the opponents it faced. 100 is league average,
+higher is always stronger, and 30 points is one standard deviation.</p>
+<p class="where">On the site: NFL Stats (Team units).</p></dd>
+
+<dt id="drive-stats">Points per drive and turnover margin</dt>
+<dd><p>Points a team scores per possession, and takeaways minus giveaways. Both feed the NFL pick model.</p>
+<p class="where">On the site: NFL game picks.</p></dd>
+
+<dt id="snap-share">Snap share</dt>
+<dd><p>The share of his side's plays a player was on the field for. A regular is on at least half over his
+last four active games.</p>
+<p class="where">On the site: What if? and Player Props.</p></dd>
+
+<dt id="floor">Floor</dt>
+<dd><p>The fewest a player has put up in a single game this season - his worst day.</p>
+<p class="where">On the site: <a href="./nfl.html">NFL</a> Player Props.</p></dd>
+</dl>
 </section>
 
-<section class="methodCategory" id="significance">
-<h2>Statistical Significance Testing</h2>
-<div class="methodGrid">
+<section class="methodCategory" id="metrics-money">
+<h2>Payroll</h2>
+<dl class="terms">
+<dt id="relative-payroll">Relative payroll</dt>
+<dd><p>A team's payroll per game over the league's that season. 2.0 spent twice the average. Dividing by the
+league's lets 1995 and 2025 be compared without adjusting for inflation.</p>
+<p class="where">On the site: <a href="./payroll.html">Payroll</a>.</p></dd>
 
-<div class="methodCard" id="wald">
-<h3>Coefficient Significance (Wald Test)</h3>
-<p class="methodLabel">What it is</p>
-<p>After fitting a model like logistic regression, each coefficient comes
-with a standard error; dividing the coefficient by its standard error
-gives a z-statistic, which converts to a p-value - the probability of
-seeing a coefficient this large by chance if the true effect were zero.
-This is what separates "this feature looks predictive in this sample"
-from "this feature is actually predictive" - a different question from
-the Regression &amp; Classification Models section above, which is about
-FITTING a model, not testing whether its coefficients are real.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>statsmodels.api.Logit</code>, fit once per feature alone and
-once with all features together, in
-<code>scripts/train_hitter_hit_model.py</code>/<code>train_game_pick_model.py</code>'s
-<code>significance_report</code>. This is real inference (fit on full
-history, not the holdout) - it answers "which features matter and in
-which direction," a different question from the walk-forward accuracy
-numbers above.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Wald_test" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="payroll-effectiveness">Payroll effectiveness</dt>
+<dd><p>Wins over average divided by payroll per win over the league's. Above 1 bought more winning per dollar
+than the league did.</p>
+<p class="where">On the site: <a href="./payroll.html">Payroll</a>.</p></dd>
 
-<div class="methodCard" id="binomial-test">
-<h3>Exact Binomial Test</h3>
-<p class="methodLabel">What it is</p>
-<p>Given n real coin-flip-style trials with a known number of successes,
-this asks: how likely is a rate this extreme (or more extreme) if the
-true underlying rate were actually the null value (e.g. 0.5, "no real
-skill difference")? Unlike a normal-approximation test, it computes the
-exact binomial probability directly rather than approximating - reliable
-even at the small n a fresh real-money backtest actually starts with (a
-handful of games, not thousands).</p>
-<p class="methodLabel">How we use it</p>
-<p><code>scipy.stats.binomtest</code>, wrapped as
-<code>evaluation.binomial_significance</code>. Applied to
-<code>beat_closing_line_rate</code> - a genuinely symmetric "whose squared
-error was lower on this game" comparison, where 0.5 really is the "no
-skill difference" null. Deliberately NOT applied to a plain accuracy rate
-(real MLB home teams win somewhat more than half their games, so 0.5
-isn't a fair null there) or to a betting win rate (bets are placed at
-different real prices, so win/loss counts alone can't measure edge - see
-the t-test below) - see <code>game_evaluation.py</code>'s own docstrings
-for exactly which rate gets which test and why. Quant-analytics item #5,
-"backtest scope and statistical significance."</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Binomial_test" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="expected-wins">Expected wins</dt>
+<dd><p>What the ten seasons whose relative payroll was closest won, plus the front office's recent edge - what
+a team "should" win for what it spent.</p>
+<p class="where">On the site: <a href="./payroll.html">Payroll</a>.</p></dd>
 
-<div class="methodCard" id="t-test">
-<h3>One-Sample t-Test</h3>
-<p class="methodLabel">What it is</p>
-<p>Tests whether the real mean of a sample of numbers is distinguishable
-from some null value, given the sample's own size and spread. Unlike a
-win/loss count, it uses the actual magnitude of each observation - the
-right tool when "how often" isn't the real question, "how much" is.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>scipy.stats.ttest_1samp</code>, wrapped as
-<code>evaluation.mean_significance</code>, tests each advised bet's real
-<code>bet_profit_units</code> against a null of 0 (breaking even) -
-reported as <code>roi_p_value</code>. This is the honest answer to "did
-the advised bets actually make money, or is this within noise": a bet's
-win/loss outcome alone doesn't capture the real price it was placed at (a
--150 favorite winning 55% of the time and a +150 underdog winning 55% of
-the time are very different real outcomes), but its real profit already
-prices that in. Quant-analytics item #5.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Student%27s_t-test#One-sample_t-test" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="front-office">Front office score</dt>
+<dd><p>How many wins a franchise beat its payroll's expectation by, averaged over its previous three seasons.</p>
+<p class="where">On the site: <a href="./payroll.html">Payroll</a>.</p></dd>
 
-</div>
+<dt id="spending-change">Spending change</dt>
+<dd><p>A team's relative payroll minus its average over the previous three seasons - positive means it spent
+up.</p>
+<p class="where">On the site: <a href="./payroll.html">Payroll</a>.</p></dd>
+
+<dt id="cash-cap">Cash paid and cap spending</dt>
+<dd><p>For NFL teams: the dollars actually paid to players that season (signing bonuses counted when paid),
+or what counted against the salary cap (bonuses spread over the contract).</p>
+<p class="where">On the site: NFL Payroll.</p></dd>
+</dl>
 </section>
 
-<section class="methodCategory" id="metrics">
-<h2>Evaluation Metrics</h2>
-<div class="methodGrid">
+<section class="methodCategory" id="metrics-betting">
+<h2>Betting</h2>
+<dl class="terms">
+<dt id="moneyline">Moneyline</dt>
+<dd><p>American odds on who wins. -150 means you risk $150 to win $100; +130 means $100 wins $130.</p>
+<p class="where">On the site: the "Vegas" number on every game pick.</p></dd>
 
-<div class="methodCard" id="brier">
-<h3>Brier Score</h3>
-<p class="methodLabel">What it is</p>
-<p>Mean squared error between a predicted probability and the actual
-binary outcome (0 or 1). Lower is better; 0 is perfect; a model that
-always predicts 0.5 scores 0.25 on a 50/50 outcome. Rewards both good
-ranking AND good calibration at once.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>evaluation.brier_score</code>/<code>ml_models.evaluate_classifier_predictions</code> -
-the primary metric used to pick between calibration methods, and the
-basis for <code>game_evaluation._beat_closing_line_rate</code>'s
-per-game model-vs-market comparison.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Brier_score" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="implied-probability">Implied probability</dt>
+<dd><p>The chance a price implies: -150 is 150 / 250 = 60%; +130 is 100 / 230 = 43.5%. Turning odds into a
+probability is <a href="#odds">converting odds</a>.</p>
+<p class="where">On the site: every game pick's Vegas number.</p></dd>
 
-<div class="methodCard" id="logloss">
-<h3>Log Loss (Cross-Entropy)</h3>
-<p class="methodLabel">What it is</p>
-<p>Negative log-likelihood of the actual outcome under the predicted
-probability. Like Brier score, it rewards calibrated probabilities - but
-it punishes a confident, wrong prediction (e.g. predicting 1% when the
-outcome happens) far more severely than Brier does, since the loss blows
-up as predicted probability approaches the wrong extreme.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>evaluation.log_loss</code>/<code>ml_models.evaluate_classifier_predictions</code> -
-the primary metric used to select model FAMILY (logistic regression vs.
-gradient boosting) before calibration is even considered.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Cross-entropy" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="devig">Vig and de-vig</dt>
+<dd><p>The two sides' implied chances add to more than 100% - 60% + 43.5% = 103.5% above. The extra is the
+sportsbook's cut, the vig. De-vigging scales both down to add to 100% (58% and 42%), the book's real view.</p>
+<p class="where">On the site: "Vegas" always means the de-vigged chance.</p></dd>
 
-<div class="methodCard" id="rocauc">
-<h3>ROC AUC</h3>
-<p class="methodLabel">What it is</p>
-<p>The probability that a classifier ranks a random positive example
-above a random negative one. Measures pure ranking/discrimination ability
-- unlike Brier/log loss, it's completely insensitive to whether the
-predicted probabilities themselves are well-calibrated.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>ml_models.evaluate_classifier_predictions</code> reports it
-alongside log loss for every classifier, as a check on whether a model
-that scores worse on log loss might still be separating outcomes better
-(or vice versa).</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Receiver_operating_characteristic" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="closing-line">Closing line</dt>
+<dd><p>The odds just before the game starts, after the market has absorbed all the news. Beating it is the
+hardest test of a pick model.</p>
+<p class="where">On the site: every MLB pick is graded against it.</p></dd>
 
-<div class="methodCard" id="permutation-importance">
-<h3>Permutation Feature Importance</h3>
-<p class="methodLabel">What it is</p>
-<p>A model-agnostic way to measure how much each feature actually
-matters: shuffle one feature's values (breaking its real relationship to
-the outcome) and see how much the model's performance drops. A bigger
-drop means the model was relying on that feature more.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>scripts/train_hitter_hit_model.py:feature_importance_report</code>
-via <code>sklearn.inspection.permutation_importance</code>, computed only
-on the untouched holdout - chosen deliberately over SHAP to avoid adding
-a new dependency for one report.</p>
-<a class="methodLink" href="https://scikit-learn.org/stable/modules/permutation_importance.html" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
+<dt id="edge">Edge</dt>
+<dd><p>Our chance minus the market's. We suggest a bet only when it's at least 5 points.</p>
+<p class="where">On the site: <a href="./predictive.html">MLB Picks</a>.</p></dd>
 
-<div class="methodCard" id="calibration-diagram">
-<h3>Calibration / Reliability Diagrams</h3>
-<p class="methodLabel">What it is</p>
-<p>A diagnostic that bins predictions by predicted probability and
-compares each bin's average predicted probability to that bin's actual
-outcome rate. A perfectly calibrated model's points fall on the diagonal
-- systematic over- or under-confidence shows up as a visible bend away
-from it.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>evaluation.calibration_table</code> - the same underlying idea
-that motivates fitting isotonic/Platt calibration in the first place
-(above), used here as a plain diagnostic table rather than a correction.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Calibration_(statistics)" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
-
-<div class="methodCard" id="pearson">
-<h3>Pearson Correlation Coefficient</h3>
-<p class="methodLabel">What it is</p>
-<p>A number from -1 to 1 measuring the strength and direction of a
-LINEAR relationship between two variables. 0 means no linear
-relationship (though a real nonlinear one could still exist).</p>
-<p class="methodLabel">How we use it</p>
-<p><code>ml_models.evaluate_predictions</code> reports it between
-predicted and actual values for every regression target (DK points,
-HR9), as a simple, standard companion to mean absolute error.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Pearson_correlation_coefficient" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
-
-</div>
-</section>
-
-<section class="methodCategory" id="resampling">
-<h2>Resampling</h2>
-<div class="methodGrid">
-
-<div class="methodCard" id="bootstrap">
-<h3>Bootstrap Resampling</h3>
-<p class="methodLabel">What it is</p>
-<p>Estimating the sampling distribution of a statistic by repeatedly
-drawing new samples, WITH replacement, from the real observed data
-itself, rather than assuming a theoretical distribution. Especially
-useful when the real underlying data-generating process is unknown or
-hard to model directly.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>scripts/backtest_streak_decision.py</code> resamples real
-historical (probability, outcome) day-pairs 1,000 times to compare the
-decision-theory play/sit rule against the status-quo rule under many
-plausible real day-orderings, reporting the real win rate and mean/median
-final streak across resamples - a genuine nonparametric bootstrap, no
-distribution assumed on the underlying probabilities.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Bootstrapping_(statistics)" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
-
-</div>
-</section>
-
-<section class="methodCategory" id="decision">
-<h2>Decision Theory</h2>
-<div class="methodGrid">
-
-<div class="methodCard" id="bellman">
-<h3>Dynamic Programming / Bellman Optimal Stopping</h3>
-<p class="methodLabel">What it is</p>
-<p>A way to solve sequential decision problems by working BACKWARD from
-the end: define the value of being in each state on the final day, then
-recursively define the value of each state one day earlier as the best
-of "stop now" vs. "the expected value of continuing," given tomorrow's
-already-solved values. This is Bellman's optimality principle - it
-collapses an exponentially large decision tree into one manageable pass
-through states and days.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>decision_theory.solve_reservation_thresholds</code> models "risk
-today's Beat the Streak pick, or protect the streak I already have" as a
-finite-horizon optimal-stopping problem: state = current streak length,
-recursion runs backward from the end of the remaining days. Because the
-next day's values are already known, the optimal action collapses to a
-closed-form probability threshold - <code>should_play</code> just
-compares today's real predicted probability against it.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Bellman_equation" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
-
-
-</div>
-</section>
-
-<section class="methodCategory" id="risk">
-<h2>Portfolio &amp; Risk Concepts</h2>
-<div class="methodGrid">
-
-<div class="methodCard" id="diversification">
-<h3>Diversification (Correlation-Aware Tie-Breaking)</h3>
-<p class="methodLabel">What it is</p>
-<p>The general finance idea that combining imperfectly-correlated bets
-reduces the risk of them all failing together, compared to betting the
-same underlying risk twice. Formally this requires estimating a real
-correlation or covariance between the bets.</p>
-<p class="methodLabel">How we use it</p>
-<p><b>Honestly labeled as a proxy, not the real thing</b>:
-<code>predictions._diversify_second_pick</code> never estimates an actual
-correlation. It's a sign-only heuristic: if a day's #1 and #2 picks share
-the same real game, and a comparably-ranked pick from a DIFFERENT game
-exists nearby, prefer it - because shared-game correlation can only ever
-raise the chance both picks miss together, never lower it, so the
-direction of the swap is safe even without knowing the real magnitude.
-Gated at 0.0 (a no-op) in production until backtest evidence justifies
-turning it on.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Diversification_(finance)" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
-
-
-
-</div>
-</section>
-
-<section class="methodCategory" id="sabermetrics">
-<h2>Sabermetric Domain Formulas</h2>
-<div class="methodGrid">
-
-<div class="methodCard" id="pythagorean">
-<h3>Pythagorean Expectation</h3>
-<p class="methodLabel">What it is</p>
-<p>Bill James' formula estimating a team's "true" win percentage from
-its runs scored and allowed - <code>RS^exp / (RS^exp + RA^exp)</code> -
-on the idea that runs scored/allowed are a more stable, less
-luck-affected signal than actual win/loss record over a partial season.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>teams.compute_strength_metrics</code> computes this per rolling
-window (with a custom-tuned exponent, <code>config.PYTHAGOREAN_EXPONENT</code>,
-not the classic 2), feeding the "Pythagorean strength"/"Pythagorean
-confidence" signals in <code>game_picks.py</code>.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Pythagorean_expectation" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
-
-<div class="methodCard" id="log5">
-<h3>log5</h3>
-<p class="methodLabel">What it is</p>
-<p>Also Bill James: an odds-ratio formula for combining two independent
-rates (a batter's rate against all pitchers, a pitcher's rate allowed to
-all batters) into the rate expected specifically in that matchup, given
-each side's rate relative to the league average.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>matchup._log5</code> combines a batter's WAVE hit rate with the
-opposing pitcher's blended PAVE allowed-rate into a real matchup-specific
-hit probability in <code>compute_matchup_hit_probability</code>.</p>
-<a class="methodLink" href="https://sabr.org/research/matchup-probabilities-major-league-baseball" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
-
-<div class="methodCard" id="park-factor">
-<h3>Park Factor</h3>
-<p class="methodLabel">What it is</p>
-<p>A per-venue adjustment for how much a ballpark inflates or suppresses
-scoring relative to a league-average park, so a hitter's raw numbers
-aren't unfairly credited/blamed for the park they happen to play in.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>teams.compute_park_factors</code> - each venue's average
-combined runs per game, normalized to the across-all-venues mean (1.0 =
-neutral), used to scale matchup rates in <code>matchup._park_factor_multiplier</code>.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Park_effects" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
-
-<div class="methodCard" id="fip">
-<h3>FIP (Fielding Independent Pitching)</h3>
-<p class="methodLabel">What it is</p>
-<p>A pitcher-evaluation stat built only from outcomes a pitcher directly
-controls (home runs, walks/HBP, strikeouts), deliberately excluding balls
-in play - since what happens to a ball in play depends heavily on the
-defense behind the pitcher, not just the pitcher. A cleaner signal of
-pitcher skill than ERA for that reason.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>age_curve.build_historical_pitcher_seasons</code> computes real
-FIP (<code>(13*HR + 3*(BB+HBP) - 2*SO)/IP + config.FIP_CONSTANT</code>) as
-an age-curve feature/label, used in place of ERA for exactly this
-reason.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Fielding_independent_pitching" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
-
-<div class="methodCard" id="statcast">
-<h3>Statcast-Derived Metrics (xBA, xwOBA, Barrel Rate, wOBA)</h3>
-<p class="methodLabel">What it is</p>
-<p>MLB's own tracking-data-based metrics: "expected" stats
-(<code>xBA</code>/<code>xwOBA</code>) model what a batted ball's outcome
-SHOULD have been given its exit velocity/launch angle, independent of
-whether a fielder happened to make a great play; "barrel" is a specific,
-officially-defined combination of exit velocity and launch angle known to
-produce great outcomes; wOBA weights every plate-appearance outcome by
-its real run value rather than counting a single and a home run equally.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>hitters.compute_quality_of_contact</code> consumes these as
-Statcast's own precomputed per-pitch columns directly (not
-independently re-derived) - averaged/rated over real batted-ball events
-and recency-window-blended, same as every other windowed signal here.</p>
-<a class="methodLink" href="https://www.mlb.com/glossary/statcast" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
-
-<div class="methodCard" id="decision-score">
-<h3>Decision Score</h3>
-<p class="methodLabel">What it is</p>
-<p>A plate-discipline metric: per real pitch, was swinging or taking the
-better choice FOR THIS BATTER right now, given the pitch's real Statcast
-zone and their own recency-windowed OPS-equivalent production in that
-specific zone (shrunk toward their own overall OPS, never a league
-average - "is this a good zone for me," not "is this objectively a good
-pitch")? Decision_Score is the real % of pitches where a batter's actual
-swing/take choice matched that advice.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>decision_score.compute_decision_score</code> builds each
-batter's real windowed OBP/SLG/OPS overall and per zone
-(<code>compute_batter_overall_ops</code>/<code>compute_zone_ops</code>,
-shrunk via <code>helpers.shrink_rate</code>,
-<code>config.DECISION_SCORE_ZONE_SHRINKAGE_STRENGTH</code> pseudo-PAs),
-then compares each pitch's zone-OPS against that batter's own overall OPS
-to classify the advised action. A real, no-lookahead backtest
-(<code>scripts/backtest_decision_score.py</code>; train Mar-Jun 2025,
-test Jul-Sep 2025, held out entirely from the reference it's graded
-against) validated the core zone signal: PA-ending pitches where the
-batter's real choice matched the advice scored a real 0.768 mean PA value
-(on-base + total bases) vs. 0.624 for mismatched ones (n=86,389,
-p&lt;0.0001 pooled AND per-batter-paired). A real, honest negative
-finding from that same backtest: hand-designed count-context/game-
-situation threshold adjustments did NOT improve on the zone-only
-baseline at any magnitude swept, so both ship at a neutral 1.0 (the
-classifiers themselves - <code>classify_count_context</code>, the real
-high-leverage flag - stay in the code, just not yet wired to move the
-threshold). A separate real, no-lookahead significance test at the team
-level (does a team's average Decision_Score, weighted by who actually
-played, predict real game outcomes beyond the existing team model) did
-NOT clear a real bar (p=0.16 controlling for pyth_Strength) - so
-Decision_Score is a player-level-only metric here, not part of any team
-rating or Automated Game Pick.</p>
-<a class="methodLink" href="https://baseballsavant.mlb.com/leaderboard/swing-take" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
-
-</div>
-</section>
-
-<section class="methodCategory" id="betting">
-<h2>Sports-Betting Math</h2>
-<div class="methodGrid">
-
-<div class="methodCard" id="devig">
-<h3>Moneyline Implied Probability &amp; De-Vig</h3>
-<p class="methodLabel">What it is</p>
-<p>American moneyline odds convert to an "implied probability" per side,
-but a real two-sided book's implied probabilities always sum to MORE
-than 100% - the extra is the bookmaker's built-in margin (the "vig" or
-"overround"). De-vigging normalizes both sides back down so they sum to
-exactly 100%, recovering the book's actual best real estimate of the true
-probability.</p>
-<p class="methodLabel">How we use it</p>
-<p><code>market_odds.moneyline_to_implied_probability</code> (standard
-American-odds conversion) and <code>devig</code> (proportional
-normalization) turn real ESPN/DraftKings moneylines into a real
-<code>market_home_win_probability</code>, logged alongside this
-project's own model probability as an honest external benchmark - "did
-we beat the closing line," not just our own heuristic.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Vigorish" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
-
-</div>
-</section>
-
-<section class="methodCategory" id="engineering">
-<h2>Data &amp; Feature Engineering</h2>
-<div class="methodGrid">
-
-
-<div class="methodCard" id="idempotence">
-<h3>Idempotent Dedup Keys</h3>
-<p class="methodLabel">What it is</p>
-<p>Designing a write/append operation so running it twice with the same
-input produces the same result as running it once - usually by deduping
-on a real natural key rather than blindly appending. Makes a daily
-pipeline safe to re-run without corrupting its own history.</p>
-<p class="methodLabel">How we use it</p>
-<p>Every append-only log in this project dedupes on a real composite key
-before writing - predictions on <code>(date, key_mlbam, metric)</code>
-(<code>predictions.append_predictions</code>), game picks on
-<code>(date, game_pk, metric)</code> (<code>game_predictions.append_game_predictions</code>),
-keeping the LAST (most-resolved) row on a collision so a re-run never
-clobbers an already-known real outcome.</p>
-<a class="methodLink" href="https://en.wikipedia.org/wiki/Idempotence" target="_blank" rel="noopener">Learn more &rarr;</a>
-</div>
-
-</div>
+<dt id="units-bet">Units</dt>
+<dd><p>A standard stake - 1% of a bankroll - so records compare across bettors. Sizes come from
+<a href="#kelly">the Kelly rule</a>.</p>
+<p class="where">On the site: <a href="./predictive.html">MLB Picks</a>' bet record.</p></dd>
+</dl>
 </section>
 
 </div>
+
+<div class="howPanel" id="methods" hidden>
+
+<p class="methodologyIntro">The statistics behind the site, in the order an intro course would teach them.
+Each idea comes with a sports example and where it does real work here - so you can learn the method and
+see it in use at the same time.</p>
+
+<ul class="toc">
+<li><a href="#methods-describing">Describing data</a></li>
+<li><a href="#methods-small-samples">Small samples</a></li>
+<li><a href="#methods-probability">Probability</a></li>
+<li><a href="#methods-models">Relationships and models</a></li>
+<li><a href="#methods-testing">Testing ideas</a></li>
+<li><a href="#methods-forecasts">Judging forecasts</a></li>
+<li><a href="#methods-simulation">Simulation</a></li>
+<li><a href="#methods-decisions">Making decisions</a></li>
+</ul>
+
+<section class="methodCategory" id="methods-describing">
+<h2>1. Describing data</h2>
+<p class="methodCategoryNote">Before predicting anything, you summarize what happened.</p>
+<dl class="terms">
+<dt id="rates">Rates and denominators</dt>
+<dd><p><span class="lbl">The idea</span> A rate is a count over the chances it had - and which chances you
+count changes what it means.</p>
+<p><span class="lbl">In sports</span> Batting average divides hits by at-bats; on-base percentage divides by
+plate appearances, so walks count. A patient hitter looks better by the second.</p>
+<p><span class="lbl">On this site</span> <a href="#wave">WAVE</a> counts at-bats only. We tested both: replaying
+the 2026 season, the Beat the Streak picks hit more often using at-bats than every plate appearance.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Batting_average_(baseball)" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="weighted-average">Weighted averages</dt>
+<dd><p><span class="lbl">The idea</span> An average where some numbers count more than others.</p>
+<p><span class="lbl">In sports</span> Is a hitter's last week or his whole season the better guide? Some of
+both: recent games say more about his form now, the season says more about who he is.</p>
+<p><span class="lbl">On this site</span> WAVE, CAVE and WOPS weight the full season and the last 81, 30 and 10
+days, so a hot or cold stretch moves them without taking over.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Weighted_arithmetic_mean" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="standard-deviation">Standard deviation</dt>
+<dd><p><span class="lbl">The idea</span> How spread out a set of numbers is - roughly, how far a typical value
+sits from the average.</p>
+<p><span class="lbl">In sports</span> Two teams both average 4.5 runs; one scores 4 or 5 almost every night,
+the other 0 or 9. Same average, very different standard deviation - and the steady one wins more close
+games.</p>
+<p><span class="lbl">On this site</span> It's the unit for our "plus" grades: on <a href="#stuff-plus">Stuff+</a>
+and <a href="#decision-plus">Decision+</a> every 10 points is one standard deviation, on the NFL
+<a href="#units">unit ratings</a> every 30.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Standard_deviation" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="z-score">Z-scores and "plus" scales</dt>
+<dd><p><span class="lbl">The idea</span> A z-score is how many standard deviations a value is from the average:
+<code>(value - average) / standard deviation</code>. It puts numbers with different units on one scale.</p>
+<p><span class="lbl">In sports</span> Is a 98 mph fastball or a 3,000 rpm curveball more special? Their units
+can't be compared; their z-scores can.</p>
+<p><span class="lbl">On this site</span> Stuff+ is <code>100 + 10 × z</code>. A 120 is two standard deviations
+above average - in a bell curve, about the top 2-3% of pitchers.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Standard_score" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="percentile">Percentiles</dt>
+<dd><p><span class="lbl">The idea</span> The share of a group a value is better than. The 90th percentile beats
+90%.</p>
+<p><span class="lbl">In sports</span> Baseball Savant's red-and-blue bars are percentiles: a 99 in exit
+velocity hits the ball harder than 99% of hitters.</p>
+<p><span class="lbl">On this site</span> The bars in <a href="./stats.html">Look up a player</a> rank him
+among regular players, worst on the left to best on the right.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Percentile" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+</dl>
+</section>
+
+<section class="methodCategory" id="methods-small-samples">
+<h2>2. Small samples</h2>
+<p class="methodCategoryNote">Sports hand you small samples every day. Knowing how little they say is half of
+analytics.</p>
+<dl class="terms">
+<dt id="noise">Sample size and noise</dt>
+<dd><p><span class="lbl">The idea</span> The fewer the chances, the more luck moves a rate.</p>
+<p><span class="lbl">In sports</span> A true .250 hitter goes 4-for-5 or better about 1.6% of the time - rare
+in any one game, but with about 270 hitters starting every day, someone does it almost daily. Nobody thinks he became an .800
+hitter.</p>
+<p><span class="lbl">On this site</span> It's why every rate we show is blended or pulled toward the league,
+and why the picks pages show how many picks a record is from.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Law_of_large_numbers" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="regression-to-mean">Regression to the mean</dt>
+<dd><p><span class="lbl">The idea</span> An extreme result is usually part skill, part luck. The luck doesn't
+repeat, so the next result tends to land closer to average.</p>
+<p><span class="lbl">In sports</span> The "Sports Illustrated cover jinx": players reach the cover after a
+career-best stretch, and the next stretch is usually worse - not a curse, just luck running out.</p>
+<p><span class="lbl">On this site</span> Decision+ carries over from one season to the next at a
+<a href="#correlation">correlation</a> of 0.75, so a hitter 20 points above average is expected about 15 above
+next year. NFL penalty rates barely carry over from one half of a season to the next, so the simulator pulls
+every team's nearly all the way to the league's.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Regression_toward_the_mean" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="shrinkage">Shrinkage</dt>
+<dd><p><span class="lbl">The idea</span> Estimate a rate as if the player started with some extra, average
+results already on his record. With few real results the average dominates; with many, his own do. (It's a
+simple form of Bayesian estimation.)</p>
+<p><span class="lbl">In sports</span> Add 50 at-bats of a .245 league average to a hitter's line: a 4-for-5
+start becomes <code>(4 + 12.25) / (5 + 50)</code> = .295, while 60-for-200 barely moves (.289).</p>
+<p><span class="lbl">On this site</span> That's WAVE's exact recipe. Stuff+ adds 100 average pitches, Decision+
+300, NFL team rates 150 plays - and the simulator starts a pitcher or hitter with few pitches from what his
+Stuff+ or Decision+ says.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Empirical_Bayes_method" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="confidence-interval">Confidence intervals</dt>
+<dd><p><span class="lbl">The idea</span> A range of values the truth could plausibly be, given the data - wider
+when the sample is small.</p>
+<p><span class="lbl">In sports</span> A pick model that's 7-for-10 might be a 70% model - or a 40% one that got
+lucky. The 95% interval for 7 of 10 runs from about 40% to 89%. At 70 of 100 it narrows to 60% to 78%.</p>
+<p><span class="lbl">On this site</span> Our backtests report intervals, not just averages - see the
+<a href="#bootstrap">bootstrap</a> below.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Binomial_proportion_confidence_interval" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+</dl>
+</section>
+
+<section class="methodCategory" id="methods-probability">
+<h2>3. Probability</h2>
+<p class="methodCategoryNote">The language every pick on this site is written in.</p>
+<dl class="terms">
+<dt id="complement">The complement rule</dt>
+<dd><p><span class="lbl">The idea</span> The chance something happens at least once is one minus the chance it
+never does.</p>
+<p><span class="lbl">In sports</span> A .280 hitter misses 72% of the time, so in 3.5 at-bats he misses every
+time about <code>0.72^3.5</code> = 32% of the time - and gets at least one hit 68%.</p>
+<p><span class="lbl">On this site</span> That's <a href="#hit-chance">hit chance</a>.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Complementary_event" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="independence">Independence</dt>
+<dd><p><span class="lbl">The idea</span> Two events are independent if one happening doesn't change the chance of
+the other. Then you can multiply their chances.</p>
+<p><span class="lbl">In sports</span> Two hitters in the same game aren't fully independent: a dominant starter
+or a cold, windy night hurts them both, so they tend to go hitless together.</p>
+<p><span class="lbl">On this site</span> Hit chance treats each at-bat as independent - close, but not exact,
+which is one reason the pick models' chances are checked against real results (see
+<a href="#calibration">calibration</a>).</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Independence_(probability_theory)" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="odds">Odds and log-odds</dt>
+<dd><p><span class="lbl">The idea</span> Odds are the chance something happens over the chance it doesn't: 60%
+is 60/40 = 1.5. Log-odds, the logarithm of that, turn a 0-to-100% scale into one with no ends, where
+adding works.</p>
+<p><span class="lbl">In sports</span> Each point of NFL spread is worth about 0.137 in log-odds: a 3-point
+favorite wins about 60%, a 7-point favorite about 72%.</p>
+<p><span class="lbl">On this site</span> What if? and the NFL simulator turn point edges into win chances this
+way; a <a href="#logistic-regression">logistic regression</a> works in log-odds throughout.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Logit" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="log5">log5</dt>
+<dd><p><span class="lbl">The idea</span> Bill James' rule for combining two rates measured against everyone into
+the rate for one matchup, each relative to the league.</p>
+<p><span class="lbl">In sports</span> A .300 hitter against a pitcher who allows .220, in a .250 league:
+<code>(.300 × .220 / .250) / (that + .700 × .780 / .750)</code> = .266. Good hitter, tough pitcher - a bit above
+average.</p>
+<p><span class="lbl">On this site</span> Beat the Streak's matchup between each hitter's WAVE and the starter's
+<a href="#pave">PAVE</a>.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Log5" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="expected-value">Expected value</dt>
+<dd><p><span class="lbl">The idea</span> The average result of a bet if you could make it over and over: each
+outcome times its chance, added up.</p>
+<p><span class="lbl">In sports</span> $100 on a +150 underdog you think wins 45%: <code>0.45 × $150 - 0.55 ×
+$100</code> = +$12.50. You'll lose this bet more often than not, and it's still a good one.</p>
+<p><span class="lbl">On this site</span> A bet is suggested only when our chance gives it a clear positive
+expected value against the market (an <a href="#edge">edge</a> of 5 points or more).</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Expected_value" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+</dl>
+</section>
+
+<section class="methodCategory" id="methods-models">
+<h2>4. Relationships and models</h2>
+<p class="methodCategoryNote">How one thing moves with another - and how to turn that into a prediction.</p>
+<dl class="terms">
+<dt id="correlation">Correlation</dt>
+<dd><p><span class="lbl">The idea</span> A number from -1 to 1 for how closely two things move together in a
+straight line. 0 is no straight-line relationship; it isn't proof that one causes the other.</p>
+<p><span class="lbl">In sports</span> Split each pitcher's season into odd and even games. His Stuff+ in one
+half matches the other at 0.91; his runs allowed, only 0.24. Stuff is a skill you can measure quickly; runs
+allowed take far longer to mean much.</p>
+<p><span class="lbl">On this site</span> That split-half test is how we checked Stuff+ (and Decision+, 0.75
+season to season) before using either.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Pearson_correlation_coefficient" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="linear-regression">Linear regression</dt>
+<dd><p><span class="lbl">The idea</span> The straight line that best fits one number from others. Its slope says
+how much the result moves per unit of the input.</p>
+<p><span class="lbl">In sports</span> Across NFL games, every extra yard a team gains is worth about 0.07
+points - so a 100-yard edge is about a touchdown.</p>
+<p><span class="lbl">On this site</span> What if? uses that slope to turn yards into points.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Linear_regression" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="logistic-regression">Logistic regression</dt>
+<dd><p><span class="lbl">The idea</span> Regression for yes-or-no outcomes: a weighted sum of inputs, in
+<a href="#odds">log-odds</a>, turned into a chance between 0 and 100%.</p>
+<p><span class="lbl">In sports</span> Win or lose: each input - point differential, the quarterback, turnovers -
+pushes the log-odds up or down by its weight.</p>
+<p><span class="lbl">On this site</span> The NFL game picks are a logistic regression on Pythagorean
+strength, EPA edges, turnover margin, points per drive and each starter's QB+.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Logistic_regression" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="gradient-boosting">Gradient boosting</dt>
+<dd><p><span class="lbl">The idea</span> Hundreds of small decision trees ("is velocity over 95? is the count
+0-2?"), each built to fix the mistakes of the ones before. It finds curves and combinations a straight line
+misses.</p>
+<p><span class="lbl">In sports</span> A 92 mph fastball can be great with lots of rise and ordinary without - the
+value of speed depends on movement. Trees catch interactions like that.</p>
+<p><span class="lbl">On this site</span> Stuff+ is a boosted model per pitch group, and so is the Beat the Streak
+hit model.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Gradient_boosting" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="nearest-neighbors">Nearest neighbors</dt>
+<dd><p><span class="lbl">The idea</span> Predict by finding the most similar past cases and seeing what happened
+to them. No equation - just comparisons.</p>
+<p><span class="lbl">In sports</span> A 27-year-old with a .280 average: what did the 25 most similar 27-year-old
+seasons do the next year?</p>
+<p><span class="lbl">On this site</span> <a href="./age-curves.html">Age Curves</a> projects next season from
+exactly those 25 comparable seasons, with the range they spanned.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="overfitting">Overfitting</dt>
+<dd><p><span class="lbl">The idea</span> A model that memorizes its data - noise included - instead of learning
+what carries over. It looks brilliant on the past and fails on the future.</p>
+<p><span class="lbl">In sports</span> "Teams wearing gray on Tuesdays are 14-3" - a pattern, but not one that
+will hold.</p>
+<p><span class="lbl">On this site</span> Each pitcher's Stuff+ comes from a model that never saw his pitches, so it
+can't remember his results; every model is judged only on games it wasn't trained on (see
+<a href="#walk-forward">walk-forward testing</a>).</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Overfitting" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+</dl>
+</section>
+
+<section class="methodCategory" id="methods-testing">
+<h2>5. Testing ideas</h2>
+<p class="methodCategoryNote">How we decide whether something is real - and whether it's worth using.</p>
+<dl class="terms">
+<dt id="p-value">Hypothesis tests and p-values</dt>
+<dd><p><span class="lbl">The idea</span> Assume there's no effect, then ask how likely data this extreme would
+be. That's the p-value. A small one (under 0.05, by convention) says "probably not just chance."</p>
+<p><span class="lbl">In sports</span> A coin-flip picker goes 60-for-100 about 3% of the time - so a 60% record
+over 100 picks is decent evidence of skill. Over 10 picks (6-4), it's no evidence at all.</p>
+<p><span class="lbl">On this site</span> Across 48,804 hitter-games, facing a pitcher with better Stuff+ meant
+fewer hits at p = 0.00000005 - about as sure as statistics gets.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/P-value" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="practical-significance">Significant isn't the same as useful</dt>
+<dd><p><span class="lbl">The idea</span> A p-value says an effect is real, not that it's big - or that it adds
+anything to what you already know.</p>
+<p><span class="lbl">In sports</span> Teams do score slightly more in warm weather - but if you already know the
+park and the pitchers, temperature may add almost nothing.</p>
+<p><span class="lbl">On this site</span> That Stuff+ effect, real as it was, didn't improve the hit model: it
+already knew how hittable each pitcher had been, and its accuracy didn't measurably change. So it isn't in
+the model. (Stuff+ still helps the simulator with pitchers it has seen little of.)</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Effect_size" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="backtest">Backtests and holdouts</dt>
+<dd><p><span class="lbl">The idea</span> Test a model on past games it never learned from, scored exactly as it
+would have been live. A holdout is a final stretch kept untouched until the very end.</p>
+<p><span class="lbl">In sports</span> It's a mock draft graded against how the players actually turned out.</p>
+<p><span class="lbl">On this site</span> No change to a pick model ships without one, and the
+<a href="https://github.com/JMerchen/mlb_metrics#readme">README</a> keeps the results - the ones that failed
+too.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Backtesting" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="walk-forward">Walk-forward testing</dt>
+<dd><p><span class="lbl">The idea</span> Train on everything before a date, predict the next stretch, step
+forward and repeat - never using the future to predict the past.</p>
+<p><span class="lbl">In sports</span> Predicting May's games with a model trained through April, then June's with
+one trained through May - the way you'd really have had to do it.</p>
+<p><span class="lbl">On this site</span> How every pick model is chosen and checked, by month or by week.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Walk_forward_optimization" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="leakage">Data leakage</dt>
+<dd><p><span class="lbl">The idea</span> When a model sees information it wouldn't have had at prediction time.
+Its backtest looks great; live, it falls apart.</p>
+<p><span class="lbl">In sports</span> Rating a starter with a season ERA that includes the very game you're
+predicting.</p>
+<p><span class="lbl">On this site</span> Every feature is computed through the day before the game - a pitcher's
+Stuff+ in a backtest uses only pitches he'd already thrown.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Leakage_(machine_learning)" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="bootstrap">The bootstrap</dt>
+<dd><p><span class="lbl">The idea</span> To see how much a result could vary, resample your own data - draw
+from it, with replacement, a thousand times - and recompute it each time. The spread is your uncertainty.</p>
+<p><span class="lbl">In sports</span> Rebuild a season by drawing 162 games at random from the real ones, a
+thousand times, and see how much the team's record swings.</p>
+<p><span class="lbl">On this site</span> Our model comparisons report a bootstrapped 95% interval for the
+difference - for the Stuff+ test, -0.0007 to +0.0005 in Brier score, which straddles zero: no measurable
+change.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Bootstrapping_(statistics)" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+</dl>
+</section>
+
+<section class="methodCategory" id="methods-forecasts">
+<h2>6. Judging forecasts</h2>
+<p class="methodCategoryNote">A 60% pick that loses wasn't necessarily wrong. These tools grade probabilities
+fairly.</p>
+<dl class="terms">
+<dt id="brier">Brier score</dt>
+<dd><p><span class="lbl">The idea</span> The average squared gap between each forecast and what happened (1 or 0).
+Lower is better; always saying 50% scores 0.25.</p>
+<p><span class="lbl">In sports</span> Say 70% and the team wins: <code>(1 - 0.7)²</code> = 0.09. Say 70% and it
+loses: <code>0.7²</code> = 0.49.</p>
+<p><span class="lbl">On this site</span> Baseball games are close to coin flips - our MLB game models land
+around 0.244, a real but modest edge on 0.25. It's the score we choose models by.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Brier_score" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="log-loss">Log loss</dt>
+<dd><p><span class="lbl">The idea</span> Like Brier, but a confident miss costs far more: saying 99% and being
+wrong is a disaster.</p>
+<p><span class="lbl">In sports</span> "There's no way they lose" - log loss is the score that makes that
+expensive.</p>
+<p><span class="lbl">On this site</span> Reported next to Brier for every pick model.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Cross-entropy" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="calibration">Calibration</dt>
+<dd><p><span class="lbl">The idea</span> Forecasts are calibrated when they mean what they say: the games called
+60% are won about 60% of the time.</p>
+<p><span class="lbl">In sports</span> A weather forecaster's 30% days should rain about 3 times in 10. A picker
+whose "locks" win 55% isn't calibrated.</p>
+<p><span class="lbl">On this site</span> The <a href="./predictive.html">MLB Picks</a> chart "When we were more
+sure, were we right more often?" is a calibration check, and every model's chances are adjusted after
+training so they line up.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Calibration_(statistics)" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="auc">AUC</dt>
+<dd><p><span class="lbl">The idea</span> How well a model ranks: the chance it puts a random "yes" above a random
+"no". 0.5 is a coin flip, 1.0 is perfect. It ignores whether the percentages themselves are right.</p>
+<p><span class="lbl">In sports</span> Does the hitter we ranked higher get a hit more often than the one we
+ranked lower?</p>
+<p><span class="lbl">On this site</span> The Beat the Streak hit model's is about 0.60. That sounds low - but a
+single game is mostly luck, which is exactly why a long streak is so hard.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Receiver_operating_characteristic" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="market-benchmark">The market as a benchmark</dt>
+<dd><p><span class="lbl">The idea</span> Compare a model with the best forecast already out there, not with
+nothing.</p>
+<p><span class="lbl">In sports</span> Betting markets pool thousands of bettors' money and information; their
+closing lines are hard to beat.</p>
+<p><span class="lbl">On this site</span> Every pick sits next to the <a href="#devig">de-vigged</a> Vegas chance,
+and when the NFL model disagrees with Vegas sharply, it defers - Vegas has been right more often there.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Efficient-market_hypothesis" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+</dl>
+</section>
+
+<section class="methodCategory" id="methods-simulation">
+<h2>7. Simulation</h2>
+<p class="methodCategoryNote">When the math gets too tangled to solve, play it out.</p>
+<dl class="terms">
+<dt id="monte-carlo">Monte Carlo simulation</dt>
+<dd><p><span class="lbl">The idea</span> Answer "how often?" by playing a random process many times and
+counting. The more runs, the smaller the error.</p>
+<p><span class="lbl">In sports</span> Play a matchup 1,000 times; if one team wins 600, its chance is about 60% -
+give or take 3 points, since <code>2 × √(0.6 × 0.4 / 1,000)</code> ≈ 0.03.</p>
+<p><span class="lbl">On this site</span> "Simulate it 1,000 times" in both game simulators: win chances, the
+spread of scores and each player's chances of a hit, a homer or 100 yards.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Monte_Carlo_method" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="markov">Markov chains and base-out states</dt>
+<dd><p><span class="lbl">The idea</span> A process that moves between states, where what happens next depends
+only on where you are now, not how you got there.</p>
+<p><span class="lbl">In sports</span> Baseball has 24 base-out states (8 ways to fill the bases, 3 out counts). A
+single with a runner on first and one out leads to first-and-second 72% of the time and first-and-third
+25%.</p>
+<p><span class="lbl">On this site</span> The MLB simulator moves runners exactly this way, with each play's real
+outcomes in each state; football's equivalent is down, distance and field position.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Markov_chain" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="calibrating-sims">Checking a simulation against reality</dt>
+<dd><p><span class="lbl">The idea</span> A simulation is only as good as its match to real games, so measure it.</p>
+<p><span class="lbl">In sports</span> If simulated teams score 5.5 runs a game, something's wrong - real ones
+score about 4.5.</p>
+<p><span class="lbl">On this site</span> Over 2,000 simulated games, MLB teams score 4.44 runs, strike out 22.9% and
+steal 0.74 bases a game, against the league's 4.46, 22.2% and 0.74.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Verification_and_validation_of_computer_simulation_models" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+</dl>
+</section>
+
+<section class="methodCategory" id="methods-decisions">
+<h2>8. Making decisions</h2>
+<p class="methodCategoryNote">A good forecast still needs a good decision rule.</p>
+<dl class="terms">
+<dt id="kelly">The Kelly rule</dt>
+<dd><p><span class="lbl">The idea</span> How much of a bankroll to stake on a bet with an edge: enough to grow it
+fastest over time, never so much that a losing run ruins you. Stake more when the edge is bigger.</p>
+<p><span class="lbl">In sports</span> At even money with a 55% chance, Kelly says 10% of the bankroll. Since our
+55% is itself an estimate, we bet half that.</p>
+<p><span class="lbl">On this site</span> Suggested bets use half-Kelly in <a href="#units-bet">units</a>, capped at
+2 units a game and 5 a day.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Kelly_criterion" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="optimal-stopping">Optimal stopping</dt>
+<dd><p><span class="lbl">The idea</span> When to stop and lock in what you have versus keep going, solved by
+working backward from the end (dynamic programming).</p>
+<p><span class="lbl">In sports</span> In Beat the Streak, a long streak is worth protecting: some days the best
+pick isn't good enough to risk it, and sitting out keeps the streak alive.</p>
+<p><span class="lbl">On this site</span> Each day's play-or-sit call compares the pick's chance with a threshold
+that depends on the current streak and the days left - the "Sat out" days in the Picks log.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Optimal_stopping" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+</dl>
+</section>
+
+</div>
+
+</div>
+
+<script>
+// The three tabs, kept in the address (#metrics, #methods, or any term's
+// own id) so a link can open a tab - or a term inside one - directly.
+(() => {
+const panels = [...document.querySelectorAll(".howPanel")]
+const buttons = [...document.querySelectorAll("#howTabs [data-panel]")]
+const show = id => {
+const target = id ? document.getElementById(id) : null
+const panel = target ? (target.classList.contains("howPanel") ? target : target.closest(".howPanel")) : null
+const active = panel || panels[0]
+panels.forEach(p => { p.hidden = p !== active })
+buttons.forEach(b => b.classList.toggle("active", b.dataset.panel === active.id))
+if(target && target !== active){ target.scrollIntoView() }
+}
+buttons.forEach(b => b.addEventListener("click", () => {
+history.replaceState(null, "", `#${b.dataset.panel}`)
+show(b.dataset.panel)
+}))
+window.addEventListener("hashchange", () => show(decodeURIComponent(location.hash.slice(1))))
+show(decodeURIComponent(location.hash.slice(1)))
+})()
+</script>
 
 <script src="./install.js"></script>
 

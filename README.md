@@ -3,8 +3,12 @@
 Daily updated hitter/pitcher/team metrics (WAVE, PAVE, Game_Hit_Probability,
 team Strength/Confidence) built from rolling windows of Statcast data, published
 to `docs/` as a GitHub Pages dashboard, plus NFL game picks, stats, player
-props and prospect boards. The site's own "How it works" page explains each
-tool, the models and the terms.
+props and prospect boards. The site's own "How it works" page
+(`docs/methodology.html`) has three tabs: Using the site (each tool, the
+models, site terms), Metrics (every number the site shows, grouped by what
+it measures) and Statistical methods (the statistics behind it, taught
+through sports examples in intro-course order). Each term has an id, so
+`methodology.html#shrinkage` opens its tab at that term.
 
 **Removed (2026-10-27):** the NFL Fantasy draft tab (bestball rankings,
 draft assistant), all DFS code (MLB and NFL lineup optimizers, salary
