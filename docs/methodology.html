@@ -1001,10 +1001,14 @@ change.</p>
 fairly.</p>
 <dl class="terms">
 <dt id="brier">Brier score</dt>
-<dd><p><span class="lbl">The idea</span> The average squared gap between each forecast and what happened (1 or 0).
-Lower is better; always saying 50% scores 0.25.</p>
-<p><span class="lbl">In sports</span> Say 70% and the team wins: <code>(1 - 0.7)²</code> = 0.09. Say 70% and it
-loses: <code>0.7²</code> = 0.49.</p>
+<dd><p><span class="lbl">The idea</span> Score each forecast by how far it was from what happened, counting a win
+as 1 and a loss as 0: <code>(forecast - result)²</code>. Squaring makes a big miss cost much more than a small
+one. Average over every game; lower is better, and 0 is perfect.</p>
+<p><span class="lbl">In sports</span> You give a team a 70% chance. If it wins, the result is 1:
+<code>(0.70 - 1)²</code> = 0.09. If it loses, the result is 0: <code>(0.70 - 0)²</code> = 0.49. Saying 50%
+scores <code>(0.50 - 1)²</code> or <code>(0.50 - 0)²</code> = 0.25 either way, so 0.25 is the coin-flip
+baseline. If your 70% teams really win 7 in 10, you average <code>0.7 × 0.09 + 0.3 × 0.49</code> = 0.21 -
+better than the coin flip.</p>
 <p><span class="lbl">On this site</span> Baseball games are close to coin flips - our MLB game models land
 around 0.244, a real but modest edge on 0.25. It's the score we choose models by.</p>
 <p class="where"><a href="https://en.wikipedia.org/wiki/Brier_score" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
