@@ -208,6 +208,7 @@ def _write_last_week_whatif(fresh: dict, prior_season: dict, season: int, week: 
     columns = ["game_id", "season", "week", "home_team", "away_team", "home_qb_id", "away_qb_id",
                "gameday", "home_moneyline", "away_moneyline", "home_qb_name", "away_qb_name"]
     games = games[[c for c in columns if c in games.columns]]
+    games = nfl_game_picks.correct_listed_starters(games, history["weekly"], history["rosters_weekly"])
     probs = nfl_game_picks.compute_game_win_probabilities(master, qb_continuity, history["weekly"], games)
     probs = nfl_game_picks.apply_ml_model(probs, master, qb_continuity, history["weekly"], games)
     probs = nfl_game_picks.apply_market_tiebreak(probs, _build_market_probabilities(games))
@@ -319,6 +320,13 @@ def run(
             for column in ("total_line", "roof", "stadium_id", "home_qb_name", "away_qb_name"):
                 if column in schedules.columns:
                     this_week_games[column] = schedules.loc[this_week_games.index, column]
+            # The feed's listed starters can be stale (a QB on injured
+            # reserve isn't on the injury report); everything below - the
+            # picks, What if? and the report repricing - uses the corrected
+            # ones.
+            this_week_games = nfl_game_picks.correct_listed_starters(
+                this_week_games, history["weekly"], history["rosters_weekly"]
+            )
 
             # Real, direct user request (2026-09-16): matchup-based
             # player prop rankings - reuses this SAME real no-lookahead
