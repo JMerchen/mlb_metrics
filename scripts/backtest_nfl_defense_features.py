@@ -15,6 +15,10 @@ features are and recency-blended the live way (nfl_team_strength
     both            the two together
     off_def_epa_play     offensive_edge and defensive_edge both per PLAY
     off_def_epa_play_ppd that, plus points allowed per drive
+    pp_opp_w             per play, each game net of w x how far the
+                         opponent's offense (for a defense) or defense
+                         (for an offense) had been from the league
+                         before that game
 
 Walk-forward 2019-2026 with the live logistic regression (C as live),
 refit on earlier seasons; reports log loss, Brier, a paired bootstrap
@@ -67,10 +71,28 @@ def defense_games() -> pd.DataFrame:
     g["ppd_allowed"] = g["points"] / g["drives"]
     g["epa_play_allowed"] = g["epa"] / g["plays"]
     g["epa_play"] = g["off_epa"] / g["off_plays"]
+    # Each game's opponent, and how good its offense and defense had been
+    # before that game (last season plus this one's earlier weeks), against
+    # the league: what an average team would have done that day.
+    opp = g[["game_id", "team"]].merge(g[["game_id", "team"]], on="game_id", suffixes=("", "_opp"))
+    g = g.merge(opp[opp["team"] != opp["team_opp"]].rename(columns={"team_opp": "opp"}), on=["game_id", "team"], how="left")
+    base = []
+    for (season, week), _ in g.groupby(["season", "week"]):
+        prior = g[(g["season"] == season - 1) | ((g["season"] == season) & (g["week"] < week))]
+        if prior.empty:
+            continue
+        lg_off, lg_def = prior["epa_play"].mean(), prior["epa_play_allowed"].mean()
+        means = prior.groupby("team")[["epa_play", "epa_play_allowed"]].mean()
+        base.append(pd.DataFrame({"season": season, "week": week, "opp": means.index,
+                                  "opp_off_gap": means["epa_play"].to_numpy() - lg_off,
+                                  "opp_def_gap": means["epa_play_allowed"].to_numpy() - lg_def}))
+    g = g.merge(pd.concat(base, ignore_index=True), on=["season", "week", "opp"], how="left")
+    g[["opp_off_gap", "opp_def_gap"]] = g[["opp_off_gap", "opp_def_gap"]].fillna(0.0)
     return g
 
 
-VARIANTS = ("live", "def_ppd", "def_epa_play", "both", "off_def_epa_play", "off_def_epa_play_ppd")
+VARIANTS = ("live", "def_ppd", "def_epa_play", "both", "off_def_epa_play", "off_def_epa_play_ppd",
+            "pp_opp_0.5", "pp_opp_1.0")
 
 
 def _z(series: pd.Series) -> pd.Series:
@@ -95,6 +117,13 @@ def rows_for(snaps, games, variant):
         if variant in ("off_def_epa_play", "off_def_epa_play_ppd"):
             v = nfl_team_strength._recency_window_blend(hist, "team", "epa_play", config.NFL_TEAM_STRENGTH_WINDOWS)
             master["offensive_edge"] = _z(master["team"].map(v)).to_numpy()
+        if variant.startswith("pp_opp_"):
+            w = float(variant.rsplit("_", 1)[1])
+            adj = hist.assign(off_adj=hist["epa_play"] - w * hist["opp_def_gap"],
+                              def_adj=hist["epa_play_allowed"] - w * hist["opp_off_gap"])
+            for col, edge in (("off_adj", "offensive_edge"), ("def_adj", "defensive_edge")):
+                v = nfl_team_strength._recency_window_blend(adj, "team", col, config.NFL_TEAM_STRENGTH_WINDOWS)
+                master[edge] = _z(master["team"].map(v)).to_numpy()
         f = nfl_game_picks.build_game_features_qb_plus(master, snap["qb_continuity"], snap["weekly"], snap["this_week_games"])
         for col in extra:
             by_team = master.set_index("team")[col]
