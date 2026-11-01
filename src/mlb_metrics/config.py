@@ -2324,7 +2324,12 @@ NFL_GAME_PICK_CALIBRATION_MODEL_PATH = "data/models/nfl_game_pick_calibration_mo
 # already-logged v1 picks (the old 4/8/full, 4-signal composite) from
 # real picks made under this new logic - same "never silently rewrite
 # already-logged history" discipline as MLB's own model_version bumps.
-NFL_GAME_PICK_MODEL_VERSION = "v2"
+# v2 -> v3 (2026-11-01): offensive/defensive edges per play, model retrained.
+NFL_GAME_PICK_MODEL_VERSION = "v3"
+# offensive_edge / defensive_edge as EPA per play from play-by-play
+# (nfl_team_strength.compute_team_epa_per_play) rather than EPA per game
+# from team stats - see that function's docstring for the backtest.
+NFL_EDGE_PER_PLAY = True
 
 # Predicted points per game (nfl_totals.py): WAVE-style offense and defense
 # EPA per play and pace, blended over games-back windows and shrunk toward

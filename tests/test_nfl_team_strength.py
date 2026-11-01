@@ -572,3 +572,24 @@ def test_assemble_team_metrics_real_season_shape():
     assert set(master.columns) == expected_cols
     assert not master.isna().any().any()
     assert (master["games_played"] == 4).all()
+
+
+def test_epa_per_play_rates_offense_and_defense_by_play_not_by_game():
+    from mlb_metrics import nfl_team_strength as ts
+    rows = []
+    # DAL's defense allows +0.3 a play on 70 snaps; NYG's allows -0.1 on 50.
+    # A per-game total would make DAL's defense look 4x worse, not 4x per play.
+    for i in range(70):
+        rows.append({"game_id": "g1", "season": 2026, "week": 1, "season_type": "REG", "posteam": "NYG", "defteam": "DAL",
+                     "play_type": "pass" if i % 2 else "run", "epa": 0.3, "qb_kneel": 0, "qb_spike": 0})
+    for i in range(50):
+        rows.append({"game_id": "g1", "season": 2026, "week": 1, "season_type": "REG", "posteam": "DAL", "defteam": "NYG",
+                     "play_type": "run", "epa": -0.1, "qb_kneel": 0, "qb_spike": 0})
+    # A kneel and a punt don't count.
+    rows.append({**rows[-1], "epa": -5.0, "qb_kneel": 1})
+    rows.append({**rows[-1], "play_type": "punt", "epa": 9.0, "qb_kneel": 0})
+    edge = ts.compute_team_epa_per_play(pd.DataFrame(rows), current_season=2026).set_index("team")
+    assert edge.loc["DAL", "defensive_edge"] == pytest.approx(0.3)
+    assert edge.loc["NYG", "offensive_edge"] == pytest.approx(0.3)
+    assert edge.loc["DAL", "offensive_edge"] == pytest.approx(-0.1)
+    assert edge.loc["NYG", "defensive_edge"] == pytest.approx(-0.1)
