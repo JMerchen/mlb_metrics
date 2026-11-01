@@ -13,9 +13,8 @@ features are and recency-blended the live way (nfl_team_strength
     def_ppd         + points allowed per drive, each side
     def_epa_play    defensive_edge as EPA allowed per PLAY
     both            the two together
-    ppd_both_sides  + points allowed per drive, and offensive points per
-                    drive's pair made symmetric (already live) - same as
-                    def_ppd; kept as a label check
+    off_def_epa_play     offensive_edge and defensive_edge both per PLAY
+    off_def_epa_play_ppd that, plus points allowed per drive
 
 Walk-forward 2019-2026 with the live logistic regression (C as live),
 refit on earlier seasons; reports log loss, Brier, a paired bootstrap
@@ -60,11 +59,18 @@ def defense_games() -> pd.DataFrame:
             points=("points", "sum"), drives=("fixed_drive", "nunique"))
         plays = p[p["play_type"].isin(["run", "pass"]) & (p["qb_kneel"] != 1) & (p["qb_spike"] != 1)].dropna(subset=["epa"])
         epa = plays.groupby(["game_id", "season", "week", "defteam"], as_index=False).agg(epa=("epa", "sum"), plays=("epa", "size"))
-        frames.append(ppd.merge(epa, on=["game_id", "season", "week", "defteam"], how="outer"))
+        own = plays.groupby(["game_id", "season", "week", "posteam"], as_index=False).agg(off_epa=("epa", "sum"), off_plays=("epa", "size"))
+        own = own.rename(columns={"posteam": "defteam"})  # keyed by team, like the rest
+        frames.append(ppd.merge(epa, on=["game_id", "season", "week", "defteam"], how="outer")
+                      .merge(own, on=["game_id", "season", "week", "defteam"], how="outer"))
     g = pd.concat(frames, ignore_index=True).rename(columns={"defteam": "team"})
     g["ppd_allowed"] = g["points"] / g["drives"]
     g["epa_play_allowed"] = g["epa"] / g["plays"]
+    g["epa_play"] = g["off_epa"] / g["off_plays"]
     return g
+
+
+VARIANTS = ("live", "def_ppd", "def_epa_play", "both", "off_def_epa_play", "off_def_epa_play_ppd")
 
 
 def _z(series: pd.Series) -> pd.Series:
@@ -79,13 +85,16 @@ def rows_for(snaps, games, variant):
         hist = games[(games["season"] == season - 1) | ((games["season"] == season) & (games["week"] < week))]
         master = snap["master"].copy()
         extra = []
-        if variant in ("def_ppd", "both"):
+        if variant in ("def_ppd", "both", "off_def_epa_play_ppd"):
             v = nfl_team_strength._recency_window_blend(hist, "team", "ppd_allowed", config.NFL_TEAM_STRENGTH_WINDOWS)
             master["ppd_allowed"] = _z(master["team"].map(v)).to_numpy()
             extra.append("ppd_allowed")
-        if variant in ("def_epa_play", "both"):
+        if variant in ("def_epa_play", "both", "off_def_epa_play", "off_def_epa_play_ppd"):
             v = nfl_team_strength._recency_window_blend(hist, "team", "epa_play_allowed", config.NFL_TEAM_STRENGTH_WINDOWS)
             master["defensive_edge"] = _z(master["team"].map(v)).to_numpy()
+        if variant in ("off_def_epa_play", "off_def_epa_play_ppd"):
+            v = nfl_team_strength._recency_window_blend(hist, "team", "epa_play", config.NFL_TEAM_STRENGTH_WINDOWS)
+            master["offensive_edge"] = _z(master["team"].map(v)).to_numpy()
         f = nfl_game_picks.build_game_features_qb_plus(master, snap["qb_continuity"], snap["weekly"], snap["this_week_games"])
         for col in extra:
             by_team = master.set_index("team")[col]
@@ -98,7 +107,7 @@ def rows_for(snaps, games, variant):
         out.append(f)
     rows = pd.concat(out, ignore_index=True)
     cols = list(nfl_game_picks.QB_PLUS_FEATURE_COLUMNS)
-    if variant in ("def_ppd", "both"):
+    if variant in ("def_ppd", "both", "off_def_epa_play_ppd"):
         cols += ["home_ppd_allowed", "away_ppd_allowed"]
     return rows, cols
 
@@ -121,7 +130,7 @@ def main():
     c = artifact["model"].get_params()["C"] if artifact else 1.0
     results = {}
     live_rows = None
-    for variant in ("live", "def_ppd", "def_epa_play", "both"):
+    for variant in VARIANTS:
         rows, cols = rows_for(snaps, games, variant)
         if variant == "live":
             live_rows = rows
@@ -135,15 +144,18 @@ def main():
     for name, r in results.items():
         r = r.loc[base.index]
         y, p, b = r["home_won"].to_numpy(), r["p"].to_numpy(), base["p"].to_numpy()
-        diffs = []
+        diffs, bdiffs = [], []
         for _ in range(1000):
             i = rng.integers(0, len(y), len(y))
             diffs.append(log_loss(y[i], p[i]) - log_loss(y[i], b[i]))
+            bdiffs.append(brier_score_loss(y[i], p[i]) - brier_score_loss(y[i], b[i]))
         lo, hi = np.percentile(diffs, [2.5, 97.5])
+        blo, bhi = np.percentile(bdiffs, [2.5, 97.5])
         better = sum(log_loss(g["home_won"], g["p"]) < log_loss(g["home_won"], base.loc[g.index, "p"]) for _, g in r.groupby("season"))
         e = r[r.index.isin(extreme)]
         print(f"  {name:13s} log loss {log_loss(y, p):.5f} ({log_loss(y, p) - log_loss(y, b):+.5f}, 95% CI {lo:+.5f} to {hi:+.5f})"
-              f"  Brier {brier_score_loss(y, p):.5f}  better {better}/{r['season'].nunique()} | extreme-D games {log_loss(e['home_won'], e['p']):.4f}")
+              f"  Brier {brier_score_loss(y, p):.5f} (CI {blo:+.5f} to {bhi:+.5f})  better {better}/{r['season'].nunique()}"
+              f" | extreme-D games {log_loss(e['home_won'], e['p']):.4f}")
 
 
 if __name__ == "__main__":
