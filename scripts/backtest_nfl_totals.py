@@ -34,6 +34,12 @@ Given the market's total the prediction still adds nothing (coefficient
 236 games where it disagrees with the market by 5+ points - within noise
 of break-even. Shown next to Vegas's number, never turned into bets.
 
+With the pull toward the league fading for units far from it
+(config.NFL_TOTALS_SHRINK_FADE, 2026-11-01): MAE 10.61 (market 10.39),
+leans right 58.3% on the 216 games 5+ points from the market, and teams
+score 0.21 points more than predicted against the worst defenses rather
+than 0.57 (scripts/backtest_nfl_extreme_shrink.py).
+
 Usage:
     python scripts/backtest_nfl_totals.py
 """

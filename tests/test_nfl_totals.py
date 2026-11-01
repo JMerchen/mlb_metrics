@@ -66,9 +66,14 @@ def test_wave_ratings_shrinks_a_small_sample_toward_the_league_rate():
         _team_game(1, "DEN", "KC", -10.0, 50),  # -0.2 per play; league rate 0.0
     ])
     raw = nfl_totals.wave_ratings(games, windows=[(None, 1.0)], shrink_plays=0.0).set_index("team")
-    shrunk = nfl_totals.wave_ratings(games, windows=[(None, 1.0)], shrink_plays=50.0).set_index("team")
+    shrunk = nfl_totals.wave_ratings(games, windows=[(None, 1.0)], shrink_plays=50.0, fade=0).set_index("team")
     assert raw.loc["KC", "off_epa"] == pytest.approx(0.2)
     assert shrunk.loc["KC", "off_epa"] == pytest.approx(0.1)
+    # With the fade the pull shrinks with distance: 0.2 from the league at a
+    # 0.05 fade keeps 50 / (1 + 16) pseudo-plays.
+    faded = nfl_totals.wave_ratings(games, windows=[(None, 1.0)], shrink_plays=50.0, fade=0.05).set_index("team")
+    assert faded.loc["KC", "off_epa"] == pytest.approx(10.0 / (50 + 50 / 17))
+    assert faded.loc["DEN", "def_epa"] == pytest.approx(faded.loc["KC", "off_epa"])
 
 
 def _qb_game(week, qb, epa_sum, dropbacks):

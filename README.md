@@ -3357,6 +3357,21 @@ every player's averages, touchdown chance and 100-yard chance - about
 > flat league average. Given the market's number it adds nothing, so the
 > site shows it next to Vegas's total and tracks both misses; it never
 > becomes a bet.
+>
+> **The pull toward the league fades for extreme units (2026-11-01).**
+> With a fixed 300 pseudo-plays per window the worst defenses were pulled
+> too far (the 2026 Cowboys allowed +0.138 EPA a play through week 7,
+> rated +0.080), and teams scored 0.57 points a game more than predicted
+> against defenses 1.5+ sd below average. Now each window's pull is
+> `300 / (1 + (gap / 0.03)^2)` (`config.NFL_TOTALS_SHRINK_FADE`): half at
+> 0.03 EPA a play from the league, a tenth at 0.09. Refit
+> (`scripts/backtest_nfl_extreme_shrink.py`, then the coefficients by
+> `scripts/backtest_nfl_totals.py`): MAE 10.645 -> 10.607 (95% CI of the
+> change -0.064 to -0.012, better in 6 of 8 seasons), the miss against
+> the worst defenses +0.57 -> +0.21, and over/under leans 5+ points from
+> the market right 58.3% (216 games). The same blend tested in the win
+> picks - this season only, or stretching extreme ratings - didn't help
+> (log loss within 0.0003, or worse).
 
 > **Per-category, opponent-adjusted ratings tested (2026-10-11).**
 > `scripts/backtest_nfl_category_ratings.py` rates every team's passing
