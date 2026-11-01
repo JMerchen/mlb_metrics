@@ -30,9 +30,26 @@ const SIM_SHORT_YARDAGE_STUFF = 0.12
 const SIM_FLAG_SECONDS = 12
 const SIM_FLAG_HURRY_SECONDS = 6
 const SIM_SIDES = ["home", "away"]
+// Field zones: inside the opponent's 10 ("goal"), its 11-20 ("red") and the
+// offense's own 10 ("backed"). The league's ratios to the middle of the
+// field (profiles.league.field_zones) scale the pass rate, sacks and
+// completions; on top of the end zone cutting gains off, gains shrink as the
+// field does, and losses shrink when pinned deep (real offenses there keep
+// the ball in front of them). Tuned so simulated yards per run, touchdowns
+// per play and safeties match the league's in each zone.
+const SIM_ZONE_GAIN = {goal: 0.9}
+const SIM_BACKED_LOSS = 0.6
+// Fourth down inside the opponent's 10, outside the last five minutes: how
+// often real teams go for it by yards to go (2024-26: 4th and 2, 61%).
+const SIM_GOAL_LINE_GO = [[1, 0.92], [2, 0.61], [3, 0.34], [5, 0.19], [99, 0.04]]
 
 function simEsc(value){
 return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+}
+
+// A spot's field zone (ball: yards from the offense's own goal line).
+function simZone(ball){
+return ball >= 90 ? "goal" : ball >= 80 ? "red" : ball <= 10 ? "backed" : null
 }
 
 // Seeded random numbers (mulberry32), so a game replays the same way.
@@ -555,6 +572,7 @@ if(desperate && !(margin >= -3 && fgDistance <= 55)){ fourth = "go" }
 else if(needTd && ball >= 40){ fourth = "go" }
 else if(behindLate && !(fgTiesOrWins && clock <= 120) && ((togo <= 2 && ball >= 25) || (togo <= 4 && ball >= 40))){ fourth = "go" }
 else if(togo <= 1 && ball >= 30){ fourth = "go" }
+else if(ball >= 90 && rng() < SIM_GOAL_LINE_GO.find(([most]) => togo <= most)[1]){ fourth = "go" }
 else if(fgDistance <= 57 && fgChance >= 0.35){ fourth = "fg" }
 else if(togo <= 2 && ball >= 50){ fourth = "go" }
 else if(togo <= 3 && ball >= 55){ fourth = "go" }
@@ -671,6 +689,11 @@ const protecting = qtr >= 4 && margin > 0 && clock <= 240
 if(protecting){ passRate = down === 1 ? 0.06 : down === 2 ? 0.2 : togo <= 3 ? 0.25 : 0.55 }
 else if(qtr >= 4 && margin >= 9){ passRate -= 0.25 }
 if(qtr >= 3 && margin <= -14){ passRate += 0.15 }
+const zone = simZone(ball)
+const zoneRates = ((lg.field_zones || {})[zone]) || {}
+if(zoneRates.pass && !protecting){ passRate *= zoneRates.pass }
+// Gains shrink near the goal line; losses shrink pinned deep.
+const zoneYards = raw => raw > 0 ? raw * (SIM_ZONE_GAIN[zone] || 1) : zone === "backed" ? raw * SIM_BACKED_LOSS : raw
 const from = ball
 const isPass = rng() < Math.min(0.95, Math.max(0.1, passRate))
 if(down === 3){ b.third_att += 1 }
@@ -688,9 +711,9 @@ const qb = line(poss, lineup.qb)
 let carrier = null
 let target = null
 if(isPass){
-if(rng() < p.sack_rate){
+if(rng() < p.sack_rate * (zoneRates.sack || 1)){
 kind = "sack"
-yards = Math.min(-1, Math.round(lg.sack_yards * (0.4 + 1.2 * rng())))
+yards = Math.min(-1, Math.round(zoneYards(lg.sack_yards * (0.4 + 1.2 * rng()))))
 b.sacks += 1
 b.sack_yards -= yards
 if(qb){
@@ -715,10 +738,10 @@ if(qb){ qb.ints += 1 }
 lost = {at: Math.min(99, Math.max(1, 100 - caught + ret)), result: "Interception"}
 text = `${name(poss, lineup.qb)} pass${target ? ` for ${target.short}` : ""} INTERCEPTED by ${code[def]} at the ${spot(100 - caught, def)}, returned ${ret} yard${ret === 1 ? "" : "s"}`
 clockUsed = 8
-}else if(rng() < Math.min(0.95, p.comp_rate * (target ? target.catch : 1))){
+}else if(rng() < Math.min(0.95, p.comp_rate * (zoneRates.comp || 1) * (target ? target.catch : 1))){
 kind = "pass"
 const raw = simDraw(p.completion_yards, probs, rng())
-yards = Math.min(100 - ball, Math.round(raw > 0 ? raw * factors[poss].pass * (target ? target.ypr : 1) : raw))
+yards = Math.min(100 - ball, Math.round(zoneYards(raw > 0 ? raw * factors[poss].pass * (target ? target.ypr : 1) : raw)))
 b.pass_comp += 1
 b.pass_yards += yards
 if(qb){
@@ -750,7 +773,7 @@ kind = "run"
 const leverage = togo <= 2 || ball >= 95 || (qtr >= 4 && Math.abs(margin) <= 8 && clock <= 300)
 carrier = simPick(leverage ? simSharpen(lineup.rushers) : lineup.rushers, rng())
 const raw = simDraw(p.rush_yards, probs, rng())
-yards = Math.min(100 - ball, Math.round(raw > 0 ? raw * factors[poss].run * (carrier ? carrier.ypc : 1) : raw))
+yards = Math.min(100 - ball, Math.round(zoneYards(raw > 0 ? raw * factors[poss].run * (carrier ? carrier.ypc : 1) : raw)))
 // Against a stacked box on 3rd or 4th and short a run is stuffed more
 // often: real ones convert 73% of the time.
 if((down === 3 || down === 4) && togo <= 2 && rng() < SIM_SHORT_YARDAGE_STUFF){ yards = Math.min(yards, 0) }
@@ -1251,7 +1274,7 @@ return `<div class="simFinal"><div class="whatIfHeadline">Final: ${headline}</di
 
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
-simRng, simDraw, simFactors, simPunt, simPick, simSharpen, simShortName, simLineup, simulateGame, simAverage, simCalibrate, simSpot, simClock,
+simRng, simDraw, simFactors, simZone, simPunt, simPick, simSharpen, simShortName, simLineup, simulateGame, simAverage, simCalibrate, simSpot, simClock,
 simSummary, simMarginBins, simMarginChartHtml, simSummaryHtml, simPlayerStatsHtml,
 simFieldSvg, simScoreboardHtml, simDriveChartHtml, simTickerHtml, simBoxScoreHtml, simCalibrationNote, simFinalHtml,
 }

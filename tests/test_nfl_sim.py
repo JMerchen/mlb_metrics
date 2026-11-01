@@ -245,3 +245,20 @@ def test_even_rows_keep_extremes_only_as_often_as_they_happen():
     picked = nfl_sim._even_rows(rows, 100)
     assert len(picked) == 100 and picked[0] == 5 and picked[-1] == 995
     assert nfl_sim._even_rows(rows[:10], 100) == rows[:10]
+
+
+def test_field_zones_compare_each_zone_with_the_middle_of_the_field():
+    rows = []
+    # Between the 20s: half passes, two thirds completed. Inside the 10:
+    # a quarter passes (on the same downs), a third completed.
+    for i in range(400):
+        rows.append(_play(yardline_100=50, down=1, play_type="pass" if i % 2 else "run", sack=0,
+                          complete_pass=int(i % 6 != 1), yards_gained=6.0, touchdown=0))
+        rows.append(_play(yardline_100=5, down=1, play_type="pass" if i % 4 == 0 else "run", sack=0,
+                          complete_pass=int(i % 12 == 0), yards_gained=2.0, touchdown=int(i % 3 == 0)))
+    zones = nfl_sim._field_zones(pd.DataFrame(rows))
+    assert set(zones) == {"goal", "middle"}  # too few plays elsewhere
+    goal = zones["goal"]
+    # 34 of 100 passes completed inside the 10 against 133 of 200 between the 20s.
+    assert goal["pass"] == 0.5 and abs(goal["comp"] - 0.34 / 0.665) < 0.002
+    assert goal["real"]["run_yards"] == 2.0 and goal["real"]["td"] == 0.335  # 134 of 400

@@ -3,7 +3,7 @@ const test = require("node:test")
 const assert = require("node:assert/strict")
 global.teamName = require("./teams.js").teamName
 const {
-  simRng, simDraw, simFactors, simulateGame, simAverage, simCalibrate, simSpot, simClock,
+  simRng, simDraw, simFactors, simZone, simulateGame, simAverage, simCalibrate, simSpot, simClock,
   simScoreboardHtml, simDriveChartHtml, simBoxScoreHtml, simTickerHtml, simFieldSvg, simFinalHtml,
   simPick, simShortName, simLineup, simSummary, simMarginBins, simSummaryHtml, simPlayerStatsHtml,
 } = require("./nfl_sim.js")
@@ -143,8 +143,10 @@ test("a pass-happy team throws more, and a bad pass defense gives up more throug
 })
 
 test("calibration lands the average game on the target margin and total", () => {
+  // At the page's own number of games (fewer leaves a step's average too
+  // noisy to land within a point).
   for (const [margin, total] of [[6, 44], [-3, 50]]) {
-    const c = simCalibrate(PROFILES, "GB", "CAR", margin, total, { games: 200 })
+    const c = simCalibrate(PROFILES, "GB", "CAR", margin, total)
     assert.ok(Math.abs(c.margin - margin) < 1, `margin ${c.margin} vs ${margin}`)
     assert.ok(Math.abs(c.total - total) < 1.5, `total ${c.total} vs ${total}`)
     assert.equal(Math.sign(c.edge), Math.sign(margin))
@@ -491,4 +493,35 @@ test("once a team starts kneeling it kneels out the clock - the two-minute warni
       if (next && next.drive === p.drive) { assert.equal(next.kind, "kneel", `seed ${seed}: ${next.text}`) }
     })
   }
+})
+
+test("field zones: the goal line is tighter, a team pinned deep rarely gives up a safety", () => {
+  assert.equal(simZone(95), "goal")
+  assert.equal(simZone(85), "red")
+  assert.equal(simZone(50), null)
+  assert.equal(simZone(5), "backed")
+  // With the real league's zone rates, over many games.
+  const real = require("./data/nfl_sim_profiles.json")
+  const teams = Object.keys(real.teams).sort()
+  const zones = { goal: { att: 0, comp: 0 }, middle: { att: 0, comp: 0 } }
+  let safeties = 0, shortFourth = 0, wentFor = 0
+  const n = 400
+  for (let s = 1; s <= n; s++) {
+    const g = simulateGame(real, teams[s % 32], teams[(s * 7 + 3) % 32] === teams[s % 32] ? teams[(s + 1) % 32] : teams[(s * 7 + 3) % 32], { seed: s })
+    for (const p of g.plays) {
+      if (p.scoring === "Safety") safeties += 1
+      const z = p.ball >= 90 ? "goal" : p.ball > 20 && p.ball < 80 ? "middle" : null
+      if (z && ["pass", "incomplete", "interception"].includes(p.kind)) { zones[z].att += 1; zones[z].comp += p.kind === "pass" ? 1 : 0 }
+      if (p.down === 4 && p.ball >= 90 && p.togo <= 2 && p.qtr < 4 && p.kind !== "penalty") {
+        shortFourth += 1
+        wentFor += SCRIMMAGE.has(p.kind) ? 1 : 0
+      }
+    }
+  }
+  // Inside the 10 passes are completed far less often (real: 49% vs 66%).
+  assert.ok(zones.goal.comp / zones.goal.att < zones.middle.comp / zones.middle.att - 0.1)
+  // Real: 0.017 safeties a team game.
+  assert.ok(safeties / (2 * n) < 0.035, `safeties ${safeties / (2 * n)}`)
+  // Real teams go for it on 4th and 1-2 inside the 10 about 3 times in 4.
+  assert.ok(wentFor / shortFourth > 0.55, `went for it ${wentFor} of ${shortFourth}`)
 })

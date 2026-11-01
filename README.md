@@ -3246,6 +3246,26 @@ and 3.75 timeouts per team, against the league's ~22 points, 61 plays,
 65 snaps, 5.6 penalties and 3.85 timeouts; calibrated scales run about
 1.05-1.2.
 
+Field zones (`nfl_sim._field_zones`, `simZone` in `docs/nfl_sim.js`):
+inside the opponent's 10 ("goal"), its 11-20 ("red") and the offense's own
+10 ("backed"). A team's own zone numbers are noise - splitting 2023-25
+seasons into odd and even weeks, offensive EPA per play carries over at
+0.65 for all plays but 0.10 inside the 20 and 0.00 inside its own 10 - so
+the zones are the league's, on top of each team's profile: each zone's pass
+rate (at its own mix of downs), completion rate and sack rate over the same
+between the 20s (goal 0.80/0.75/0.83, red 0.92/0.93/0.85, backed
+0.88/1.04/0.77), gains inside the 10 times `SIM_ZONE_GAIN` 0.9 on top of
+the end zone cutting them off, losses inside a team's own 10 times
+`SIM_BACKED_LOSS` 0.6, and fourth downs inside the 10 going for it by yards
+to go as real teams do outside the last five minutes (`SIM_GOAL_LINE_GO`:
+1 92%, 2 61%, 3 34%, 4-5 19%, 6+ 4%). Before, a red-zone trip (counting
+scrimmage snaps only - the extra point's snap at the 15 would make every
+touchdown drive one) ended in a touchdown 62% of the time and 77% once
+inside the 10, with 0.047 safeties a team game; now 58.5%, 70.6% and
+0.018, against the league's 58.9%, 70.2% and 0.017 (2025-26). Calibration
+on real matchups still lands within 0.2 points of the target margin on
+average.
+
 Late-game and short-yardage play calling (checked against 2025-26
 play-by-play): 3rd and 4th and 1 throw 25% (real teams run 77%) and a
 run there is stuffed for no gain 12% of the time on top of its draw, so

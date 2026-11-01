@@ -56,6 +56,7 @@ PBP_COLUMNS = [
     "rusher_player_id", "rusher_player_name", "kicker_player_id", "kicker_player_name",
     "penalty", "penalty_team", "penalty_type", "penalty_yards", "first_down_penalty", "desc",
     "yardline_100", "punt_fair_catch", "punt_downed", "punt_out_of_bounds", "kickoff_out_of_bounds",
+    "touchdown", "qb_kneel", "qb_spike",
 ]
 KICK_SAMPLES = 600
 PUNT_SAMPLES_PER_BUCKET = 150
@@ -117,6 +118,54 @@ def _offense_rates(plays: pd.DataFrame) -> dict:
         "completion_yards": completions["yards_gained"].dropna().to_numpy(),
         "sack_yards": passes.loc[passes["sack"] == 1, "yards_gained"].dropna().to_numpy(),
     }
+
+
+# Field zones by yards to the end zone (yardline_100). A team's own red-zone
+# or backed-up numbers barely carry over within a season (odd vs even weeks,
+# 2023-25: r = 0.10 inside the 20, 0.00 inside its own 10, against 0.65 for
+# all its plays), so the zones are the league's, on top of each team's own
+# profile.
+FIELD_ZONES = {"goal": (0, 10), "red": (11, 20), "backed": (90, 99)}
+
+
+def _field_zones(plays: pd.DataFrame) -> dict:
+    """{zone: {pass, comp, sack}} - each zone's pass rate (at the zone's own
+    mix of downs), completion rate and sack rate over the same between the
+    20s - plus the zone's real per-play numbers for checking the
+    simulation against: completion rate, yards per run, touchdowns per play
+    and pass rate."""
+    for column in ("qb_kneel", "qb_spike", "touchdown"):
+        if column not in plays:
+            plays = plays.assign(**{column: 0})
+    plays = plays[(plays["qb_kneel"] != 1) & (plays["qb_spike"] != 1)]
+    yl = plays["yardline_100"]
+    middle = plays[(yl > 20) & (yl < 90)]
+
+    def rates(g):
+        passes = g[g["play_type"] == "pass"]
+        attempts = passes[passes["sack"] != 1]
+        runs = g[g["play_type"] == "run"]
+        return {"pass": (g["play_type"] == "pass").mean(), "comp": attempts["complete_pass"].mean(),
+                "sack": (passes["sack"] == 1).mean(), "run_yards": runs["yards_gained"].mean(),
+                "td": (g["touchdown"] == 1).mean()}
+
+    mid = rates(middle)
+    mid_pass_by_down = middle.groupby("down")["play_type"].apply(lambda s: (s == "pass").mean())
+    out = {}
+    for zone, (lo, hi) in FIELD_ZONES.items():
+        g = plays[(yl >= lo) & (yl <= hi)]
+        if len(g) < 200:
+            continue
+        z = rates(g)
+        downs = g["down"].value_counts(normalize=True)
+        expected_pass = float(sum(share * mid_pass_by_down.get(d, mid["pass"]) for d, share in downs.items()))
+        out[zone] = {
+            "pass": round(z["pass"] / expected_pass, 3), "comp": round(z["comp"] / mid["comp"], 3),
+            "sack": round(z["sack"] / mid["sack"], 3),
+            "real": {k: round(float(v), 3) for k, v in z.items()},
+        }
+    out["middle"] = {"real": {k: round(float(v), 3) for k, v in mid.items()}}
+    return out
 
 
 def _onside_kicks(pbp: pd.DataFrame) -> pd.DataFrame:
@@ -408,6 +457,7 @@ def build_profiles(pbp: pd.DataFrame, season: int, rosters: pd.DataFrame | None 
         "sack_yards": round(float(np.mean(league["sack_yards"])) if len(league["sack_yards"]) else -7.0, 2),
         "rush_yards": _quantiles(league["rush_yards"]),
         "completion_yards": _quantiles(league["completion_yards"]),
+        "field_zones": _field_zones(_scrimmage(recent)),
         "kickoff_start": _quantiles(_drive_starts(recent, "KICKOFF", onside)),
         "punt_net": _quantiles(punt_net),
         "punt_touchback_rate": round(float(punts["touchback"].fillna(0).mean()) if len(punts) else 0.07, 4),
