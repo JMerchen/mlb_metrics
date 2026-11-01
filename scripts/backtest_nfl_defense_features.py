@@ -25,6 +25,22 @@ refit on earlier seasons; reports log loss, Brier, a paired bootstrap
 interval against live, seasons better, and the 474 games with a defense
 1.5+ sd from average.
 
+RESULT (2026-11-01, 1,972 games 2019-2026, live logistic regression C=3):
+    live                  0.63949
+    def_ppd               -0.00031 (95% CI -0.00109 to +0.00045), 4/8 seasons
+    def_epa_play          -0.00076 (-0.00152 to +0.00006), 6/8
+    both                  -0.00065 (-0.00157 to +0.00022), 6/8
+    off_def_epa_play      -0.00120 (-0.00252 to +0.00024), 5/8  <- shipped
+    off_def_epa_play_ppd  -0.00099 (-0.00244 to +0.00052), 4/8
+    pp_opp_0.5            -0.00104 (-0.00240 to +0.00045), 5/8
+    pp_opp_1.0            -0.00073 (-0.00238 to +0.00091), 5/8
+off_def_epa_play beats live at every C from 0.1 to 10 (by 0.0010-0.0012,
+5-7 of 8 seasons), and other recency windows for it don't help (the live
+3/7/all weights are best). Retrained through
+scripts/train_nfl_game_pick_model.py: the qb_plus set, per play, cv log
+loss 0.6371 / 2025 holdout 0.6259 against 0.6384 / 0.6273 per game. Points
+allowed per drive and opponent adjustment add nothing on top.
+
 Usage:
     python scripts/backtest_nfl_defense_features.py
 """
