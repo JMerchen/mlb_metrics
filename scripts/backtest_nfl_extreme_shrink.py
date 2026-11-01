@@ -33,6 +33,23 @@ earlier seasons, 2018-2025), for offense and defense EPA:
     fade_0.03      faster fade
     season_only    this season's games only once there are 4
 
+RESULT (2026-11-01):
+Win picks (1,972 games 2019-2026): no change. This season only is worse
+(log loss +0.0011; extreme-defense games 0.6439 against 0.6426) - last
+season's games still help at week 8. Stretching the extremes moves log
+loss by 0.0003 or less (stretch_od_1.3 -0.00027, 95% CI -0.00094 to
++0.00036): within noise.
+Predicted totals (2,127 games 2018-2025): yes. Teams scored 0.57 points
+more than predicted against a defense 1.5+ sd below average - the pull
+toward the league was too strong for the worst units. Fading it with
+distance fixes most of that and lowers the miss on the total:
+    live        MAE 10.645   bad-defense miss +0.57
+    k75         -0.031 (95% CI -0.050 to -0.010), better in 6/8 seasons
+    fade_0.05   -0.035 (-0.060 to -0.011), 6/8,     bad-defense miss +0.24
+    fade_0.03   -0.038 (-0.064 to -0.012), 6/8,     bad-defense miss +0.21
+    season_only -0.003                              bad-defense miss +0.70
+(Paired bootstrap over games; same refit-on-earlier-seasons regression.)
+
 Usage:
     python scripts/backtest_nfl_extreme_shrink.py
 """
