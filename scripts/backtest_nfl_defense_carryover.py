@@ -26,6 +26,15 @@ season, and compares 2019-2026 predictions with the live blend's:
                   counted as k extra games: (n x this + k x last) / (n + k)
     mean_k        the same with this season's plain average (no recency)
 
+RESULT (2026-11-01, 166 replayed weeks, 1,972 games 2019-2026): no change.
+Every candidate lands within 0.0003 of the live blend's log loss (0.64059),
+with 95% intervals about ten times as wide on both sides of zero; none is
+better in more than 5 of 8 seasons. In the 474 games with a defense 1.5+ sd
+from average - the case in question - the live blend is the best of them
+(log loss 0.6426 against 0.6458-0.6466 counting last season more). The
+model's other inputs (points-based strength, points per drive) already
+carry much of what last season's defense adds.
+
 Usage:
     python scripts/backtest_nfl_defense_carryover.py
 """
