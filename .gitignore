@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Backtest scratch caches (rebuilt on demand).
+data/backtest/*.pkl
