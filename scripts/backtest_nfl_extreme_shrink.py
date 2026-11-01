@@ -72,8 +72,11 @@ def _paired_ci(y, p, base, score, rng):
 
 # --- Win picks ---
 
+LIVE_SEASON_BLEND = nfl_team_strength._season_aware_blend
+
+
 def _season_only_blend(stats_df, group_col, value_col, current_season, **kwargs):
-    live = nfl_team_strength._season_aware_blend
+    live = LIVE_SEASON_BLEND
     current = stats_df[stats_df["season"] == current_season]
     if value_col != "epa_allowed_adjusted" or current.groupby(group_col).size().min() < 3:
         return live(stats_df, group_col, value_col, current_season, **kwargs)
