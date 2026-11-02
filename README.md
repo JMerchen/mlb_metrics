@@ -3357,6 +3357,21 @@ every player's averages, touchdown chance and 100-yard chance - about
 > flat league average. Given the market's number it adds nothing, so the
 > site shows it next to Vegas's total and tracks both misses; it never
 > becomes a bet.
+>
+> **The pull toward the league fades for extreme units (2026-11-01).**
+> With a fixed 300 pseudo-plays per window the worst defenses were pulled
+> too far (the 2026 Cowboys allowed +0.138 EPA a play through week 7,
+> rated +0.080), and teams scored 0.57 points a game more than predicted
+> against defenses 1.5+ sd below average. Now each window's pull is
+> `300 / (1 + (gap / 0.03)^2)` (`config.NFL_TOTALS_SHRINK_FADE`): half at
+> 0.03 EPA a play from the league, a tenth at 0.09. Refit
+> (`scripts/backtest_nfl_extreme_shrink.py`, then the coefficients by
+> `scripts/backtest_nfl_totals.py`): MAE 10.645 -> 10.607 (95% CI of the
+> change -0.064 to -0.012, better in 6 of 8 seasons), the miss against
+> the worst defenses +0.57 -> +0.21, and over/under leans 5+ points from
+> the market right 58.3% (216 games). The same blend tested in the win
+> picks - this season only, or stretching extreme ratings - didn't help
+> (log loss within 0.0003, or worse).
 
 > **Per-category, opponent-adjusted ratings tested (2026-10-11).**
 > `scripts/backtest_nfl_category_ratings.py` rates every team's passing
@@ -3449,6 +3464,22 @@ data, so a new composite would likely just duplicate existing signal for
 real added engineering cost, not add new information; real ESPN Total
 QBR itself is proprietary and isn't in `nflreadpy` at all, so it
 couldn't be reproduced exactly regardless.
+
+**Offensive and defensive EPA per play (2026-11-01, model v3).** The win
+model's `offensive_edge`/`defensive_edge` were EPA per game from team stats
+(passing + rushing + receiving EPA - counting each completion twice, since
+a team's receiving EPA is its passing EPA - and mixing in pace: a defense on
+the field for 75 snaps looks worse than one facing 55). Now they're EPA per
+play from play-by-play (`nfl_team_strength.compute_team_epa_per_play`,
+`config.NFL_EDGE_PER_PLAY`), same recency windows. Walk-forward 2019-2026
+with the live regression refit each season: log loss 0.63949 -> 0.63829,
+better at every C from 0.1 to 10; the retrained `qb_plus` model: cv log
+loss 0.6384 -> 0.6371, 2025 holdout 0.6273 -> 0.6259
+(`scripts/backtest_nfl_defense_features.py`). Tested alongside and not
+helping: points allowed per drive, opponent-adjusted EPA (now refit, not
+swapped into a frozen model), this season only, stretching extreme ratings,
+counting last season more (`backtest_nfl_defense_carryover.py`,
+`backtest_nfl_extreme_shrink.py`).
 
 **Listed starters are checked against the roster**
 (`nfl_game_picks.correct_listed_starters`, 2026-10-31). The schedule

@@ -2324,7 +2324,12 @@ NFL_GAME_PICK_CALIBRATION_MODEL_PATH = "data/models/nfl_game_pick_calibration_mo
 # already-logged v1 picks (the old 4/8/full, 4-signal composite) from
 # real picks made under this new logic - same "never silently rewrite
 # already-logged history" discipline as MLB's own model_version bumps.
-NFL_GAME_PICK_MODEL_VERSION = "v2"
+# v2 -> v3 (2026-11-01): offensive/defensive edges per play, model retrained.
+NFL_GAME_PICK_MODEL_VERSION = "v3"
+# offensive_edge / defensive_edge as EPA per play from play-by-play
+# (nfl_team_strength.compute_team_epa_per_play) rather than EPA per game
+# from team stats - see that function's docstring for the backtest.
+NFL_EDGE_PER_PLAY = True
 
 # Predicted points per game (nfl_totals.py): WAVE-style offense and defense
 # EPA per play and pace, blended over games-back windows and shrunk toward
@@ -2337,6 +2342,16 @@ NFL_TOTALS_WINDOWS = [
     (4, 0.50),
 ]
 NFL_TOTALS_SHRINK_PLAYS = 300.0
+# The pull fades for a unit far from the league (2026-11-01, "the further a
+# team is away from the middle, the less we help them" - the Cowboys'
+# defense allowed +0.138 EPA a play through week 7, shown as +0.080):
+# pseudo-plays = SHRINK_PLAYS / (1 + (gap / FADE)^2), so a unit 0.03 EPA a
+# play from the league gets half the pull and one 0.09 out a tenth. Teams
+# had scored 0.57 points a game more than predicted against defenses 1.5+
+# sd below average; with the fade, 0.21, and the miss on the total fell
+# 10.645 -> 10.607 (2018-25, 95% CI -0.064 to -0.012, better in 6 of 8
+# seasons; scripts/backtest_nfl_extreme_shrink.py).
+NFL_TOTALS_SHRINK_FADE = 0.03
 # The listed starting QB's own EPA per dropback: his last 16 games, shrunk
 # with 150 pseudo-dropbacks toward replacement level (league rate - 0.10).
 NFL_TOTALS_QB_GAMES = 16
@@ -2350,15 +2365,17 @@ NFL_UNIT_SHRINK_PLAYS = 150.0
 # 130 is one SD above average, 160 two. 30 rather than 10 (user request,
 # 2026-10-22) so whole numbers separate teams more finely.
 NFL_UNIT_PLUS_POINTS_PER_SD = 30.0
+# Refit 2026-11-01 with NFL_TOTALS_SHRINK_FADE (the ratings spread further,
+# so each EPA point is worth fewer points than before: 17.6/18.8 then).
 NFL_TOTALS_COEFFICIENTS = {
-    "const": 4.80,
-    "off_epa": 17.6,
-    "opp_def_epa": 18.8,
-    "off_plays": 0.052,
-    "opp_def_plays": 0.196,
-    "home": 1.67,
-    "dome": 1.55,
-    "qb_epa": 19.1,
+    "const": 5.23,
+    "off_epa": 11.54,
+    "opp_def_epa": 12.32,
+    "off_plays": 0.051,
+    "opp_def_plays": 0.192,
+    "home": 1.66,
+    "dome": 1.57,
+    "qb_epa": 18.75,
 }
 
 # Walk-forward CV / final-holdout sizing for

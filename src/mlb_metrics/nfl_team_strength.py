@@ -467,6 +467,46 @@ def compute_team_offense_defense_edge(
 # --- Turnover margin (real takeaways minus real giveaways, per game) ---
 
 
+EDGE_PBP_COLUMNS = {"game_id", "season", "week", "season_type", "posteam", "defteam", "play_type", "epa"}
+
+
+def compute_team_epa_per_play(
+    pbp_df: pd.DataFrame, current_season: int = None,
+    carryover_regression: float = None, carryover_prior_strength: float = None, season_aware: bool = False,
+) -> pd.DataFrame:
+    """One row per team: `offensive_edge` (EPA per play on its dropbacks
+    and designed runs, kneels and spikes left out) and `defensive_edge`
+    (the same, allowed), each game's rate blended per `_season_aware_blend`
+    - the same recency windows as every other team signal.
+
+    Per play rather than compute_team_offense_defense_edge's EPA per game
+    (2026-11-01, "our model does not capture just how bad [the Cowboys'
+    defense is]"): a game total mixes in pace - a defense on the field for
+    75 snaps looks worse than one facing 55 - and team_stats' passing +
+    rushing + receiving EPA counts each completion twice (a team's
+    receiving EPA is its passing EPA). Walk-forward 2019-2026, the live
+    logistic regression on per-play ratings: log loss 0.63949 -> 0.63829,
+    better at every C from 0.1 to 10 (by 0.0010-0.0012, in 5-7 of 8
+    seasons); scripts/backtest_nfl_defense_features.py."""
+    p = pbp_df[(pbp_df["season_type"] == "REG") & pbp_df["play_type"].isin(["run", "pass"])
+               & pbp_df["posteam"].notna() & pbp_df["defteam"].notna() & pbp_df["epa"].notna()]
+    for flag in ("qb_kneel", "qb_spike"):
+        if flag in p.columns:
+            p = p[p[flag] != 1]
+    current_season = int(p["season"].max()) if current_season is None else current_season
+    keys = ["game_id", "season", "week"]
+    offense = p.groupby(keys + ["posteam"], as_index=False)["epa"].mean().rename(columns={"posteam": "team"})
+    defense = p.groupby(keys + ["defteam"], as_index=False)["epa"].mean().rename(columns={"defteam": "team"})
+    result = pd.DataFrame({
+        "offensive_edge": _season_aware_blend(offense, "team", "epa", current_season, prior_strength=carryover_prior_strength,
+                                              regression=carryover_regression, season_aware=season_aware),
+        "defensive_edge": _season_aware_blend(defense, "team", "epa", current_season, prior_strength=carryover_prior_strength,
+                                              regression=carryover_regression, season_aware=season_aware),
+    })
+    result.index.name = "team"
+    return result.reset_index()
+
+
 def compute_team_turnover_margin(
     team_stats_df: pd.DataFrame, current_season: int = None,
     carryover_regression: float = None, carryover_prior_strength: float = None, season_aware: bool = False,
@@ -668,10 +708,17 @@ def assemble_team_metrics(
     current_season = int(schedules_df["season"].max()) if current_season is None else current_season
     record = build_team_record(schedules_df)
     current_strength, sos = compute_strength_metrics(record)
-    edge = compute_team_offense_defense_edge(
-        team_stats_df, current_season, carryover_regression, carryover_prior_strength, season_aware,
-        opponent_adjustment_weight,
-    )
+    per_play = (config.NFL_EDGE_PER_PLAY and pbp_df is not None and EDGE_PBP_COLUMNS <= set(pbp_df.columns)
+                and not (opponent_adjustment_weight or config.NFL_OPPONENT_ADJUSTMENT_WEIGHT))
+    if per_play:
+        edge = compute_team_epa_per_play(
+            pbp_df, current_season, carryover_regression, carryover_prior_strength, season_aware,
+        )
+    else:
+        edge = compute_team_offense_defense_edge(
+            team_stats_df, current_season, carryover_regression, carryover_prior_strength, season_aware,
+            opponent_adjustment_weight,
+        )
     turnovers = compute_team_turnover_margin(
         team_stats_df, current_season, carryover_regression, carryover_prior_strength, season_aware
     )
