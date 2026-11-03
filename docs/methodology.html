@@ -48,6 +48,13 @@ from style.css's shared :root tokens (--bg-card, --border, --text-dim,
 .terms code{font-family:var(--font-mono);font-size:12.5px;background:var(--bg-raised);border-radius:4px;padding:1px 4px;color:var(--text);overflow-wrap:anywhere;}
 .terms .lbl{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-right:6px;}
 .terms .where{font-size:12.5px;}
+.realism{border-collapse:collapse;margin:4px 0 10px;width:100%;max-width:620px;font-size:14px;}
+.realism th,.realism td{padding:7px 10px;border-bottom:1px solid var(--border);text-align:right;}
+.realism th:first-child,.realism td:first-child{text-align:left;color:var(--text);}
+.realism td{color:var(--text-dim);}
+.realism th{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);}
+.realism th,.realism td{white-space:normal;}
+@media (max-width:640px){.realism{font-size:13px;}.realism th,.realism td{padding:6px 6px;}}
 @media (max-width:640px){.terms{grid-template-columns:1fr;}.terms dd{border-top:0;padding-top:4px;}}
 .methodologyIntro{
 opacity:.75;
@@ -153,6 +160,7 @@ sports, so you can pick up the ideas as you go. Backtest results and implementat
 <button class="tabButton active" data-panel="using-the-site">Using the site</button>
 <button class="tabButton" data-panel="metrics">Metrics</button>
 <button class="tabButton" data-panel="methods">Statistical methods</button>
+<button class="tabButton" data-panel="simulations">Simulations</button>
 </div>
 
 <div class="howPanel" id="using-the-site">
@@ -377,6 +385,7 @@ game, against the league's 4.5, 22%, 10% and 0.74. "Simulate it 1,000
 times" plays the matchup a thousand times: who wins how often, the
 spread of margins and the commonest scores, and each player's averages,
 next to our pick model's chance for the same game.</p>
+<p><a href="#sim-mlb">Step by step, and checked against the league &rarr;</a></p>
 </div>
 
 <div class="methodCard">
@@ -428,6 +437,7 @@ rest; swap the QB and the new one throws and takes the QB's runs.
 how often each side wins, the spread of margins and totals, and each
 player's averages - how often he scores, and how often he reaches 100
 yards.</p>
+<p><a href="#sim-nfl">Step by step, and checked against the league &rarr;</a></p>
 </div>
 
 <div class="methodCard">
@@ -1122,8 +1132,209 @@ that depends on the current streak and the days left - the "Sat out" days in the
 
 </div>
 
+<div class="howPanel" id="simulations" hidden>
+
+<p class="methodologyIntro">Both game simulators work the same way: count what really happens in each
+situation, then play the game out one pitch or one snap at a time, rolling the dice at exactly those odds.
+Nothing is scripted - the result of each pitch or play is drawn from what players and teams have actually
+done. To check the simulators, we play thousands of games and compare their averages with the real league's
+(the tables below).</p>
+
+<ul class="toc">
+<li><a href="#sim-mlb">Baseball, pitch by pitch</a></li>
+<li><a href="#sim-mlb-check">Baseball: checked against the league</a></li>
+<li><a href="#sim-nfl">Football, snap by snap</a></li>
+<li><a href="#sim-nfl-check">Football: checked against the league</a></li>
+<li><a href="#sim-thousand">1,000 games at once</a></li>
+</ul>
+
+<section class="methodCategory" id="sim-mlb">
+<h2>Baseball, pitch by pitch</h2>
+<p class="methodCategoryNote">Built every day from the last two seasons of Statcast - every pitch thrown, with
+its type, speed, count, location and result.</p>
+<dl class="terms">
+<dt id="sim-mlb-pitch">Which pitch he throws</dt>
+<dd><p>Each pitcher throws his own mix - every pitch he uses at least 3% of the time - and the mix changes with
+the count and the hitter's side, as his really does: first pitch, ahead in the count, even, or behind. A
+pitcher who leans on his slider when ahead of a right-handed hitter does so here too. Its speed comes from his
+own average and spread for that pitch.</p></dd>
+
+<dt id="sim-mlb-result">What the pitch does</dt>
+<dd><p>Every pitch ends one of six ways: ball, called strike, swinging strike, foul, hit by pitch, or put in
+play. We start from how often each happens league-wide <b>for that pitch type in that count</b> - a 3-0
+fastball is a ball far more often than an 0-2 slider. Then we adjust:</p>
+<p>&bull; the <b>pitcher's</b> own rates for that pitch, against what the league would have done with the same
+pitches in the same counts - so a pitcher isn't credited or blamed just for being ahead in counts;</p>
+<p>&bull; the <b>hitter's</b> rates against everything he's seen, measured the same way;</p>
+<p>&bull; the <b>platoon edge</b> (same side or opposite) and the <b>times through the order</b>
+(hitters do better the third time they see a pitcher).</p>
+<p>The adjustments multiply. Small samples are pulled toward the league
+(<a href="#shrinkage">shrinkage</a>: 250 pitches for a pitcher, 400 for a hitter), and a pitcher or hitter
+with few pitches starts from what his <a href="#stuff-plus">Stuff+</a> or
+<a href="#decision-plus">Decision+</a> says, until enough of his own take over (600 of a pitch type for a
+pitcher, 1,500 pitches for a hitter). A last set
+of league-wide multipliers, each within half a percent of 1, makes the whole product add up to what really
+happened between these players.</p></dd>
+
+<dt id="sim-mlb-contact">What happens when it's hit</dt>
+<dd><p>A ball in play becomes a groundout, flyout, lineout, single, double, triple or home run, the same way:
+the league's rates, times the pitcher's (200 balls in play of pull toward average) and the hitter's (150).</p></dd>
+
+<dt id="sim-mlb-runners">How the runners move</dt>
+<dd><p>Not by rule but by record. For every kind of play, every arrangement of runners and every number of
+outs, we counted where the runners actually ended up - so a single with a runner on first and one out leaves
+first and second 72% of the time and first and third 25%, double plays and sacrifice flies happen as often as
+they really do, and a fast runner taking the extra base is in the averages. Between pitches, runners steal,
+get caught or picked off, and move up on wild pitches as often as they do in that spot; when every runner
+moves up a base it's a steal 75% of the time, otherwise a wild pitch. Hitters are walked intentionally as often
+as managers do it with first base open, more late in close games.</p></dd>
+
+<dt id="sim-mlb-manager">The manager's decisions</dt>
+<dd><p><b>Starters</b> get a pitch count drawn around their own recent average, between 45 and 115; they come
+out when they reach it (a few pitches early between innings, a few late mid-inning) or when an inning gets away
+from them (5 runs, or 4 past 70 pitches). <b>Relievers</b> come in by role: the closer in the 9th or later
+when his team is tied or ahead by up to 3, the setup man in a close 8th, anyone else as often as he really pitches - so the whole
+bullpen gets used, not just its best. A reliever usually gets his inning, sometimes two. <b>Lineups</b> default
+to each team's regulars in their usual spots; you can pick your own. <b>Extra innings</b> start with a runner on
+second, as in the majors.</p></dd>
+</dl>
+</section>
+
+<section class="methodCategory" id="sim-mlb-check">
+<h2>Baseball: checked against the league</h2>
+<p class="methodCategoryNote">2,000 simulated games with default lineups against what the same players did in
+2025-26, per team per game.</p>
+<table class="realism">
+<thead><tr><th></th><th>Simulated</th><th>Real</th></tr></thead>
+<tbody>
+<tr><td>Runs</td><td>4.44</td><td>4.46</td></tr>
+<tr><td>Plate appearances</td><td>38.0</td><td>37.8</td></tr>
+<tr><td>Pitches</td><td>148</td><td>147</td></tr>
+<tr><td>Batting average</td><td>.240</td><td>.243</td></tr>
+<tr><td>Strikeouts (of plate appearances)</td><td>22.9%</td><td>22.2%</td></tr>
+<tr><td>Walks and hit batters</td><td>9.9%</td><td>9.8%</td></tr>
+<tr><td>Home runs</td><td>3.0%</td><td>3.0%</td></tr>
+<tr><td>Starter's innings</td><td>5.0</td><td>about 5</td></tr>
+<tr><td>Steals</td><td>0.74</td><td>0.74</td></tr>
+<tr><td>Wild pitches, passed balls and balks</td><td>0.41</td><td>about 0.4</td></tr>
+<tr><td>Intentional walks</td><td>0.09</td><td>about 0.1</td></tr>
+<tr><td>Grounded into double plays</td><td>0.63</td><td>about 0.7</td></tr>
+</tbody>
+</table>
+<p class="methodCategoryNote">Strikeouts run a little high (22.9% against 22.2%): the model treats each pitch on
+its own, and real pitchers set hitters up across a sequence in ways a pitch-at-a-time model can't see. When
+something was off by more than this, we found the cause and fixed it - wild pitches first came in at 0.71 a
+game, against about 0.4, because the check for runners moving ran before a hitter's first pitch too, counting
+movement already in the play before.</p>
+</section>
+
+<section class="methodCategory" id="sim-nfl">
+<h2>Football, snap by snap</h2>
+<p class="methodCategoryNote">Built every week from this season's play-by-play for each team, and the last two
+seasons for the league (kickoffs, punts, field goals, penalties).</p>
+<dl class="terms">
+<dt id="sim-nfl-style">Style, not strength</dt>
+<dd><p>Each offense has its own profile: how often it throws on early downs in a close game, how often it's
+sacked, completes a pass, throws an interception or fumbles, and the whole spread of its runs and completions
+(not just the average - a team that lives on 4-yard runs and one that breaks 40-yarders look different). Small
+samples are pulled toward the league with 150 plays. Then each team's gains are scaled to the league's average,
+so the profile carries <b>how</b> a team plays but not <b>how good</b> it is.</p></dd>
+
+<dt id="sim-nfl-strength">Where strength comes from</dt>
+<dd><p>Strength is set to agree with our own pick. Before you watch, 300 practice games tune two dials - a yards
+edge for the stronger team and an overall scale - until the average simulated game lands on the What if?
+panel's win chance (turned into a point margin: each point is worth about 0.137 in
+<a href="#odds">log-odds</a>) and on our predicted total. Mark a player out or change a unit's percent and the
+yards move where they belong: a pass defense at 80% gives up more through the air, not on the ground.</p></dd>
+
+<dt id="sim-nfl-call">What play is called</dt>
+<dd><p>A pass or a run, at the team's own early-down pass rate, adjusted the way teams adjust:</p>
+<p>&bull; <b>3rd and 4th down</b> by distance: 25% passes on 3rd and 1, 40% on 3rd and 2, 65% on 3rd and 3-4, 85% when longer; 2nd and long throws more, 2nd and short less;</p>
+<p>&bull; <b>ahead late</b> (the last four minutes), teams run the clock: 6% passes on first down, 20% on second, 25% or 55% on a short or long third;</p>
+<p>&bull; <b>behind by two scores</b> from the third quarter on, more passes; in the hurry-up, more again;</p>
+<p>&bull; <b>field position</b>: inside the opponent's 10 teams pass 20% less than their downs would suggest,
+and pinned inside their own 10, 12% less.</p></dd>
+
+<dt id="sim-nfl-who">Who gets the ball</dt>
+<dd><p>Targets and carries go to each team's players by their shares over its last four games, among those still
+active. In short yardage, at the goal line and late in close games, the lead back gets the ball more - shares are
+squared, so a back with 83% of the carries gets about 98%. Mark a player out and his share goes to the rest; swap
+the quarterback and the new one throws and takes the quarterback's runs.</p></dd>
+
+<dt id="sim-nfl-result">What the play gains</dt>
+<dd><p>A pass is first a sack or not, at the team's sack rate; then an interception or not; then complete or not,
+at the team's completion rate times the target's own catch rate. A completion or a run gains yards drawn from the
+team's own spread of gains, times the strength scale, times the player's own yards per catch or carry next to his
+teammates'. Near the goal line, completions drop (49% inside the 10 against 66% between the 20s) and gains
+shrink; pinned deep, losses shrink, so safeties are as rare as real ones. On 3rd or 4th and short, a run is stuffed
+12% of the time on top of its draw - real teams convert 73% of them; simulated ones, 72%.</p></dd>
+
+<dt id="sim-nfl-fourth">Fourth down and kicks</dt>
+<dd><p>Fourth downs go for it the way teams decide now: 4th and 1 from your own 30 on; 4th and 2 from midfield and
+4th and 3 from the opponent's 45 when a field goal is out of reach; inside the opponent's 10 by yards to go (4th and 2: 61%); behind late, more aggressively; otherwise a field goal
+when it's makeable (the league's make rate by distance) or a punt. Kickoffs and punts are real ones from the last
+two seasons: where the ball was caught and how far it came back are drawn together, as one real return, so a deep
+catch comes back farther, and return touchdowns happen about as often as real ones. A team behind late kicks
+onside and recovers about 1 in 13.</p></dd>
+
+<dt id="sim-nfl-clock">The clock and the referees</dt>
+<dd><p>Plays in bounds take 40 seconds, incompletions 6. Each team has three timeouts a half and spends them as
+teams do - the defense to stop the clock late, the offense when behind or driving at the half - and the
+two-minute warning stops the clock. A team kneels only when kneeling on every remaining down actually ends the
+game. Penalties come at each team's rate (pulled hard toward the league's, since a team's flag rate barely carries
+over from one half of a season to the next) in the league's mix of fouls, enforced by the rulebook: false starts
+and holding walked back, pass interference spotted, personal fouls added on with an automatic first down.</p></dd>
+</dl>
+</section>
+
+<section class="methodCategory" id="sim-nfl-check">
+<h2>Football: checked against the league</h2>
+<p class="methodCategoryNote">Simulated games before the strength dials are tuned (the tuning moves points, not
+the shape of the game), per team per game, against 2025-26.</p>
+<table class="realism">
+<thead><tr><th></th><th>Simulated</th><th>Real</th></tr></thead>
+<tbody>
+<tr><td>Plays (snaps, counting ones a flag wiped out)</td><td>62 (67)</td><td>61 (65)</td></tr>
+<tr><td>Penalties</td><td>5.7 for 44 yards</td><td>5.6</td></tr>
+<tr><td>Timeouts used</td><td>3.75</td><td>3.85</td></tr>
+<tr><td>Red-zone trips ending in a touchdown</td><td>58.5%</td><td>58.9%</td></tr>
+<tr><td>... once inside the 10</td><td>70.6%</td><td>70.2%</td></tr>
+<tr><td>Safeties</td><td>0.018</td><td>0.017</td></tr>
+<tr><td>3rd and 4th and 1 converted on a run</td><td>72%</td><td>73%</td></tr>
+<tr><td>Kick returns: average starting yard line</td><td>31</td><td>30.7</td></tr>
+<tr><td>Return touchdowns, kick / punt</td><td>0.014 / 0.035</td><td>0.016 / 0.042</td></tr>
+<tr><td>Onside kicks</td><td>0.15</td><td>0.19</td></tr>
+</tbody>
+</table>
+<p class="methodCategoryNote">Untuned, a team scores about 20 points against the league's 22; the tuning step
+closes that game by game, landing within 0.2 points of the target margin on average. Late-game passing runs a
+little high (28% of plays when protecting a lead, against 23%). As in baseball, each gap we found had a cause:
+red-zone touchdowns ran too high (77% inside the 10) because gains were drawn the same way anywhere on the field,
+until the field zones were measured; kickoffs once handed out short fields at random, because nearly half of the
+real kickoff drives starting past midfield followed a failed onside kick.</p>
+</section>
+
+<section class="methodCategory" id="sim-thousand">
+<h2>1,000 games at once</h2>
+<dl class="terms">
+<dt id="sim-thousand-what">What it's for</dt>
+<dd><p>One simulated game is one story; a thousand are a forecast. "Simulate it 1,000 times" plays the same
+matchup with different dice each time (<a href="#monte-carlo">Monte Carlo</a>) and reports how often each team
+wins, the spread of margins and totals, the commonest final scores, and each player's averages - his chance of a
+hit, a homer, a touchdown or 100 yards.</p></dd>
+
+<dt id="sim-thousand-trust">How much to trust it</dt>
+<dd><p>A thousand games pins a win share down to about 3 points either way. The football simulator is tuned to our
+pick, so it adds the shape of the game - who scores, how it's won - more than a new chance. The baseball simulator
+isn't tuned to the pick: it builds the game from the players alone, so its win share is an independent second
+opinion, shown next to our pick model's.</p></dd>
+</dl>
+</section>
+
+</div>
+
 <script>
-// The three tabs, kept in the address (#metrics, #methods, or any term's
+// The tabs, kept in the address (#metrics, #methods, or any term's
 // own id) so a link can open a tab - or a term inside one - directly.
 (() => {
 const panels = [...document.querySelectorAll(".howPanel")]
