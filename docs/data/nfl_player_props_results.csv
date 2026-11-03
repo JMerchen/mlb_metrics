@@ -12,9 +12,9 @@ v4,Receiving Yards,12,11,0.9166666666666666,0,3
 v4,Receptions,15,10,0.6666666666666666,0,4
 v4,Rushing Yards,4,1,0.25,0,2
 v4,Sacks,5,4,0.8,0,0
-v6,all,23,19,0.8260869565217391,0,16
-v6,Passing Yards,2,2,1.0,0,4
-v6,Receiving Yards,6,5,0.8333333333333334,0,5
-v6,Receptions,8,7,0.875,0,3
-v6,Rushing Yards,3,2,0.6666666666666666,0,2
-v6,Sacks,4,3,0.75,0,2
+v6,all,32,21,0.65625,0,17
+v6,Passing Yards,4,3,0.75,0,3
+v6,Receiving Yards,8,6,0.75,0,7
+v6,Receptions,10,7,0.7,0,4
+v6,Rushing Yards,4,2,0.5,0,2
+v6,Sacks,6,3,0.5,0,1
