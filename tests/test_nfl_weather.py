@@ -103,3 +103,22 @@ def test_rain_and_wind_lower_the_predicted_total():
     assert totals["dry"] - totals["wet"] == pytest.approx(2 * (2.7 + 0.5 + 2.826))
     # Under a roof the weather outside doesn't count.
     assert totals["dome"] == pytest.approx(40.0)
+
+
+def test_the_simulations_weather_total_matches_the_points_model():
+    """docs/nfl_sim.js keeps its own copy of the points model's weather
+    terms (SIM_TOTAL_WEATHER) for weather chosen in the simulation."""
+    import os
+    import re
+
+    text = open(os.path.join(os.path.dirname(__file__), "..", "docs", "nfl_sim.js")).read()
+    line = re.search(r"const SIM_TOTAL_WEATHER = (\{.*\})", text).group(1)
+    numbers = dict(re.findall(r"(\w+): (-?[\d.]+)", line.split("means:")[0]))
+    coefficients = config.NFL_TOTALS_COEFFICIENTS
+    means = config.NFL_WEATHER_OUTDOOR_MEANS
+    for term in ("wind", "cold", "rain"):
+        assert float(numbers[term]) == coefficients[f"wx_{term}"]
+    # The means come after the coefficients on the same line.
+    means_part = dict(re.findall(r"(\w+): (-?[\d.]+)", line.split("means:")[1]))
+    for term in ("wind", "cold", "rain"):
+        assert float(means_part[term]) == means[f"wx_{term}"]
