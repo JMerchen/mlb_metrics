@@ -2366,17 +2366,26 @@ NFL_UNIT_SHRINK_PLAYS = 150.0
 # 2026-10-22) so whole numbers separate teams more finely.
 NFL_UNIT_PLUS_POINTS_PER_SD = 30.0
 # Refit 2026-11-01 with NFL_TOTALS_SHRINK_FADE (the ratings spread further,
-# so each EPA point is worth fewer points than before: 17.6/18.8 then).
+# so each EPA point is worth fewer points than before: 17.6/18.8 then), and
+# 2026-11-04 with the weather terms (nfl_weather.py): per team, -0.18 points
+# per mph of wind over 5, -0.1 per degree below 40F, -2.8 in rain. Weather
+# explains most of what a roof was worth (dome 1.57 -> 0.56).
 NFL_TOTALS_COEFFICIENTS = {
-    "const": 5.23,
-    "off_epa": 11.54,
-    "opp_def_epa": 12.32,
+    "const": 6.185,
+    "off_epa": 12.069,
+    "opp_def_epa": 12.387,
     "off_plays": 0.051,
-    "opp_def_plays": 0.192,
-    "home": 1.66,
-    "dome": 1.57,
-    "qb_epa": 18.75,
+    "opp_def_plays": 0.193,
+    "home": 1.664,
+    "dome": 0.559,
+    "qb_epa": 18.265,
+    "wx_wind": -0.18,
+    "wx_cold": -0.1,
+    "wx_rain": -2.826,
 }
+# The average outdoor game's weather terms (nfl_weather.weather_features),
+# for an outdoor game with no reading or forecast yet.
+NFL_WEATHER_OUTDOOR_MEANS = {"wx_wind": 3.754, "wx_cold": 1.322, "wx_rain": 0.07}
 
 # Walk-forward CV / final-holdout sizing for
 # scripts/train_nfl_game_pick_calibration.py - same role as

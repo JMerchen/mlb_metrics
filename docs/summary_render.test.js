@@ -4,9 +4,13 @@ const assert = require("node:assert/strict")
 global.teamName = require("./teams.js").teamName
 const {
   srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, totalPointsText, teamEpaHtml,
+  srWeather, pickBarHtml,
 } = require("./summary_render.js")
 
 const text = html => html.replace(/<[^>]+>/g, "").replace(/&middot;/g, "·").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim()
+// The card's face (what shows before it's clicked) and what opens below.
+const face = html => text(html.match(/<summary>([\s\S]*)<\/summary>/)[1])
+const detail = html => text(html.split("</summary>")[1])
 
 test("teamName: nicknames per sport, unknown codes fall back", () => {
   const { teamName } = require("./teams.js")
@@ -25,19 +29,23 @@ test("srPct: whole-number percentages", () => {
 })
 
 test("game row: nicknames, our number next to Vegas's", () => {
-  const row = text(gamePickRowHtml({
+  const html = gamePickRowHtml({
     home_team: "NYY", away_team: "TB", predicted_winner: "NYY",
     predicted_probability: 0.589, market_predicted_winner_probability: 0.605, bet_units: 0,
-  }, "mlb"))
-  assert.equal(row, "Rays at Yankees We say Yankees 59% · Vegas 61%")
+    market_home_win_probability: 0.605,
+  }, "mlb")
+  assert.equal(face(html), "Rays at Yankees We say Yankees 59% · Vegas 61%")
+  // Opened: each team's chance as a bar, and no weather for baseball.
+  assert.equal(detail(html), "Rays 41%59% Yankees The tick is Vegas: Yankees 61%")
 })
 
 test("game row: a bet reads as a sentence, not units shorthand", () => {
-  const row = text(gamePickRowHtml({
+  const html = gamePickRowHtml({
     home_team: "SEA", away_team: "LAC", predicted_winner: "SEA",
     predicted_probability: 0.82, market_predicted_winner_probability: "", bet_units: 1.73, bet_team: "SEA",
-  }, "nfl"))
-  assert.equal(row, "Chargers at Seahawks We say Seahawks 82% Bet Seahawks · 1.7 units Before the final injury report")
+  }, "nfl")
+  assert.equal(face(html), "Chargers at Seahawks We say Seahawks 82% Bet Seahawks · 1.7 units")
+  assert.match(detail(html), /Before the final injury report$/)
 })
 
 test("NFL game row: outlined and labelled by the injury report; MLB rows aren't", () => {
@@ -89,11 +97,12 @@ test("no statistician vocabulary on these panels", () => {
 })
 
 test("NFL game row: predicted total next to Vegas's; nothing for MLB", () => {
-  const row = text(gamePickRowHtml({
+  const html = gamePickRowHtml({
     home_team: "LA", away_team: "BUF", predicted_winner: "LA", predicted_probability: 0.51,
     market_predicted_winner_probability: 0.57, bet_units: 0, predicted_total: 51.37, market_total: 54.5,
-  }, "nfl"))
-  assert.equal(row, "Bills at Rams We say Rams 51% · Vegas 57%Total points: we say 51 · Vegas 54.5 Before the final injury report")
+  }, "nfl")
+  assert.equal(face(html), "Bills at Rams We say Rams 51% · Vegas 57%")
+  assert.equal(detail(html), "Bills 49%51% Rams 🗓️Forecast comes the day before the game Total points: we say 51 · Vegas 54.5 Before the final injury report")
   assert.equal(text(totalPointsText({ predicted_total: "47.6", market_total: "" })), "Total points: we say 48")
   assert.equal(totalPointsText({ predicted_total: "" }), "")
   assert.equal(totalPointsText({}), "")
@@ -123,4 +132,30 @@ test("Beat the Streak after the regular season: final record, season over, no 't
   assert.ok(!tiles.includes("Best hitter today"))
   assert.ok(tiles.includes("at the end of the season"))
   assert.equal(text(btsSeasonOverHtml(summary)), "The regular season ended Sep 27. Beat the Streak picks return on Opening Day.")
+})
+
+test("NFL weather: a symbol and plain words, indoors, or not yet", () => {
+  assert.equal(srWeather({}), null)
+  assert.deepEqual(srWeather({ weather_indoor: 1, weather_temp: 30 }), { indoor: true, icon: "🏟️", label: "Indoors" })
+  const wet = srWeather({ weather_indoor: 0, weather_temp: 51.4, weather_wind: 9, weather_rain: 0.8, weather_code: 63 })
+  assert.equal(wet.icon, "🌧️")
+  assert.equal(wet.label, "51°F, wind 9 mph, 80% chance of rain")
+  assert.equal(srWeather({ weather_temp: 28, weather_wind: 6, weather_rain: 0, weather_code: 73 }).label, "28°F, wind 6 mph, snow")
+  assert.equal(srWeather({ weather_temp: 60, weather_wind: 22, weather_rain: 0.1, weather_code: 3 }).icon, "💨")
+  assert.equal(srWeather({ weather_temp: 70, weather_wind: 4, weather_rain: 0, weather_code: 0 }).icon, "☀️")
+  const html = gamePickRowHtml({
+    home_team: "TB", away_team: "ATL", predicted_winner: "TB", predicted_probability: 0.6,
+    weather_indoor: 0, weather_temp: 78, weather_wind: 9, weather_rain: 0.9, weather_code: 63,
+  }, "nfl")
+  assert.match(face(html), /🌧️/)
+  assert.match(detail(html), /🌧️78°F, wind 9 mph, 90% chance of rain/)
+})
+
+test("pick bar: away left, home right, our side filled, Vegas ticked", () => {
+  const html = pickBarHtml({ home_team: "TB", away_team: "ATL", predicted_winner: "ATL", predicted_probability: 0.7,
+    market_home_win_probability: 0.4 }, "nfl")
+  assert.match(html, /pickBarAway picked" style="width:70.0%"/)
+  assert.match(html, /pickBarVegas" style="left:60.0%"/)
+  assert.equal(text(html), "Falcons 70%30% Buccaneers The tick is Vegas: Falcons 60%")
+  assert.equal(pickBarHtml({ home_team: "TB", away_team: "ATL" }, "nfl"), "")
 })

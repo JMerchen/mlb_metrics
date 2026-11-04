@@ -144,7 +144,56 @@ return `<table class="epaTable">
 </table>`
 }
 
-// One game: "Rays at Yankees", our pick and our chance next to Vegas's.
+// Open-Meteo weather codes (WMO) that mean snow.
+const SR_SNOW_CODES = new Set([71, 73, 75, 77, 85, 86])
+
+// NFL: the game's weather from its pick (nfl_weather.py) - {indoor, temp,
+// wind, rain, code, snow, icon, label} - or null when there's no forecast
+// yet (it's pulled the day before, or the morning of a Monday or Thursday
+// game) or the sport has none.
+function srWeather(g){
+if(srNum(g.weather_indoor) === 1){ return {indoor: true, icon: "🏟️", label: "Indoors"} }
+const temp = srNum(g.weather_temp), wind = srNum(g.weather_wind), rain = srNum(g.weather_rain), code = srNum(g.weather_code)
+if(temp === null && wind === null && rain === null){ return null }
+const snow = code !== null && SR_SNOW_CODES.has(code)
+const icon = snow ? "🌨️"
+: code !== null && code >= 95 ? "⛈️"
+: (rain || 0) >= 0.5 ? "🌧️"
+: (rain || 0) >= 0.25 ? "🌦️"
+: (wind || 0) >= 18 ? "💨"
+: code === 45 || code === 48 ? "🌫️"
+: code === 0 || code === 1 ? "☀️"
+: code === 2 ? "⛅"
+: code === 3 ? "☁️" : "🌤️"
+const parts = []
+if(temp !== null){ parts.push(`${Math.round(temp)}°F`) }
+if(wind !== null){ parts.push(`wind ${Math.round(wind)} mph`) }
+if(snow){ parts.push("snow") }else if(rain !== null){ parts.push(`${Math.round(rain * 100)}% chance of rain`) }
+return {indoor: false, temp, wind, rain, code, snow, icon, label: parts.join(", ")}
+}
+
+// Each team's chance as one bar, away on the left and home on the right,
+// our pick's side filled in, with a tick where Vegas has it.
+function pickBarHtml(g, sport){
+const p = srNum(g.predicted_probability)
+if(p === null){ return "" }
+const homePicked = g.predicted_winner === g.home_team
+const home = homePicked ? p : 1 - p
+const vegasHome = srNum(g.market_home_win_probability)
+const away = srTeam(g.away_team, sport), homeName = srTeam(g.home_team, sport)
+const tick = vegasHome === null ? ""
+: `<span class="pickBarVegas" style="left:${((1 - vegasHome) * 100).toFixed(1)}%" title="Vegas: ${srEsc(homeName)} ${srPct(vegasHome)}"></span>`
+return `<div class="pickBar" role="img" aria-label="${srEsc(away)} ${srPct(1 - home)}, ${srEsc(homeName)} ${srPct(home)}">
+<div class="pickBarLabels"><span>${srEsc(away)} <b>${srPct(1 - home)}</b></span><span><b>${srPct(home)}</b> ${srEsc(homeName)}</span></div>
+<div class="pickBarTrack"><span class="pickBarAway${homePicked ? "" : " picked"}" style="width:${((1 - home) * 100).toFixed(1)}%"></span><span class="pickBarHome${homePicked ? " picked" : ""}"></span>${tick}</div>
+${vegasHome === null ? "" : `<div class="pickBarKey">The tick is Vegas: ${srEsc(homePicked ? homeName : away)} ${srPct(homePicked ? vegasHome : 1 - vegasHome)}</div>`}
+</div>`
+}
+
+// One game: a card with the matchup and our pick ("Rays at Yankees", "We
+// say Yankees 59%"), a color bar down its left edge (NFL: before or after
+// the final injury report), and a click to open the rest: each team's
+// chance as a bar, the weather, the predicted total and each team's EPA.
 function gamePickRowHtml(g, sport){
 const homePicked = g.predicted_winner === g.home_team
 const away = srEsc(srTeam(g.away_team, sport))
@@ -156,20 +205,36 @@ const total = totalPointsText(g)
 const bet = units > 0
 ? `<span class="bet-badge">Bet ${srEsc(srTeam(g.bet_team, sport))}&nbsp;&middot; ${units.toFixed(1)} units</span>` : ""
 // NFL picks carry whether they came before or after the final injury
-// report (outlined in different colors).
+// report (the edge's color).
 const report = sport === "nfl" ? (g.injury_report === "after" ? "after" : "before") : ""
 const reportNote = report
 ? `<span class="reportNote"><b>${report === "after" ? "After" : "Before"} the final injury report</b></span>`
 : ""
-return `<div class="game${report ? ` report-${report}` : ""}">
+const weather = sport === "nfl" ? srWeather(g) : null
+const weatherLine = sport !== "nfl" ? ""
+: weather
+? `<div class="gameWeather"><span class="wxIcon" aria-hidden="true">${weather.icon}</span><span>${srEsc(weather.label)}</span></div>`
+: `<div class="gameWeather"><span class="wxIcon" aria-hidden="true">🗓️</span><span>Forecast comes the day before the game</span></div>`
+const epa = sport === "nfl" ? teamEpaHtml(g, sport) : ""
+return `<details class="game${report ? ` report-${report}` : ""}">
+<summary>
 <div class="btsMatchup">
 <span class="${homePicked ? "" : "winner"}">${away}</span> at
 <span class="${homePicked ? "winner" : ""}">${home}</span>
 </div>
-<span class="prob">We say <b>${pick} ${srPct(g.predicted_probability)}</b>${vegas !== null ? `<span class="mkt">&nbsp;&middot; Vegas ${srPct(vegas)}</span>` : ""}${total ? `<span class="total">${total}</span>` : ""}</span>
+<span class="prob">We say <b>${pick} ${srPct(g.predicted_probability)}</b>${vegas !== null ? `<span class="mkt">&nbsp;&middot; Vegas ${srPct(vegas)}</span>` : ""}</span>
+${weather && !weather.indoor ? `<span class="wxIcon wxPeek" title="${srEsc(weather.label)}" aria-hidden="true">${weather.icon}</span>` : ""}
 ${bet}
+<span class="gameMore" aria-hidden="true"></span>
+</summary>
+<div class="gameDetail">
+${pickBarHtml(g, sport)}
+${weatherLine}
+${total ? `<div class="total">${total}</div>` : ""}
+${epa}
 ${reportNote}
-</div>`
+</div>
+</details>`
 }
 
 function gamePicksListHtml(picks, sport){
@@ -182,6 +247,7 @@ return picks.map(g => gamePickRowHtml(g, sport)).join("")
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, gamePicksListHtml, totalPointsText,
+srWeather, pickBarHtml,
 btsSeasonOver, btsSeasonOverHtml,
 teamEpaHtml,
 }
