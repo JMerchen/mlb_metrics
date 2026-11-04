@@ -3360,6 +3360,27 @@ every player's averages, touchdown chance and 100-yard chance - about
 > site shows it next to Vegas's total and tracks both misses; it never
 > becomes a bet.
 >
+> **Game-day weather (2026-11-04).** The Thursday, Saturday and Monday
+> morning runs pull Open-Meteo's forecast (free, no key) for each outdoor
+> game played that day or the next (`nfl_weather.py`): mean temperature
+> and wind and the highest chance of rain from kickoff through the next
+> three hours. It enters the points model as wind over 5 mph, degrees
+> below 40°F and the chance of rain (per team: −0.18, −0.10 and −2.8
+> points), fit on nflverse's game-time readings plus rain from the
+> play-by-play's weather text. Graded the same way, the total misses by
+> 10.47 (10.61 without weather), and for the first time it adds to the
+> market's number (coefficient 0.26, p = 0.004) - 130 rainy outdoor games
+> since 2016 came in 3.5 points under the closing total. Indoor games get
+> no forecast; an outdoor game without one (Tuesday's pick) takes the
+> average outdoor game's weather. The game simulation uses the same
+> forecast to change how the game is played (`SIM_WEATHER` in
+> `docs/nfl_sim.js`, measured by `scripts/measure_nfl_weather_effects.py`
+> on 222,000 outdoor snaps): rain means about 3 points fewer passes called
+> and completed, wind and cold less of both and shorter completions, snow
+> more sacks. Win picks don't use it (weather moves how many points get
+> scored, not who wins). The home page's game cards show it with a symbol
+> when opened, next to each team's EPA and a bar of each team's chance.
+>
 > **The pull toward the league fades for extreme units (2026-11-01).**
 > With a fixed 300 pseudo-plays per window the worst defenses were pulled
 > too far (the 2026 Cowboys allowed +0.138 EPA a play through week 7,

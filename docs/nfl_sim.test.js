@@ -6,6 +6,7 @@ const {
   simRng, simDraw, simFactors, simZone, simulateGame, simAverage, simCalibrate, simSpot, simClock,
   simScoreboardHtml, simDriveChartHtml, simBoxScoreHtml, simTickerHtml, simFieldSvg, simFinalHtml,
   simPick, simShortName, simLineup, simSummary, simMarginBins, simSummaryHtml, simPlayerStatsHtml,
+  simWeather, simShiftOdds,
 } = require("./nfl_sim.js")
 
 const text = html => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
@@ -524,4 +525,38 @@ test("field zones: the goal line is tighter, a team pinned deep rarely gives up 
   assert.ok(safeties / (2 * n) < 0.035, `safeties ${safeties / (2 * n)}`)
   // Real teams go for it on 4th and 1-2 inside the 10 about 3 times in 4.
   assert.ok(wentFor / shortFourth > 0.55, `went for it ${wentFor} of ${shortFourth}`)
+})
+
+test("weather turns into shifts, and none indoors or without a forecast", () => {
+  assert.equal(simWeather(null), null)
+  assert.equal(simWeather({ temp: 30, wind: 20, rain: 1, indoor: 1 }), null)
+  assert.equal(simWeather({ temp: "", wind: "", rain: "" }), null)
+  const calm = simWeather({ temp: 60, wind: 3, rain: 0 })
+  assert.deepEqual(calm, { pass_rate: 0, comp: 0, sack: 0, pass_yds: 1 })
+  const soaked = simWeather({ temp: 60, wind: 3, rain: 1 })
+  assert.ok(soaked.pass_rate < -0.1 && soaked.comp < -0.1 && soaked.pass_yds === 1)
+  const windy = simWeather({ temp: 60, wind: 25 })
+  assert.ok(windy.pass_yds < 1 && windy.comp < 0)
+  assert.ok(simWeather({ temp: 25, wind: 5, snow: true }).sack > 0)
+  assert.ok(Math.abs(simShiftOdds(0.6, 0) - 0.6) < 1e-12)
+  assert.ok(simShiftOdds(0.6, -0.12) < 0.6 && simShiftOdds(0.6, -0.12) > 0.56)
+})
+
+test("a soaked game throws less and completes less", () => {
+  const tally = weather => {
+    let att = 0, cmp = 0, rush = 0
+    for(let seed = 1; seed <= 150; seed++){
+      const g = simulateGame(PROFILES, "GB", "CAR", { seed, weather })
+      for(const side of ["home", "away"]){
+        att += g.box[side].pass_att
+        cmp += g.box[side].pass_comp
+        rush += g.box[side].rush_att
+      }
+    }
+    return { passShare: att / (att + rush), comp: cmp / att }
+  }
+  const dry = tally(null)
+  const wet = tally({ temp: 45, wind: 15, rain: 1 })
+  assert.ok(wet.passShare < dry.passShare - 0.01, `${wet.passShare} vs ${dry.passShare}`)
+  assert.ok(wet.comp < dry.comp - 0.02, `${wet.comp} vs ${dry.comp}`)
 })

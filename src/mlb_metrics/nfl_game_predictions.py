@@ -31,7 +31,7 @@ import os
 
 import pandas as pd
 
-from mlb_metrics import config, game_picks, kelly, market_odds, nfl_totals
+from mlb_metrics import config, game_picks, kelly, market_odds, nfl_totals, nfl_weather
 
 NFL_GAME_PREDICTION_COLUMNS = [
     "date", "season", "week", "game_id", "home_team", "away_team", "predicted_winner",
@@ -45,6 +45,9 @@ NFL_GAME_PREDICTION_COLUMNS = [
     # it (repriced the morning of, or the day before, the game), and for
     # an "after" pick the players the report took out.
     "injury_report", "injury_note",
+    # The weather at kickoff (nfl_weather.py): the forecast for a game
+    # repriced the day before or morning of it, blank otherwise.
+    *nfl_weather.WEATHER_DISPLAY_COLUMNS,
 ]
 
 POINT_PREDICTION_COLUMNS = ["predicted_home_points", "predicted_away_points", "predicted_total"]
@@ -255,6 +258,9 @@ def select_game_picks(
     else:
         picks["market_total"] = pd.NA
     picks["actual_total"] = pd.NA
+    for column in nfl_weather.WEATHER_DISPLAY_COLUMNS:
+        picks[column] = picks["game_id"].map(schedule_games_df.set_index("game_id")[column]) \
+            if column in schedule_games_df.columns else pd.NA
     picks["injury_report"] = "before"
     picks["injury_note"] = pd.NA
 

@@ -1185,8 +1185,29 @@ template already relies on these exact names. */
 .panel-head.with-stats{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;}
 .panel-head .stat-line{font-size:13px;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:400;}
 .panel-head .stat-line b{color:var(--text);font-weight:600;}
-.game{display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid var(--border);}
-.game:last-child{border-bottom:none;}
+.game{display:block;margin:8px 10px;border:1px solid var(--border);border-left:6px solid var(--accent);border-radius:8px;background:var(--bg-raised);overflow:hidden;}
+.game:last-child{margin-bottom:10px;}
+.game>summary{display:flex;align-items:center;gap:10px;padding:11px 14px 11px 12px;cursor:pointer;list-style:none;}
+.game>summary::-webkit-details-marker{display:none;}
+.game>summary:hover{background:var(--bg-card);}
+.game>summary:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+.game .gameMore::before{content:"";display:inline-block;width:7px;height:7px;border-right:2px solid var(--text-dim);border-bottom:2px solid var(--text-dim);transform:rotate(-45deg);transition:transform .15s;}
+.game[open] .gameMore::before{transform:rotate(45deg);}
+.game .wxPeek{font-size:16px;line-height:1;}
+.gameDetail{padding:2px 14px 12px 12px;font-size:13px;}
+.gameDetail .total{font-size:12px;color:var(--text-dim);margin-top:6px;}
+.gameWeather{display:flex;align-items:center;gap:8px;margin-top:10px;color:var(--text);}
+.gameWeather .wxIcon{font-size:24px;line-height:1;}
+.pickBar{margin-top:4px;}
+.pickBarLabels{display:flex;justify-content:space-between;font-size:12px;color:var(--text-dim);margin-bottom:4px;}
+.pickBarLabels b{color:var(--text);font-weight:600;}
+.pickBarTrack{position:relative;display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--border);}
+.pickBarTrack .pickBarAway,.pickBarTrack .pickBarHome{display:block;height:100%;background:var(--text-dim);opacity:.35;}
+.pickBarTrack .pickBarHome{flex:1;}
+.pickBarTrack .picked{background:var(--accent);opacity:1;}
+.pickBarTrack .pickBarAway{border-right:2px solid var(--bg-card);}
+.pickBarVegas{position:absolute;top:-1px;bottom:-1px;width:3px;margin-left:-1.5px;background:var(--text);border-radius:1px;}
+.pickBarKey{font-size:11px;color:var(--text-dim);margin-top:3px;}
 .game .btsMatchup{flex:1;min-width:0;font-size:13px;}
 .game .btsMatchup .away{color:var(--text-dim);}
 .game .btsMatchup .winner{font-weight:700;color:var(--on-accent);background:var(--accent);padding:1px 7px;border-radius:4px;}
@@ -1256,9 +1277,9 @@ td,th{padding:7px 8px;font-size:12px;}
 .statusNote{font-size:13px;}
 
 /* A game row wraps instead of squeezing "We say ... · Vegas ..." */
-.game{flex-wrap:wrap;row-gap:4px;}
+.game>summary{flex-wrap:wrap;row-gap:4px;}
 .game .btsMatchup{flex-basis:100%;}
-.game .prob{white-space:normal;}
+.game .prob{white-space:normal;flex:1;}
 
 }
 
@@ -1792,8 +1813,10 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 .whatIfPctWrap{display:inline-flex;align-items:center;white-space:nowrap;}
 
 /* ---- NFL picks: before / after the final injury report ---- */
-.pickCard.report-before,.game.report-before{outline:2px solid var(--report-before);outline-offset:-2px;}
-.pickCard.report-after,.game.report-after{outline:2px solid var(--report-after);outline-offset:-2px;}
+.pickCard.report-before{outline:2px solid var(--report-before);outline-offset:-2px;}
+.pickCard.report-after{outline:2px solid var(--report-after);outline-offset:-2px;}
+.game.report-before{border-left-color:var(--report-before);}
+.game.report-after{border-left-color:var(--report-after);}
 .reportNote{font-size:12px;color:var(--text-dim);margin-top:4px;}
 .reportNote b{font-weight:600;}
 .report-before .reportNote b{color:var(--report-before);}

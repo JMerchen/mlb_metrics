@@ -46,7 +46,7 @@ import pandas as pd
 from mlb_metrics import (
     config, market_odds, nfl_data, nfl_game_evaluation, nfl_game_picks, nfl_game_predictions,
     nfl_player_props, nfl_position_floors, nfl_prop_predictions, nfl_team_strength, nfl_totals, nfl_units,
-    nfl_whatif,
+    nfl_weather, nfl_whatif,
 )
 
 NFL_GAME_PREDICTIONS_LOG_PATH = "data/predictions/nfl_game_predictions.csv"
@@ -317,7 +317,7 @@ def run(
                 (schedules["season"] == season) & (schedules["game_type"] == "REG") & (schedules["week"] == week)
             ][["game_id", "season", "week", "home_team", "away_team", "home_qb_id", "away_qb_id",
                "gameday", "home_moneyline", "away_moneyline"]]
-            for column in ("total_line", "roof", "stadium_id", "home_qb_name", "away_qb_name"):
+            for column in ("total_line", "roof", "stadium_id", "gametime", "home_qb_name", "away_qb_name"):
                 if column in schedules.columns:
                     this_week_games[column] = schedules.loc[this_week_games.index, column]
             # The feed's listed starters can be stale (a QB on injured
@@ -438,6 +438,20 @@ def run(
             )
             nfl_whatif.save_json(os.path.join(output_dir, "nfl_whatif.json"), whatif)
             _write_last_week_whatif(fresh, prior_season, season, week, output_dir)
+
+            # The weather at kickoff (nfl_weather.py) for the same games
+            # the report reprices - played today or tomorrow - so their
+            # "after" pick has the forecast from the day before (the
+            # morning of, for Thursday and Monday games). Indoor games
+            # get none; every other game takes the average outdoor game's.
+            indoor = nfl_totals.dome_flags(this_week_games, history["schedules"])
+            this_week_games["weather_indoor"] = indoor
+            forecasts = nfl_weather.game_forecasts(this_week_games, indoor, report_games)
+            for column in [c for c in forecasts.columns if c != "game_id"]:
+                this_week_games[column] = this_week_games["game_id"].map(forecasts.set_index("game_id")[column])
+            for _, f in forecasts.iterrows():
+                print(f"Weather {f['game_id']}: {f['weather_temp']}F, wind {f['weather_wind']} mph, "
+                      f"rain {f['weather_rain']}, code {f['weather_code']}")
 
             # Predicted points per side and total (nfl_totals.py), from
             # the same no-lookahead history. Shown next to the market's

@@ -43,6 +43,41 @@ const SIM_BACKED_LOSS = 0.6
 // often real teams go for it by yards to go (2024-26: 4th and 2, 61%).
 const SIM_GOAL_LINE_GO = [[1, 0.92], [2, 0.61], [3, 0.34], [5, 0.19], [99, 0.04]]
 
+// What the weather does to plays (scripts/measure_nfl_weather_effects.py,
+// 222,000 outdoor snaps 2016-25, only effects with p < 0.05): log-odds
+// shifts for passes called on early downs, completions and sacks, and the
+// fraction of yards per completion, per mph of wind over 5, degree below
+// 40F, rain (its chance) and snow. Rain: about 3 points fewer passes
+// called and completed; nothing measurable on interceptions, fumbles,
+// yards per carry or field goals.
+const SIM_WEATHER = {
+pass_rate: {wind: -0.0054, cold: -0.0049, rain: -0.1363, snow: -0.1925},
+comp: {wind: -0.0063, cold: -0.0042, rain: -0.1223, snow: -0.1919},
+sack: {snow: 0.2606},
+pass_yds: {wind: -0.0028},
+}
+
+// A game's weather ({temp, wind, rain, snow, indoor}, from the pick) as
+// SIM_WEATHER's shifts, or null indoors or with no forecast.
+function simWeather(weather){
+const w = weather || {}
+const num = v => v === null || v === undefined || v === "" || !isFinite(Number(v)) ? null : Number(v)
+const temp = num(w.temp), wind = num(w.wind), rain = num(w.rain)
+if(w.indoor || (temp === null && wind === null && rain === null && !w.snow)){ return null }
+const x = {
+wind: Math.max(0, (wind ?? 5) - 5), cold: Math.max(0, 40 - (temp ?? 40)),
+rain: Math.min(1, Math.max(0, rain ?? 0)), snow: w.snow ? 1 : 0,
+}
+const shift = kind => Object.entries(SIM_WEATHER[kind]).reduce((sum, [term, b]) => sum + b * x[term], 0)
+return {pass_rate: shift("pass_rate"), comp: shift("comp"), sack: shift("sack"), pass_yds: 1 + shift("pass_yds")}
+}
+
+// A probability moved by `shift` in log-odds.
+function simShiftOdds(p, shift){
+if(!shift || p <= 0 || p >= 1){ return p }
+return 1 / (1 + Math.exp(-(Math.log(p / (1 - p)) + shift)))
+}
+
 function simEsc(value){
 return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")
 }
@@ -253,6 +288,7 @@ home: simFactors(scale * (1 + edge), pcts.home, pcts.away),
 away: simFactors(scale * (1 - edge), pcts.away, pcts.home),
 }
 const fg = lg.field_goal || {a: 6, b: -0.1}
+const wx = simWeather(opts.weather)
 const lineups = opts.lineups || {}
 const lines = {home: new Map(), away: new Map()}
 // The stat line of a lineup entry (made the first time it's needed).
@@ -680,7 +716,7 @@ continue
 // 77% runs in real games); ahead late, a team runs the clock - in the last
 // four minutes real teams throw on 6% of first downs, 21% of seconds and
 // 42% of thirds - and an incompletion would stop it.
-let passRate = p.neutral_pass_rate
+let passRate = wx ? simShiftOdds(p.neutral_pass_rate, wx.pass_rate) : p.neutral_pass_rate
 if(down === 3 || down === 4){ passRate = togo <= 1 ? 0.25 : togo <= 2 ? 0.4 : togo <= 4 ? 0.65 : 0.85 }
 else if(down === 2 && togo >= 8){ passRate += 0.1 }
 else if(down === 2 && togo <= 3){ passRate -= 0.1 }
@@ -711,7 +747,7 @@ const qb = line(poss, lineup.qb)
 let carrier = null
 let target = null
 if(isPass){
-if(rng() < p.sack_rate * (zoneRates.sack || 1)){
+if(rng() < (wx ? simShiftOdds(p.sack_rate, wx.sack) : p.sack_rate) * (zoneRates.sack || 1)){
 kind = "sack"
 yards = Math.min(-1, Math.round(zoneYards(lg.sack_yards * (0.4 + 1.2 * rng()))))
 b.sacks += 1
@@ -738,10 +774,10 @@ if(qb){ qb.ints += 1 }
 lost = {at: Math.min(99, Math.max(1, 100 - caught + ret)), result: "Interception"}
 text = `${name(poss, lineup.qb)} pass${target ? ` for ${target.short}` : ""} INTERCEPTED by ${code[def]} at the ${spot(100 - caught, def)}, returned ${ret} yard${ret === 1 ? "" : "s"}`
 clockUsed = 8
-}else if(rng() < Math.min(0.95, p.comp_rate * (zoneRates.comp || 1) * (target ? target.catch : 1))){
+}else if(rng() < Math.min(0.95, (wx ? simShiftOdds(p.comp_rate, wx.comp) : p.comp_rate) * (zoneRates.comp || 1) * (target ? target.catch : 1))){
 kind = "pass"
 const raw = simDraw(p.completion_yards, probs, rng())
-yards = Math.min(100 - ball, Math.round(zoneYards(raw > 0 ? raw * factors[poss].pass * (target ? target.ypr : 1) : raw)))
+yards = Math.min(100 - ball, Math.round(zoneYards(raw > 0 ? raw * factors[poss].pass * (target ? target.ypr : 1) * (wx ? wx.pass_yds : 1) : raw)))
 b.pass_comp += 1
 b.pass_yards += yards
 if(qb){
@@ -900,14 +936,14 @@ return {margin, total, homeWins}
 
 // The edge and scale that make the average game land on targetMargin
 // (home points minus away) and targetTotal, with opts.unitPcts (the What
-// if? unit percents) and opts.lineups applied and opts.games games
+// if? unit percents), opts.lineups and opts.weather applied and opts.games games
 // (default 300). Broyden's
 // method: slopes measured once by nudging each, then updated from every
 // step taken; the closest try wins if it runs out of steps.
 function simCalibrate(profiles, homeCode, awayCode, targetMargin, targetTotal, opts = {}){
 const n = opts.games || SIM_CALIBRATION_GAMES
 const at = (edge, scale) => {
-const r = simAverage(profiles, homeCode, awayCode, {edge, scale, unitPcts: opts.unitPcts, lineups: opts.lineups}, n)
+const r = simAverage(profiles, homeCode, awayCode, {edge, scale, unitPcts: opts.unitPcts, lineups: opts.lineups, weather: opts.weather}, n)
 return {...r, edge, scale, off: [r.margin - targetMargin, r.total - targetTotal]}
 }
 const miss = r => Math.abs(r.off[0]) / 0.25 + Math.abs(r.off[1]) / 0.5
@@ -1274,7 +1310,7 @@ return `<div class="simFinal"><div class="whatIfHeadline">Final: ${headline}</di
 
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
-simRng, simDraw, simFactors, simZone, simPunt, simPick, simSharpen, simShortName, simLineup, simulateGame, simAverage, simCalibrate, simSpot, simClock,
+simRng, simDraw, simFactors, simWeather, simShiftOdds, SIM_WEATHER, simZone, simPunt, simPick, simSharpen, simShortName, simLineup, simulateGame, simAverage, simCalibrate, simSpot, simClock,
 simSummary, simMarginBins, simMarginChartHtml, simSummaryHtml, simPlayerStatsHtml,
 simFieldSvg, simScoreboardHtml, simDriveChartHtml, simTickerHtml, simBoxScoreHtml, simCalibrationNote, simFinalHtml,
 }

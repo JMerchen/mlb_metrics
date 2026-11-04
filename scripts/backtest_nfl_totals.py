@@ -27,7 +27,7 @@ scored/allowed, success rate, early-down EPA, separate pass/rush EPA,
 neutral-situation pass rate, drives per game, red-zone TD rate,
 turnovers, a season-to-date league scoring level, gradient boosting on
 all of them. Temperature and wind help on history (10.57 with the QB
-term) but aren't published before kickoff, so they can't be used live.
+term) but weren't published before kickoff - see the weather note below.
 Two seasons of QB history instead of one: 10.63, not worth it.
 Given the market's total the prediction still adds nothing (coefficient
 0.01, p = 0.90); over/under leans are right 50-51% overall, 55.5% on the
@@ -39,6 +39,16 @@ With the pull toward the league fading for units far from it
 leans right 58.3% on the 216 games 5+ points from the market, and teams
 score 0.21 points more than predicted against the worst defenses rather
 than 0.57 (scripts/backtest_nfl_extreme_shrink.py).
+
+With the game's weather (nfl_weather.py, 2026-11-04: nflverse's readings
+for past games, Open-Meteo's forecast live) - wind over 5 mph, degrees
+below 40F and rain: MAE 10.47 (market 10.39), and for the first time the
+prediction adds to the market's total (coefficient 0.26, p = 0.004); leans
+right 62.0% on the 237 games 5+ points from the market. Rain alone is -2.8
+points a team. Tried and not kept: wind from 0/8/10/12 mph (5 best), cold
+below 32/50 (40 best), snow as its own term or counted as rain (22 games,
+nothing). Fit on game-time readings; a day-before forecast is less sure,
+so live the gain will be somewhat smaller.
 
 Usage:
     python scripts/backtest_nfl_totals.py
@@ -53,7 +63,7 @@ import statsmodels.api as sm
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from mlb_metrics import nfl_totals  # noqa: E402
+from mlb_metrics import nfl_totals, nfl_weather  # noqa: E402
 
 RAW_DIR = "data/raw/nfl"
 SEASONS = range(2016, 2026)
@@ -64,14 +74,16 @@ SCORED_SEASONS = range(2018, 2026)
 def load():
     schedules = pd.concat([pd.read_parquet(os.path.join(RAW_DIR, f"schedules_{s}.parquet")) for s in SEASONS])
     schedules = schedules[schedules["game_type"] == "REG"]
-    team_games, qb_games = [], []
+    team_games, qb_games, weather = [], [], []
     for season in SEASONS:
         pbp = pd.read_parquet(
             os.path.join(RAW_DIR, f"pbp_{season}.parquet"),
-            columns=sorted(set(nfl_totals.PBP_COLUMNS) | set(nfl_totals.QB_PBP_COLUMNS)),
+            columns=sorted(set(nfl_totals.PBP_COLUMNS) | set(nfl_totals.QB_PBP_COLUMNS) | {"weather"}),
         )
+        weather.append(nfl_weather.historical_weather(schedules[schedules["season"] == season], pbp))
         team_games.append(nfl_totals.team_game_epa(pbp, schedules[schedules["season"] == season]))
         qb_games.append(nfl_totals.qb_game_epa(pbp))
+    schedules = schedules.merge(pd.concat(weather, ignore_index=True), on="game_id", how="left")
     return pd.concat(team_games, ignore_index=True), pd.concat(qb_games, ignore_index=True), schedules
 
 
@@ -137,6 +149,12 @@ def main():
         "market": (d["total_line"] - d["total"]).abs().mean(),
     }), include_groups=False)
     print(by_season.round(2).to_string())
+
+    outdoor = features[features["dome"] == 0]
+    known = outdoor.merge(schedules[["game_id", *nfl_weather.WEATHER_INPUT_COLUMNS]], on="game_id")
+    print("\nconfig.NFL_WEATHER_OUTDOOR_MEANS (outdoor games with a reading):")
+    print({c: round(float(known.loc[known[i].notna(), c].mean()), 3) for c, i in
+           zip(nfl_weather.WEATHER_FEATURE_COLUMNS, ["weather_wind", "weather_temp", "weather_rain"])})
 
     final = fit(features)
     print("\nconfig.NFL_TOTALS_COEFFICIENTS (fit on every season):")

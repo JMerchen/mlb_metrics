@@ -27,10 +27,13 @@ A team's points in a game are then a linear function of its offense and
 the opponent's defense:
     points = const + b1*off_epa + b2*opp_def_epa + b3*off_plays
              + b4*opp_def_plays + b5*home + b6*dome + b7*qb_epa
+             + b8*wx_wind + b9*wx_cold + b10*wx_rain
 with the coefficients in config.NFL_TOTALS_COEFFICIENTS, fit by
 scripts/backtest_nfl_totals.py. The game's total is the two teams' sum.
-Temperature and wind help on history but aren't published before the
-game (nflverse leaves them blank for upcoming games), so they're left out.
+plus the game's weather (nfl_weather.py): wind over 5 mph, degrees below
+40°F and the chance of rain, all 0 indoors - from nflverse's readings for
+past games and Open-Meteo's forecast for the games played today or
+tomorrow (an outdoor game with neither takes the average outdoor game's).
 
 Plays are dropbacks and designed runs (`pass` or `rush` flagged, kneels and
 spikes dropped) - the same set the category ratings backtest uses.
@@ -42,13 +45,14 @@ next to Vegas's total, never turned into bet advice.
 
 import pandas as pd
 
-from mlb_metrics import config
+from mlb_metrics import config, nfl_weather
 
 # Schedules keep each franchise's code at the time (OAK, SD, STL);
 # play-by-play is restated in today's codes.
 NFL_TEAM_ALIASES = {"OAK": "LV", "SD": "LAC", "STL": "LA"}
 
-TOTALS_FEATURE_COLUMNS = ["off_epa", "opp_def_epa", "off_plays", "opp_def_plays", "home", "dome", "qb_epa"]
+TOTALS_FEATURE_COLUMNS = ["off_epa", "opp_def_epa", "off_plays", "opp_def_plays", "home", "dome", "qb_epa",
+                          *nfl_weather.WEATHER_FEATURE_COLUMNS]
 
 PBP_COLUMNS = ["game_id", "season", "week", "season_type", "posteam", "defteam", "home_team",
                 "epa", "pass", "rush", "qb_kneel", "qb_spike"]
@@ -211,10 +215,12 @@ def matchup_features(
     """Two rows per game (home offense, away offense) with
     TOTALS_FEATURE_COLUMNS. `games` needs game_id, home_team, away_team,
     and for the game-level features home_qb_id/away_qb_id and roof (plus
-    stadium_id when it has one). A team with no rating (no earlier games)
+    stadium_id when it has one), and nfl_weather.WEATHER_INPUT_COLUMNS when
+    the weather is known. A team with no rating (no earlier games)
     gets NaN features; so does every row's qb_epa without `qb_games`."""
     games = games.assign(home_team=_canonical(games["home_team"]), away_team=_canonical(games["away_team"]))
     dome = dome_flags(games, history_schedules)
+    weather = nfl_weather.weather_features(games, dome)
     no_qb = pd.Series(pd.NA, index=games.index, dtype=object)
     sides = pd.concat([
         pd.DataFrame({"game_id": games["game_id"], "team": games["home_team"], "opp": games["away_team"], "home": 1.0,
@@ -222,6 +228,7 @@ def matchup_features(
         pd.DataFrame({"game_id": games["game_id"], "team": games["away_team"], "opp": games["home_team"], "home": 0.0,
                       "dome": dome, "starter": games.get("away_qb_id", no_qb)}),
     ], ignore_index=True)
+    sides = sides.join(pd.concat([weather, weather], ignore_index=True))
     sides["qb_epa"] = starter_qb_epa(qb_games, sides["starter"])
     offense = ratings[["team", "off_epa", "off_plays"]]
     defense = ratings[["team", "def_epa", "def_plays"]].rename(
@@ -246,11 +253,13 @@ def ranked_ratings(ratings: pd.DataFrame) -> pd.DataFrame:
 
 
 def predict_team_points(features: pd.DataFrame, coefficients: dict | None = None) -> pd.Series:
-    """Linear points prediction for rows carrying TOTALS_FEATURE_COLUMNS."""
+    """Linear points prediction for rows carrying TOTALS_FEATURE_COLUMNS
+    (a coefficient set without a term, like one fit before the weather
+    terms, leaves it out)."""
     coefficients = config.NFL_TOTALS_COEFFICIENTS if coefficients is None else coefficients
     points = pd.Series(coefficients["const"], index=features.index, dtype=float)
     for column in TOTALS_FEATURE_COLUMNS:
-        points = points + coefficients[column] * features[column]
+        points = points + coefficients.get(column, 0.0) * features[column]
     return points
 
 

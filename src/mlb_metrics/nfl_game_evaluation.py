@@ -11,10 +11,10 @@ itself" non-goal), so there is no pre-existing schema to migrate from.
 
 import pandas as pd
 
-from mlb_metrics import evaluation, nfl_totals
+from mlb_metrics import evaluation, nfl_totals, nfl_weather
 
 POINTS_COLUMNS = ["predicted_home_points", "predicted_away_points", "predicted_total", "market_total", "actual_total"]
-DISPLAY_COLUMNS = POINTS_COLUMNS + nfl_totals.EPA_DISPLAY_COLUMNS
+DISPLAY_COLUMNS = POINTS_COLUMNS + nfl_totals.EPA_DISPLAY_COLUMNS + nfl_weather.WEATHER_DISPLAY_COLUMNS
 
 
 def _classify_outcome(df: pd.DataFrame) -> pd.Series:

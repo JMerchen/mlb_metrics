@@ -235,7 +235,7 @@ renderNflWhatIf('[data-whatif-action="clear"]')
 const NFL_SIM_SECONDS = 300
 const NFL_SIM_SUMMARY_GAMES = 1000
 const NFL_SIM_SPEEDS = [1, 4, 16]
-const nflSim = {profiles: null, totals: {}, run: null}
+const nflSim = {profiles: null, totals: {}, weather: {}, run: null}
 
 async function loadNflSim(picks){
 
@@ -250,6 +250,8 @@ return
 for(const p of picks || []){
 const total = Number(p.predicted_total) || Number(p.market_total)
 if(total > 0){ nflSim.totals[p.game_id] = total }
+const weather = srWeather(p)
+if(weather){ nflSim.weather[p.game_id] = weather }
 }
 el.hidden = false
 renderNflSimIdle()
@@ -300,8 +302,9 @@ stopNflSim()
 el.innerHTML = `<h4>${whatifEsc(whatifGameLabel(game))}</h4><p class="simIntro">Setting up the game…</p>`
 // Let "Setting up" paint before the calibration's few hundred games run.
 setTimeout(() => {
-const calibration = simCalibrate(nflSim.profiles, game.home.team, game.away.team, target.margin, target.total, {unitPcts, lineups})
-run({game, target, unitPcts, lineups, settings, calibration, label: whatifGameLabel(game)})
+const weather = nflSim.weather[game.game_id] || null
+const calibration = simCalibrate(nflSim.profiles, game.home.team, game.away.team, target.margin, target.total, {unitPcts, lineups, weather})
+run({game, target, unitPcts, lineups, weather, settings, calibration, label: whatifGameLabel(game)})
 }, 30)
 
 }
@@ -311,7 +314,7 @@ function startNflSim(){
 prepareNflSim(prep => {
 const sim = simulateGame(nflSim.profiles, prep.game.home.team, prep.game.away.team, {
 seed: Math.floor(Math.random() * 2147483647), edge: prep.calibration.edge, scale: prep.calibration.scale,
-unitPcts: prep.unitPcts, lineups: prep.lineups,
+unitPcts: prep.unitPcts, lineups: prep.lineups, weather: prep.weather,
 })
 nflSim.run = {...prep, kind: "game", sim, index: 0, speed: nflSim.run && nflSim.run.speed ? nflSim.run.speed : 1, paused: false, timer: null}
 renderNflSimShell()
@@ -326,7 +329,7 @@ function startNflSimSummary(){
 prepareNflSim(prep => {
 const summary = simSummary(nflSim.profiles, prep.game.home.team, prep.game.away.team, {
 seed: Math.floor(Math.random() * 2147483647), edge: prep.calibration.edge, scale: prep.calibration.scale,
-unitPcts: prep.unitPcts, lineups: prep.lineups,
+unitPcts: prep.unitPcts, lineups: prep.lineups, weather: prep.weather,
 }, NFL_SIM_SUMMARY_GAMES)
 nflSim.run = {...prep, kind: "summary", summary, speed: nflSim.run && nflSim.run.speed ? nflSim.run.speed : 1}
 document.getElementById("nflSim").innerHTML = `<h4>${whatifEsc(prep.label)}, ${NFL_SIM_SUMMARY_GAMES.toLocaleString()} times</h4>
@@ -416,7 +419,7 @@ const s = run.settings
 const home = typeof teamName === "function" ? teamName(s.home, "nfl") : s.home
 return `<p class="simIntro simSettings">${s.changes.length
 ? `Simulated with ${whatifEsc(s.changes.join("; "))}`
-: "Simulated as posted, with no What if? changes"} (${whatifEsc(home)} ${whatifPct(s.probability)} in the panel).</p>
+: "Simulated as posted, with no What if? changes"} (${whatifEsc(home)} ${whatifPct(s.probability)} in the panel).${run.weather ? ` Weather: ${whatifEsc(run.weather.label)}.` : ""}</p>
 <div class="simNotice"></div>`
 
 }
