@@ -405,7 +405,7 @@ nflSimSyncSettings()
 return
 }
 live.innerHTML = `${simScoreboardHtml(sim, play, sim.plays[run.index + 1])}
-${simFieldSvg(play, sim.home, sim.away)}
+${simFieldSvg(play, sim.home, sim.away, run.weather)}
 ${simTickerHtml(sim, run.index, 5)}
 <h4>Drive chart</h4><div class="scrollbox simDriveBox">${simDriveChartHtml(sim, run.index)}</div>`
 

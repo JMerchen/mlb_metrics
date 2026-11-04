@@ -1918,14 +1918,41 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 .simQuarter{font-size:12px;color:var(--text-dim);font-weight:700;}
 .simClock{font-size:18px;font-weight:700;}
 .simDown{font-size:12px;color:var(--accent);min-height:15px;white-space:nowrap;}
-.simField{display:block;width:100%;height:auto;margin:0 0 10px;}
-.simGrass{fill:#1f4d2b;}
-.simEndZone{fill:#173a21;}
-.simEndText{fill:rgba(255,255,255,.55);font:700 12px var(--font);text-anchor:middle;}
-.simYardLine{stroke:rgba(255,255,255,.28);stroke-width:1;}
-.simYardNum{fill:rgba(255,255,255,.5);font:600 9px var(--font);text-anchor:middle;}
+.simField{display:block;width:100%;height:auto;margin:0 0 10px;border-radius:8px;overflow:hidden;background:#1f4d2b;}
+.simGrass{fill:#2a6b3a;}
+.simEndZone{fill:#1f5530;}
+.simEndText{fill:rgba(255,255,255,.7);font:700 13px var(--font);text-anchor:middle;}
+.simYardLine,.simGoalLine{stroke:rgba(255,255,255,.55);stroke-width:1.2;}
+.simHashLine{stroke:rgba(255,255,255,.22);stroke-width:.8;}
+.simGoalLine{stroke:rgba(255,255,255,.85);stroke-width:2;}
+.simYardNum{fill:rgba(255,255,255,.75);font:700 11px var(--font);text-anchor:middle;}
+.simScrimmage{stroke:#3d8bff;stroke-width:2.5;}
 .simFirstDown{stroke:#ffd400;stroke-width:2.5;}
 .simBall{fill:#8a5230;stroke:#fff;stroke-width:1;}
+.simStands{fill:#2b2f38;}
+.simSeats{stroke:rgba(255,255,255,.1);stroke-width:4;stroke-dasharray:3 2;}
+.simPost line{stroke:#ffd400;stroke-width:2.5;stroke-linecap:round;}
+.simSkyLabel{fill:#fff;font:600 12px var(--font);paint-order:stroke;stroke:rgba(0,0,0,.35);stroke-width:3px;}
+.simSun circle{fill:#ffd23f;}
+.simSunRays line{stroke:#ffd23f;stroke-width:3;stroke-linecap:round;}
+.simCloud circle,.simCloud rect{fill:#f4f6f8;}
+.simCloudDark circle,.simCloudDark rect{fill:#c3c9d0;}
+.simRoof{fill:#151820;}
+.simLight{fill:#fff6d6;}
+.simRain line{stroke:#cfe3ff;stroke-width:1.4;stroke-linecap:round;opacity:.8;animation:simFall .6s linear infinite;}
+.simSnow circle{fill:#fff;animation:simFall 2.4s linear infinite;}
+.simGust path{fill:none;stroke:rgba(255,255,255,.9);stroke-width:2.6;stroke-linecap:round;stroke-dasharray:80 100;animation:simGust 2.2s linear infinite;}
+.simFlight{fill:none;stroke:#fff;stroke-width:2;stroke-dasharray:1;stroke-dashoffset:1;opacity:.85;animation:simDraw .9s ease-out forwards;}
+.simRun{stroke:#fff;stroke-width:2.5;stroke-dasharray:1;stroke-dashoffset:1;animation:simDraw .6s ease-out forwards;}
+.simAfterCatch{stroke-width:2;animation-delay:.9s;opacity:.85;}
+.simSack{stroke:#ff6b6b;}
+@keyframes simDraw{to{stroke-dashoffset:0;}}
+@keyframes simFall{from{transform:translateY(-14px);}to{transform:translateY(0);}}
+@keyframes simGust{from{stroke-dashoffset:180;}to{stroke-dashoffset:0;}}
+@media (prefers-reduced-motion: reduce){
+.simRain line,.simSnow circle,.simGust path{animation:none;}
+.simFlight,.simRun{animation:none;stroke-dashoffset:0;}
+}
 .simTicker{list-style:none;margin:0 0 12px;padding:0;font-size:13px;}
 .simTicker li{padding:4px 0;border-bottom:1px solid var(--border);}
 .simTicker li:first-child{font-weight:600;}

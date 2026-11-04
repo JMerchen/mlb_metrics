@@ -328,7 +328,7 @@ const record = (kind, yards, text, extra = {}) => {
 const play = {
 qtr, clock, poss, down: extra.down ?? down, togo: extra.togo ?? togo, ball: extra.ball ?? ball, end: extra.end ?? ball, kind, yards: Math.round(yards), text,
 home: score.home, away: score.away, drive: drives.length - 1, scoring: extra.scoring || null, timeouts: {...timeouts},
-change: !!extra.change,
+change: !!extra.change, flight: extra.flight ?? null,
 }
 plays.push(play)
 return play
@@ -451,7 +451,7 @@ if(u < kicks.touchback_rate || u < kicks.touchback_rate + kicks.out_of_bounds_ra
 const tb = u < kicks.touchback_rate
 startDrive(receiver, tb ? kicks.touchback_spot : kicks.out_of_bounds_spot, how)
 tick(5)
-record("kickoff", 0, `${code[kicker]} kicks off, ${tb ? "touchback" : "out of bounds"}; ${code[receiver]} start at ${spot(ball, receiver)}`)
+record("kickoff", 0, `${code[kicker]} kicks off, ${tb ? "touchback" : "out of bounds"}; ${code[receiver]} start at ${spot(ball, receiver)}`, {flight: tb ? -4 : null})
 return
 }
 const [caught, ret] = kicks.returns[Math.floor(rng() * kicks.returns.length)]
@@ -468,7 +468,7 @@ record("kickoff", 0, ret === 0 && caught >= 35
 ? `${code[kicker]} kicks off short of the landing zone; ${code[receiver]} start at the ${spot(ball, receiver)}`
 : ret === 0
 ? `${kickText}, no return`
-: `${kickText}, returned ${ret} yard${ret === 1 ? "" : "s"} to the ${spot(ball, receiver)}`)
+: `${kickText}, returned ${ret} yard${ret === 1 ? "" : "s"} to the ${spot(ball, receiver)}`, {flight: caught})
 }
 // A kick or punt returned all the way: six points (and the try) for the
 // returning team, which then kicks off.
@@ -645,12 +645,12 @@ tick(8)
 const punt = simPunt(lg, ball, rng)
 const kicker = code[poss]
 if(punt.touchdown){
-record("punt", 0, `${kicker} punts ${punt.gross} yards to the ${spot(100 - punt.landing, def)}`, {change: true})
+record("punt", 0, `${kicker} punts ${punt.gross} yards to the ${spot(100 - punt.landing, def)}`, {change: true, flight: punt.landing})
 endDrive("Punt")
 returnTouchdown(def, "punt", `${code[def]} return the punt ${punt.ret} yards`, "Punt")
 continue
 }
-record("punt", 0, `${kicker} ${punt.text(spot, def)}`, {change: true})
+record("punt", 0, `${kicker} ${punt.text(spot, def)}`, {change: true, flight: punt.landing})
 endDrive("Punt")
 startDrive(def, punt.at, "Punt")
 continue
@@ -742,6 +742,8 @@ let kind
 let text
 let clockUsed = hurry ? 16 : 40
 let lost = null
+// Where an interception was caught, for the field graphic's ball flight.
+let flight = null
 const lineup = lineups[poss] || {}
 const qb = line(poss, lineup.qb)
 let carrier = null
@@ -767,6 +769,7 @@ if(rng() < p.int_rate){
 kind = "interception"
 const air = Math.round(5 + 25 * rng())
 const caught = Math.min(ball + air, 99)
+flight = caught
 const ret = Math.round(15 * rng() * rng())
 b.ints += 1
 b.turnovers += 1
@@ -837,7 +840,7 @@ b.fumbles_lost += lost.result === "Fumble" ? 1 : 0
 b.turnovers += lost.result === "Fumble" ? 1 : 0
 tick(clockUsed === 6 ? 6 : 8)
 ball += yards
-record(kind, yards, `${situation}: ${text}`, {ball: from, end: ball, change: true})
+record(kind, yards, `${situation}: ${text}`, {ball: from, end: ball, change: true, flight})
 turnover(poss, 100 - lost.at, lost.result)
 continue
 }
@@ -1175,28 +1178,192 @@ ${table("Kicking", ["FG", "XP", "Long"], kicking.map(p => `<tr>${who(p)}<td>${p.
 return block("away") + block("home")
 }
 
-// Field picture: the offense's ball spot, the first-down line and the end
-// zones, home driving to the right (so home's own end zone is on the left).
-function simFieldSvg(play, homeCode, awayCode){
-const x = yards => 40 + yards * 5.2
-const toRight = play.poss === "home"
-const at = b => x(toRight ? b : 100 - b)
-const ball = at(play.end ?? play.ball)
-const marker = play.kind === "kickoff" || play.kind === "punt" || play.kind === "field_goal" || play.scoring
-? null : at(Math.min(100, play.line ?? ((play.end ?? play.ball) + (play.first_down ? 10 : Math.max(0, play.togo - play.yards)))))
-const lines = []
-for(let y = 10; y <= 90; y += 10){
-lines.push(`<line x1="${x(y)}" y1="6" x2="${x(y)}" y2="74" class="simYardLine"/>`)
-lines.push(`<text x="${x(y)}" y="70" class="simYardNum">${y <= 50 ? y : 100 - y}</text>`)
+// The field from the sideline, in perspective: the far sideline narrower
+// than the near one, stands and sky behind, goalposts at each end line.
+// The sky shows the game's weather (simWeatherScene) and the play's ball
+// flies - a pass from the quarterback to the catch (then the run after
+// it), a punt or kickoff to where it came down, a field goal at the
+// uprights - and a run or sack is a line along the ground.
+const SIM_FIELD = {farY: 118, nearY: 216, farL: 80, farR: 520, nearL: 8, nearR: 592, depth: 0.55}
+
+// Screen point for u yards (-10 = left end line, 110 = right end line) at
+// depth t (0 far sideline, 1 near) and h pixels above the ground.
+function simFieldPoint(u, t = SIM_FIELD.depth, h = 0){
+const f = SIM_FIELD
+const y = f.farY + t * (f.nearY - f.farY)
+const left = f.farL + t * (f.nearL - f.farL), right = f.farR + t * (f.nearR - f.farR)
+return [+(left + (u + 10) / 120 * (right - left)).toFixed(1), +(y - h).toFixed(1)]
 }
-return `<svg class="simField" viewBox="0 0 600 80" role="img" aria-label="Ball at ${simEsc(simSpot(play.end ?? play.ball, play.poss === "home" ? homeCode : awayCode, play.poss === "home" ? awayCode : homeCode))}">
-<rect x="0" y="4" width="600" height="72" rx="6" class="simGrass"/>
-<rect x="0" y="4" width="40" height="72" class="simEndZone"/><rect x="560" y="4" width="40" height="72" class="simEndZone"/>
-<text x="20" y="44" class="simEndText" transform="rotate(-90 20 40)">${simEsc(homeCode)}</text>
-<text x="580" y="44" class="simEndText" transform="rotate(90 580 40)">${simEsc(awayCode)}</text>
-${lines.join("")}
-${marker === null ? "" : `<line x1="${marker}" y1="6" x2="${marker}" y2="74" class="simFirstDown"/>`}
-<ellipse cx="${ball}" cy="38" rx="7" ry="4.5" class="simBall"/>
+
+// What a play's ball does: {kind: "air", from, to, height, landHeight,
+// thenTo} or {kind: "ground", from, to} in u yards, or null.
+function simBallPath(play, toRight){
+const u = b => toRight ? b : 100 - b
+const from = play.ball, end = play.end ?? play.ball
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
+if(play.kind === "pass"){
+const air = Math.max(0, Math.round((end - from) * 0.55))
+if(air < 2){ return {kind: "ground", from: u(from), to: u(end)} }
+return {kind: "air", from: u(from - 5), to: u(from + air), height: clamp(10 + air * 1.3, 14, 70), thenTo: u(end)}
+}
+if(play.kind === "incomplete"){
+const air = clamp((play.togo || 10) + 3, 5, 25)
+return {kind: "air", from: u(from - 5), to: u(Math.min(109, from + air)), height: clamp(10 + air * 1.3, 14, 70)}
+}
+if(play.kind === "interception" && play.flight !== null && play.flight !== undefined){
+return {kind: "air", from: u(from - 5), to: u(play.flight), height: clamp(10 + (play.flight - from) * 1.3, 14, 75)}
+}
+if(play.kind === "punt" && play.flight !== null && play.flight !== undefined){
+return {kind: "air", from: u(from - 14), to: u(Math.min(108, play.flight)), height: clamp(20 + (play.flight - from) * 1.5, 40, 100)}
+}
+if(play.kind === "kickoff" && play.flight !== null && play.flight !== undefined){
+// The receiving team has the ball; the kick came from the kicker's 35.
+return {kind: "air", from: u(65), to: u(play.flight), height: 100}
+}
+if(play.kind === "field_goal"){
+const good = play.scoring === "FG"
+return {kind: "air", from: u(from - 7), to: u(good ? 113 : 106), height: clamp(30 + (110 - from) * 0.6, 40, 80), landHeight: good ? 46 : 0}
+}
+if(play.kind === "run" || play.kind === "sack" || play.kind === "kneel"){
+return end === from ? null : {kind: "ground", from: u(from), to: u(end)}
+}
+return null
+}
+
+// The weather as a scene: sky colors, sun, clouds, rain, snow and gusts.
+function simWeatherScene(weather){
+const w = weather || {}
+const num = v => v === null || v === undefined || v === "" || !isFinite(Number(v)) ? null : Number(v)
+const code = num(w.code), rain = num(w.rain), wind = num(w.wind), temp = num(w.temp)
+if(w.indoor){ return {indoor: true, sky: ["#20242c", "#2b303a"], label: "Indoors"} }
+const known = code !== null || rain !== null || wind !== null || temp !== null
+const rainy = (rain ?? 0) >= 0.5 || (code !== null && ((code >= 51 && code <= 67) || (code >= 80 && code <= 82) || code >= 95))
+const snowy = !!w.snow || (code !== null && [71, 73, 75, 77, 85, 86].includes(code))
+const cloudy = !rainy && !snowy && ((rain ?? 0) >= 0.25 || code === 3 || code === 45 || code === 48)
+const partly = !rainy && !snowy && !cloudy && code === 2
+const parts = []
+if(temp !== null){ parts.push(`${Math.round(temp)}°F`) }
+if(wind !== null){ parts.push(`wind ${Math.round(wind)} mph`) }
+if(snowy){ parts.push("snow") }else if(rain !== null && rain >= 0.1){ parts.push(`${Math.round(rain * 100)}% rain`) }
+return {
+indoor: false, known, rainy, snowy, cloudy, partly,
+sunny: known && !rainy && !snowy && !cloudy, windy: (wind ?? 0) >= 15, wind: wind ?? 0,
+sky: rainy || snowy ? ["#5d6672", "#8a929c"] : cloudy ? ["#7d8a99", "#aab4bf"] : ["#3f8fd8", "#a9d4f5"],
+label: parts.join(" · "),
+}
+}
+
+function simSkySvg(scene){
+// One gradient per sky color (ids are page-wide: a second field on the
+// page reuses the first's).
+const id = `simSky${scene.sky[0].slice(1)}`
+const out = [`<defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${scene.sky[0]}"/><stop offset="1" stop-color="${scene.sky[1]}"/></linearGradient></defs>`,
+`<rect x="0" y="0" width="600" height="${SIM_FIELD.farY}" fill="url(#${id})"/>`]
+const cloud = (x, y, r, cls = "simCloud") => `<g class="${cls}"><circle cx="${x}" cy="${y}" r="${r}"/><circle cx="${x + r * 0.9}" cy="${y - r * 0.5}" r="${r * 0.85}"/><circle cx="${x + r * 1.8}" cy="${y}" r="${r * 0.9}"/><rect x="${x}" y="${y}" width="${r * 1.8}" height="${r * 0.9}"/></g>`
+if(scene.indoor){
+out.push(`<path d="M0 58 Q300 -10 600 58 L600 0 L0 0 Z" class="simRoof"/>`)
+for(const x of [120, 240, 360, 480]){ out.push(`<circle cx="${x}" cy="${40 - Math.abs(300 - x) / 20}" r="3" class="simLight"/>`) }
+}
+if(scene.sunny || scene.partly){
+const rays = Array.from({length: 8}, (_, i) => {
+const a = i * Math.PI / 4
+return `<line x1="${(530 + Math.cos(a) * 19).toFixed(1)}" y1="${(30 + Math.sin(a) * 19).toFixed(1)}" x2="${(530 + Math.cos(a) * 27).toFixed(1)}" y2="${(30 + Math.sin(a) * 27).toFixed(1)}"/>`
+}).join("")
+out.push(`<g class="simSun"><circle cx="530" cy="30" r="14"/><g class="simSunRays">${rays}</g></g>`)
+}
+if(scene.partly){ out.push(cloud(470, 38, 12)) }
+if(scene.cloudy || scene.rainy || scene.snowy){
+const dark = scene.rainy || scene.snowy ? "simCloud simCloudDark" : "simCloud"
+out.push(cloud(70, 52, 13, dark), cloud(250, 22, 19, dark), cloud(400, 36, 15, dark), cloud(520, 18, 13, dark))
+}
+if(scene.rainy){
+const slant = Math.min(14, scene.wind * 0.6)
+const drops = []
+for(let i = 0; i < 46; i++){
+const x = (i * 53) % 610, y = 40 + (i * 37) % 70
+drops.push(`<line x1="${x}" y1="${y}" x2="${(x - slant).toFixed(1)}" y2="${y + 12}"/>`)
+}
+out.push(`<g class="simRain">${drops.join("")}</g>`)
+}
+if(scene.snowy){
+const flakes = []
+for(let i = 0; i < 40; i++){ flakes.push(`<circle cx="${(i * 61) % 600}" cy="${42 + (i * 29) % 68}" r="${1.4 + (i % 3) * 0.6}"/>`) }
+out.push(`<g class="simSnow">${flakes.join("")}</g>`)
+}
+if(scene.windy){
+const gusts = [[40, 60], [170, 82], [330, 54], [440, 90]].map(([x, y]) =>
+`<path d="M${x} ${y} q30 -8 60 0 t60 0 q12 4 8 -6"/>`).join("")
+out.push(`<g class="simGust">${gusts}</g>`)
+}
+if(!scene.indoor && !scene.known){ out.push(`<text x="14" y="22" class="simSkyLabel">No forecast for this game</text>`) }
+else if(scene.label){ out.push(`<text x="14" y="22" class="simSkyLabel">${simEsc(scene.label)}</text>`) }
+return out.join("")
+}
+
+function simFieldSvg(play, homeCode, awayCode, weather){
+const f = SIM_FIELD
+const P = simFieldPoint
+const toRight = play.poss === "home"
+const at = b => toRight ? b : 100 - b
+const poly = (u0, u1, cls) => {
+const pts = [P(u0, 0), P(u1, 0), P(u1, 1), P(u0, 1)].map(p => p.join(",")).join(" ")
+return `<polygon points="${pts}" class="${cls}"/>`
+}
+const across = (u, cls) => { const a = P(u, 0), b = P(u, 1); return `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" class="${cls}"/>` }
+const scene = simWeatherScene(weather)
+const parts = [simSkySvg(scene)]
+// Stands: rows of seats behind the far sideline.
+parts.push(`<polygon points="0,${f.farY - 40} 600,${f.farY - 40} 600,${f.farY} 0,${f.farY}" class="simStands"/>`)
+for(let r = 0; r < 4; r++){ parts.push(`<line x1="0" y1="${f.farY - 34 + r * 9}" x2="600" y2="${f.farY - 34 + r * 9}" class="simSeats"/>`) }
+parts.push(poly(-10, 110, "simGrass"), poly(-10, 0, "simEndZone"), poly(100, 110, "simEndZone"))
+for(let y = 5; y <= 95; y += 5){ parts.push(across(y, y % 10 === 0 ? "simYardLine" : "simYardLine simHashLine")) }
+parts.push(across(0, "simGoalLine"), across(100, "simGoalLine"))
+for(let y = 10; y <= 90; y += 10){
+const [x, yy] = P(y, 0.9)
+parts.push(`<text x="${x}" y="${yy}" class="simYardNum">${y <= 50 ? y : 100 - y}</text>`)
+}
+const endText = (u, text) => { const [x, y] = P(u, 0.62); return `<text x="${x}" y="${y}" class="simEndText">${simEsc(text)}</text>` }
+parts.push(endText(-5, homeCode), endText(105, awayCode))
+// Goalposts on each end line.
+for(const u of [-10, 110]){
+const base = P(u, 0.5), l = P(u, 0.44, 30), r = P(u, 0.56, 30)
+parts.push(`<g class="simPost"><line x1="${base[0]}" y1="${base[1]}" x2="${base[0]}" y2="${base[1] - 30}"/><line x1="${l[0]}" y1="${l[1]}" x2="${r[0]}" y2="${r[1]}"/><line x1="${l[0]}" y1="${l[1]}" x2="${l[0]}" y2="${l[1] - 34}"/><line x1="${r[0]}" y1="${r[1]}" x2="${r[0]}" y2="${r[1] - 34}"/></g>`)
+}
+const scrimmage = SIM_SCRIMMAGE.has(play.kind)
+if(scrimmage && !play.scoring){
+const marker = Math.min(100, play.line ?? ((play.end ?? play.ball) + (play.first_down ? 10 : Math.max(0, play.togo - play.yards))))
+parts.push(across(at(play.ball), "simScrimmage"))
+if(marker < 100){ parts.push(across(at(marker), "simFirstDown")) }
+}
+const path = simBallPath(play, toRight)
+let rest = P(at(Math.min(100, Math.max(0, play.end ?? play.ball))))
+const ball = (x, y, extra = "") => `<ellipse cx="0" cy="0" rx="6.5" ry="4" class="simBall" transform="translate(${x} ${y})"${extra}/>`
+if(path && path.kind === "ground"){
+const a = P(path.from), b = P(path.to)
+parts.push(`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" class="simRun${play.kind === "sack" ? " simSack" : ""}" pathLength="1"/>`)
+parts.push(ball(b[0], b[1]))
+}else if(path){
+const a = P(path.from), b = P(path.to, f.depth, path.landHeight || 0)
+const c = [(a[0] + b[0]) / 2, Math.min(a[1], b[1]) - path.height * 2]
+const d = `M${a[0]} ${a[1]} Q${c[0].toFixed(1)} ${c[1].toFixed(1)} ${b[0]} ${b[1]}`
+parts.push(`<path d="${d}" class="simFlight" pathLength="1"/>`)
+if(path.thenTo !== undefined && path.thenTo !== path.to){
+const e = P(path.thenTo)
+parts.push(`<line x1="${b[0]}" y1="${b[1]}" x2="${e[0]}" y2="${e[1]}" class="simRun simAfterCatch" pathLength="1"/>`)
+rest = e
+}else if(play.kind === "field_goal" || play.kind === "incomplete"){
+rest = b
+}else{
+rest = P(at(Math.min(100, Math.max(0, play.end ?? play.ball))))
+if(play.kind === "punt" || play.kind === "kickoff" || play.kind === "interception"){ rest = b }
+}
+parts.push(`<g class="simBallFlying">${ball(0, 0, "")}<animateMotion dur="0.9s" fill="freeze" path="${d}"/><animate attributeName="opacity" from="1" to="0" begin="0.9s" dur="0.01s" fill="freeze"/></g>`)
+parts.push(`<g opacity="0">${ball(rest[0], rest[1])}<animate attributeName="opacity" from="0" to="1" begin="0.9s" dur="0.01s" fill="freeze"/></g>`)
+}else{
+parts.push(ball(rest[0], rest[1]))
+}
+return `<svg class="simField" viewBox="0 0 600 ${f.nearY + 6}" role="img" aria-label="Ball at ${simEsc(simSpot(play.end ?? play.ball, play.poss === "home" ? homeCode : awayCode, play.poss === "home" ? awayCode : homeCode))}${scene.label ? `; ${simEsc(scene.label)}` : ""}">
+${parts.join("\n")}
 </svg>`
 }
 
@@ -1312,6 +1479,6 @@ if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 simRng, simDraw, simFactors, simWeather, simShiftOdds, SIM_WEATHER, simZone, simPunt, simPick, simSharpen, simShortName, simLineup, simulateGame, simAverage, simCalibrate, simSpot, simClock,
 simSummary, simMarginBins, simMarginChartHtml, simSummaryHtml, simPlayerStatsHtml,
-simFieldSvg, simScoreboardHtml, simDriveChartHtml, simTickerHtml, simBoxScoreHtml, simCalibrationNote, simFinalHtml,
+simFieldSvg, simFieldPoint, simBallPath, simWeatherScene, simScoreboardHtml, simDriveChartHtml, simTickerHtml, simBoxScoreHtml, simCalibrationNote, simFinalHtml,
 }
 }
