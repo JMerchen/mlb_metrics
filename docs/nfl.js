@@ -235,7 +235,7 @@ renderNflWhatIf('[data-whatif-action="clear"]')
 const NFL_SIM_SECONDS = 300
 const NFL_SIM_SUMMARY_GAMES = 1000
 const NFL_SIM_SPEEDS = [1, 4, 16]
-const nflSim = {profiles: null, totals: {}, weather: {}, run: null}
+const nflSim = {profiles: null, totals: {}, weather: {}, choice: {}, run: null}
 
 async function loadNflSim(picks){
 
@@ -256,6 +256,7 @@ if(weather){ nflSim.weather[p.game_id] = weather }
 el.hidden = false
 renderNflSimIdle()
 el.addEventListener("click", onNflSimClick)
+el.addEventListener("change", onNflSimWeatherChange)
 
 }
 
@@ -265,8 +266,34 @@ stopNflSim()
 nflSim.run = null
 document.getElementById("nflSim").innerHTML = `<h4>Simulate the game</h4>
 <p class="simIntro">Play the game picked above out snap by snap, with its QBs, players out and unit settings as they're set now. It takes about five minutes: a drive chart builds as it goes, and the final score comes with each team's box score and every player's stat line. Speed it up or skip to the end anytime - then mark someone else out above and run it again. Or play it 1,000 times at once for how often each team wins, the likely scores and what each player averages.</p>
+${nflSimWeatherHtml()}
 <div class="simControls"><button class="whatIfAction" data-sim-action="start">Simulate this game</button>
 <button class="whatIfAction" data-sim-action="summary">Simulate it 1,000 times</button></div>`
+
+}
+
+// The weather the game will be simulated in: its forecast, indoors, or -
+// with no forecast yet (it comes the day before) - a dropdown to choose.
+function nflSimWeatherHtml(){
+
+const game = nflWhatIfGameData(nflWhatIf.mode)
+if(!game){ return "" }
+const forecast = nflSim.weather[game.game_id]
+if(forecast){
+return `<p class="simIntro simWeatherLine">${forecast.icon || ""} Weather: ${whatifEsc(forecast.label)}${forecast.indoor ? "" : " (the forecast)"}.</p>`
+}
+const chosen = nflSim.choice[game.game_id] || "typical"
+const options = SIM_WEATHER_CHOICES.map(c => `<option value="${c.id}"${c.id === chosen ? " selected" : ""}>${whatifEsc(c.name)}</option>`).join("")
+return `<label class="simWeatherPick">Weather <span>(no forecast yet - it comes the day before the game)</span>
+<select data-sim-weather="${whatifEsc(game.game_id)}">${options}</select></label>`
+
+}
+
+function onNflSimWeatherChange(event){
+
+const select = event.target.closest("select[data-sim-weather]")
+if(!select){ return }
+nflSim.choice[select.dataset.simWeather] = select.value
 
 }
 
@@ -280,9 +307,14 @@ const game = nflWhatIfGameData(mode)
 if(!data || !game){ return }
 const state = nflWhatIf.state[mode]
 const p = Math.min(0.995, Math.max(0.005, whatifProbability(game, data, state).probability))
+// A forecast is already in the pick's total; a chosen weather moves it
+// by the points model's weather terms.
+const forecast = nflSim.weather[game.game_id] || null
+const chosen = forecast ? null : simWeatherChoice(nflSim.choice[game.game_id])
+const weather = forecast || chosen
 const target = {
 margin: Math.log(p / (1 - p)) / (Number(data.logodds_per_point) || 0.137),
-total: nflSim.totals[game.game_id] || 45,
+total: (nflSim.totals[game.game_id] || 45) + simWeatherTotalShift(chosen),
 probability: p,
 }
 const unitPcts = {home: whatifUnitPcts(game, "home", data, state), away: whatifUnitPcts(game, "away", data, state)}
@@ -302,7 +334,6 @@ stopNflSim()
 el.innerHTML = `<h4>${whatifEsc(whatifGameLabel(game))}</h4><p class="simIntro">Setting up the game…</p>`
 // Let "Setting up" paint before the calibration's few hundred games run.
 setTimeout(() => {
-const weather = nflSim.weather[game.game_id] || null
 const calibration = simCalibrate(nflSim.profiles, game.home.team, game.away.team, target.margin, target.total, {unitPcts, lineups, weather})
 run({game, target, unitPcts, lineups, weather, settings, calibration, label: whatifGameLabel(game)})
 }, 30)
@@ -431,7 +462,12 @@ function nflSimSyncSettings(){
 
 const run = nflSim.run
 const el = document.getElementById("nflSim")
-if(!run || !el){ return }
+if(!el){ return }
+// Idle: the weather line or dropdown follows the game picked above.
+if(!run){
+if(!el.hidden){ renderNflSimIdle() }
+return
+}
 const mode = nflWhatIf.mode
 const game = nflWhatIfGameData(mode)
 if(mode !== run.settings.mode || !game || game.game_id !== run.settings.gameId){

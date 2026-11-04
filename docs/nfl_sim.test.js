@@ -594,3 +594,19 @@ test("sideline view: the sky follows the weather", () => {
   assert.equal(simWeatherScene(null).known, false)
   assert.doesNotMatch(simFieldSvg({ kind: "run", poss: "home", ball: 40, end: 44, togo: 10, yards: 4 }, "TB", "ATL", { indoor: true }), /simSun|simRain/)
 })
+
+test("chosen weather: the dropdown's choices, and how far each moves the total", () => {
+  const { SIM_WEATHER_CHOICES, simWeatherChoice, simWeatherTotalShift } = require("./nfl_sim.js")
+  assert.equal(SIM_WEATHER_CHOICES[0].id, "typical")
+  assert.equal(simWeatherChoice("typical"), null)
+  assert.equal(simWeatherChoice("nope"), null)
+  assert.equal(simWeatherChoice("rain").label, "Rain (50°F), chosen")
+  assert.equal(simWeatherTotalShift(null), 0)
+  assert.equal(simWeatherTotalShift({ indoor: true }), 0)
+  // Rain at 50F and 10 mph: per team -2.826*(1-0.07) - 0.18*(5-3.754) + 0.1*1.322.
+  const rain = simWeatherTotalShift(simWeatherChoice("rain"))
+  assert.ok(Math.abs(rain - 2 * (-2.826 * 0.93 - 0.18 * 1.246 + 0.1322)) < 1e-9)
+  assert.ok(simWeatherTotalShift(simWeatherChoice("snow")) < 0)
+  assert.ok(simWeatherTotalShift(simWeatherChoice("sunny")) > 0)
+  assert.ok(simWeatherChoice("snow").snow)
+})

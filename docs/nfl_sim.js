@@ -72,6 +72,40 @@ const shift = kind => Object.entries(SIM_WEATHER[kind]).reduce((sum, [term, b]) 
 return {pass_rate: shift("pass_rate"), comp: shift("comp"), sack: shift("sack"), pass_yds: 1 + shift("pass_yds")}
 }
 
+// Weather to choose for a game with no forecast yet (the simulation's
+// dropdown on the NFL page). "Typical" is no weather at all - what the
+// game's pick already assumes for an outdoor game without a forecast.
+const SIM_WEATHER_CHOICES = [
+{id: "typical", name: "Typical outdoor day", weather: null},
+{id: "sunny", name: "Sunny and mild (65°F)", weather: {temp: 65, wind: 5, rain: 0, code: 0}},
+{id: "cloudy", name: "Cloudy (50°F)", weather: {temp: 50, wind: 8, rain: 0.1, code: 3}},
+{id: "rain", name: "Rain (50°F)", weather: {temp: 50, wind: 10, rain: 1, code: 63}},
+{id: "wind", name: "Windy (gusts over 20 mph)", weather: {temp: 50, wind: 22, rain: 0, code: 3}},
+{id: "cold", name: "Bitter cold (20°F)", weather: {temp: 20, wind: 8, rain: 0, code: 1}},
+{id: "snow", name: "Snow (28°F)", weather: {temp: 28, wind: 10, rain: 0, code: 73, snow: true}},
+]
+
+function simWeatherChoice(id){
+const choice = SIM_WEATHER_CHOICES.find(c => c.id === id)
+return choice && choice.weather ? {...choice.weather, label: `${choice.name}, chosen`} : null
+}
+
+// The points model's weather terms, per team (config.NFL_TOTALS_COEFFICIENTS
+// wx_wind/wx_cold/wx_rain, measured from the average outdoor game,
+// config.NFL_WEATHER_OUTDOOR_MEANS; tests/test_nfl_weather.py checks they
+// match): how far a chosen weather moves the game's total from its pick.
+const SIM_TOTAL_WEATHER = {wind: -0.18, cold: -0.1, rain: -2.826, means: {wind: 3.754, cold: 1.322, rain: 0.07}}
+
+function simWeatherTotalShift(weather){
+if(!weather || weather.indoor){ return 0 }
+const t = SIM_TOTAL_WEATHER
+const x = {
+wind: Math.max(0, (Number(weather.wind) || 0) - 5), cold: Math.max(0, 40 - (weather.temp ?? 40)),
+rain: weather.snow ? 0 : Math.min(1, Math.max(0, Number(weather.rain) || 0)),
+}
+return 2 * ["wind", "cold", "rain"].reduce((sum, k) => sum + t[k] * (x[k] - t.means[k]), 0)
+}
+
 // A probability moved by `shift` in log-odds.
 function simShiftOdds(p, shift){
 if(!shift || p <= 0 || p >= 1){ return p }
@@ -1249,7 +1283,7 @@ return {
 indoor: false, known, rainy, snowy, cloudy, partly,
 sunny: known && !rainy && !snowy && !cloudy, windy: (wind ?? 0) >= 15, wind: wind ?? 0,
 sky: rainy || snowy ? ["#5d6672", "#8a929c"] : cloudy ? ["#7d8a99", "#aab4bf"] : ["#3f8fd8", "#a9d4f5"],
-label: parts.join(" · "),
+label: w.label || parts.join(" · "),
 }
 }
 
@@ -1477,7 +1511,7 @@ return `<div class="simFinal"><div class="whatIfHeadline">Final: ${headline}</di
 
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
-simRng, simDraw, simFactors, simWeather, simShiftOdds, SIM_WEATHER, simZone, simPunt, simPick, simSharpen, simShortName, simLineup, simulateGame, simAverage, simCalibrate, simSpot, simClock,
+simRng, simDraw, simFactors, simWeather, simShiftOdds, SIM_WEATHER, SIM_WEATHER_CHOICES, simWeatherChoice, simWeatherTotalShift, simZone, simPunt, simPick, simSharpen, simShortName, simLineup, simulateGame, simAverage, simCalibrate, simSpot, simClock,
 simSummary, simMarginBins, simMarginChartHtml, simSummaryHtml, simPlayerStatsHtml,
 simFieldSvg, simFieldPoint, simBallPath, simWeatherScene, simScoreboardHtml, simDriveChartHtml, simTickerHtml, simBoxScoreHtml, simCalibrationNote, simFinalHtml,
 }
