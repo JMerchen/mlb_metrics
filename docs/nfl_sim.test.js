@@ -560,3 +560,37 @@ test("a soaked game throws less and completes less", () => {
   assert.ok(wet.passShare < dry.passShare - 0.01, `${wet.passShare} vs ${dry.passShare}`)
   assert.ok(wet.comp < dry.comp - 0.02, `${wet.comp} vs ${dry.comp}`)
 })
+
+test("sideline view: the ball's flight for passes, punts, kicks; a ground line for runs", () => {
+  const { simBallPath, simWeatherScene } = require("./nfl_sim.js")
+  // Home drives to the right: a 22-yard catch is thrown from 5 back, caught ~12 out, then run.
+  const pass = simBallPath({ kind: "pass", poss: "home", ball: 30, end: 52 }, true)
+  assert.deepEqual([pass.kind, pass.from, pass.to, pass.thenTo], ["air", 25, 42, 52])
+  // The away team drives left, so its punt from its own 28 flies right to left.
+  const punt = simBallPath({ kind: "punt", ball: 28, flight: 73 }, false)
+  assert.deepEqual([punt.from, punt.to], [86, 27])
+  assert.equal(simBallPath({ kind: "punt", ball: 28 }, true), null)
+  const fg = simBallPath({ kind: "field_goal", ball: 68, scoring: "FG" }, true)
+  assert.ok(fg.to > 110 && fg.landHeight > 30)
+  assert.equal(simBallPath({ kind: "field_goal", ball: 68 }, true).landHeight, 0)
+  assert.deepEqual(simBallPath({ kind: "run", ball: 45, end: 51 }, true), { kind: "ground", from: 45, to: 51 })
+  assert.equal(simBallPath({ kind: "timeout", ball: 45 }, true), null)
+  const svg = simFieldSvg({ kind: "punt", poss: "away", ball: 28, end: 28, flight: 73 }, "TB", "ATL", { temp: 51, wind: 9, rain: 0.9, code: 63 })
+  assert.match(svg, /class="simFlight"/)
+  assert.match(svg, /animateMotion/)
+  assert.match(svg, /class="simRain"/)
+  assert.match(svg, /51°F · wind 9 mph · 90% rain/)
+})
+
+test("sideline view: the sky follows the weather", () => {
+  const { simWeatherScene } = require("./nfl_sim.js")
+  assert.ok(simWeatherScene({ indoor: true }).indoor)
+  assert.ok(simWeatherScene({ temp: 70, wind: 3, rain: 0, code: 0 }).sunny)
+  assert.ok(simWeatherScene({ temp: 70, wind: 3, rain: 0, code: 2 }).partly)
+  assert.ok(simWeatherScene({ temp: 50, wind: 3, rain: 0.1, code: 3 }).cloudy)
+  assert.ok(simWeatherScene({ temp: 50, wind: 3, rain: 0.8, code: 61 }).rainy)
+  assert.ok(simWeatherScene({ temp: 25, wind: 3, rain: 0, code: 73 }).snowy)
+  assert.ok(simWeatherScene({ temp: 50, wind: 20, rain: 0, code: 0 }).windy)
+  assert.equal(simWeatherScene(null).known, false)
+  assert.doesNotMatch(simFieldSvg({ kind: "run", poss: "home", ball: 40, end: 44, togo: 10, yards: 4 }, "TB", "ATL", { indoor: true }), /simSun|simRain/)
+})
