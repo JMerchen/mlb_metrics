@@ -3381,6 +3381,12 @@ every player's averages, touchdown chance and 100-yard chance - about
 > scored, not who wins). The home page's game cards show it with a symbol
 > when opened, next to each team's EPA and a bar of each team's chance.
 >
+> **Shown as a range (2026-11-06).** The site shows each predicted total
+> as a range 9 points either side (`config.NFL_TOTAL_BAND_HALF_WIDTH`),
+> not one number: in the 2018–2025 backtest the real total landed inside
+> it in 52% of games (inside the same range around Vegas's total: 53%).
+> The NFL page tracks how often it does, next to Vegas's.
+>
 > **The pull toward the league fades for extreme units (2026-11-01).**
 > With a fixed 300 pseudo-plays per window the worst defenses were pulled
 > too far (the 2026 Cowboys allowed +0.138 EPA a play through week 7,

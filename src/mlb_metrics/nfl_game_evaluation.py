@@ -11,7 +11,7 @@ itself" non-goal), so there is no pre-existing schema to migrate from.
 
 import pandas as pd
 
-from mlb_metrics import evaluation, nfl_totals, nfl_weather
+from mlb_metrics import config, evaluation, nfl_totals, nfl_weather
 
 POINTS_COLUMNS = ["predicted_home_points", "predicted_away_points", "predicted_total", "market_total", "actual_total"]
 DISPLAY_COLUMNS = POINTS_COLUMNS + nfl_totals.EPA_DISPLAY_COLUMNS + nfl_weather.WEATHER_DISPLAY_COLUMNS
@@ -80,13 +80,14 @@ def build_game_picks_export(
 
     # Logs written before predicted points existed lack those columns.
     picks = picks.reindex(columns=picks.columns.union(DISPLAY_COLUMNS, sort=False))
+    picks["predicted_total_low"], picks["predicted_total_high"] = total_band(picks["predicted_total"])
     picks_out = picks[
         [
             "date", "season", "week", "game_id", "home_team", "away_team", "predicted_winner", "predicted_loser",
             "predicted_probability", "above_threshold", "status", "market_home_win_probability",
             "market_predicted_winner_probability",
             "bet_units", "bet_side", "bet_team", "bet_moneyline", "bet_profit_units",
-            *DISPLAY_COLUMNS,
+            *DISPLAY_COLUMNS, "predicted_total_low", "predicted_total_high",
             "injury_report", "injury_note", "before_report_winner", "before_report_probability",
         ]
     ].sort_values("date", ascending=False).reset_index(drop=True)
@@ -161,19 +162,36 @@ def _latest_pick_per_game(picks: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
 def points_total_metrics(picks: pd.DataFrame) -> dict:
     """How far the predicted point total landed from the real one, next to
     the market's total, on the same played games (those with a predicted,
-    a market and an actual total). Average absolute miss in points; NaN
-    (and n 0) when no game qualifies."""
+    a market and an actual total): the average miss in points, and how
+    often the real total fell in the range shown on the site (ours, and
+    the same width around Vegas's - config.NFL_TOTAL_BAND_HALF_WIDTH).
+    NaN (and n 0) when no game qualifies."""
     columns = ["predicted_total", "market_total", "actual_total"]
+    empty = {"points_total_n": 0, "points_total_mae": float("nan"), "market_points_total_mae": float("nan"),
+             "points_total_in_range": float("nan"), "market_points_total_in_range": float("nan")}
     if picks.empty or not set(columns).issubset(picks.columns):
-        return {"points_total_n": 0, "points_total_mae": float("nan"), "market_points_total_mae": float("nan")}
+        return empty
     totals = picks[columns].apply(pd.to_numeric, errors="coerce").dropna()
     if totals.empty:
-        return {"points_total_n": 0, "points_total_mae": float("nan"), "market_points_total_mae": float("nan")}
+        return empty
+    ours = totals["predicted_total"] - totals["actual_total"]
+    vegas = totals["market_total"] - totals["actual_total"]
+    low, high = total_band(totals["predicted_total"])
     return {
         "points_total_n": int(len(totals)),
-        "points_total_mae": float((totals["predicted_total"] - totals["actual_total"]).abs().mean()),
-        "market_points_total_mae": float((totals["market_total"] - totals["actual_total"]).abs().mean()),
+        "points_total_mae": float(ours.abs().mean()),
+        "market_points_total_mae": float(vegas.abs().mean()),
+        "points_total_in_range": float(((totals["actual_total"] >= low) & (totals["actual_total"] <= high)).mean()),
+        "market_points_total_in_range": float((vegas.abs() <= config.NFL_TOTAL_BAND_HALF_WIDTH).mean()),
     }
+
+
+def total_band(predicted_total: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """The range shown for a predicted total: whole points,
+    config.NFL_TOTAL_BAND_HALF_WIDTH either side (never below 0)."""
+    total = pd.to_numeric(predicted_total, errors="coerce")
+    half = config.NFL_TOTAL_BAND_HALF_WIDTH
+    return (total - half).round().clip(lower=0), (total + half).round()
 
 
 def _bet_pnl_metrics(picks: pd.DataFrame):

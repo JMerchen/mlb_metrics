@@ -2383,6 +2383,12 @@ NFL_TOTALS_COEFFICIENTS = {
     "wx_cold": -0.1,
     "wx_rain": -2.826,
 }
+# The predicted total is shown as a range: this many points either side
+# (user request 2026-11-06, "a point total around the prediction tells the
+# same story"). 2018-25 backtest (scripts/backtest_nfl_totals.py): the real
+# total landed within 9 of ours in 51.8% of 2,127 games (within 9 of
+# Vegas's total: 52.8%) - "about half the time".
+NFL_TOTAL_BAND_HALF_WIDTH = 9
 # The average outdoor game's weather terms (nfl_weather.weather_features),
 # for an outdoor game with no reading or forecast yet.
 NFL_WEATHER_OUTDOOR_MEANS = {"wx_wind": 3.754, "wx_cold": 1.322, "wx_rain": 0.07}

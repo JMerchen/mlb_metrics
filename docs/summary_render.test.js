@@ -104,6 +104,12 @@ test("NFL game row: predicted total next to Vegas's; nothing for MLB", () => {
   assert.equal(face(html), "Bills at Rams We say Rams 51% · Vegas 57%")
   assert.equal(detail(html), "Bills 49%51% Rams 🗓️Forecast comes the day before the game Total points: we say 51 · Vegas 54.5 Before the final injury report")
   assert.equal(text(totalPointsText({ predicted_total: "47.6", market_total: "" })), "Total points: we say 48")
+  // With the range from the export: the range, not one number.
+  assert.equal(text(totalPointsText({ predicted_total: 47.6, predicted_total_low: 39, predicted_total_high: 57, market_total: 47.5 })),
+    "Total points: we say 39–57 · Vegas 47.5")
+  const card = gamePickRowHtml({ home_team: "LA", away_team: "BUF", predicted_winner: "LA", predicted_probability: 0.51,
+    predicted_total: 47.6, predicted_total_low: 39, predicted_total_high: 57 }, "nfl")
+  assert.match(detail(card), /Total points: we say 39–57 About half of games finish inside our range\./)
   assert.equal(totalPointsText({ predicted_total: "" }), "")
   assert.equal(totalPointsText({}), "")
 })

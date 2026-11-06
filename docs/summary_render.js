@@ -107,13 +107,18 @@ const direction = units >= 0 ? "up" : "down"
 return `Our bets: won <b>${won} of ${bets}</b>, ${direction} ${Math.abs(units).toFixed(1)} units.`
 }
 
-// NFL: "Total points: we say 48 · Vegas 47.5". Empty when there is no
-// predicted total (every MLB game, NFL games before totals existed).
+// NFL: "Total points: we say 39–57 · Vegas 47.5" - our total as a range
+// (config.NFL_TOTAL_BAND_HALF_WIDTH either side; the real total lands in
+// it about half the time), or one number for a pick logged without one.
+// Empty when there is no predicted total (every MLB game, NFL games before
+// totals existed).
 function totalPointsText(g){
 const ours = srNum(g.predicted_total)
 if(ours === null){ return "" }
+const low = srNum(g.predicted_total_low), high = srNum(g.predicted_total_high)
+const range = low !== null && high !== null ? `${low}–${high}` : `${Math.round(ours)}`
 const vegas = srNum(g.market_total)
-return `Total points: we say ${Math.round(ours)}${vegas !== null ? `&nbsp;&middot; Vegas ${vegas}` : ""}`
+return `Total points: we say ${range}${vegas !== null ? `&nbsp;&middot; Vegas ${vegas}` : ""}`
 }
 
 // 3 -> "3rd"
@@ -231,6 +236,7 @@ ${bet}
 ${pickBarHtml(g, sport)}
 ${weatherLine}
 ${total ? `<div class="total">${total}</div>` : ""}
+${total && srNum(g.predicted_total_low) !== null ? `<div class="totalNote">About half of games finish inside our range.</div>` : ""}
 ${epa}
 ${reportNote}
 </div>

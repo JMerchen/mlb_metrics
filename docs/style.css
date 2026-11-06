@@ -1196,6 +1196,7 @@ template already relies on these exact names. */
 .game .wxPeek{font-size:16px;line-height:1;}
 .gameDetail{padding:2px 14px 12px 12px;font-size:13px;}
 .gameDetail .total{font-size:12px;color:var(--text-dim);margin-top:6px;}
+.gameDetail .totalNote{font-size:11px;color:var(--text-dim);opacity:.8;}
 .gameWeather{display:flex;align-items:center;gap:8px;margin-top:10px;color:var(--text);}
 .gameWeather .wxIcon{font-size:24px;line-height:1;}
 .pickBar{margin-top:4px;}

@@ -50,6 +50,12 @@ below 32/50 (40 best), snow as its own term or counted as rain (22 games,
 nothing). Fit on game-time readings; a day-before forecast is less sure,
 so live the gain will be somewhat smaller.
 
+Shown as a range (2026-11-06, config.NFL_TOTAL_BAND_HALF_WIDTH): the real
+total landed within 6/9/11 points of ours in 36/52/60% of games (Vegas's
+total: 37/53/62%); the median miss is 8.7 (7.6 on the lowest third of
+predicted totals, 9.4 on the middle). The site uses +/-9: "about half
+the time".
+
 Usage:
     python scripts/backtest_nfl_totals.py
 """
@@ -155,6 +161,17 @@ def main():
     print("\nconfig.NFL_WEATHER_OUTDOOR_MEANS (outdoor games with a reading):")
     print({c: round(float(known.loc[known[i].notna(), c].mean()), 3) for c, i in
            zip(nfl_weather.WEATHER_FEATURE_COLUMNS, ["weather_wind", "weather_temp", "weather_rain"])})
+
+    # How far off a game's total is, for the band shown on the site
+    # (config.NFL_TOTAL_BAND_HALF_WIDTH).
+    miss = (games["predicted_total"] - games["total"]).abs()
+    print("\nmiss quantiles (points):", {q: round(float(miss.quantile(q)), 1) for q in (0.5, 0.6, 2 / 3, 0.75, 0.8)})
+    for half in (6, 7, 8, 9, 10, 11):
+        print(f"  within +/-{half}: {(miss <= half).mean():.3f}"
+              f"  (market's total: {((games['total_line'] - games['total']).abs() <= half).mean():.3f})")
+    games["third"] = pd.qcut(games["predicted_total"], 3, labels=["low", "mid", "high"])
+    print("  median miss by predicted total:", games.groupby("third", observed=True)
+          .apply(lambda d: round(float((d["predicted_total"] - d["total"]).abs().median()), 1), include_groups=False).to_dict())
 
     final = fit(features)
     print("\nconfig.NFL_TOTALS_COEFFICIENTS (fit on every season):")
