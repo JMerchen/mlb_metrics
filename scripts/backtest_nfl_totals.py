@@ -162,6 +162,32 @@ def main():
     print({c: round(float(known.loc[known[i].notna(), c].mean()), 3) for c, i in
            zip(nfl_weather.WEATHER_FEATURE_COLUMNS, ["weather_wind", "weather_temp", "weather_rain"])})
 
+    # Over/under leans by how far our total is from the market's, with a
+    # 95% Wilson interval and a one-sided p against the 52.4% that breaks
+    # even at -110, and season by season for the bet threshold.
+    from scipy import stats as st
+    print("\nover/under lean vs the market's total (pushes out):")
+    for gap in (3, 4, 5, 6, 7, 8, 9, 10):
+        lean = decided[decided["lean"].abs() >= gap]
+        n = len(lean)
+        if not n:
+            continue
+        wins = int(((lean["lean"] > 0) == (lean["total"] > lean["total_line"])).sum())
+        z = 1.96
+        p_hat = wins / n
+        centre = (p_hat + z * z / (2 * n)) / (1 + z * z / n)
+        half = z * np.sqrt(p_hat * (1 - p_hat) / n + z * z / (4 * n * n)) / (1 + z * z / n)
+        p_value = st.binomtest(wins, n, 0.524, alternative="greater").pvalue
+        units = wins * (100 / 110) - (n - wins)
+        print(f"  gap {gap:>2}+: {n:4d} games, right {p_hat:.3f} ({centre - half:.3f}-{centre + half:.3f}),"
+              f" p vs 52.4% {p_value:.3f}, units at -110 {units:+.1f}"
+              f"  overs {int((lean['lean'] > 0).sum())} / unders {int((lean['lean'] < 0).sum())}")
+    for gap in (5, 7, 9):
+        lean = decided[decided["lean"].abs() >= gap].copy()
+        lean["right"] = (lean["lean"] > 0) == (lean["total"] > lean["total_line"])
+        print(f"  gap {gap}+ by season:", lean.groupby("season")["right"].agg(["size", "mean"]).round(2)
+              .apply(lambda r: f"{int(r['size'])}:{r['mean']:.2f}", axis=1).to_dict())
+
     # How far off a game's total is, for the band shown on the site
     # (config.NFL_TOTAL_BAND_HALF_WIDTH).
     miss = (games["predicted_total"] - games["total"]).abs()

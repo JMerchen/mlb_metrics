@@ -2389,6 +2389,18 @@ NFL_TOTALS_COEFFICIENTS = {
 # total landed within 9 of ours in 51.8% of 2,127 games (within 9 of
 # Vegas's total: 52.8%) - "about half the time".
 NFL_TOTAL_BAND_HALF_WIDTH = 9
+# An over/under lean when our total is this many points or more from
+# Vegas's (user request 2026-11-06: totals "accurate enough to use for
+# bets"). 2018-25 backtest, refit season by season on earlier seasons only
+# (scripts/backtest_nfl_totals.py), against the closing total, pushes out:
+#   3+ points: 716 games, right 55.4% (+41.9 units at -110, p 0.055)
+#   5+ points: 237 games, right 62.0% (55.7-68.0%), p 0.002 against the
+#              52.4% that breaks even, +43.6 units; 54-75% every season
+#   9+ points (Vegas outside our range): 17 games, 64.7% (41-83%) - too
+#              few to judge alone
+# The design choices (weather terms, shrink fade) were tried on these same
+# seasons, so expect live results somewhat below the backtest's.
+NFL_TOTAL_LEAN_MIN_GAP = 5.0
 # The average outdoor game's weather terms (nfl_weather.weather_features),
 # for an outdoor game with no reading or forecast yet.
 NFL_WEATHER_OUTDOOR_MEANS = {"wx_wind": 3.754, "wx_cold": 1.322, "wx_rain": 0.07}

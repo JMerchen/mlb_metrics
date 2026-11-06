@@ -90,21 +90,33 @@ return `<div class="pick">
 // it is how often our picks were right next to how often Vegas's were, on
 // the same games; while it's on, it is the bet record.
 function gamePicksRecordHtml(summary, current){
+return gamePicksBaseRecordHtml(summary, current) + totalLeansRecordHtml(summary)
+}
+
+function gamePicksBaseRecordHtml(summary, current){
 const s = summary || {}
 if(String(s.betting_enabled).toLowerCase() === "false"){
 const n = current ? srNum(current.model_vs_market_n) || 0 : 0
-const paused = "Not suggesting bets right now."
+const paused = "Not suggesting moneyline bets right now."
 if(!n){ return `No results yet this season. ${paused}` }
 const ours = Math.round((srNum(current.model_pick_accuracy) || 0) * n)
 const vegas = Math.round((srNum(current.market_pick_accuracy) || 0) * n)
 return `Right on <b>${ours} of ${n}</b> games so far (Vegas: ${vegas} of ${n}). ${paused}`
 }
+
 const bets = srNum(s.n_bets_advised) || 0
 if(!bets){ return "No bets settled yet." }
 const won = srNum(s.bets_won) || 0
 const units = srNum(s.total_profit_units) || 0
 const direction = units >= 0 ? "up" : "down"
 return `Our bets: won <b>${won} of ${bets}</b>, ${direction} ${Math.abs(units).toFixed(1)} units.`
+}
+
+// NFL: " Over/under leans: won 5 of 8." Empty without any settled lean.
+function totalLeansRecordHtml(summary){
+const s = summary || {}
+const won = srNum(s.total_leans_won) || 0, lost = srNum(s.total_leans_lost) || 0
+return won + lost ? ` Over/under leans: won <b>${won} of ${won + lost}</b>.` : ""
 }
 
 // NFL: "Total points: we say 39–57 · Vegas 47.5" - our total as a range
@@ -195,6 +207,35 @@ ${vegasHome === null ? "" : `<div class="pickBarKey">The tick is Vegas: ${srEsc(
 </div>`
 }
 
+// NFL: our over/under lean when our total is far enough from Vegas's
+// (config.NFL_TOTAL_LEAN_MIN_GAP) - {side, line, gap, result} or null.
+function totalLean(g){
+const side = g.total_lean === "over" || g.total_lean === "under" ? g.total_lean : null
+const line = srNum(g.total_lean_line)
+if(!side || line === null){ return null }
+const ours = srNum(g.predicted_total)
+return {side, line, gap: ours === null ? null : Math.abs(ours - line), result: g.total_lean_result || ""}
+}
+
+// "Lean OVER 37.5", and once played "won" / "lost" / "push".
+function totalLeanBadgeHtml(g){
+const lean = totalLean(g)
+if(!lean){ return "" }
+const done = {win: " · won", loss: " · lost", push: " · push"}[lean.result] || ""
+return `<span class="leanBadge lean-${lean.side}${lean.result ? ` lean-${lean.result}` : ""}">Lean ${lean.side.toUpperCase()} ${lean.line}${done}</span>`
+}
+
+// A played game outside our range: "Finished 61 - 5 over our range".
+function totalRangeNote(g){
+const actual = srNum(g.actual_total)
+if(actual === null){ return "" }
+const miss = srNum(g.total_range_miss)
+if(g.total_range_result === "over" || g.total_range_result === "under"){
+return `Finished ${actual} - ${miss} ${g.total_range_result} our range`
+}
+return g.total_range_result === "in" ? `Finished ${actual} - inside our range` : ""
+}
+
 // One game: a card with the matchup and our pick ("Rays at Yankees", "We
 // say Yankees 59%"), a color bar down its left edge (NFL: before or after
 // the final injury report), and a click to open the rest: each team's
@@ -230,6 +271,7 @@ return `<details class="game${report ? ` report-${report}` : ""}">
 <span class="prob">We say <b>${pick} ${srPct(g.predicted_probability)}</b>${vegas !== null ? `<span class="mkt">&nbsp;&middot; Vegas ${srPct(vegas)}</span>` : ""}</span>
 ${weather && !weather.indoor ? `<span class="wxIcon wxPeek" title="${srEsc(weather.label)}" aria-hidden="true">${weather.icon}</span>` : ""}
 ${bet}
+${sport === "nfl" ? totalLeanBadgeHtml(g) : ""}
 <span class="gameMore" aria-hidden="true"></span>
 </summary>
 <div class="gameDetail">
@@ -237,6 +279,8 @@ ${pickBarHtml(g, sport)}
 ${weatherLine}
 ${total ? `<div class="total">${total}</div>` : ""}
 ${total && srNum(g.predicted_total_low) !== null ? `<div class="totalNote">About half of games finish inside our range.</div>` : ""}
+${sport === "nfl" && totalLean(g) ? `<div class="totalNote leanNote">We lean ${totalLean(g).side} Vegas's ${totalLean(g).line}: our total is ${Math.round(totalLean(g).gap)} points ${totalLean(g).side === "over" ? "higher" : "lower"}.</div>` : ""}
+${sport === "nfl" && totalRangeNote(g) ? `<div class="totalNote">${srEsc(totalRangeNote(g))}</div>` : ""}
 ${epa}
 ${reportNote}
 </div>
@@ -253,7 +297,7 @@ return picks.map(g => gamePickRowHtml(g, sport)).join("")
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, gamePicksListHtml, totalPointsText,
-srWeather, pickBarHtml,
+srWeather, pickBarHtml, totalLean, totalLeanBadgeHtml, totalRangeNote,
 btsSeasonOver, btsSeasonOverHtml,
 teamEpaHtml,
 }

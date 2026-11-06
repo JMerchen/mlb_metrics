@@ -1196,7 +1196,8 @@ template already relies on these exact names. */
 .game .wxPeek{font-size:16px;line-height:1;}
 .gameDetail{padding:2px 14px 12px 12px;font-size:13px;}
 .gameDetail .total{font-size:12px;color:var(--text-dim);margin-top:6px;}
-.gameDetail .totalNote{font-size:11px;color:var(--text-dim);opacity:.8;}
+.gameDetail .totalNote{font-size:11px;color:var(--text-dim);opacity:.85;}
+.gameDetail .leanNote{color:var(--text);opacity:1;font-weight:600;}
 .gameWeather{display:flex;align-items:center;gap:8px;margin-top:10px;color:var(--text);}
 .gameWeather .wxIcon{font-size:24px;line-height:1;}
 .pickBar{margin-top:4px;}
@@ -1235,6 +1236,9 @@ template already relies on these exact names. */
 .unitsTable td.unitWeak{color:var(--danger);font-weight:600;}
 /* A confidence range or other detail inside a table cell. */
 td .dim{color:var(--text-dim);font-size:.9em;}
+.leanBadge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;color:var(--on-accent);background:var(--accent);}
+.leanBadge.lean-loss{background:var(--text-dim);}
+.leanBadge.lean-push{background:var(--border);color:var(--text);}
 .bet-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid var(--accent);color:var(--accent);white-space:nowrap;}
 .empty-note{padding:14px 16px;color:var(--text-dim);font-size:13px;line-height:1.5;}
 

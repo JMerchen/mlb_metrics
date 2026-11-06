@@ -348,3 +348,27 @@ def test_build_game_picks_export_shows_the_pick_after_the_injury_report_with_the
     assert s["n_report_compared"] == 1
     assert s["before_report_accuracy"] == 0.0
     assert s["after_report_accuracy"] == 1.0
+
+
+def test_total_leans_and_games_outside_our_range():
+    picks = pd.DataFrame({
+        "predicted_total": [44.6, 30.0, 44.0, 44.0, 44.0],
+        "market_total":    [37.5, 37.0, 42.0, 38.0, 38.0],
+        "actual_total":    [61.0, 31.0, 40.0, None, 38.0],
+    })
+    out = nfl_game_evaluation.total_leans(picks)
+    # 44.6 vs 37.5: lean over (7.1 >= 5), and 61 beat it; 61 is 7 above our 36-54 range.
+    assert out.loc[0, ["total_lean", "total_lean_line", "total_lean_result"]].tolist() == ["over", 37.5, "win"]
+    assert (out.loc[0, "total_range_result"], out.loc[0, "total_range_miss"]) == ("over", 7.0)
+    # 30 vs 37: lean under; 31 stayed under. Inside 21-39.
+    assert out.loc[1, ["total_lean", "total_lean_result", "total_range_result"]].tolist() == ["under", "win", "in"]
+    # 44 vs 42: only 2 apart, no lean.
+    assert pd.isna(out.loc[2, "total_lean"]) and pd.isna(out.loc[2, "total_lean_result"])
+    # Not played yet: a lean, no result.
+    assert out.loc[3, "total_lean"] == "over" and pd.isna(out.loc[3, "total_lean_result"])
+    # Landing on Vegas's number is a push; 38 is inside our 35-53.
+    assert out.loc[4, "total_lean_result"] == "push"
+    assert (out.loc[4, "total_range_result"], out.loc[4, "total_range_miss"]) == ("in", 0.0)
+    metrics = nfl_game_evaluation.total_lean_metrics(out)
+    assert metrics == {"total_leans_won": 2, "total_leans_lost": 0, "total_leans_pushed": 1,
+                       "total_lean_units": round(2 * 100 / 110, 2)}

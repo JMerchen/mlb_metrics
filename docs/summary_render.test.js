@@ -68,7 +68,7 @@ test("record line while bets are paused: right N of M next to Vegas", () => {
     { betting_enabled: false },
     { model_vs_market_n: 11, model_pick_accuracy: 0.4545, market_pick_accuracy: 0.5455 },
   ))
-  assert.equal(line, "Right on 5 of 11 games so far (Vegas: 6 of 11). Not suggesting bets right now.")
+  assert.equal(line, "Right on 5 of 11 games so far (Vegas: 6 of 11). Not suggesting moneyline bets right now.")
 })
 
 test("record line while bets are on: won N of M, up or down units", () => {
@@ -164,4 +164,25 @@ test("pick bar: away left, home right, our side filled, Vegas ticked", () => {
   assert.match(html, /pickBarVegas" style="left:60.0%"/)
   assert.equal(text(html), "Falcons 70%30% Buccaneers The tick is Vegas: Falcons 60%")
   assert.equal(pickBarHtml({ home_team: "TB", away_team: "ATL" }, "nfl"), "")
+})
+
+test("NFL totals: a lean when we're far from Vegas, and games outside our range marked", () => {
+  const { totalLean, totalLeanBadgeHtml, totalRangeNote } = require("./summary_render.js")
+  const g = { home_team: "BAL", away_team: "JAX", predicted_winner: "JAX", predicted_probability: 0.8,
+    predicted_total: 44.6, predicted_total_low: 36, predicted_total_high: 54, market_total: 37.5,
+    total_lean: "over", total_lean_line: 37.5 }
+  assert.deepEqual(totalLean(g), { side: "over", line: 37.5, gap: 44.6 - 37.5, result: "" })
+  assert.equal(text(totalLeanBadgeHtml(g)), "Lean OVER 37.5")
+  const html = gamePickRowHtml(g, "nfl")
+  assert.match(face(html), /Lean OVER 37\.5/)
+  assert.match(detail(html), /We lean over Vegas's 37\.5: our total is 7 points higher\./)
+  assert.equal(text(totalLeanBadgeHtml({ ...g, total_lean_result: "loss" })), "Lean OVER 37.5 · lost")
+  assert.equal(totalLean({ ...g, total_lean: "" }), null)
+  assert.equal(totalRangeNote({ ...g, actual_total: 61, total_range_result: "over", total_range_miss: 7 }), "Finished 61 - 7 over our range")
+  assert.equal(totalRangeNote({ ...g, actual_total: 40, total_range_result: "in", total_range_miss: 0 }), "Finished 40 - inside our range")
+  assert.equal(totalRangeNote(g), "")
+  // MLB cards never lean.
+  assert.doesNotMatch(gamePickRowHtml({ ...g, home_team: "NYY", away_team: "BOS", predicted_winner: "NYY" }, "mlb"), /leanBadge/)
+  assert.match(gamePicksRecordHtml({ betting_enabled: false, total_leans_won: 5, total_leans_lost: 3 }, null), /Over\/under leans: won <b>5 of 8<\/b>\./)
+  assert.doesNotMatch(gamePicksRecordHtml({ betting_enabled: false }, null), /leans/)
 })
