@@ -547,6 +547,15 @@ html += stat("-", "Bets won", "no bets settled yet")
 }
 const totals = Number(s.points_total_n) || 0
 if(totals){
+const inRange = Number(s.points_total_in_range)
+if(Number.isFinite(inRange)){
+html += stat(pct0(inRange), "Totals inside our range", `of ${totals} games &middot; the same range around Vegas's total: ${pct0(s.market_points_total_in_range)}`)
+}
+const leans = (Number(s.total_leans_won) || 0) + (Number(s.total_leans_lost) || 0)
+if(leans){
+const units = Number(s.total_lean_units) || 0
+html += stat(`${s.total_leans_won} of ${leans}`, "Over/under leans won", `${units >= 0 ? "+" : "−"}${Math.abs(units).toFixed(1)} units at −110 &middot; 52.4% breaks even${Number(s.total_leans_pushed) ? ` &middot; ${s.total_leans_pushed} push` : ""}`)
+}
 html += stat(`${Number(s.points_total_mae).toFixed(1)} pts`, "Our point totals missed by", `on average over ${totals} games &middot; Vegas missed by ${Number(s.market_points_total_mae).toFixed(1)}`)
 }
 el.innerHTML = html
@@ -610,7 +619,7 @@ return `
 <div class="pickCard ${p.status} report-${report}${betAdvised ? " recommended" : ""}">
 <div class="pickName">${matchup}</div>
 <div class="pickProb">We say ${pick} ${pct0(p.predicted_probability)}${vegas ? ` &middot; Vegas ${vegas}` : ""}</div>
-${totalPointsText(p) ? `<div class="pickProb">${totalPointsText(p)}</div>` : ""}
+${totalPointsText(p) ? `<div class="pickProb">${totalPointsText(p)} ${totalLeanBadgeHtml(p)}</div>` : ""}
 ${teamEpaHtml(p, "nfl")}
 ${reportNote}
 <div class="pickStatus">${statusLabels[p.status] || p.status}</div>
@@ -660,9 +669,14 @@ const row = {
 }
 if(anyTotals){
 const num = v=>v !== undefined && v !== "" && !Number.isNaN(Number(v)) ? Number(v) : null
-row["Total: we said"] = num(p.predicted_total) === null ? "-" : Math.round(num(p.predicted_total))
+const low = num(p.predicted_total_low), high = num(p.predicted_total_high), actual = num(p.actual_total)
+row["Total: we said"] = num(p.predicted_total) === null ? "-" : low !== null && high !== null ? `${low}–${high}` : Math.round(num(p.predicted_total))
 row["Total: Vegas"] = num(p.market_total) === null ? "-" : num(p.market_total)
-row["Total: actual"] = num(p.actual_total) === null ? "-" : num(p.actual_total)
+row["Total: actual"] = actual === null ? "-" : actual
+row["In our range"] = actual === null || low === null || high === null ? "-"
+: p.total_range_result === "over" || p.total_range_result === "under" ? `No: ${num(p.total_range_miss)} ${p.total_range_result}` : "Yes"
+const lean = totalLean(p)
+row["Total lean"] = !lean ? "-" : `${lean.side === "over" ? "Over" : "Under"} ${lean.line}${{win: ", won", loss: ", lost", push: ", push"}[lean.result] || ""}`
 }
 if(anyBets){ row["Bet"] = betCell(p) }
 return row

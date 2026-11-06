@@ -293,6 +293,22 @@ def test_build_game_picks_export_points_columns_and_total_miss_next_to_the_marke
     assert row["market_points_total_mae"] == pytest.approx(6.25)
     g1 = picks.set_index("game_id").loc["g1"]
     assert (g1["predicted_home_points"], g1["predicted_away_points"], g1["market_total"]) == (24.0, 20.0, 47.5)
+    # The total is shown as a range 9 points either side (config.NFL_TOTAL_BAND_HALF_WIDTH):
+    # g1's 41 is inside 35-53, g2's 50 inside 34-52; Vegas's 47.5 +/- 9 holds 41, 44 +/- 9 holds 50.
+    assert (g1["predicted_total_low"], g1["predicted_total_high"]) == (35.0, 53.0)
+    assert row["points_total_in_range"] == pytest.approx(1.0)
+    assert row["market_points_total_in_range"] == pytest.approx(1.0)
+
+
+def test_the_total_range_is_whole_points_and_never_below_zero():
+    low, high = nfl_game_evaluation.total_band(pd.Series([44.4, 44.6, 5.0, None]))
+    assert low.tolist()[:3] == [35.0, 36.0, 0.0] and high.tolist()[:3] == [53.0, 54.0, 14.0]
+    assert pd.isna(low.iloc[3])
+    # A real total outside the range counts as a miss.
+    picks = pd.DataFrame({"predicted_total": [44.0, 44.0], "market_total": [44.0, 60.0], "actual_total": [54.0, 50.0]})
+    metrics = nfl_game_evaluation.points_total_metrics(picks)
+    assert metrics["points_total_in_range"] == pytest.approx(0.5)
+    assert metrics["market_points_total_in_range"] == pytest.approx(0.0)
 
 
 def test_build_game_picks_export_log_without_points_columns_still_exports():
@@ -332,3 +348,27 @@ def test_build_game_picks_export_shows_the_pick_after_the_injury_report_with_the
     assert s["n_report_compared"] == 1
     assert s["before_report_accuracy"] == 0.0
     assert s["after_report_accuracy"] == 1.0
+
+
+def test_total_leans_and_games_outside_our_range():
+    picks = pd.DataFrame({
+        "predicted_total": [44.6, 30.0, 44.0, 44.0, 44.0],
+        "market_total":    [37.5, 37.0, 42.0, 38.0, 38.0],
+        "actual_total":    [61.0, 31.0, 40.0, None, 38.0],
+    })
+    out = nfl_game_evaluation.total_leans(picks)
+    # 44.6 vs 37.5: lean over (7.1 >= 5), and 61 beat it; 61 is 7 above our 36-54 range.
+    assert out.loc[0, ["total_lean", "total_lean_line", "total_lean_result"]].tolist() == ["over", 37.5, "win"]
+    assert (out.loc[0, "total_range_result"], out.loc[0, "total_range_miss"]) == ("over", 7.0)
+    # 30 vs 37: lean under; 31 stayed under. Inside 21-39.
+    assert out.loc[1, ["total_lean", "total_lean_result", "total_range_result"]].tolist() == ["under", "win", "in"]
+    # 44 vs 42: only 2 apart, no lean.
+    assert pd.isna(out.loc[2, "total_lean"]) and pd.isna(out.loc[2, "total_lean_result"])
+    # Not played yet: a lean, no result.
+    assert out.loc[3, "total_lean"] == "over" and pd.isna(out.loc[3, "total_lean_result"])
+    # Landing on Vegas's number is a push; 38 is inside our 35-53.
+    assert out.loc[4, "total_lean_result"] == "push"
+    assert (out.loc[4, "total_range_result"], out.loc[4, "total_range_miss"]) == ("in", 0.0)
+    metrics = nfl_game_evaluation.total_lean_metrics(out)
+    assert metrics == {"total_leans_won": 2, "total_leans_lost": 0, "total_leans_pushed": 1,
+                       "total_lean_units": round(2 * 100 / 110, 2)}

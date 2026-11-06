@@ -3381,6 +3381,24 @@ every player's averages, touchdown chance and 100-yard chance - about
 > scored, not who wins). The home page's game cards show it with a symbol
 > when opened, next to each team's EPA and a bar of each team's chance.
 >
+> **Shown as a range (2026-11-06).** The site shows each predicted total
+> as a range 9 points either side (`config.NFL_TOTAL_BAND_HALF_WIDTH`),
+> not one number: in the 2018–2025 backtest the real total landed inside
+> it in 52% of games (inside the same range around Vegas's total: 53%).
+> The NFL page tracks how often it does, next to Vegas's, and marks every
+> game that finished outside it (and by how much).
+>
+> **Over/under leans (2026-11-06).** When our total is 5+ points from
+> Vegas's (`config.NFL_TOTAL_LEAN_MIN_GAP`), the card shows "Lean OVER" or
+> "Lean UNDER" at Vegas's number, and the NFL page keeps the record (won,
+> lost, pushes, units at −110). In the 2018–2025 backtest, refit season by
+> season on earlier seasons only, those leans were right 62.0% of 237
+> games against the closing total (95% CI 55.7–68.0%; p 0.002 against the
+> 52.4% that breaks even at −110; +43.6 units; 54–75% in every season).
+> Vegas's number falling outside our whole range (9+ points apart) happened
+> in only 17 games - too few to judge on its own. The design choices were
+> tried on those same seasons, so expect live results below the backtest's.
+>
 > **The pull toward the league fades for extreme units (2026-11-01).**
 > With a fixed 300 pseudo-plays per window the worst defenses were pulled
 > too far (the 2026 Cowboys allowed +0.138 EPA a play through week 7,

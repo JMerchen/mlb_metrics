@@ -50,6 +50,12 @@ below 32/50 (40 best), snow as its own term or counted as rain (22 games,
 nothing). Fit on game-time readings; a day-before forecast is less sure,
 so live the gain will be somewhat smaller.
 
+Shown as a range (2026-11-06, config.NFL_TOTAL_BAND_HALF_WIDTH): the real
+total landed within 6/9/11 points of ours in 36/52/60% of games (Vegas's
+total: 37/53/62%); the median miss is 8.7 (7.6 on the lowest third of
+predicted totals, 9.4 on the middle). The site uses +/-9: "about half
+the time".
+
 Usage:
     python scripts/backtest_nfl_totals.py
 """
@@ -155,6 +161,43 @@ def main():
     print("\nconfig.NFL_WEATHER_OUTDOOR_MEANS (outdoor games with a reading):")
     print({c: round(float(known.loc[known[i].notna(), c].mean()), 3) for c, i in
            zip(nfl_weather.WEATHER_FEATURE_COLUMNS, ["weather_wind", "weather_temp", "weather_rain"])})
+
+    # Over/under leans by how far our total is from the market's, with a
+    # 95% Wilson interval and a one-sided p against the 52.4% that breaks
+    # even at -110, and season by season for the bet threshold.
+    from scipy import stats as st
+    print("\nover/under lean vs the market's total (pushes out):")
+    for gap in (3, 4, 5, 6, 7, 8, 9, 10):
+        lean = decided[decided["lean"].abs() >= gap]
+        n = len(lean)
+        if not n:
+            continue
+        wins = int(((lean["lean"] > 0) == (lean["total"] > lean["total_line"])).sum())
+        z = 1.96
+        p_hat = wins / n
+        centre = (p_hat + z * z / (2 * n)) / (1 + z * z / n)
+        half = z * np.sqrt(p_hat * (1 - p_hat) / n + z * z / (4 * n * n)) / (1 + z * z / n)
+        p_value = st.binomtest(wins, n, 0.524, alternative="greater").pvalue
+        units = wins * (100 / 110) - (n - wins)
+        print(f"  gap {gap:>2}+: {n:4d} games, right {p_hat:.3f} ({centre - half:.3f}-{centre + half:.3f}),"
+              f" p vs 52.4% {p_value:.3f}, units at -110 {units:+.1f}"
+              f"  overs {int((lean['lean'] > 0).sum())} / unders {int((lean['lean'] < 0).sum())}")
+    for gap in (5, 7, 9):
+        lean = decided[decided["lean"].abs() >= gap].copy()
+        lean["right"] = (lean["lean"] > 0) == (lean["total"] > lean["total_line"])
+        print(f"  gap {gap}+ by season:", lean.groupby("season")["right"].agg(["size", "mean"]).round(2)
+              .apply(lambda r: f"{int(r['size'])}:{r['mean']:.2f}", axis=1).to_dict())
+
+    # How far off a game's total is, for the band shown on the site
+    # (config.NFL_TOTAL_BAND_HALF_WIDTH).
+    miss = (games["predicted_total"] - games["total"]).abs()
+    print("\nmiss quantiles (points):", {q: round(float(miss.quantile(q)), 1) for q in (0.5, 0.6, 2 / 3, 0.75, 0.8)})
+    for half in (6, 7, 8, 9, 10, 11):
+        print(f"  within +/-{half}: {(miss <= half).mean():.3f}"
+              f"  (market's total: {((games['total_line'] - games['total']).abs() <= half).mean():.3f})")
+    games["third"] = pd.qcut(games["predicted_total"], 3, labels=["low", "mid", "high"])
+    print("  median miss by predicted total:", games.groupby("third", observed=True)
+          .apply(lambda d: round(float((d["predicted_total"] - d["total"]).abs().median()), 1), include_groups=False).to_dict())
 
     final = fit(features)
     print("\nconfig.NFL_TOTALS_COEFFICIENTS (fit on every season):")

@@ -11,7 +11,7 @@ itself" non-goal), so there is no pre-existing schema to migrate from.
 
 import pandas as pd
 
-from mlb_metrics import evaluation, nfl_totals, nfl_weather
+from mlb_metrics import config, evaluation, nfl_totals, nfl_weather
 
 POINTS_COLUMNS = ["predicted_home_points", "predicted_away_points", "predicted_total", "market_total", "actual_total"]
 DISPLAY_COLUMNS = POINTS_COLUMNS + nfl_totals.EPA_DISPLAY_COLUMNS + nfl_weather.WEATHER_DISPLAY_COLUMNS
@@ -80,13 +80,16 @@ def build_game_picks_export(
 
     # Logs written before predicted points existed lack those columns.
     picks = picks.reindex(columns=picks.columns.union(DISPLAY_COLUMNS, sort=False))
+    picks["predicted_total_low"], picks["predicted_total_high"] = total_band(picks["predicted_total"])
+    picks = picks.join(total_leans(picks))
     picks_out = picks[
         [
             "date", "season", "week", "game_id", "home_team", "away_team", "predicted_winner", "predicted_loser",
             "predicted_probability", "above_threshold", "status", "market_home_win_probability",
             "market_predicted_winner_probability",
             "bet_units", "bet_side", "bet_team", "bet_moneyline", "bet_profit_units",
-            *DISPLAY_COLUMNS,
+            *DISPLAY_COLUMNS, "predicted_total_low", "predicted_total_high",
+            "total_range_result", "total_range_miss", "total_lean", "total_lean_line", "total_lean_result",
             "injury_report", "injury_note", "before_report_winner", "before_report_probability",
         ]
     ].sort_values("date", ascending=False).reset_index(drop=True)
@@ -122,6 +125,7 @@ def build_game_picks_export(
                 "beat_closing_line_rate_p_value": beat_closing_line_rate_p_value,
                 **evaluation.model_vs_market(picks),
                 **points_total_metrics(picks),
+                **total_lean_metrics(picks),
                 **report_compare,
             }
         ]
@@ -161,19 +165,78 @@ def _latest_pick_per_game(picks: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
 def points_total_metrics(picks: pd.DataFrame) -> dict:
     """How far the predicted point total landed from the real one, next to
     the market's total, on the same played games (those with a predicted,
-    a market and an actual total). Average absolute miss in points; NaN
-    (and n 0) when no game qualifies."""
+    a market and an actual total): the average miss in points, and how
+    often the real total fell in the range shown on the site (ours, and
+    the same width around Vegas's - config.NFL_TOTAL_BAND_HALF_WIDTH).
+    NaN (and n 0) when no game qualifies."""
     columns = ["predicted_total", "market_total", "actual_total"]
+    empty = {"points_total_n": 0, "points_total_mae": float("nan"), "market_points_total_mae": float("nan"),
+             "points_total_in_range": float("nan"), "market_points_total_in_range": float("nan")}
     if picks.empty or not set(columns).issubset(picks.columns):
-        return {"points_total_n": 0, "points_total_mae": float("nan"), "market_points_total_mae": float("nan")}
+        return empty
     totals = picks[columns].apply(pd.to_numeric, errors="coerce").dropna()
     if totals.empty:
-        return {"points_total_n": 0, "points_total_mae": float("nan"), "market_points_total_mae": float("nan")}
+        return empty
+    ours = totals["predicted_total"] - totals["actual_total"]
+    vegas = totals["market_total"] - totals["actual_total"]
+    low, high = total_band(totals["predicted_total"])
     return {
         "points_total_n": int(len(totals)),
-        "points_total_mae": float((totals["predicted_total"] - totals["actual_total"]).abs().mean()),
-        "market_points_total_mae": float((totals["market_total"] - totals["actual_total"]).abs().mean()),
+        "points_total_mae": float(ours.abs().mean()),
+        "market_points_total_mae": float(vegas.abs().mean()),
+        "points_total_in_range": float(((totals["actual_total"] >= low) & (totals["actual_total"] <= high)).mean()),
+        "market_points_total_in_range": float((vegas.abs() <= config.NFL_TOTAL_BAND_HALF_WIDTH).mean()),
     }
+
+
+def total_leans(picks: pd.DataFrame) -> pd.DataFrame:
+    """For each pick: whether the real total landed in our range
+    (total_range_result "in", "over" or "under" with total_range_miss, the
+    points outside it), and the over/under lean when our total is
+    config.NFL_TOTAL_LEAN_MIN_GAP or more from Vegas's (total_lean "over"
+    or "under" at total_lean_line, settled as total_lean_result "win",
+    "loss" or "push"; blank until the game is played)."""
+    num = lambda c: pd.to_numeric(picks[c], errors="coerce") if c in picks.columns else pd.Series(float("nan"), index=picks.index)
+    predicted, market, actual = num("predicted_total"), num("market_total"), num("actual_total")
+    low, high = total_band(predicted)
+    out = pd.DataFrame(index=picks.index)
+    out["total_range_result"] = pd.Series(pd.NA, index=picks.index, dtype=object)
+    played = actual.notna() & predicted.notna()
+    out.loc[played & (actual > high), "total_range_result"] = "over"
+    out.loc[played & (actual < low), "total_range_result"] = "under"
+    out.loc[played & (actual >= low) & (actual <= high), "total_range_result"] = "in"
+    out["total_range_miss"] = (actual - high).where(actual > high, (low - actual).where(actual < low, 0.0)).where(played)
+    gap = predicted - market
+    lean = pd.Series(pd.NA, index=picks.index, dtype=object)
+    lean[gap >= config.NFL_TOTAL_LEAN_MIN_GAP] = "over"
+    lean[gap <= -config.NFL_TOTAL_LEAN_MIN_GAP] = "under"
+    out["total_lean"] = lean
+    out["total_lean_line"] = market.where(lean.notna())
+    result = pd.Series(pd.NA, index=picks.index, dtype=object)
+    settled = lean.notna() & actual.notna()
+    went_over = actual > market
+    result[settled & (actual == market)] = "push"
+    result[settled & (actual != market) & ((lean == "over") == went_over)] = "win"
+    result[settled & (actual != market) & ((lean == "over") != went_over)] = "loss"
+    out["total_lean_result"] = result
+    return out
+
+
+def total_lean_metrics(picks: pd.DataFrame) -> dict:
+    """The over/under leans' record: won, lost, pushed, and units at the
+    standard -110 (risk 1.1 to win 1, reported per unit risked)."""
+    result = picks["total_lean_result"] if "total_lean_result" in picks.columns else pd.Series(dtype=object)
+    won, lost, pushed = int((result == "win").sum()), int((result == "loss").sum()), int((result == "push").sum())
+    return {"total_leans_won": won, "total_leans_lost": lost, "total_leans_pushed": pushed,
+            "total_lean_units": round(won * 100 / 110 - lost, 2)}
+
+
+def total_band(predicted_total: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """The range shown for a predicted total: whole points,
+    config.NFL_TOTAL_BAND_HALF_WIDTH either side (never below 0)."""
+    total = pd.to_numeric(predicted_total, errors="coerce")
+    half = config.NFL_TOTAL_BAND_HALF_WIDTH
+    return (total - half).round().clip(lower=0), (total + half).round()
 
 
 def _bet_pnl_metrics(picks: pd.DataFrame):
