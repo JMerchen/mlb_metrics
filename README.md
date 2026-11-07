@@ -3408,7 +3408,10 @@ every player's averages, touchdown chance and 100-yard chance - about
 > nflverse's schedule). Beating the close on average is the standard
 > early sign of a real edge, readable within dozens of leans. 2026 so far:
 > lines logged Tuesday moved before kickoff in 67% of games (mean 1.05
-> points), Saturday's after-report lines in 57% (0.64).
+> points), Saturday's after-report lines in 57% (0.64). Tuesday's lean -
+> the pick before the injury report, against Tuesday's line, the earliest
+> one to bet - is graded on its own too (`tuesday_total_lean*`), since it
+> has the most time for the line to move.
 >
 > **The pull toward the league fades for extreme units (2026-11-01).**
 > With a fixed 300 pseudo-plays per window the worst defenses were pulled

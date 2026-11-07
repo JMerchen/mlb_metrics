@@ -394,3 +394,22 @@ def test_closing_line_value_of_each_lean():
     assert metrics["total_lean_clv_mean"] == pytest.approx(1.0)
     assert (metrics["total_lean_clv_beat"], metrics["total_lean_clv_worse"]) == (2, 1)
     assert 0 < metrics["total_lean_clv_p"] < 1
+
+
+def test_tuesday_leans_are_graded_against_the_close_on_their_own():
+    predictions = _predictions()
+    g = predictions["game_id"].iloc[0]
+    first = predictions[predictions["game_id"] == g].iloc[[0]].copy()
+    # Tuesday: we say 40 against 47.5 (lean under); Saturday, after the report: 44 against 46.5 (no lean).
+    before = first.assign(injury_report="before", predicted_total=40.0, market_total=47.5,
+                          actual_total=38.0, closing_total=45.5)
+    after = first.assign(injury_report="after", predicted_total=44.0, market_total=46.5,
+                         actual_total=38.0, closing_total=45.5)
+    picks, summary = nfl_game_evaluation.build_game_picks_export(pd.concat([before, after], ignore_index=True))
+    row = picks.set_index("game_id").loc[g]
+    assert pd.isna(row["total_lean"])
+    assert (row["tuesday_total_lean"], row["tuesday_total_lean_line"]) == ("under", 47.5)
+    assert row["tuesday_total_lean_result"] == "win" and row["tuesday_total_lean_clv"] == 2.0
+    s = summary.iloc[0]
+    assert s["tuesday_total_lean_clv_n"] == 1 and s["tuesday_total_lean_clv_mean"] == 2.0
+    assert s["tuesday_total_leans_won"] == 1 and s["total_leans_won"] == 0

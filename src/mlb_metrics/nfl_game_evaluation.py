@@ -83,6 +83,13 @@ def build_game_picks_export(
     picks = picks.reindex(columns=picks.columns.union(DISPLAY_COLUMNS, sort=False))
     picks["predicted_total_low"], picks["predicted_total_high"] = total_band(picks["predicted_total"])
     picks = picks.join(total_leans(picks))
+    # Tuesday's lean (the pick before the injury report, against Tuesday's
+    # line), graded the same way - its closing-line value is the fairest
+    # read, with the most time for the line to move.
+    tuesday = total_leans(picks.assign(predicted_total=picks["before_report_predicted_total"],
+                                       market_total=picks["before_report_market_total"]))
+    for column in ("total_lean", "total_lean_line", "total_lean_result", "total_lean_clv"):
+        picks[f"tuesday_{column}"] = tuesday[column]
     picks_out = picks[
         [
             "date", "season", "week", "game_id", "home_team", "away_team", "predicted_winner", "predicted_loser",
@@ -92,6 +99,7 @@ def build_game_picks_export(
             *DISPLAY_COLUMNS, "predicted_total_low", "predicted_total_high",
             "total_range_result", "total_range_miss", "total_lean", "total_lean_line", "total_lean_result",
             "total_lean_close", "total_lean_clv",
+            "tuesday_total_lean", "tuesday_total_lean_line", "tuesday_total_lean_result", "tuesday_total_lean_clv",
             "injury_report", "injury_note", "before_report_winner", "before_report_probability",
         ]
     ].sort_values("date", ascending=False).reset_index(drop=True)
@@ -128,6 +136,10 @@ def build_game_picks_export(
                 **evaluation.model_vs_market(picks),
                 **points_total_metrics(picks),
                 **total_lean_metrics(picks),
+                **{f"tuesday_{k}": v for k, v in total_lean_metrics(
+                    picks.rename(columns={"total_lean_result": "_shown_result", "total_lean_clv": "_shown_clv",
+                                          "tuesday_total_lean_result": "total_lean_result",
+                                          "tuesday_total_lean_clv": "total_lean_clv"})).items()},
                 **report_compare,
             }
         ]
@@ -153,6 +165,10 @@ def _latest_pick_per_game(picks: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
                        ignore_index=True)
     latest["before_report_winner"] = latest["game_id"].map(before["predicted_winner"])
     latest["before_report_probability"] = latest["game_id"].map(before["predicted_probability"])
+    # Tuesday's total and the line it was compared with, for grading
+    # Tuesday's over/under lean on its own (the earliest line to bet).
+    for column in ("predicted_total", "market_total"):
+        latest[f"before_report_{column}"] = latest["game_id"].map(before[column]) if column in before.columns else pd.NA
 
     both = after.set_index("game_id").join(before[["predicted_winner"]].rename(columns={"predicted_winner": "before_winner"}),
                                            how="inner")
