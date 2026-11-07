@@ -392,3 +392,21 @@ def test_append_game_predictions_rerun_fills_team_epa_but_keeps_the_logged_predi
     row = combined.iloc[0]
     assert row["predicted_probability"] == 0.65           # first-logged prediction stands
     assert float(row["home_off_epa"]) == 0.12 and float(row["away_def_rank"]) == 8.0
+
+
+def test_resolve_records_the_closing_total_for_played_games(tmp_path):
+    log_path = tmp_path / "log.csv"
+    pd.DataFrame({
+        "date": ["2026-11-08", "2026-11-08", "2026-11-09"], "game_id": ["a", "b", "c"],
+        "home_team": ["KC", "BUF", "SEA"], "away_team": ["DEN", "MIA", "SF"],
+        "game_played": [None, 1, None], "actual_winner": [None, "BUF", None], "bet_units": [0, 0, 0],
+        "bet_team": [None, None, None], "bet_moneyline": [None, None, None], "bet_profit_units": [None, None, None],
+    }).to_csv(log_path, index=False)
+    schedules = pd.DataFrame({
+        "game_id": ["a", "b", "c"], "home_score": [24, 30, None], "away_score": [20, 10, None],
+        "total_line": [45.5, 48.0, 44.0],
+    })
+    log = nfl_game_predictions.resolve_game_predictions(str(log_path), schedules).set_index("game_id")
+    # Newly final and already-final games both get the closing line; an unplayed game doesn't.
+    assert log.loc["a", "closing_total"] == 45.5 and log.loc["b", "closing_total"] == 48.0
+    assert pd.isna(log.loc["c", "closing_total"])

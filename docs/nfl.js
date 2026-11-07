@@ -556,6 +556,16 @@ if(leans){
 const units = Number(s.total_lean_units) || 0
 html += stat(`${s.total_leans_won} of ${leans}`, "Over/under leans won", `${units >= 0 ? "+" : "−"}${Math.abs(units).toFixed(1)} units at −110 &middot; 52.4% breaks even${Number(s.total_leans_pushed) ? ` &middot; ${s.total_leans_pushed} push` : ""}`)
 }
+const tueN = Number(s.tuesday_total_lean_clv_n) || 0
+if(tueN){
+const avg = Number(s.tuesday_total_lean_clv_mean) || 0
+html += stat(`${avg >= 0 ? "+" : "−"}${Math.abs(avg).toFixed(1)} pts`, "Tuesday leans vs the closing line", `the earliest line &middot; ${tueN} lean${tueN === 1 ? "" : "s"}, beat the close ${s.tuesday_total_lean_clv_beat}, worse ${s.tuesday_total_lean_clv_worse}`)
+}
+const clvN = Number(s.total_lean_clv_n) || 0
+if(clvN){
+const avg = Number(s.total_lean_clv_mean) || 0
+html += stat(`${avg >= 0 ? "+" : "−"}${Math.abs(avg).toFixed(1)} pts`, "Leans vs the closing line", `average move our way over ${clvN} lean${clvN === 1 ? "" : "s"} &middot; beat the close ${s.total_lean_clv_beat}, worse ${s.total_lean_clv_worse}`)
+}
 html += stat(`${Number(s.points_total_mae).toFixed(1)} pts`, "Our point totals missed by", `on average over ${totals} games &middot; Vegas missed by ${Number(s.market_points_total_mae).toFixed(1)}`)
 }
 el.innerHTML = html
@@ -676,7 +686,10 @@ row["Total: actual"] = actual === null ? "-" : actual
 row["In our range"] = actual === null || low === null || high === null ? "-"
 : p.total_range_result === "over" || p.total_range_result === "under" ? `No: ${num(p.total_range_miss)} ${p.total_range_result}` : "Yes"
 const lean = totalLean(p)
-row["Total lean"] = !lean ? "-" : `${lean.side === "over" ? "Over" : "Under"} ${lean.line}${{win: ", won", loss: ", lost", push: ", push"}[lean.result] || ""}`
+const tue = p.tuesday_total_lean === "over" || p.tuesday_total_lean === "under" ? p.tuesday_total_lean : null
+const tueClv = num(p.tuesday_total_lean_clv)
+row["Tuesday lean"] = !tue ? "-" : `${tue === "over" ? "Over" : "Under"} ${num(p.tuesday_total_lean_line)}${{win: ", won", loss: ", lost", push: ", push"}[p.tuesday_total_lean_result] || ""}${tueClv !== null ? ` (${tueClv > 0 ? "+" : tueClv < 0 ? "−" : ""}${Math.abs(tueClv)} vs close)` : ""}`
+row["Total lean"] = !lean ? "-" : `${lean.side === "over" ? "Over" : "Under"} ${lean.line}${{win: ", won", loss: ", lost", push: ", push"}[lean.result] || ""}${lean.close !== null && lean.clv !== null ? ` (closed ${lean.close}, ${lean.clv > 0 ? "+" : lean.clv < 0 ? "−" : ""}${Math.abs(lean.clv)})` : ""}`
 }
 if(anyBets){ row["Bet"] = betCell(p) }
 return row

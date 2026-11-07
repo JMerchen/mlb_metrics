@@ -214,7 +214,8 @@ const side = g.total_lean === "over" || g.total_lean === "under" ? g.total_lean 
 const line = srNum(g.total_lean_line)
 if(!side || line === null){ return null }
 const ours = srNum(g.predicted_total)
-return {side, line, gap: ours === null ? null : Math.abs(ours - line), result: g.total_lean_result || ""}
+return {side, line, gap: ours === null ? null : Math.abs(ours - line), result: g.total_lean_result || "",
+close: srNum(g.total_lean_close), clv: srNum(g.total_lean_clv)}
 }
 
 // "Lean OVER 37.5", and once played "won" / "lost" / "push".
@@ -223,6 +224,16 @@ const lean = totalLean(g)
 if(!lean){ return "" }
 const done = {win: " · won", loss: " · lost", push: " · push"}[lean.result] || ""
 return `<span class="leanBadge lean-${lean.side}${lean.result ? ` lean-${lean.result}` : ""}">Lean ${lean.side.toUpperCase()} ${lean.line}${done}</span>`
+}
+
+// Where the line closed against our lean: "The line closed at 45.5 - 2
+// points our way". Empty before the game is played.
+function totalLeanCloseNote(g){
+const lean = totalLean(g)
+if(!lean || lean.close === null || lean.clv === null){ return "" }
+const pts = Math.abs(lean.clv)
+const amount = `${pts % 1 ? pts.toFixed(1) : pts} point${pts === 1 ? "" : "s"}`
+return `The line closed at ${lean.close} - ${lean.clv > 0 ? `${amount} our way` : lean.clv < 0 ? `${amount} against us` : "where we got it"}`
 }
 
 // A played game outside our range: "Finished 61 - 5 over our range".
@@ -280,6 +291,7 @@ ${weatherLine}
 ${total ? `<div class="total">${total}</div>` : ""}
 ${total && srNum(g.predicted_total_low) !== null ? `<div class="totalNote">About half of games finish inside our range.</div>` : ""}
 ${sport === "nfl" && totalLean(g) ? `<div class="totalNote leanNote">We lean ${totalLean(g).side} Vegas's ${totalLean(g).line}: our total is ${Math.round(totalLean(g).gap)} points ${totalLean(g).side === "over" ? "higher" : "lower"}.</div>` : ""}
+${sport === "nfl" && totalLeanCloseNote(g) ? `<div class="totalNote">${srEsc(totalLeanCloseNote(g))}</div>` : ""}
 ${sport === "nfl" && totalRangeNote(g) ? `<div class="totalNote">${srEsc(totalRangeNote(g))}</div>` : ""}
 ${epa}
 ${reportNote}
@@ -297,7 +309,7 @@ return picks.map(g => gamePickRowHtml(g, sport)).join("")
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, gamePicksListHtml, totalPointsText,
-srWeather, pickBarHtml, totalLean, totalLeanBadgeHtml, totalRangeNote,
+srWeather, pickBarHtml, totalLean, totalLeanBadgeHtml, totalRangeNote, totalLeanCloseNote,
 btsSeasonOver, btsSeasonOverHtml,
 teamEpaHtml,
 }

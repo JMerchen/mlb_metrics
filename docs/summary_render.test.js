@@ -171,7 +171,7 @@ test("NFL totals: a lean when we're far from Vegas, and games outside our range 
   const g = { home_team: "BAL", away_team: "JAX", predicted_winner: "JAX", predicted_probability: 0.8,
     predicted_total: 44.6, predicted_total_low: 36, predicted_total_high: 54, market_total: 37.5,
     total_lean: "over", total_lean_line: 37.5 }
-  assert.deepEqual(totalLean(g), { side: "over", line: 37.5, gap: 44.6 - 37.5, result: "" })
+  assert.deepEqual(totalLean(g), { side: "over", line: 37.5, gap: 44.6 - 37.5, result: "", close: null, clv: null })
   assert.equal(text(totalLeanBadgeHtml(g)), "Lean OVER 37.5")
   const html = gamePickRowHtml(g, "nfl")
   assert.match(face(html), /Lean OVER 37\.5/)
@@ -185,4 +185,15 @@ test("NFL totals: a lean when we're far from Vegas, and games outside our range 
   assert.doesNotMatch(gamePickRowHtml({ ...g, home_team: "NYY", away_team: "BOS", predicted_winner: "NYY" }, "mlb"), /leanBadge/)
   assert.match(gamePicksRecordHtml({ betting_enabled: false, total_leans_won: 5, total_leans_lost: 3 }, null), /Over\/under leans: won <b>5 of 8<\/b>\./)
   assert.doesNotMatch(gamePicksRecordHtml({ betting_enabled: false }, null), /leans/)
+})
+
+test("NFL totals: where the line closed against our lean", () => {
+  const { totalLeanCloseNote } = require("./summary_render.js")
+  const g = { home_team: "ATL", away_team: "CIN", predicted_winner: "CIN", predicted_probability: 0.6,
+    predicted_total: 47, market_total: 52.5, total_lean: "under", total_lean_line: 52.5 }
+  assert.equal(totalLeanCloseNote(g), "")
+  assert.equal(totalLeanCloseNote({ ...g, total_lean_close: 50.5, total_lean_clv: 2 }), "The line closed at 50.5 - 2 points our way")
+  assert.equal(totalLeanCloseNote({ ...g, total_lean_close: 53, total_lean_clv: -0.5 }), "The line closed at 53 - 0.5 points against us")
+  assert.equal(totalLeanCloseNote({ ...g, total_lean_close: 52.5, total_lean_clv: 0 }), "The line closed at 52.5 - where we got it")
+  assert.match(detail(gamePickRowHtml({ ...g, total_lean_close: 50.5, total_lean_clv: 2 }, "nfl")), /The line closed at 50\.5 - 2 points our way/)
 })
