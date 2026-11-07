@@ -688,7 +688,7 @@ row["In our range"] = actual === null || low === null || high === null ? "-"
 const lean = totalLean(p)
 const tue = p.tuesday_total_lean === "over" || p.tuesday_total_lean === "under" ? p.tuesday_total_lean : null
 const tueClv = num(p.tuesday_total_lean_clv)
-row["Tuesday lean"] = !tue ? "-" : `${tue === "over" ? "Over" : "Under"} ${num(p.tuesday_total_lean_line)}${{win: ", won", loss: ", lost", push: ", push"}[p.tuesday_total_lean_result] || ""}${tueClv !== null ? ` (${tueClv > 0 ? "+" : tueClv < 0 ? "−" : ""}${Math.abs(tueClv)} vs close)` : ""}`
+row["Tuesday lean"] = p.tuesday_total_lean_held ? "Held (starters in doubt)" : !tue ? "-" : `${tue === "over" ? "Over" : "Under"} ${num(p.tuesday_total_lean_line)}${{win: ", won", loss: ", lost", push: ", push"}[p.tuesday_total_lean_result] || ""}${tueClv !== null ? ` (${tueClv > 0 ? "+" : tueClv < 0 ? "−" : ""}${Math.abs(tueClv)} vs close)` : ""}`
 row["Total lean"] = !lean ? "-" : `${lean.side === "over" ? "Over" : "Under"} ${lean.line}${{win: ", won", loss: ", lost", push: ", push"}[lean.result] || ""}${lean.close !== null && lean.clv !== null ? ` (closed ${lean.close}, ${lean.clv > 0 ? "+" : lean.clv < 0 ? "−" : ""}${Math.abs(lean.clv)})` : ""}`
 }
 if(anyBets){ row["Bet"] = betCell(p) }

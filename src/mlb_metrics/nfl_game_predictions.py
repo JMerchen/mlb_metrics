@@ -48,6 +48,9 @@ NFL_GAME_PREDICTION_COLUMNS = [
     # The weather at kickoff (nfl_weather.py): the forecast for a game
     # repriced the day before or morning of it, blank otherwise.
     *nfl_weather.WEATHER_DISPLAY_COLUMNS,
+    # Why a Tuesday over/under lean is held (starters in doubt on the
+    # latest injury report - nfl_whatif.starter_doubts), blank otherwise.
+    "lean_hold",
 ]
 
 POINT_PREDICTION_COLUMNS = ["predicted_home_points", "predicted_away_points", "predicted_total"]
@@ -258,7 +261,7 @@ def select_game_picks(
     else:
         picks["market_total"] = pd.NA
     picks["actual_total"] = pd.NA
-    for column in nfl_weather.WEATHER_DISPLAY_COLUMNS:
+    for column in [*nfl_weather.WEATHER_DISPLAY_COLUMNS, "lean_hold"]:
         picks[column] = picks["game_id"].map(schedule_games_df.set_index("game_id")[column]) \
             if column in schedule_games_df.columns else pd.NA
     picks["injury_report"] = "before"

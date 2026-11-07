@@ -518,6 +518,61 @@ def home_probability(game: dict, data: dict, out: dict | None = None, qbs: dict 
     return 1 / (1 + math.exp(-logit))
 
 
+# Statuses that leave a player's game in doubt on the latest report.
+DOUBT_STATUSES = {"Questionable", "Doubtful", "Out"}
+# Key regulars (not the QB) in doubt before a Tuesday lean is held: 3+
+# who play 60%+ of their side's snaps. ("Questionable" is common and most
+# such players play: counting every regular held 9 of 15 week-9 games;
+# this holds 3 - the clear cases, like a starting QB in doubt.)
+DOUBT_MIN_REGULARS = 3
+DOUBT_MIN_SHARE = 0.6
+
+
+def _report_pfr_ids(gsis_ids: set, rosters: pd.DataFrame | None, snap_counts: pd.DataFrame | None) -> set:
+    """The pfr ids (what the regulars list uses) of report players, by
+    gsis id, through the weekly rosters (filled from snap counts where a
+    roster row lacks one)."""
+    if rosters is None or rosters.empty or not {"gsis_id", "pfr_id"} <= set(rosters.columns):
+        return set()
+    roster = rosters.copy()
+    if snap_counts is not None and not snap_counts.empty:
+        snaps = snap_counts[snap_counts["game_type"] == "REG"].copy()
+        snaps["team"] = nfl_totals._canonical(snaps["team"])
+        roster["team"] = nfl_totals._canonical(roster["team"])
+        roster = _fill_pfr_ids(roster, snaps)
+    return set(roster.loc[roster["gsis_id"].isin(gsis_ids), "pfr_id"].dropna())
+
+
+def starter_doubts(data: dict, report: pd.DataFrame, rosters: pd.DataFrame | None,
+                   snap_counts: pd.DataFrame | None) -> dict:
+    """{game_id: note} for games whose starters are in doubt on the latest
+    injury report - on Tuesday that's last week's final one (this week's
+    first comes Wednesday): a listed starting QB Questionable, Doubtful or
+    Out, or DOUBT_MIN_REGULARS+ of a team's key regulars (DOUBT_MIN_SHARE+
+    of the snaps). A Tuesday over/under
+    lean on such a game is held for the rerun after this week's report."""
+    if report is None or report.empty or not {"gsis_id", "report_status"} <= set(report.columns):
+        return {}
+    doubt = report[report["report_status"].isin(DOUBT_STATUSES)]
+    status = doubt.drop_duplicates("gsis_id", keep="last").set_index("gsis_id")["report_status"].to_dict()
+    pfr_doubt = _report_pfr_ids(set(status), rosters, snap_counts)
+    notes = {}
+    for game in data.get("games", []):
+        reasons = []
+        for side in ("home", "away"):
+            team = game[side]
+            listed = next((q for q in team.get("qbs", []) if q.get("listed")), None)
+            if listed is not None and listed["id"] in status:
+                reasons.append(f"{team['team']} QB {listed['name']} ({status[listed['id']].lower()} on the last report)")
+            hurt = [r["name"] for r in team.get("regulars", [])
+                    if r["id"] in pfr_doubt and r.get("share", 1.0) >= DOUBT_MIN_SHARE]
+            if len(hurt) >= DOUBT_MIN_REGULARS:
+                reasons.append(f"{len(hurt)} {team['team']} key starters on the last report")
+        if reasons:
+            notes[game["game_id"]] = "; ".join(reasons)
+    return notes
+
+
 def apply_injury_report(data: dict, report: pd.DataFrame, rosters: pd.DataFrame | None,
                         snap_counts: pd.DataFrame | None, game_ids) -> dict:
     """For each game in `game_ids` (the ones the report is final for): the

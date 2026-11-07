@@ -1239,6 +1239,7 @@ td .dim{color:var(--text-dim);font-size:.9em;}
 .leanBadge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;color:var(--on-accent);background:var(--accent);}
 .leanBadge.lean-loss{background:var(--text-dim);}
 .leanBadge.lean-push{background:var(--border);color:var(--text);}
+.leanBadge.lean-held{background:none;border:1px dashed var(--text-dim);color:var(--text-dim);}
 .bet-badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;border:1px solid var(--accent);color:var(--accent);white-space:nowrap;}
 .empty-note{padding:14px 16px;color:var(--text-dim);font-size:13px;line-height:1.5;}
 

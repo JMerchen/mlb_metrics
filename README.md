@@ -3422,6 +3422,18 @@ every player's averages, touchdown chance and 100-yard chance - about
 > at every volume (top 10% of leans 63.2% vs 60.5%), and at the 5-point
 > rule 60.1% of 333 leans (+53.6 units) against 62.5% of 184 (+37.2).
 >
+> **Tuesday leans: early forecast, and a hold when starters are in doubt
+> (2026-11-07).** Every run now pulls the forecast for every game still to
+> be played, so Tuesday's pick and lean see the early (five- or six-day)
+> forecast; the day-before one still comes with the repriced pick. And a
+> Tuesday lean is held - "Lean on hold" on the card, not graded - when the
+> latest injury report (on Tuesday, last week's final one; this week's
+> first comes Wednesday) has a team's listed starting QB questionable,
+> doubtful or out, or 3+ of its key regulars (60%+ of the snaps;
+> `nfl_whatif.starter_doubts`) - 3 of 15 games in week 9, not the 9 that
+> counting every questionable regular would hold.
+> The rerun after this week's report decides those games.
+>
 > **The pull toward the league fades for extreme units (2026-11-01).**
 > With a fixed 300 pseudo-plays per window the worst defenses were pulled
 > too far (the 2026 Cowboys allowed +0.138 EPA a play through week 7,

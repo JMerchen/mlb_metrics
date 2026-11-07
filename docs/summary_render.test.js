@@ -209,3 +209,12 @@ test("NFL totals: a lean's reason, with the weather's part", () => {
     "We lean under Vegas's 46.5: the forecast's rain and wind take off about 5 points.")
   assert.equal(totalLeanReason({}), "")
 })
+
+test("NFL totals: a Tuesday lean on hold for the injury report", () => {
+  const g = { home_team: "KC", away_team: "DEN", predicted_winner: "KC", predicted_probability: 0.6, predicted_total: 40,
+    predicted_total_low: 31, predicted_total_high: 49, market_total: 47.5,
+    total_lean_held: "KC QB Patrick Mahomes (questionable on the last report)" }
+  const html = gamePickRowHtml(g, "nfl")
+  assert.match(face(html), /Lean on hold/)
+  assert.match(detail(html), /Lean on hold until this week's injury report: KC QB Patrick Mahomes \(questionable on the last report\)\./)
+})
