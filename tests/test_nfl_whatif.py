@@ -295,3 +295,29 @@ def test_apply_injury_report_skips_games_the_report_isnt_final_for():
     report = pd.DataFrame([{"gsis_id": "love", "full_name": "Jordan Love", "report_status": "Out"}])
     assert nfl_whatif.apply_injury_report(data, report, None, None, []) == {}
     assert "injury_report" not in game
+
+
+def test_starter_doubts_flags_a_listed_qb_or_several_regulars_on_the_last_report():
+    data = {"games": [
+        {"game_id": "g1", "home": {"team": "KC", "qbs": [{"id": "qb1", "name": "Patrick Mahomes", "listed": True}], "regulars": []},
+         "away": {"team": "DEN", "qbs": [{"id": "qb2", "name": "Bo Nix", "listed": True}], "regulars": []}},
+        {"game_id": "g2", "home": {"team": "BUF", "qbs": [{"id": "qb3", "name": "Josh Allen", "listed": True}],
+                                   "regulars": [{"id": f"p{i}", "name": f"Player {i}", "share": 0.9} for i in range(4)]
+                                   + [{"id": "p9", "name": "Backup", "share": 0.2}]},
+         "away": {"team": "MIA", "qbs": [], "regulars": []}},
+        {"game_id": "g3", "home": {"team": "SEA", "qbs": [], "regulars": []}, "away": {"team": "SF", "qbs": [], "regulars": []}},
+    ]}
+    report = pd.DataFrame({
+        "gsis_id": ["qb1", "g0", "g1", "g2", "qb2"],
+        "report_status": ["Questionable", "Out", "Doubtful", "Questionable", None],
+    })
+    rosters = pd.DataFrame({"gsis_id": ["g0", "g1", "g2"], "pfr_id": ["p0", "p1", "p2"], "team": ["BUF"] * 3})
+    notes = nfl_whatif.starter_doubts(data, report, rosters, None)
+    assert notes["g1"] == "KC QB Patrick Mahomes (questionable on the last report)"
+    assert notes["g2"] == "3 BUF key starters on the last report"
+    # A part-timer in doubt doesn't count toward the three.
+    report2 = pd.DataFrame({"gsis_id": ["g0", "g1", "g9"], "report_status": ["Out", "Doubtful", "Questionable"]})
+    rosters2 = pd.concat([rosters, pd.DataFrame({"gsis_id": ["g9"], "pfr_id": ["p9"], "team": ["BUF"]})])
+    assert "g2" not in nfl_whatif.starter_doubts(data, report2, rosters2, None)
+    assert "g3" not in notes
+    assert nfl_whatif.starter_doubts(data, pd.DataFrame(), rosters, None) == {}
