@@ -3399,6 +3399,17 @@ every player's averages, touchdown chance and 100-yard chance - about
 > in only 17 games - too few to judge on its own. The design choices were
 > tried on those same seasons, so expect live results below the backtest's.
 >
+> **Closing-line value for the leans (2026-11-07).** Win/loss is a slow,
+> noisy test of an edge (a true 55% takes ~1,400 bets to tell from
+> break-even), so each lean is also graded against the closing total -
+> the market's last, best-informed line. `total_lean_clv` is how many
+> points the line moved toward our side between the line in the pick and
+> kickoff (`closing_total`, recorded for every played game from
+> nflverse's schedule). Beating the close on average is the standard
+> early sign of a real edge, readable within dozens of leans. 2026 so far:
+> lines logged Tuesday moved before kickoff in 67% of games (mean 1.05
+> points), Saturday's after-report lines in 57% (0.64).
+>
 > **The pull toward the league fades for extreme units (2026-11-01).**
 > With a fixed 300 pseudo-plays per window the worst defenses were pulled
 > too far (the 2026 Cowboys allowed +0.138 EPA a play through week 7,

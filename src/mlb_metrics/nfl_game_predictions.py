@@ -346,6 +346,18 @@ def resolve_game_predictions(log_path: str, schedules_df: pd.DataFrame) -> pd.Da
     log.loc[away_won, "actual_winner"] = log.loc[away_won, "away_team"]
     log.loc[final, "actual_total"] = merged.loc[final, "_home_score"] + merged.loc[final, "_away_score"]
 
+    # The closing total - the market's last line, which nflverse's schedule
+    # holds once the game is played - for every played game still without
+    # one (finished games logged before this column existed included), so
+    # each over/under lean can be graded against where the line closed.
+    if "total_line" in schedules_df.columns:
+        if "closing_total" not in log.columns:
+            log["closing_total"] = float("nan")
+        closing = log["game_id"].map(schedules_df.drop_duplicates("game_id").set_index("game_id")["total_line"])
+        played = (merged["_home_score"].notna() & merged["_away_score"].notna()).to_numpy()
+        fill = log["closing_total"].isna() & played & closing.notna()
+        log.loc[fill, "closing_total"] = closing[fill]
+
     # Real units won/lost, only for newly-finalized rows where a real bet
     # was advised (bet_units > 0 - the single "was a bet advised" signal).
     advised_final = final & (pd.to_numeric(log["bet_units"], errors="coerce") > 0)

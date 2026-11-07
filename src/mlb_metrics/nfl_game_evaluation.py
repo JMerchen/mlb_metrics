@@ -10,6 +10,7 @@ itself" non-goal), so there is no pre-existing schema to migrate from.
 """
 
 import pandas as pd
+from scipy import stats
 
 from mlb_metrics import config, evaluation, nfl_totals, nfl_weather
 
@@ -90,6 +91,7 @@ def build_game_picks_export(
             "bet_units", "bet_side", "bet_team", "bet_moneyline", "bet_profit_units",
             *DISPLAY_COLUMNS, "predicted_total_low", "predicted_total_high",
             "total_range_result", "total_range_miss", "total_lean", "total_lean_line", "total_lean_result",
+            "total_lean_close", "total_lean_clv",
             "injury_report", "injury_note", "before_report_winner", "before_report_probability",
         ]
     ].sort_values("date", ascending=False).reset_index(drop=True)
@@ -219,6 +221,14 @@ def total_leans(picks: pd.DataFrame) -> pd.DataFrame:
     result[settled & (actual != market) & ((lean == "over") == went_over)] = "win"
     result[settled & (actual != market) & ((lean == "over") != went_over)] = "loss"
     out["total_lean_result"] = result
+    # Closing-line value: how many points the line moved toward the lean
+    # between when it was posted (total_lean_line, the line in the pick)
+    # and kickoff (closing_total). Positive = we got a better number than
+    # the market's final one.
+    closing = num("closing_total")
+    toward = (closing - market).where(lean == "over", (market - closing).where(lean == "under"))
+    out["total_lean_close"] = closing.where(lean.notna())
+    out["total_lean_clv"] = toward.where(lean.notna() & closing.notna())
     return out
 
 
@@ -227,8 +237,17 @@ def total_lean_metrics(picks: pd.DataFrame) -> dict:
     standard -110 (risk 1.1 to win 1, reported per unit risked)."""
     result = picks["total_lean_result"] if "total_lean_result" in picks.columns else pd.Series(dtype=object)
     won, lost, pushed = int((result == "win").sum()), int((result == "loss").sum()), int((result == "push").sum())
+    clv = pd.to_numeric(picks["total_lean_clv"], errors="coerce").dropna() if "total_lean_clv" in picks.columns \
+        else pd.Series(dtype=float)
+    n = len(clv)
+    # One-sided t-test that the average move is toward us (needs 3+ leans
+    # and some spread).
+    p = float(stats.ttest_1samp(clv, 0.0, alternative="greater").pvalue) if n >= 3 and clv.std() > 0 else float("nan")
     return {"total_leans_won": won, "total_leans_lost": lost, "total_leans_pushed": pushed,
-            "total_lean_units": round(won * 100 / 110 - lost, 2)}
+            "total_lean_units": round(won * 100 / 110 - lost, 2),
+            "total_lean_clv_n": n, "total_lean_clv_mean": float(clv.mean()) if n else float("nan"),
+            "total_lean_clv_beat": int((clv > 0).sum()), "total_lean_clv_worse": int((clv < 0).sum()),
+            "total_lean_clv_p": p}
 
 
 def total_band(predicted_total: pd.Series) -> tuple[pd.Series, pd.Series]:
