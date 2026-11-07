@@ -428,3 +428,21 @@ def test_rain_and_wind_in_the_forecast_add_to_the_lean():
     assert out.loc[1, "total_lean"] == "under"
     assert out.loc[1, "total_lean_weather"] == pytest.approx(round(weather, 2))
     assert out.loc[1, "total_lean_edge"] == pytest.approx(round(-3.5 + weather, 2))
+
+
+def test_a_tuesday_lean_is_held_when_starters_are_in_doubt_and_uses_tuesdays_forecast():
+    predictions = _predictions()
+    g1, g2 = predictions["game_id"].iloc[0], predictions["game_id"].iloc[1]
+    row = lambda g: predictions[predictions["game_id"] == g].iloc[[0]].copy()
+    # g1: Tuesday under 47.5 (our 40), a QB in doubt -> held, on the card too (no Saturday pick yet).
+    held = row(g1).assign(injury_report="before", predicted_total=40.0, market_total=47.5,
+                          lean_hold="KC QB Patrick Mahomes (questionable on the last report)")
+    # g2: Tuesday 44 vs 47.5 (gap 3.5) with an early forecast of rain -> the weather makes it a lean.
+    rainy = row(g2).assign(injury_report="before", predicted_total=44.0, market_total=47.5,
+                           weather_indoor=0, weather_rain=0.9, weather_wind=10.0)
+    picks, summary = nfl_game_evaluation.build_game_picks_export(pd.concat([held, rainy], ignore_index=True))
+    picks = picks.set_index("game_id")
+    assert pd.isna(picks.loc[g1, "total_lean"]) and "Mahomes" in picks.loc[g1, "total_lean_held"]
+    assert pd.isna(picks.loc[g1, "tuesday_total_lean"]) and "Mahomes" in picks.loc[g1, "tuesday_total_lean_held"]
+    assert picks.loc[g2, "tuesday_total_lean"] == "under" and picks.loc[g2, "total_lean"] == "under"
+    assert pd.isna(picks.loc[g2, "tuesday_total_lean_held"])

@@ -83,15 +83,33 @@ def build_game_picks_export(
     picks = picks.reindex(columns=picks.columns.union(DISPLAY_COLUMNS, sort=False))
     picks["predicted_total_low"], picks["predicted_total_high"] = total_band(picks["predicted_total"])
     picks = picks.join(total_leans(picks))
+    # Until the injury report reprices a game the shown pick is Tuesday's,
+    # so a held Tuesday lean is held there too (total_lean_held says why).
+    own_hold = picks["lean_hold"] if "lean_hold" in picks.columns else pd.Series(pd.NA, index=picks.index)
+    shown_held = ((picks["injury_report"] != "after") & own_hold.notna() & (own_hold.astype(str) != "")
+                  & picks["total_lean"].notna())
+    for column in ("total_lean", "total_lean_line", "total_lean_result", "total_lean_clv", "total_lean_close",
+                   "total_lean_edge", "total_lean_weather"):
+        picks[column] = picks[column].where(~shown_held)
+    picks["total_lean_held"] = own_hold.where(shown_held)
     # Tuesday's lean (the pick before the injury report, against Tuesday's
     # line), graded the same way - its closing-line value is the fairest
     # read, with the most time for the line to move.
-    # (No forecast yet on Tuesday: its lean is the plain gap.)
+    # Tuesday's own forecast (the early one; none on picks logged before
+    # 2026-11-07, so their lean is the plain gap). A Tuesday lean on a game
+    # whose starters were in doubt is held (tuesday_total_lean_held says
+    # why) and not graded.
     tuesday = total_leans(picks.assign(predicted_total=picks["before_report_predicted_total"],
                                        market_total=picks["before_report_market_total"],
-                                       weather_wind=float("nan"), weather_rain=float("nan")))
+                                       weather_wind=picks["before_report_weather_wind"],
+                                       weather_rain=picks["before_report_weather_rain"],
+                                       weather_indoor=picks["before_report_weather_indoor"]))
+    hold = picks["before_report_lean_hold"].where(picks["before_report_lean_hold"].notna()
+                                                 & (picks["before_report_lean_hold"].astype(str) != ""))
+    held = hold.notna() & tuesday["total_lean"].notna()
     for column in ("total_lean", "total_lean_line", "total_lean_result", "total_lean_clv"):
-        picks[f"tuesday_{column}"] = tuesday[column]
+        picks[f"tuesday_{column}"] = tuesday[column].where(~held)
+    picks["tuesday_total_lean_held"] = hold.where(held)
     picks_out = picks[
         [
             "date", "season", "week", "game_id", "home_team", "away_team", "predicted_winner", "predicted_loser",
@@ -100,8 +118,9 @@ def build_game_picks_export(
             "bet_units", "bet_side", "bet_team", "bet_moneyline", "bet_profit_units",
             *DISPLAY_COLUMNS, "predicted_total_low", "predicted_total_high",
             "total_range_result", "total_range_miss", "total_lean", "total_lean_line", "total_lean_result",
-            "total_lean_close", "total_lean_clv", "total_lean_edge", "total_lean_weather",
+            "total_lean_close", "total_lean_clv", "total_lean_edge", "total_lean_weather", "total_lean_held",
             "tuesday_total_lean", "tuesday_total_lean_line", "tuesday_total_lean_result", "tuesday_total_lean_clv",
+            "tuesday_total_lean_held",
             "injury_report", "injury_note", "before_report_winner", "before_report_probability",
         ]
     ].sort_values("date", ascending=False).reset_index(drop=True)
@@ -169,7 +188,7 @@ def _latest_pick_per_game(picks: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     latest["before_report_probability"] = latest["game_id"].map(before["predicted_probability"])
     # Tuesday's total and the line it was compared with, for grading
     # Tuesday's over/under lean on its own (the earliest line to bet).
-    for column in ("predicted_total", "market_total"):
+    for column in ("predicted_total", "market_total", "weather_wind", "weather_rain", "weather_indoor", "lean_hold"):
         latest[f"before_report_{column}"] = latest["game_id"].map(before[column]) if column in before.columns else pd.NA
 
     both = after.set_index("game_id").join(before[["predicted_winner"]].rename(columns={"predicted_winner": "before_winner"}),

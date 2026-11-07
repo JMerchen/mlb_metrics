@@ -237,10 +237,11 @@ return wx >= 1 ? `${parts[0]}: ${parts[1]}, and the forecast's rain and wind tak
 return wx >= 1 ? `${parts[0]}: the forecast's rain and wind take off about ${wx} point${wx === 1 ? "" : "s"}.` : `${parts[0]}.`
 }
 
-// "Lean OVER 37.5", and once played "won" / "lost" / "push".
+// "Lean OVER 37.5", and once played "won" / "lost" / "push". A Tuesday
+// lean held for the injury report reads "Lean on hold".
 function totalLeanBadgeHtml(g){
 const lean = totalLean(g)
-if(!lean){ return "" }
+if(!lean){ return g.total_lean_held ? `<span class="leanBadge lean-held">Lean on hold</span>` : "" }
 const done = {win: " · won", loss: " · lost", push: " · push"}[lean.result] || ""
 return `<span class="leanBadge lean-${lean.side}${lean.result ? ` lean-${lean.result}` : ""}">Lean ${lean.side.toUpperCase()} ${lean.line}${done}</span>`
 }
@@ -310,6 +311,7 @@ ${weatherLine}
 ${total ? `<div class="total">${total}</div>` : ""}
 ${total && srNum(g.predicted_total_low) !== null ? `<div class="totalNote">About half of games finish inside our range.</div>` : ""}
 ${sport === "nfl" && totalLean(g) ? `<div class="totalNote leanNote">${srEsc(totalLeanReason(g))}</div>` : ""}
+${sport === "nfl" && !totalLean(g) && g.total_lean_held ? `<div class="totalNote leanNote">Lean on hold until this week's injury report: ${srEsc(g.total_lean_held)}.</div>` : ""}
 ${sport === "nfl" && totalLeanCloseNote(g) ? `<div class="totalNote">${srEsc(totalLeanCloseNote(g))}</div>` : ""}
 ${sport === "nfl" && totalRangeNote(g) ? `<div class="totalNote">${srEsc(totalRangeNote(g))}</div>` : ""}
 ${epa}

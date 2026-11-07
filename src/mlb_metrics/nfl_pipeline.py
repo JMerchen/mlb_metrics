@@ -105,6 +105,19 @@ def _this_week_injury_report(raw_dir: str, season: int, week: int) -> pd.DataFra
     return report
 
 
+def _latest_injury_report(raw_dir: str, season: int, week: int) -> pd.DataFrame:
+    """The newest regular-season injury report on file up to `week` - on a
+    Tuesday, last week's final one (this week's first comes Wednesday).
+    Read from the copy _this_week_injury_report just persisted."""
+    injuries = nfl_data.load_persisted_table(raw_dir, "injuries", season)
+    if injuries is None or injuries.empty or "week" not in injuries.columns:
+        return pd.DataFrame()
+    if "game_type" in injuries.columns:
+        injuries = injuries[injuries["game_type"] == "REG"]
+    injuries = injuries[injuries["week"] <= week]
+    return injuries[injuries["week"] == injuries["week"].max()] if not injuries.empty else injuries
+
+
 def _today_eastern() -> datetime.date:
     """Today on the US East Coast, where NFL game dates are set."""
     return datetime.datetime.now(ZoneInfo("America/New_York")).date()
@@ -436,17 +449,27 @@ def run(
                 whatif, injury_report, fresh.get("rosters_weekly"), history.get("snap_counts", pd.DataFrame()),
                 report_games,
             )
+            # Starters in doubt on the latest report (on Tuesday, last
+            # week's final one): a Tuesday over/under lean on those games is
+            # held for the rerun after this week's report.
+            doubts = nfl_whatif.starter_doubts(
+                whatif, _latest_injury_report(raw_dir, season, week), fresh.get("rosters_weekly"),
+                history.get("snap_counts", pd.DataFrame()),
+            )
+            this_week_games["lean_hold"] = this_week_games["game_id"].map(doubts)
             nfl_whatif.save_json(os.path.join(output_dir, "nfl_whatif.json"), whatif)
             _write_last_week_whatif(fresh, prior_season, season, week, output_dir)
 
-            # The weather at kickoff (nfl_weather.py) for the same games
-            # the report reprices - played today or tomorrow - so their
-            # "after" pick has the forecast from the day before (the
-            # morning of, for Thursday and Monday games). Indoor games
-            # get none; every other game takes the average outdoor game's.
+            # The weather at kickoff (nfl_weather.py) for every game still
+            # to be played: Tuesday's pick gets the early forecast (five or
+            # six days out for Sunday), and the games the report reprices -
+            # played today or tomorrow - get the one from the day before
+            # (the morning of, for Thursday and Monday games) in their
+            # "after" pick. Indoor games get none; an outdoor game whose
+            # forecast fails takes the average outdoor game's.
             indoor = nfl_totals.dome_flags(this_week_games, history["schedules"])
             this_week_games["weather_indoor"] = indoor
-            forecasts = nfl_weather.game_forecasts(this_week_games, indoor, report_games)
+            forecasts = nfl_weather.game_forecasts(this_week_games, indoor, props_games["game_id"])
             for column in [c for c in forecasts.columns if c != "game_id"]:
                 this_week_games[column] = this_week_games["game_id"].map(forecasts.set_index("game_id")[column])
             for _, f in forecasts.iterrows():
