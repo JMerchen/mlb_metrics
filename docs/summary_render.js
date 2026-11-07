@@ -215,7 +215,26 @@ const line = srNum(g.total_lean_line)
 if(!side || line === null){ return null }
 const ours = srNum(g.predicted_total)
 return {side, line, gap: ours === null ? null : Math.abs(ours - line), result: g.total_lean_result || "",
-close: srNum(g.total_lean_close), clv: srNum(g.total_lean_clv)}
+close: srNum(g.total_lean_close), clv: srNum(g.total_lean_clv), weather: srNum(g.total_lean_weather) || 0}
+}
+
+// Why we lean: "We lean under Vegas's 46.5: our total is 4 points lower,
+// and the forecast's rain and wind take off about 3 more." (The weather
+// part is what the line still misses for it - config.NFL_TOTAL_LEAN_WEATHER.)
+function totalLeanReason(g){
+const lean = totalLean(g)
+if(!lean){ return "" }
+const ours = srNum(g.predicted_total)
+const diff = ours === null ? null : ours - lean.line
+const parts = [`We lean ${lean.side} Vegas's ${lean.line}`]
+if(diff !== null && Math.round(Math.abs(diff)) > 0){
+parts.push(`our total is ${Math.round(Math.abs(diff))} point${Math.round(Math.abs(diff)) === 1 ? "" : "s"} ${diff > 0 ? "higher" : "lower"}`)
+}
+const wx = Math.round(Math.abs(lean.weather))
+if(parts.length > 1){
+return wx >= 1 ? `${parts[0]}: ${parts[1]}, and the forecast's rain and wind take off about ${wx} more.` : `${parts[0]}: ${parts[1]}.`
+}
+return wx >= 1 ? `${parts[0]}: the forecast's rain and wind take off about ${wx} point${wx === 1 ? "" : "s"}.` : `${parts[0]}.`
 }
 
 // "Lean OVER 37.5", and once played "won" / "lost" / "push".
@@ -290,7 +309,7 @@ ${pickBarHtml(g, sport)}
 ${weatherLine}
 ${total ? `<div class="total">${total}</div>` : ""}
 ${total && srNum(g.predicted_total_low) !== null ? `<div class="totalNote">About half of games finish inside our range.</div>` : ""}
-${sport === "nfl" && totalLean(g) ? `<div class="totalNote leanNote">We lean ${totalLean(g).side} Vegas's ${totalLean(g).line}: our total is ${Math.round(totalLean(g).gap)} points ${totalLean(g).side === "over" ? "higher" : "lower"}.</div>` : ""}
+${sport === "nfl" && totalLean(g) ? `<div class="totalNote leanNote">${srEsc(totalLeanReason(g))}</div>` : ""}
 ${sport === "nfl" && totalLeanCloseNote(g) ? `<div class="totalNote">${srEsc(totalLeanCloseNote(g))}</div>` : ""}
 ${sport === "nfl" && totalRangeNote(g) ? `<div class="totalNote">${srEsc(totalRangeNote(g))}</div>` : ""}
 ${epa}
@@ -309,7 +328,7 @@ return picks.map(g => gamePickRowHtml(g, sport)).join("")
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, gamePicksListHtml, totalPointsText,
-srWeather, pickBarHtml, totalLean, totalLeanBadgeHtml, totalRangeNote, totalLeanCloseNote,
+srWeather, pickBarHtml, totalLean, totalLeanBadgeHtml, totalRangeNote, totalLeanCloseNote, totalLeanReason,
 btsSeasonOver, btsSeasonOverHtml,
 teamEpaHtml,
 }

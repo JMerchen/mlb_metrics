@@ -86,8 +86,10 @@ def build_game_picks_export(
     # Tuesday's lean (the pick before the injury report, against Tuesday's
     # line), graded the same way - its closing-line value is the fairest
     # read, with the most time for the line to move.
+    # (No forecast yet on Tuesday: its lean is the plain gap.)
     tuesday = total_leans(picks.assign(predicted_total=picks["before_report_predicted_total"],
-                                       market_total=picks["before_report_market_total"]))
+                                       market_total=picks["before_report_market_total"],
+                                       weather_wind=float("nan"), weather_rain=float("nan")))
     for column in ("total_lean", "total_lean_line", "total_lean_result", "total_lean_clv"):
         picks[f"tuesday_{column}"] = tuesday[column]
     picks_out = picks[
@@ -98,7 +100,7 @@ def build_game_picks_export(
             "bet_units", "bet_side", "bet_team", "bet_moneyline", "bet_profit_units",
             *DISPLAY_COLUMNS, "predicted_total_low", "predicted_total_high",
             "total_range_result", "total_range_miss", "total_lean", "total_lean_line", "total_lean_result",
-            "total_lean_close", "total_lean_clv",
+            "total_lean_close", "total_lean_clv", "total_lean_edge", "total_lean_weather",
             "tuesday_total_lean", "tuesday_total_lean_line", "tuesday_total_lean_result", "tuesday_total_lean_clv",
             "injury_report", "injury_note", "before_report_winner", "before_report_probability",
         ]
@@ -224,11 +226,17 @@ def total_leans(picks: pd.DataFrame) -> pd.DataFrame:
     out.loc[played & (actual < low), "total_range_result"] = "under"
     out.loc[played & (actual >= low) & (actual <= high), "total_range_result"] = "in"
     out["total_range_miss"] = (actual - high).where(actual > high, (low - actual).where(actual < low, 0.0)).where(played)
-    gap = predicted - market
+    # The lean's edge: our total minus the line, plus what the line still
+    # misses for the forecast's rain and wind (config.NFL_TOTAL_LEAN_WEATHER;
+    # none indoors or without a forecast).
+    weather = total_lean_weather(picks)
+    edge = predicted - market + weather
     lean = pd.Series(pd.NA, index=picks.index, dtype=object)
-    lean[gap >= config.NFL_TOTAL_LEAN_MIN_GAP] = "over"
-    lean[gap <= -config.NFL_TOTAL_LEAN_MIN_GAP] = "under"
+    lean[edge >= config.NFL_TOTAL_LEAN_MIN_GAP] = "over"
+    lean[edge <= -config.NFL_TOTAL_LEAN_MIN_GAP] = "under"
     out["total_lean"] = lean
+    out["total_lean_edge"] = edge.round(2).where(lean.notna())
+    out["total_lean_weather"] = weather.round(2).where(lean.notna())
     out["total_lean_line"] = market.where(lean.notna())
     result = pd.Series(pd.NA, index=picks.index, dtype=object)
     settled = lean.notna() & actual.notna()
@@ -246,6 +254,23 @@ def total_leans(picks: pd.DataFrame) -> pd.DataFrame:
     out["total_lean_close"] = closing.where(lean.notna())
     out["total_lean_clv"] = toward.where(lean.notna() & closing.notna())
     return out
+
+
+def total_lean_weather(picks: pd.DataFrame) -> pd.Series:
+    """Points the forecast's rain and wind add to a lean's edge (negative =
+    toward the under): config.NFL_TOTAL_LEAN_WEATHER times wx_rain (the
+    chance of rain) and wx_wind (mph over 5). 0 indoors and for a game
+    with no forecast."""
+    def num(column):
+        return pd.to_numeric(picks[column], errors="coerce") if column in picks.columns \
+            else pd.Series(float("nan"), index=picks.index)
+    wind, rain, indoor = num("weather_wind"), num("weather_rain"), num("weather_indoor")
+    outdoors = indoor.fillna(0) < 0.5
+    terms = {"wx_wind": (wind - nfl_weather.WIND_FROM_MPH).clip(lower=0), "wx_rain": rain.clip(0, 1)}
+    total = pd.Series(0.0, index=picks.index)
+    for name, x in terms.items():
+        total = total + (config.NFL_TOTAL_LEAN_WEATHER.get(name, 0.0) * x).where(outdoors & x.notna(), 0.0)
+    return total
 
 
 def total_lean_metrics(picks: pd.DataFrame) -> dict:

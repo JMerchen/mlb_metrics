@@ -3413,6 +3413,15 @@ every player's averages, touchdown chance and 100-yard chance - about
 > one to bet - is graded on its own too (`tuesday_total_lean*`), since it
 > has the most time for the line to move.
 >
+> **Weather in the leans (2026-11-07).** Even after our total's own
+> weather terms, the line still misses rain (by about 4 points) and wind
+> (0.2 a mph over 5), so a lean's edge adds `config.NFL_TOTAL_LEAN_WEATHER`
+> times the forecast's chance of rain and wind - nothing indoors or without
+> a forecast (Tuesday's lean stays the plain gap). Walk-forward 2019–2025
+> (`scripts/backtest_nfl_totals_vs_market.py`): better than the plain gap
+> at every volume (top 10% of leans 63.2% vs 60.5%), and at the 5-point
+> rule 60.1% of 333 leans (+53.6 units) against 62.5% of 184 (+37.2).
+>
 > **The pull toward the league fades for extreme units (2026-11-01).**
 > With a fixed 300 pseudo-plays per window the worst defenses were pulled
 > too far (the 2026 Cowboys allowed +0.138 EPA a play through week 7,

@@ -2401,6 +2401,16 @@ NFL_TOTAL_BAND_HALF_WIDTH = 9
 # The design choices (weather terms, shrink fade) were tried on these same
 # seasons, so expect live results somewhat below the backtest's.
 NFL_TOTAL_LEAN_MIN_GAP = 5.0
+# What the line still misses for the weather, beyond our total's own
+# weather terms (2026-11-06, scripts/backtest_nfl_totals_vs_market.py):
+# points added to a lean's edge per unit of nfl_weather's wx_rain (chance
+# of rain) and wx_wind (mph over 5) - only for a game with a forecast, so
+# an indoor game or one without a forecast leans on the plain gap. Walk-
+# forward 2019-25: right 63.2% vs 60.5% on each season's top 10% of
+# leans, 56.7% vs 55.2% on the top 30%, better in 5 of 7 seasons; at the
+# 5-point rule 60.1% of 333 leans (+53.6 units) vs 62.5% of 184 (+37.2).
+# Fit on every scored season: rain -4.16 (p 0.005), wind -0.20 (p 0.014).
+NFL_TOTAL_LEAN_WEATHER = {"wx_rain": -4.156, "wx_wind": -0.204}
 # The average outdoor game's weather terms (nfl_weather.weather_features),
 # for an outdoor game with no reading or forecast yet.
 NFL_WEATHER_OUTDOOR_MEANS = {"wx_wind": 3.754, "wx_cold": 1.322, "wx_rain": 0.07}

@@ -171,7 +171,7 @@ test("NFL totals: a lean when we're far from Vegas, and games outside our range 
   const g = { home_team: "BAL", away_team: "JAX", predicted_winner: "JAX", predicted_probability: 0.8,
     predicted_total: 44.6, predicted_total_low: 36, predicted_total_high: 54, market_total: 37.5,
     total_lean: "over", total_lean_line: 37.5 }
-  assert.deepEqual(totalLean(g), { side: "over", line: 37.5, gap: 44.6 - 37.5, result: "", close: null, clv: null })
+  assert.deepEqual(totalLean(g), { side: "over", line: 37.5, gap: 44.6 - 37.5, result: "", close: null, clv: null, weather: 0 })
   assert.equal(text(totalLeanBadgeHtml(g)), "Lean OVER 37.5")
   const html = gamePickRowHtml(g, "nfl")
   assert.match(face(html), /Lean OVER 37\.5/)
@@ -196,4 +196,16 @@ test("NFL totals: where the line closed against our lean", () => {
   assert.equal(totalLeanCloseNote({ ...g, total_lean_close: 53, total_lean_clv: -0.5 }), "The line closed at 53 - 0.5 points against us")
   assert.equal(totalLeanCloseNote({ ...g, total_lean_close: 52.5, total_lean_clv: 0 }), "The line closed at 52.5 - where we got it")
   assert.match(detail(gamePickRowHtml({ ...g, total_lean_close: 50.5, total_lean_clv: 2 }, "nfl")), /The line closed at 50\.5 - 2 points our way/)
+})
+
+test("NFL totals: a lean's reason, with the weather's part", () => {
+  const { totalLeanReason } = require("./summary_render.js")
+  const g = { predicted_total: 42.4, total_lean: "under", total_lean_line: 46.5 }
+  assert.equal(totalLeanReason(g), "We lean under Vegas's 46.5: our total is 4 points lower.")
+  assert.equal(totalLeanReason({ ...g, total_lean_weather: -3.2 }),
+    "We lean under Vegas's 46.5: our total is 4 points lower, and the forecast's rain and wind take off about 3 more.")
+  // Our total right at the line, the weather alone makes the lean.
+  assert.equal(totalLeanReason({ predicted_total: 46.5, total_lean: "under", total_lean_line: 46.5, total_lean_weather: -5.1 }),
+    "We lean under Vegas's 46.5: the forecast's rain and wind take off about 5 points.")
+  assert.equal(totalLeanReason({}), "")
 })
