@@ -44,6 +44,24 @@ does the rest. One thing the line still misses after the gap: rain (-4.3
 points beyond our gap, p 0.005; wind -0.17 a mph, p 0.075). Kept: the
 gap rule (config.NFL_TOTAL_LEAN_MIN_GAP).
 
+Then (2026-11-06, user request) the gap plus what the line still misses
+for the weather - "gapwx": the rain and wind coefficients of (actual -
+line) on the gap and weather, fit on earlier seasons, added to the gap
+(not centered, so a calm, dry or indoor game keeps the plain gap):
+    share     gap             gap+weather
+    top 5%    59.6% / 94 +14  69.5% / 95 +32
+    top 10%   60.5% /185 +31  63.2% /185 +40
+    top 15%   58.3% /278 +34  59.9% /279 +44
+    top 20%   56.9% /369 +36  58.1% /370 +45
+    top 30%   55.2% /558 +35  56.7% /559 +53
+better in 5 of 7 seasons at the top 10%; at the 5-point rule 60.1% of 333
+leans, +53.6 units (the plain gap: 62.5% of 184, +37.2); in rain games
+77% of 74 leans. Fit on every scored season: rain -4.16 (p 0.005), wind
+-0.20 a mph over 5 (p 0.014) -> config.NFL_TOTAL_LEAN_WEATHER, used live.
+(A first try centered the weather terms on the average game, which tilted
+every lean toward the over in a period when totals went over 0.6 points
+more than the line; dropped.)
+
 Usage:
     python scripts/backtest_nfl_totals_vs_market.py
 """
@@ -63,6 +81,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import backtest_nfl_totals as totals_backtest  # noqa: E402
 from mlb_metrics import config, nfl_totals, nfl_weather  # noqa: E402
 
+WEATHER_TERMS = ["wx_rain", "wx_wind"]
 FEATURES = ["gap", "wx_wind", "wx_cold", "wx_rain", "dome", "total_line", "abs_spread", "div_game", "thursday"]
 SHARES = (0.05, 0.10, 0.15, 0.20, 0.30)
 
@@ -110,6 +129,12 @@ def predicted_edges(games: pd.DataFrame) -> pd.DataFrame:
                                                 min_samples_leaf=40, l2_regularization=1.0, random_state=0)
         boosted.fit(train[FEATURES], train["miss"])
         test["edge_boosted"] = boosted.predict(test[FEATURES])
+        # The gap plus what the line still misses for the weather: the rain
+        # and wind coefficients of (actual - line) on the gap and weather,
+        # added to the gap itself (the gap is not rescaled).
+        weather = sm.OLS(train["miss"], sm.add_constant(train[["gap", *WEATHER_TERMS]])).fit()
+        # Not centered: a calm, dry or indoor game's lean is the plain gap.
+        test["edge_gapwx"] = test["gap"] + sum(weather.params[t] * test[t] for t in WEATHER_TERMS)
         out.append(test)
     return pd.concat(out)
 
@@ -145,29 +170,45 @@ def top_share(games: pd.DataFrame, edge: str, share: float) -> pd.DataFrame:
 def main():
     games = predicted_edges(out_of_sample_games())
     print(f"{len(games)} games 2019-2025 with a closing total; real total minus line: mean {games['miss'].mean():+.2f}")
-    for name in ("gap", "linear", "boosted"):
+    for name in ("gap", "gapwx", "linear", "boosted"):
         corr = np.corrcoef(games[f"edge_{name}"], games["miss"])[0, 1]
         print(f"  {name:8s} edge vs real miss: r {corr:+.3f}")
     print("\nSame volume per season (top share by |edge|): right / n, units, p vs 52.4%")
     for share in SHARES:
         line = [f"  top {int(share * 100):>2}%:"]
-        for name in ("gap", "linear", "boosted"):
+        for name in ("gap", "gapwx", "linear", "boosted"):
             g = grade(top_share(games, f"edge_{name}", share), f"edge_{name}")
             line.append(f"{name} {g['right']:.3f}/{g['n']} {g['units']:+6.1f}u p{g['p']:.3f}")
         print("  ".join(line))
     live = games[games["gap"].abs() >= config.NFL_TOTAL_LEAN_MIN_GAP]
     g = grade(live, "edge_gap")
     print(f"\nlive rule |gap| >= {config.NFL_TOTAL_LEAN_MIN_GAP}: {g['right']:.3f} of {g['n']}, {g['units']:+.1f} units, p {g['p']:.3f}")
-    for name in ("linear", "boosted"):
+    wx_live = games[games["edge_gapwx"].abs() >= config.NFL_TOTAL_LEAN_MIN_GAP]
+    g = grade(wx_live, "edge_gapwx")
+    print(f"gap+weather at |edge| >= {config.NFL_TOTAL_LEAN_MIN_GAP}: {g['right']:.3f} of {g['n']}, {g['units']:+.1f} units, p {g['p']:.3f}")
+    changed = games[(games["gap"].abs() >= config.NFL_TOTAL_LEAN_MIN_GAP) != (games["edge_gapwx"].abs() >= config.NFL_TOTAL_LEAN_MIN_GAP)]
+    for label, part in (("leans only with weather", changed[changed["edge_gapwx"].abs() >= config.NFL_TOTAL_LEAN_MIN_GAP]),
+                        ("leans dropped by weather", changed[changed["gap"].abs() >= config.NFL_TOTAL_LEAN_MIN_GAP])):
+        if len(part):
+            g = grade(part, "edge_gapwx" if "only" in label else "edge_gap")
+            print(f"  {label}: {g['right']:.3f} of {g['n']} ({g['units']:+.1f} units)")
+    rainy = games[games["wx_rain"] > 0.5]
+    for name in ("gap", "gapwx"):
+        g = grade(rainy[rainy[f"edge_{name}"].abs() >= config.NFL_TOTAL_LEAN_MIN_GAP], f"edge_{name}")
+        print(f"  rain games, {name} lean: {g['right']:.3f} of {g['n']} ({g['units']:+.1f} units)")
+    for name in ("gapwx", "linear", "boosted"):
         same = top_share(games, f"edge_{name}", len(live) / len(games))
         g = grade(same, f"edge_{name}")
         print(f"  {name} at the same volume: {g['right']:.3f} of {g['n']}, {g['units']:+.1f} units, p {g['p']:.3f}")
+    weather = sm.OLS(games["miss"], sm.add_constant(games[["gap", *WEATHER_TERMS]])).fit()
+    print("\ngap + weather fit on every scored season:", {k: (round(float(v), 3), round(float(weather.pvalues[k]), 3)) for k, v in weather.params.items()},
+          "means", {t: round(float(games[t].mean()), 3) for t in WEATHER_TERMS})
     final = sm.OLS(games["miss"], sm.add_constant(games[FEATURES])).fit()
     print("\nlinear model fit on every scored season (coefficient, p):")
     print({k: (round(float(v), 3), round(float(final.pvalues[k]), 3)) for k, v in final.params.items()})
     for season, part in games.groupby("season"):
         row = [f"  {season}:"]
-        for name in ("gap", "linear", "boosted"):
+        for name in ("gap", "gapwx", "linear", "boosted"):
             g = grade(top_share(part, f"edge_{name}", 0.10), f"edge_{name}")
             row.append(f"{name} {g['right']:.2f}/{g['n']}")
         print(" ".join(row))

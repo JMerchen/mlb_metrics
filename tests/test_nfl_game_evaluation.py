@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from mlb_metrics import evaluation, nfl_game_evaluation
+from mlb_metrics import config, evaluation, nfl_game_evaluation
 
 
 def _pick(date, game_id, home_team, away_team, predicted_winner, predicted_probability, actual_winner, game_played,
@@ -413,3 +413,18 @@ def test_tuesday_leans_are_graded_against_the_close_on_their_own():
     s = summary.iloc[0]
     assert s["tuesday_total_lean_clv_n"] == 1 and s["tuesday_total_lean_clv_mean"] == 2.0
     assert s["tuesday_total_leans_won"] == 1 and s["total_leans_won"] == 0
+
+
+def test_rain_and_wind_in_the_forecast_add_to_the_lean():
+    base = {"predicted_total": 44.0, "market_total": 47.5, "actual_total": None}
+    picks = pd.DataFrame([
+        {**base},                                                                   # no forecast: plain gap 3.5, no lean
+        {**base, "weather_indoor": 0, "weather_rain": 0.9, "weather_wind": 12.0},   # rain and wind: under
+        {**base, "weather_indoor": 1, "weather_rain": 0.9, "weather_wind": 12.0},   # indoors: weather doesn't count
+    ])
+    out = nfl_game_evaluation.total_leans(picks)
+    assert pd.isna(out.loc[0, "total_lean"]) and pd.isna(out.loc[2, "total_lean"])
+    weather = config.NFL_TOTAL_LEAN_WEATHER["wx_rain"] * 0.9 + config.NFL_TOTAL_LEAN_WEATHER["wx_wind"] * 7
+    assert out.loc[1, "total_lean"] == "under"
+    assert out.loc[1, "total_lean_weather"] == pytest.approx(round(weather, 2))
+    assert out.loc[1, "total_lean_edge"] == pytest.approx(round(-3.5 + weather, 2))
