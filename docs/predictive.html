@@ -13,6 +13,8 @@ rel="icon"
 type="image/svg+xml"
 href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjQ2IiBoZWlnaHQ9IjQ2IiByeD0iMTIiIGZpbGw9IiMxNDE3MWMiIHN0cm9rZT0iIzNhNDE1MCIvPjx0ZXh0IHg9IjE3IiB5PSIyOSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9Ii1hcHBsZS1zeXN0ZW0sIEJsaW5rTWFjU3lzdGVtRm9udCwgJ1NlZ29lIFVJJywgUm9ib3RvLCBJbnRlciwgSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC13ZWlnaHQ9IjkwMCIgZm9udC1zaXplPSIyMSIgZmlsbD0iI2M4MTAyZSI+UzwvdGV4dD48dGV4dCB4PSIzMSIgeT0iMjkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSItYXBwbGUtc3lzdGVtLCBCbGlua01hY1N5c3RlbUZvbnQsICdTZWdvZSBVSScsIFJvYm90bywgSW50ZXIsIEhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtd2VpZ2h0PSI5MDAiIGZvbnQtc2l6ZT0iMjEiIGZpbGw9IiNmZmZmZmYiPlI8L3RleHQ+PHJlY3QgeD0iMTEiIHk9IjMzIiB3aWR0aD0iMjYiIGhlaWdodD0iMi42IiByeD0iMS4zIiBmaWxsPSIjZjJhOTNjIi8+PC9zdmc+">
 
+<script src="./mode.js"></script>
+
 <link
 rel="stylesheet"
 href="./style.css">
@@ -70,9 +72,9 @@ href="./style.css">
 <div class="tabGroup" id="mlbSubTabs">
 <a class="tabButton active" href="./predictive.html">Picks</a>
 <a class="tabButton" href="./stats.html">Stats</a>
-<a class="tabButton" href="./age-curves.html">Age Curves</a>
+<a class="tabButton deep-only" href="./age-curves.html">Age Curves</a>
 <a class="tabButton" href="./prospects.html">Prospects</a>
-<a class="tabButton" href="./payroll.html">Payroll</a>
+<a class="tabButton deep-only" href="./payroll.html">Payroll</a>
 </div>
 
 <p class="sectionIntro">Everything here comes from our pick models. The numbers behind them - hit rates, WOPS, pitchers, team ratings and schedules - are on the <a href="./stats.html">Stats</a> page.</p>
@@ -85,7 +87,7 @@ Beat the Streak
 
 <div class="tabGroup" id="btsTabs">
 <button class="tabButton active" data-view="ourPicks" onclick="selectBtsView('ourPicks')">Our picks</button>
-<button class="tabButton" data-view="modelOdds" onclick="selectBtsView('modelOdds')">Today's best chances</button>
+<button class="tabButton deep-only" data-view="modelOdds" onclick="selectBtsView('modelOdds')">Today's best chances</button>
 </div>
 
 <div id="ourPicksSection">
@@ -114,6 +116,7 @@ Loading...
 
 </div>
 
+<div class="deep-only">
 <h3>
 Day by day
 </h3>
@@ -125,6 +128,7 @@ Loading...
 </div>
 
 <div class="logButtons" id="streakHistoryMore"></div>
+</div>
 
 </div>
 
@@ -179,6 +183,7 @@ Loading...
 
 </div>
 
+<div class="deep-only">
 <h3>
 How our picks have done
 </h3>
@@ -206,6 +211,7 @@ Simulate a game
 class="whatIf simPanel mlbSimPanel"
 id="mlbSim">
 
+</div>
 </div>
 
 </div>

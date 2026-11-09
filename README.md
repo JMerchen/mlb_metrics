@@ -18,6 +18,17 @@ estimates, DFS projection models), and one-off workflows and scripts
 (`debug_*`, `backfill_market_odds`, `recommend_bets`). Sections below that
 mention them are the project's history, not current behavior.
 
+
+**Basic or Deep dive (2026-11-09).** Every page has a Basic / Deep dive
+switch at the top right (`docs/mode.js`, remembered per browser). Basic,
+the default, is a light, clean page with the essentials - picks, records,
+latest results, schedules, team rankings, hit streaks, probable pitchers.
+Deep dive adds everything else (What if?, the simulations, the full stat
+tables, team units, Stuff+, player floors and recent form, Age Curves,
+Payroll) in a soft dark theme for longer reading. Sections marked
+`class="deep-only"` are hidden in Basic; the two colour schemes are
+`:root[data-theme="light"|"dark"]` in `docs/style.css`.
+
 ## Project layout
 
 - `src/mlb_metrics/` - the pipeline: `config.py` (window lengths and blend

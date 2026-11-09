@@ -1294,6 +1294,50 @@ td,th{padding:7px 8px;font-size:12px;}
    Over/under is a diverging pair - blue / orange, checked with the dataviz
    palette validator against --bg-card - with a neutral grey midpoint. Text
    never takes the series colour; every coloured mark has a word beside it. */
+/* Basic / Deep dive (docs/mode.js). Basic: a light, clean scheme. Deep
+dive: a soft dark one - dark gray rather than near-black, with gentler
+text - for reading longer. Without the script the original dark scheme
+above applies. */
+:root[data-theme="light"]{
+--bg:#f5f6f8;
+--bg-raised:#ffffff;
+--bg-card:#ffffff;
+--bg-hover:#eef0f4;
+--border:#e1e4ea;
+--border-strong:#c6ccd5;
+--text:#1a1e24;
+--text-dim:#5d6672;
+--accent:#d4801a;
+--accent-strong:#b56a0c;
+--on-accent:#ffffff;
+--success:#1c9a60;
+--danger:#d03a34;
+--info:#3b5bdb;
+--report-before:#9a6fa0;
+--report-after:#2b93bd;
+--prop-mid:#d3d6dc;
+--prop-other:#9aa1ac;
+--mlb-mid:#a3a9b3;
+}
+:root[data-theme="dark"]{
+--bg:#15181d;
+--bg-raised:#1c2027;
+--bg-card:#21262e;
+--bg-hover:#272c35;
+--border:#2f353f;
+--border-strong:#424a58;
+--text:#d8dce2;
+--text-dim:#9399a4;
+--accent:#e3a24a;
+--accent-strong:#f0b86a;
+--on-accent:#1a1206;
+}
+:root[data-mode="basic"] .deep-only{display:none !important;}
+.modeSwitch{display:inline-flex;margin-left:auto;border:1px solid var(--border-strong);border-radius:999px;padding:2px;background:var(--bg-raised);}
+.modeSwitch button{font:600 12px var(--font);color:var(--text-dim);background:none;border:0;border-radius:999px;padding:5px 12px;cursor:pointer;}
+.modeSwitch button.active{background:var(--accent);color:var(--on-accent);}
+.modeSwitch button:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+
 :root{
 --prop-over:#3987e5;
 --prop-under:#d95926;
