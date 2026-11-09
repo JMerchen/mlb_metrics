@@ -235,7 +235,7 @@ renderNflWhatIf('[data-whatif-action="clear"]')
 const NFL_SIM_SECONDS = 300
 const NFL_SIM_SUMMARY_GAMES = 1000
 const NFL_SIM_SPEEDS = [1, 4, 16]
-const nflSim = {profiles: null, totals: {}, weather: {}, choice: {}, run: null}
+const nflSim = {profiles: null, totals: {}, points: {}, weather: {}, choice: {}, run: null}
 
 async function loadNflSim(picks){
 
@@ -250,6 +250,8 @@ return
 for(const p of picks || []){
 const total = Number(p.predicted_total) || Number(p.market_total)
 if(total > 0){ nflSim.totals[p.game_id] = total }
+const home = Number(p.predicted_home_points), away = Number(p.predicted_away_points)
+if(home > 0 && away > 0){ nflSim.points[p.game_id] = {home, away} }
 const weather = srWeather(p)
 if(weather){ nflSim.weather[p.game_id] = weather }
 }
@@ -312,8 +314,17 @@ const p = Math.min(0.995, Math.max(0.005, whatifProbability(game, data, state).p
 const forecast = nflSim.weather[game.game_id] || null
 const chosen = forecast ? null : simWeatherChoice(nflSim.choice[game.game_id])
 const weather = forecast || chosen
+// Each team's points come from the points model (it sees each offense
+// against the other's defense - a historically bad defense included);
+// What if? changes move the margin by as much as they move the panel's
+// win chance from its posted one. Without points-model numbers, the
+// margin is the panel's win chance in points, as before.
+const perPoint = Number(data.logodds_per_point) || 0.137
+const asPoints = q => { const c = Math.min(0.995, Math.max(0.005, q)); return Math.log(c / (1 - c)) / perPoint }
+const points = nflSim.points[game.game_id]
+const posted = points ? whatifProbability(game, data, whatifPostedState(game)).probability : null
 const target = {
-margin: Math.log(p / (1 - p)) / (Number(data.logodds_per_point) || 0.137),
+margin: points ? (points.home - points.away) + asPoints(p) - asPoints(posted) : asPoints(p),
 total: (nflSim.totals[game.game_id] || 45) + simWeatherTotalShift(chosen),
 probability: p,
 }

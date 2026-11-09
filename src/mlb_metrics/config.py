@@ -2352,6 +2352,12 @@ NFL_TOTALS_SHRINK_PLAYS = 300.0
 # 10.645 -> 10.607 (2018-25, 95% CI -0.064 to -0.012, better in 6 of 8
 # seasons; scripts/backtest_nfl_extreme_shrink.py).
 NFL_TOTALS_SHRINK_FADE = 0.03
+# The same fade for a defense worse than the league (allowing more EPA a
+# play) - None = NFL_TOTALS_SHRINK_FADE. Tested 2026-11-09
+# (scripts/backtest_nfl_bad_defense_shrink.py): 0.02 down to 0.005 changed
+# nothing (MAE 10.475 throughout) - the fade already barely pulls an
+# extreme defense - so it stays off.
+NFL_TOTALS_SHRINK_FADE_BAD_DEFENSE = None
 # The listed starting QB's own EPA per dropback: his last 16 games, shrunk
 # with 150 pseudo-dropbacks toward replacement level (league rate - 0.10).
 NFL_TOTALS_QB_GAMES = 16
