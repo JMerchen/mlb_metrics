@@ -13,6 +13,8 @@ rel="icon"
 type="image/svg+xml"
 href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjQ2IiBoZWlnaHQ9IjQ2IiByeD0iMTIiIGZpbGw9IiMxNDE3MWMiIHN0cm9rZT0iIzNhNDE1MCIvPjx0ZXh0IHg9IjE3IiB5PSIyOSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9Ii1hcHBsZS1zeXN0ZW0sIEJsaW5rTWFjU3lzdGVtRm9udCwgJ1NlZ29lIFVJJywgUm9ib3RvLCBJbnRlciwgSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC13ZWlnaHQ9IjkwMCIgZm9udC1zaXplPSIyMSIgZmlsbD0iI2M4MTAyZSI+UzwvdGV4dD48dGV4dCB4PSIzMSIgeT0iMjkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSItYXBwbGUtc3lzdGVtLCBCbGlua01hY1N5c3RlbUZvbnQsICdTZWdvZSBVSScsIFJvYm90bywgSW50ZXIsIEhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtd2VpZ2h0PSI5MDAiIGZvbnQtc2l6ZT0iMjEiIGZpbGw9IiNmZmZmZmYiPlI8L3RleHQ+PHJlY3QgeD0iMTEiIHk9IjMzIiB3aWR0aD0iMjYiIGhlaWdodD0iMi42IiByeD0iMS4zIiBmaWxsPSIjZjJhOTNjIi8+PC9zdmc+">
 
+<script src="./mode.js"></script>
+
 <link
 rel="stylesheet"
 href="./style.css">
@@ -83,7 +85,7 @@ this block isn't in the shared stylesheet. */
 <button class="tabButton" data-nfl-tab="stats" onclick="selectNflTab('stats')">Stats</button>
 <button class="tabButton" data-nfl-tab="playerprops" onclick="selectNflTab('playerprops')">Player Props</button>
 <button class="tabButton" data-nfl-tab="prospects" onclick="selectNflTab('prospects')">Prospects</button>
-<button class="tabButton" data-nfl-tab="payroll" onclick="selectNflTab('payroll')">Payroll</button>
+<button class="tabButton deep-only" data-nfl-tab="payroll" onclick="selectNflTab('payroll')">Payroll</button>
 </div>
 
 <div id="gamePicksSection" style="display:none">
@@ -118,6 +120,7 @@ Loading...
 
 </div>
 
+<div class="deep-only">
 <h3>
 What if?
 </h3>
@@ -137,6 +140,7 @@ class="whatIf simPanel"
 id="nflSim"
 hidden>
 
+</div>
 </div>
 
 <h3>
@@ -188,6 +192,7 @@ Loading...
 <div id="nflTeamProfile">
 </div>
 
+<div class="deep-only">
 <h3>
 Players
 </h3>
@@ -266,10 +271,11 @@ class="scrollbox"
 id="nflUnitByes">
 
 </div>
+</div>
 
 </div>
 
-<div id="nflPayrollSection" style="display:none">
+<div id="nflPayrollSection" class="deep-only" style="display:none">
 
 <h3>
 Payroll value
@@ -323,6 +329,7 @@ Loading...
 Loading...
 </div>
 
+<div class="deep-only">
 <h3 style="margin-top:28px">Every-game floors and recent form</h3>
 <p class="sectionIntro">Season floors: the fewest each of the 32 busiest players at each position has put up in a single game this season, zeros included, with his average underneath. If a receiver's catches go 5, 6, 4, his floor is 4.</p>
 <p class="sectionIntro">Recent form: his average over his last 3 games, with &#9650; or &#9660; when that's well above or below his season average (half a standard deviation or more), and his last four games underneath. Our models already lean on recent games; this shows you how each player is trending.</p>
@@ -336,6 +343,7 @@ Loading...
 
 <div class="scrollbox" id="nflPositionFloorTable">
 Loading...
+</div>
 </div>
 
 </div>

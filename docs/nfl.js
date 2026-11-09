@@ -536,8 +536,9 @@ return
 
 const s = summary[0]
 
-const stat = (value, label, sub) =>
-`<div class="streakStat"><div class="value">${value}</div><div class="label">${label}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`
+// `deep` tiles show only in Deep dive (docs/mode.js).
+const stat = (value, label, sub, deep = false) =>
+`<div class="streakStat${deep ? " deep-only" : ""}"><div class="value">${value}</div><div class="label">${label}</div>${sub ? `<div class="sub">${sub}</div>` : ""}</div>`
 const pct0 = v=>v === undefined || v === "" || Number.isNaN(Number(v)) ? "-" : Math.round(Number(v) * 100) + "%"
 
 // Plain-language headline: our picks next to Vegas's on the same games,
@@ -552,7 +553,7 @@ const bets = Number(s.n_bets_advised) || 0
 if(bets){
 const units = Number(s.total_profit_units)
 html += stat(`${s.bets_won} of ${bets}`, "Bets won", `the odds said about ${pct0(s.odds_implied_win_rate)} would win`)
-html += `<div class="streakStat"><div class="value" style="color:${units >= 0 ? "var(--success)" : "var(--danger)"}">${units >= 0 ? "+" : "−"}${Math.abs(units).toFixed(1)}</div><div class="label">Units won or lost</div><div class="sub">${bets < 100 ? "too few bets to judge yet" : ""}</div></div>`
+html += `<div class="streakStat deep-only"><div class="value" style="color:${units >= 0 ? "var(--success)" : "var(--danger)"}">${units >= 0 ? "+" : "−"}${Math.abs(units).toFixed(1)}</div><div class="label">Units won or lost</div><div class="sub">${bets < 100 ? "too few bets to judge yet" : ""}</div></div>`
 }else{
 html += stat("-", "Bets won", "no bets settled yet")
 }
@@ -560,7 +561,7 @@ const totals = Number(s.points_total_n) || 0
 if(totals){
 const inRange = Number(s.points_total_in_range)
 if(Number.isFinite(inRange)){
-html += stat(pct0(inRange), "Totals inside our range", `of ${totals} games &middot; the same range around Vegas's total: ${pct0(s.market_points_total_in_range)}`)
+html += stat(pct0(inRange), "Totals inside our range", `of ${totals} games &middot; the same range around Vegas's total: ${pct0(s.market_points_total_in_range)}`, true)
 }
 const leans = (Number(s.total_leans_won) || 0) + (Number(s.total_leans_lost) || 0)
 if(leans){
@@ -570,14 +571,14 @@ html += stat(`${s.total_leans_won} of ${leans}`, "Over/under leans won", `${unit
 const tueN = Number(s.tuesday_total_lean_clv_n) || 0
 if(tueN){
 const avg = Number(s.tuesday_total_lean_clv_mean) || 0
-html += stat(`${avg >= 0 ? "+" : "−"}${Math.abs(avg).toFixed(1)} pts`, "Tuesday leans vs the closing line", `the earliest line &middot; ${tueN} lean${tueN === 1 ? "" : "s"}, beat the close ${s.tuesday_total_lean_clv_beat}, worse ${s.tuesday_total_lean_clv_worse}`)
+html += stat(`${avg >= 0 ? "+" : "−"}${Math.abs(avg).toFixed(1)} pts`, "Tuesday leans vs the closing line", `the earliest line &middot; ${tueN} lean${tueN === 1 ? "" : "s"}, beat the close ${s.tuesday_total_lean_clv_beat}, worse ${s.tuesday_total_lean_clv_worse}`, true)
 }
 const clvN = Number(s.total_lean_clv_n) || 0
 if(clvN){
 const avg = Number(s.total_lean_clv_mean) || 0
-html += stat(`${avg >= 0 ? "+" : "−"}${Math.abs(avg).toFixed(1)} pts`, "Leans vs the closing line", `average move our way over ${clvN} lean${clvN === 1 ? "" : "s"} &middot; beat the close ${s.total_lean_clv_beat}, worse ${s.total_lean_clv_worse}`)
+html += stat(`${avg >= 0 ? "+" : "−"}${Math.abs(avg).toFixed(1)} pts`, "Leans vs the closing line", `average move our way over ${clvN} lean${clvN === 1 ? "" : "s"} &middot; beat the close ${s.total_lean_clv_beat}, worse ${s.total_lean_clv_worse}`, true)
 }
-html += stat(`${Number(s.points_total_mae).toFixed(1)} pts`, "Our point totals missed by", `on average over ${totals} games &middot; Vegas missed by ${Number(s.market_points_total_mae).toFixed(1)}`)
+html += stat(`${Number(s.points_total_mae).toFixed(1)} pts`, "Our point totals missed by", `on average over ${totals} games &middot; Vegas missed by ${Number(s.market_points_total_mae).toFixed(1)}`, true)
 }
 el.innerHTML = html
 
