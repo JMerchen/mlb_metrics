@@ -244,3 +244,22 @@ test("nextPlayerPropsSort: biggest first for numbers, #1 first for rank, A-Z for
   assert.deepEqual(nextPlayerPropsSort(undefined, "player_name", rows), { key: "player_name", ascending: true })
   assert.deepEqual(nextPlayerPropsSort({ key: "projection", ascending: false }, "projection", rows), { key: "projection", ascending: true })
 })
+
+test("recent form: last 3 games against the season average, with a direction", () => {
+  const { positionFloorTrend, formatPositionFloorTrend } = require("./player_props.js")
+  const hot = { receptions_log: "3, 4, 3, 4, 8, 9, 7", receptions_mean: 38 / 7, receptions_sd: 2.4 }
+  const t = positionFloorTrend(hot, "receptions")
+  assert.equal(t.recent, 8)
+  assert.equal(t.dir, "up")
+  assert.deepEqual(t.last, [4, 8, 9, 7])
+  assert.equal(formatPositionFloorTrend(t), "8.0 ▲")
+  const cold = { receiving_yards_log: "90, 110, 95, 100, 30, 25, 40", receiving_yards_mean: 70, receiving_yards_sd: 35 }
+  const c = positionFloorTrend(cold, "receiving_yards")
+  assert.equal(c.dir, "down")
+  assert.equal(formatPositionFloorTrend(c), "32 ▼")
+  // Inside half a standard deviation is steady; three games or fewer can't be a trend.
+  assert.equal(positionFloorTrend({ x_log: "5, 6, 5, 6, 5", x_mean: 5.4, x_sd: 0.55 }, "x").dir, "steady")
+  assert.equal(positionFloorTrend({ x_log: "1, 9, 9", x_mean: 6.3, x_sd: 4.6 }, "x").dir, "steady")
+  assert.equal(positionFloorTrend({ x_log: "" }, "x"), null)
+  assert.equal(formatPositionFloorTrend(null), "-")
+})
