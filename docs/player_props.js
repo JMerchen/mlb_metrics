@@ -244,6 +244,35 @@ if(_isBlank(sd) || isNaN(Number(sd))){ return avg }
 return `${avg} \u00b1 ${Number(sd).toFixed(digits)}`
 }
 
+// Recent form for one stat: the average of his last RECENT_FORM_GAMES
+// counted games next to his season average, from the CSV's `<key>_log`
+// (his counted games in order). "up"/"down" when the recent average is
+// half a standard deviation or more from the season's - smaller swings
+// read "steady" - with his last four games for the line underneath.
+const RECENT_FORM_GAMES = 3
+
+function positionFloorTrend(row, key){
+const log = row[`${key}_log`]
+if(_isBlank(log)){ return null }
+const games = String(log).split(",").map(v=>Number(v.trim())).filter(v=>!isNaN(v))
+if(!games.length){ return null }
+const recentGames = games.slice(-RECENT_FORM_GAMES)
+const recent = recentGames.reduce((a, b)=>a + b, 0) / recentGames.length
+const season = _isBlank(row[`${key}_mean`]) ? games.reduce((a, b)=>a + b, 0) / games.length : Number(row[`${key}_mean`])
+const sd = Number(row[`${key}_sd`])
+const diff = recent - season
+const step = !isNaN(sd) && sd > 0 ? 0.5 * sd : Math.max(0.5, Math.abs(season) * 0.15)
+const dir = games.length <= RECENT_FORM_GAMES ? "steady" : diff >= step ? "up" : diff <= -step ? "down" : "steady"
+return {recent, season, diff, dir, last: games.slice(-4)}
+}
+
+function formatPositionFloorTrend(trend){
+if(!trend){ return "-" }
+const digits = Math.abs(trend.season) >= 10 || Math.abs(trend.recent) >= 10 ? 0 : 1
+const arrow = {up: " \u25b2", down: " \u25bc", steady: ""}[trend.dir]
+return `${trend.recent.toFixed(digits)}${arrow}`
+}
+
 function positionFloorNote(row){
 const notes = []
 if(!_isBlank(row.excluded_weeks)){
@@ -284,18 +313,22 @@ data.forEach(row=>{ if(row.game && !seen.includes(row.game)){ seen.push(row.game
 return seen.sort()
 }
 
-function buildPositionFloorTable(rows, tab, sortKey, id, onSort){
+// `mode` "floors" (the season low) or "form" (the last 3 games against the
+// season average).
+function buildPositionFloorTable(rows, tab, sortKey, id, onSort, mode = "floors"){
 const el = document.getElementById(id)
 if(!el){ return }
 if(!rows.length){
 el.innerHTML = "No players to show for this selection."
 return
 }
+const form = mode === "form"
 const stats = POSITION_FLOOR_STATS[tab] || []
 let html = "<table><tr><th>#</th><th>Player</th><th>Pos</th><th>Team</th><th>Next Game</th><th>Games</th>"
 stats.forEach(([key, label])=>{
 const marker = key === sortKey ? " &#9660;" : ""
-html += `<th data-floor-sort="${key}" style="cursor:pointer" title="Sort by ${label} floor">${label}${marker}</th>`
+const title = form ? `Sort by ${label}, last ${RECENT_FORM_GAMES} games` : `Sort by ${label} floor`
+html += `<th data-floor-sort="${key}" style="cursor:pointer" title="${title}">${label}${marker}</th>`
 })
 html += "<th>Note</th></tr>"
 rows.forEach(row=>{
@@ -305,6 +338,17 @@ const games = counted === played ? `${played}` : `${counted} of ${played}`
 html += `<tr><td>${row.rank}</td><td>${row.player_name}</td><td>${row.position}</td><td>${row.team}</td>`
 html += `<td>${_isBlank(row.game) ? "bye" : row.game}</td><td>${games}</td>`
 stats.forEach(([key])=>{
+if(form){
+const trend = positionFloorTrend(row, key)
+const cls = trend && trend.dir !== "steady" ? ` class="form-${trend.dir}"` : ""
+html += `<td${cls}><b>${formatPositionFloorTrend(trend)}</b>`
+if(trend){
+const digits = Math.abs(trend.season) >= 10 ? 0 : 1
+html += `<br><span style="font-size:0.8em;opacity:0.7;white-space:nowrap">season ${trend.season.toFixed(digits)} &middot; last ${trend.last.length}: ${trend.last.join(" \u00b7 ")}</span>`
+}
+html += "</td>"
+return
+}
 const spread = formatPositionFloorSpread(row[`${key}_mean`], row[`${key}_sd`])
 html += `<td><b>${formatPositionFloor(row[key])}</b>`
 if(spread){
@@ -326,17 +370,41 @@ th.onclick = ()=> onSort(th.getAttribute("data-floor-sort"))
 function buildPositionFloorsSection(data, tabsId, gameSelectId, tableId){
 const tabsEl = document.getElementById(tabsId)
 const gameSelect = document.getElementById(gameSelectId)
-const state = { tab: POSITION_FLOOR_TABS[0], sortKey: null }
+const state = { tab: POSITION_FLOOR_TABS[0], sortKey: null, mode: "floors" }
+// The Season floors / Recent form switch, above the position tabs.
+let modeEl = null
+if(tabsEl && tabsEl.parentNode && typeof document !== "undefined"){
+modeEl = document.createElement("div")
+modeEl.className = "floorModes"
+modeEl.innerHTML = [["floors", "Season floors"], ["form", `Recent form (last ${RECENT_FORM_GAMES})`]]
+.map(([m, label])=>`<button class="tabButton" data-floor-mode="${m}">${label}</button>`).join("")
+tabsEl.parentNode.insertBefore(modeEl, tabsEl)
+modeEl.querySelectorAll("button").forEach(b=>{
+b.onclick = ()=>{
+state.mode = b.getAttribute("data-floor-mode")
+state.sortKey = null
+render()
+}
+})
+}
 const render = ()=>{
-const rows = sortPositionFloors(
-filterPositionFloors(data, state.tab, gameSelect ? gameSelect.value : PLAYER_PROPS_ALL_GAMES),
-state.sortKey,
-)
+let rows = filterPositionFloors(data, state.tab, gameSelect ? gameSelect.value : PLAYER_PROPS_ALL_GAMES)
+// Recent form sorts by the last-3 average.
+const sortKey = state.mode === "form" && state.sortKey ? `${state.sortKey}__recent` : state.sortKey
+if(state.mode === "form" && state.sortKey){
+rows = rows.map(r=>{ const t = positionFloorTrend(r, state.sortKey); return {...r, [sortKey]: t ? t.recent : ""} })
+}
+rows = sortPositionFloors(rows, sortKey)
 buildPositionFloorTable(rows, state.tab, state.sortKey, tableId, key=>{
 // Clicking the sorted column again goes back to snap order.
 state.sortKey = state.sortKey === key ? null : key
 render()
+}, state.mode)
+if(modeEl){
+modeEl.querySelectorAll("button").forEach(b=>{
+b.classList.toggle("active", b.getAttribute("data-floor-mode") === state.mode)
 })
+}
 if(tabsEl){
 tabsEl.querySelectorAll("button").forEach(b=>{
 b.classList.toggle("active", b.getAttribute("data-floor-tab") === state.tab)
@@ -366,6 +434,8 @@ render()
 
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
+positionFloorTrend,
+formatPositionFloorTrend,
 sortPlayerProps,
 nextPlayerPropsSort,
 formatPlayerPropsValue,

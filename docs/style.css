@@ -2081,3 +2081,7 @@ input.whatIfPct{width:64px;margin:0 2px 0 0;padding:4px 6px;font-size:13px;font-
 .mlbStageRight{order:-1;display:flex;justify-content:center;}
 .mlbZone{max-width:180px;}
 }
+
+.floorModes{display:flex;gap:6px;margin:0 0 8px 0;flex-wrap:wrap;}
+td.form-up b{color:var(--success);}
+td.form-down b{color:var(--danger);}
