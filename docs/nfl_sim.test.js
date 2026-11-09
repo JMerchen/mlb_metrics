@@ -610,3 +610,16 @@ test("chosen weather: the dropdown's choices, and how far each moves the total",
   assert.ok(simWeatherTotalShift(simWeatherChoice("sunny")) > 0)
   assert.ok(simWeatherChoice("snow").snow)
 })
+
+test("1,000-game summary: each team's scoring odds instead of exact finals", () => {
+  const summary = simSummary(PROFILES, "GB", "CAR", { seed: 3 }, 200)
+  for (const side of ["home", "away"]) {
+    const s = summary.scoring[side]
+    assert.ok(Math.abs(s.under20 + s.plus20 - 1) < 1e-9)
+    assert.ok(s.le10 <= s.under20 && s.plus30 <= s.plus20)
+  }
+  const html = text(simSummaryHtml(summary, { margin: 3, total: 44, probability: 0.6 }))
+  assert.match(html, /Points scored 10 or fewer Under 20 20\+ 30\+/)
+  assert.match(html, /Tuned to the points model: Panthers 20\.5, Packers 23\.5 on average/)
+  assert.doesNotMatch(html, /Commonest finals/)
+})

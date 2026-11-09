@@ -157,19 +157,22 @@ def dome_flags(games: pd.DataFrame, history_schedules: pd.DataFrame | None = Non
 
 
 def _blend(rows: pd.DataFrame, value: str, count: str, prior: float, pseudo: float, windows,
-           fade: float | None = None) -> float:
+           fade: float | None = None, fade_above: float | None = None) -> float:
     """WAVE-style blend of rows[value].sum() / rows[count].sum() over the
     most recent N rows for each (N, weight) window (N None = all rows),
     each window shrunk toward `prior` with `pseudo` pseudo-observations -
     fewer, when `fade` is given, the further the window's own rate is from
-    `prior`: pseudo / (1 + (gap / fade)^2)."""
+    `prior`: pseudo / (1 + (gap / fade)^2), with `fade_above` in its place
+    when the rate is above `prior` (for a defense: allowing more)."""
     total = 0.0
     for n_games, weight in windows:
         window = rows if n_games is None else rows.tail(n_games)
         n = window[count].sum()
         k = pseudo
         if fade and n > 0:
-            k = pseudo / (1 + ((window[value].sum() / n - prior) / fade) ** 2)
+            gap = window[value].sum() / n - prior
+            scale = fade_above if (fade_above and gap > 0) else fade
+            k = pseudo / (1 + (gap / scale) ** 2)
         total += weight * (window[value].sum() + k * prior) / (n + k)
     return total
 
@@ -186,6 +189,7 @@ def wave_ratings(
     windows = config.NFL_TOTALS_WINDOWS if windows is None else windows
     shrink_plays = config.NFL_TOTALS_SHRINK_PLAYS if shrink_plays is None else shrink_plays
     fade = config.NFL_TOTALS_SHRINK_FADE if fade is None else fade
+    fade_bad_defense = config.NFL_TOTALS_SHRINK_FADE_BAD_DEFENSE
     columns = ["team", "off_epa", "def_epa", "off_plays", "def_plays"]
     if team_games is None or team_games.empty:
         return pd.DataFrame(columns=columns)
@@ -198,7 +202,8 @@ def wave_ratings(
         for team, own in games.groupby(key):
             rows.append({
                 "team": team,
-                f"{prefix}_epa": _blend(own, "epa_sum", "plays", league_epa, shrink_plays, windows, fade),
+                f"{prefix}_epa": _blend(own, "epa_sum", "plays", league_epa, shrink_plays, windows, fade,
+                                        fade_bad_defense if prefix == "def" else None),
                 f"{prefix}_plays": _blend(own, "plays", "games", league_pace, _PACE_PSEUDO_GAMES, windows),
             })
         return pd.DataFrame(rows, columns=["team", f"{prefix}_epa", f"{prefix}_plays"])

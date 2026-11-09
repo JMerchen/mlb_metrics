@@ -3422,6 +3422,20 @@ every player's averages, touchdown chance and 100-yard chance - about
 > at every volume (top 10% of leans 63.2% vs 60.5%), and at the 5-point
 > rule 60.1% of 333 leans (+53.6 units) against 62.5% of 184 (+37.2).
 >
+> **The simulation's scores come from the points model (2026-11-09).** The
+> 1,000-game summary used to split the predicted total by the win pick's
+> margin, so when the two models disagreed it could undo a bad defense:
+> Dallas at Indianapolis (week 9) had the Colts at 25.3 points in the
+> points model, but 21.8 in the simulation, held under 20 in 40% of games
+> (teams facing the league's worst 10% of defenses stay under 20 about 27%
+> of the time). Now each team's average comes from the points model, What
+> if? changes moving the margin by as much as they move the win chance:
+> 25.4 points, under 20 in 24%. The summary shows each team's chance to
+> score 10 or fewer, under 20, 20+ and 30+ instead of the commonest exact
+> finals (each about 1% of games). Pulling bad defenses toward the league
+> less was also tested and changed nothing
+> (`scripts/backtest_nfl_bad_defense_shrink.py`).
+>
 > **Tuesday leans: early forecast, and a hold when starters are in doubt
 > (2026-11-07).** Every run now pulls the forecast for every game still to
 > be played, so Tuesday's pick and lean see the early (five- or six-day)

@@ -1032,6 +1032,10 @@ const seed = Number(opts.seed) || 1
 const out = {
 n, home: homeCode, away: awayCode, homeWins: 0, awayWins: 0, ties: 0, overtime: 0,
 points: {home: 0, away: 0}, margins: [], totals: [], scores: new Map(), players: {home: new Map(), away: new Map()},
+// How often each team scores 10 or fewer, under 20, 20+ and 30+ - what a
+// "can this defense hold them?" question needs; any one exact final is
+// rare (the commonest turn up in about 1% of games).
+scoring: {home: {le10: 0, under20: 0, plus20: 0, plus30: 0}, away: {le10: 0, under20: 0, plus20: 0, plus30: 0}},
 }
 for(let i = 0; i < n; i++){
 const g = simulateGame(profiles, homeCode, awayCode, {...opts, seed: seed + i})
@@ -1040,6 +1044,14 @@ if(f.home > f.away){ out.homeWins += 1 }else if(f.away > f.home){ out.awayWins +
 if(f.overtime){ out.overtime += 1 }
 out.points.home += f.home / n
 out.points.away += f.away / n
+for(const side of SIM_SIDES){
+const pts = f[side]
+const s = out.scoring[side]
+s.le10 += pts <= 10 ? 1 / n : 0
+s.under20 += pts < 20 ? 1 / n : 0
+s.plus20 += pts >= 20 ? 1 / n : 0
+s.plus30 += pts >= 30 ? 1 / n : 0
+}
 out.margins.push(f.home - f.away)
 out.totals.push(f.home + f.away)
 const key = `${Math.max(f.home, f.away)}-${Math.min(f.home, f.away)}|${f.home > f.away ? "home" : f.away > f.home ? "away" : "tie"}`
@@ -1153,10 +1165,13 @@ const stats = `<div class="simStats">
 <div><b>${t50}</b><span>median total; 8 in 10 between ${t10} and ${t90}</span></div>
 <div><b>${simPct(summary.overtime / n)}</b><span>went to overtime${summary.ties ? `; ${simPct(summary.ties / n)} ended tied` : ""}</span></div>
 </div>`
-const scores = `<table class="simBox simCommon"><thead><tr><th>Commonest finals</th><th>Games</th></tr></thead><tbody>${
-summary.commonScores.map(c => `<tr><td>${c.winner === "tie" ? `Tie ${c.score}` : `${name(c.winner)} ${c.score}`}</td><td>${simPct(c.share)}</td></tr>`).join("")}</tbody></table>`
+const scores = `<table class="simBox simCommon"><thead><tr><th>Points scored</th><th>10 or fewer</th><th>Under 20</th><th>20+</th><th>30+</th></tr></thead><tbody>${
+SIM_SIDES.slice().reverse().map(side => {
+const s = summary.scoring[side]
+return `<tr><td>${name(side)}</td><td>${simPct(s.le10)}</td><td>${simPct(s.under20)}</td><td>${simPct(s.plus20)}</td><td>${simPct(s.plus30)}</td></tr>`
+}).join("")}</tbody></table>`
 const note = target
-? `<p class="simIntro">Tuned to ${name(target.margin >= 0 ? "home" : "away")} by ${Math.abs(target.margin).toFixed(1)} and ${target.total.toFixed(0)} total points; the What if? panel gives ${name("home")} ${simPct(target.probability)}.</p>`
+? `<p class="simIntro">Tuned to the points model: ${name("away")} ${simFixed((target.total - target.margin) / 2)}, ${name("home")} ${simFixed((target.total + target.margin) / 2)} on average; the What if? panel gives ${name("home")} ${simPct(target.probability)} to win.</p>`
 : ""
 const teams = SIM_SIDES.slice().reverse().map(side => `<h4>${name(side)}</h4>${simPlayerAveragesHtml(summary.players[side])}`).join("")
 return `<div class="simSummary"><div class="whatIfHeadline">${headline}</div>${note}${stats}
