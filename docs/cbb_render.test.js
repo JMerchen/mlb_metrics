@@ -61,6 +61,12 @@ test("rankings table: search, conference, limit", () => {
   assert.doesNotMatch(r.cbbRankingsHtml([duke, yale], { conference: "ACC" }), /Yale/)
   assert.match(r.cbbRankingsHtml([duke, yale], { limit: 1 }), /Showing 1 of 2/)
   assert.match(r.cbbRankingsHtml([duke, yale], { search: "zzz" }), /No teams match/)
+  // With the league's numbers, Deep dive gets adjusted efficiency and the chance of beating an average team.
+  const deep = text(r.cbbRankingsHtml([duke, yale], { league }))
+  assert.match(deep, /Scores Allows Beats avg Pace/)
+  assert.match(deep, /1 Duke ACC 20–2 \+30\.0 \+14\.0 4th \+16\.0 1st 119\.0 89\.0 97% 70\.0/)
+  assert.ok(Math.abs(r.cbbBeatsAverage(duke, league) - r.cbbNormCdf(30 * 0.70 / 11)) < 1e-9)
+  assert.ok(Math.abs(r.cbbBeatsAverage({ net: 0, tempo: 68 }, league) - 0.5) < 1e-9)
 })
 
 test("game rows: the pick, the expected score, and the result once played", () => {
@@ -144,4 +150,65 @@ test("upsets to consider: only on the real bracket, worse seeds with a real chan
   // 12 over 5 and 11 over 6 qualify; 9 over 8 is one line apart, 16 over 1 has no chance.
   assert.equal(html, "Upsets to consider: 12 Yale over 5 Duke (45%, East); 11 Team 6 over 6 Team 5 (42%, West).")
   assert.equal(r.cbbUpsetsHtml({ kind: "official", teams: teams.slice(2, 4) }, byId), "")
+})
+
+// A full 64-team bracket (no First Four): team id = 100 x region + seed, better seeds are better teams.
+function fullBracket(){
+  const regions = ["East", "Midwest", "West", "South"], teams = [], rated = []
+  regions.forEach((region, r) => {
+    for (let seed = 1; seed <= 16; seed++) {
+      const id = 100 * (r + 1) + seed
+      teams.push({ team_id: id, seed, region, play_in: false })
+      rated.push({ team_id: id, team: `${region} ${seed}`, net: 34 - 3 * seed - r, offense: 0, defense: 0, tempo: 68 })
+    }
+  })
+  return { bracket: { kind: "official", final_four_pairs: [["East", "Midwest"], ["West", "South"]], teams, results: [] }, ids: r.cbbTeamIndex(rated) }
+}
+
+test("playing a bracket: favorites only is all chalk; a random one has upsets and repeats with its seed", () => {
+  const { bracket, ids } = fullBracket()
+  const chalk = r.cbbPlayBracket(bracket, ids, league, null)
+  assert.equal(chalk.upsets.length, 0)
+  assert.equal(chalk.champion.team_id, 101)                         // the best 1 seed
+  assert.deepEqual(chalk.regions.map(x => x.winner.seed), [1, 1, 1, 1])
+  assert.deepEqual(chalk.regions[0].rounds.map(games => games.length), [8, 4, 2, 1])
+  assert.equal(chalk.finalFour.length, 2)
+  assert.equal(chalk.finalFour[0].loser.region, "Midwest")           // East plays Midwest, as paired
+  assert.ok(chalk.regions[0].rounds[0][0].chance > 0.99)             // 1 over 16
+  const a = r.cbbPlayBracket(bracket, ids, league, r.cbbRng(7)), b = r.cbbPlayBracket(bracket, ids, league, r.cbbRng(7))
+  assert.equal(a.champion.team_id, b.champion.team_id)
+  assert.deepEqual(a.upsets.map(g => g.winner.team_id), b.upsets.map(g => g.winner.team_id))
+  // Over many brackets underdogs win about as often as their chance: an 8 beats a 9 a bit over half the time, and upsets happen.
+  let eightWins = 0, upsets = 0
+  const random = r.cbbRng(123)
+  for (let i = 0; i < 400; i++) {
+    const sim = r.cbbPlayBracket(bracket, ids, league, random)
+    upsets += sim.upsets.length
+    eightWins += sim.regions[0].rounds[0][1].winner.seed === 8 ? 1 : 0
+  }
+  const expected = r.cbbMatchup(ids.get(108), ids.get(109), "neutral", league).winA
+  assert.ok(Math.abs(eightWins / 400 - expected) < 0.08)
+  assert.ok(upsets / 400 > 8 && upsets / 400 < 25)
+})
+
+test("playing a bracket: First Four pairs play for their spot, and played games keep their real winner", () => {
+  const { bracket, ids } = fullBracket()
+  bracket.teams.push({ team_id: 117, seed: 16, region: "East", play_in: true })
+  bracket.teams.find(t => t.team_id === 116).play_in = true
+  ids.set(117, { team_id: 117, team: "East 16b", net: -40, offense: 0, defense: 0, tempo: 68 })
+  const sim = r.cbbPlayBracket(bracket, ids, league, null)
+  assert.equal(sim.regions[0].firstFour.length, 1)
+  assert.equal(sim.regions[0].firstFour[0].winner.team_id, 116)
+  // The real tournament had the 16 seed beat the 1: every bracket played from here has that result.
+  bracket.results = [{ round: "Round of 64", home_id: 101, away_id: 116, home_score: 60, away_score: 61 }]
+  const after = r.cbbPlayBracket(bracket, ids, league, null)
+  const first = after.regions[0].rounds[0][0]
+  assert.equal(first.winner.team_id, 116)
+  assert.ok(first.played && first.upset && first.chance < 0.01)
+  assert.notEqual(after.champion.team_id, 101)
+  const html = text(r.cbbPlayedBracketHtml(after, ids))
+  assert.match(html, /^East 2 wins it all|^Midwest 1 wins it all/)
+  assert.match(html, /16 East 16 over 1 East 1 final/)
+  assert.match(html, /upsets? by seed/)
+  assert.match(r.cbbPlayedBracketHtml(r.cbbPlayBracket({ teams: [], final_four_pairs: [] }, ids, league, null), ids), /No bracket to play yet/)
 })
