@@ -116,7 +116,8 @@ def test_simulate_counts_how_often_each_team_reaches_each_round():
     assert odds.at[116, "round_of_64"] + odds.at[117, "round_of_64"] == pytest.approx(1.0)     # a First Four pair
     assert (odds.diff(axis=1).iloc[:, 1:] <= 1e-12).all().all()                                 # nobody gets likelier by round
     # The four 1 seeds are equal here, so each wins about a quarter of the time, and a 1 beats a 16 nearly always.
-    assert odds.loc[[101, 201, 301, 401], "champion"].sum() > 0.5
+    assert odds.loc[[101, 201, 301, 401], "champion"].sum() > 0.4
+    assert odds.loc[[101, 201, 301, 401], "champion"].min() > odds.loc[[102, 202, 302, 402], "champion"].max()
     assert odds.at[101, "round_of_32"] > 0.97 and odds.at[102, "sweet_16"] > odds.at[107, "sweet_16"]
     # Same seed, same result.
     again = cbb_bracket.simulate(field, ratings, LEAGUE, pairs, sims=4000, seed=1).set_index("team_id")

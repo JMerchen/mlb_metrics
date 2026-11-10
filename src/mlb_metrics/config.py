@@ -2916,9 +2916,14 @@ CBB_FIRST_SEASON = 2008                   # hoopR's ESPN data starts 2003; box s
 CBB_FREE_THROW_POSSESSION_WEIGHT = 0.475
 CBB_POINTS_PER_POSSESSION = 1.03
 CBB_AVERAGE_TEMPO = 68.0
-# Rating settings, tuned in scripts/backtest_cbb_ratings.py (see its
-# docstring for the numbers). Strengths are in games: a rating is pulled
-# toward its prior as if the prior were that many extra games.
+# Rating settings, tuned in scripts/backtest_cbb_ratings.py: every season
+# from 2009 replayed week by week (ratings refit each week from earlier
+# games only), scored on 2010-2026. With these: 92,350 games, margin off by
+# 8.84, favorite won 72.9%, log loss 0.5249; NCAA tournament games from
+# Selection Sunday's ratings (2009-2026): favorite won 791 of 1,130, log
+# loss 0.549. What the sweeps found is in that script's docstring.
+# Strengths are in games: a rating is pulled toward its prior as if the
+# prior were that many extra games.
 CBB_RIDGE_GAMES = 4.0                     # a team with no prior, toward average
 CBB_PRIOR_GAMES = 6.0                     # toward last season's rating...
 CBB_PRIOR_CARRYOVER = 0.85                # ...of which this share carries over
@@ -2933,7 +2938,7 @@ CBB_HOME_EDGE_PRIOR_GAMES = 1e7           # held there: a freely fit edge soaks 
 CBB_AP_PRESEASON_BONUS = 4.5
 CBB_HALF_LIFE_DAYS = None                 # None = every game counts the same
 CBB_MARGIN_CAP = None                     # None = no cap on one game's efficiency
-CBB_MARGIN_SIGMA = 11.0                   # points a game lands from its expected margin (sd)
+CBB_MARGIN_SIGMA = 11.2                   # points a game lands from its expected margin (sd)
 # The bracket (cbb_bracket.py). Which regions meet in the national
 # semifinals changes every year and isn't in the data until those games are
 # scheduled: add the season here on Selection Sunday, e.g.

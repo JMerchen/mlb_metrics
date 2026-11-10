@@ -5031,16 +5031,29 @@ team, in points per 100 possessions better than average, by ridge
 regression over all the season's Division I games at once (efficiency =
 league average + offense - opponent's defense + home edge). Possessions
 come from the box score (FGA - OREB + TO + 0.475 FTA). Each rating is
-pulled toward a prior - CBB_CARRY of last season's rating, plus CBB_AP for a
-team in the preseason AP top 25 - with the weight of CBB_PRIOR games. A game's
+pulled toward a prior - 85% of last season's rating, plus 4.5 for a
+team in the preseason AP top 25 - with the weight of 6 games. A game's
 expected margin is the net-rating gap over the two teams' pace (plus home
-court), and the win chance is a normal curve CBB_SIGMA points wide around it.
+court), and the win chance is a normal curve 11.2 points wide around it.
 
 **Backtest** (`scripts/backtest_cbb_ratings.py`): every season from 2009
 replayed week by week (ratings refit each week from earlier games only),
-scored on 2010-2026, CBB_GAMES games:
+scored on 2010-2026:
 
-CBB_TABLE
+| | Games | Margin off by | Favorite won | Log loss |
+| --- | --- | --- | --- | --- |
+| Every game | 92,350 | 8.84 | 72.9% | 0.5249 |
+| November-December | | | | 0.4705 |
+| January-February | | | | 0.5571 |
+| March-April | | | | 0.5598 |
+| NCAA tournament, that week's ratings | 1,066 | | | 0.5504 |
+| NCAA tournament, Selection Sunday's ratings | 1,066 | | 70.2% | 0.5516 |
+
+Calibration (favorite's chance said -> won): 50-60% 55.0% -> 55.1%; 60-70%
+65.0% -> 64.7%; 70-80% 74.9% -> 75.1%; 80-90% 84.9% -> 85.6%; 90%+ 94.9%
+-> 95.6%. Tournament games by round, from Selection Sunday's ratings
+(favorite won): First Four 56%, round of 64 74%, round of 32 73%, Sweet
+16 64%, Elite 8 58%, Final Four 66%, title game 69%.
 
 What the settings sweep found (log loss over all games): recency
 weighting hurts at every half-life tried (45 days +0.0101, 90 +0.0033,
@@ -5048,7 +5061,11 @@ weighting hurts at every half-life tried (45 days +0.0101, 90 +0.0033,
 worse than holding it at 2.6 points per 100 possessions a side (+0.0019,
 in November it soaks up big programs hosting small ones); carrying over
 85% of last season's rating beats 70% (-0.0014) and 100%; the prior's
-weight is flat from 3 to 6 games and worse past 8. CBB_APLINE
+weight is flat from 3 to 6 games and worse past 8. The preseason AP top 25 (in the data
+from 2023): those 100 teams finished 4.5 net points better than their
+carryover alone said (p 0.0007; where in the 25 added nothing), so they
+start 4.5 higher - a small gain in the replay (November-December log loss
+on 2023-26, 0.4822 to 0.4818).
 
 **The bracket** (`cbb_bracket.py`): `official_field` reads the real
 bracket from the schedule once the round of 64 is posted with seeds;
@@ -5065,7 +5082,13 @@ page says so).
 
 **Past tournaments** (`--table`, `data/backtest/cbb_tournament_backtest.csv`,
 shown on the page): every tournament game picked from the ratings before
-the first game. CBB_TLINE
+the first game. 2009-2026: our favorite won 791 of 1,130
+(70.0%), log loss 0.549. On the 247 games between different seeds
+(2023-26) ours won 186 and the better seed 182 - about even, and behind
+the seeds in 2023 (40 to 44). The champion was in our top 7 before 15 of
+the 17 tournaments (UConn was 18th in 2011 and 26th in 2014); the title
+chance we gave it: UConn 3% (2023), UConn 14% (2024), Florida 9% (2025),
+Michigan 18% (2026).
 
 **Daily run** (`cbb_pipeline.py`, `.github/workflows/cbb_daily_update.yml`,
 every day November to early April): refit, grade finished picks, log a

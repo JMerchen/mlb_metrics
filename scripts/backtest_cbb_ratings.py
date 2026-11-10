@@ -19,7 +19,29 @@ Usage:
     PYTHONPATH=src python3 scripts/backtest_cbb_ratings.py [--sweep] [--table] [--cache DIR]
 (--cache defaults to data/raw/cbb; seasons not there are downloaded into it.)
 
-RESULT: see config.py's CBB_* comments (filled in from this script).
+RESULT (2026-11-10, the settings in config.py; scored on 2010-2026):
+    every game              92,350 games, margin off by 8.84, favorite won 72.9%, log loss 0.5249
+    by part of the season   Nov-Dec 0.4705, Jan-Feb 0.5571, Mar-Apr 0.5598
+    NCAA tournament         1,066 games: live 0.5504, bracket 0.5516 (favorite won 70.2%)
+    the sd of the miss      11.24 points (config.CBB_MARGIN_SIGMA)
+    calibration             said 55% won 55%, 65% -> 65%, 75% -> 75%, 85% -> 86%, 95% -> 96%
+    --table, 2009-2026      favorite won 791 of 1,130 (70.0%), log loss 0.549; games between
+                            different seeds (2023-26): ours 186 of 247, the better seed 182
+  Sweeps (change in log loss over every game against the first settings,
+  0.5274: ridge 4, prior 6 games at 70% carryover, home edge fit with a weak prior):
+    ridge 2 / 8                          -0.0001 / +0.0001
+    prior weight 3 / 10 / 16 games       -0.0008 / +0.0045 / +0.0123
+    carryover 50% / 85%                  +0.0065 / -0.0024
+    recent games weighted more,
+      half-life 45 / 90 / 180 days       +0.0101 / +0.0033 / +0.0012
+    one game's efficiency capped at
+      25 / 40 points per 100             +0.0002 / 0.0000
+    home edge fit freely / held at 2.6   +0.0008 / -0.0011
+  Second round, home edge held (0.5263): carryover 85% with prior 6 games
+  0.5249 (kept), prior 4 0.5249, prior 8 0.5258; carryover 100% 0.5254-0.5256;
+  home edge 2.2 / 3.0: 0.5266 / 0.5271.
+  Preseason AP top 25 bonus (ranks in the data from 2023; Nov-Dec log loss
+  on 2023-26): none 0.4822, +3 0.4818, +4.5 0.4818, +6 0.4820.
 """
 
 import argparse
