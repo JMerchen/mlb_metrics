@@ -62,8 +62,19 @@ const color = team && /^[0-9a-fA-F]{6}$/.test(team.color || "") ? `#${team.color
 return `<span class="cbbDot" style="background:${color}"></span>`
 }
 
-// The rankings table. `filter` = {search, conference, limit}.
+// A team's chance of beating an average Division I team on a neutral
+// floor, from its rating and pace (the same idea as Bart Torvik's
+// "Barthag", computed from our own numbers).
+function cbbBeatsAverage(team, league){
+return cbbNormCdf(team.net / 100 * team.tempo / league.sigma)
+}
+
+// The rankings table. `filter` = {search, conference, limit, league};
+// with `league`, Deep dive adds each team's adjusted efficiency (points
+// scored and allowed per 100 possessions against an average team) and its
+// chance of beating an average team.
 function cbbRankingsHtml(teams, filter = {}){
+const league = filter.league
 const search = (filter.search || "").trim().toLowerCase()
 let rows = (teams || []).filter(t => (!filter.conference || t.conference === filter.conference)
 && (!search || t.team.toLowerCase().includes(search)))
@@ -78,11 +89,14 @@ const body = rows.map(t => `<tr>
 <td><b>${cbbSigned(t.net)}</b></td>
 <td>${cbbSigned(t.offense)} <span class="dim">${cbbOrdinal(t.offense_rank)}</span></td>
 <td>${cbbSigned(t.defense)} <span class="dim">${cbbOrdinal(t.defense_rank)}</span></td>
+${league ? `<td class="deep-only">${(league.efficiency + t.offense).toFixed(1)}</td>
+<td class="deep-only">${(league.efficiency - t.defense).toFixed(1)}</td>
+<td class="deep-only">${cbbPct(cbbBeatsAverage(t, league))}</td>` : ""}
 <td class="deep-only">${Number(t.tempo).toFixed(1)}</td>
 <td class="deep-only">${t.last_season_net === null || t.last_season_net === undefined ? "-" : cbbSigned(t.last_season_net)}</td>
 </tr>`).join("")
 return `<table class="cbbTable">
-<thead><tr><th>#</th><th>Team</th><th>Conference</th><th>Record</th><th>Rating</th><th>Offense</th><th>Defense</th><th class="deep-only">Pace</th><th class="deep-only">Last season</th></tr></thead>
+<thead><tr><th>#</th><th>Team</th><th>Conference</th><th>Record</th><th>Rating</th><th>Offense</th><th>Defense</th>${league ? '<th class="deep-only" title="Points per 100 possessions against an average defense">Scores</th><th class="deep-only" title="Points allowed per 100 possessions against an average offense">Allows</th><th class="deep-only" title="Chance of beating an average Division I team on a neutral floor">Beats avg</th>' : ""}<th class="deep-only">Pace</th><th class="deep-only">Last season</th></tr></thead>
 <tbody>${body}</tbody>
 </table>${filter.limit && total > rows.length ? `<div class="cbbMore">Showing ${rows.length} of ${total}.</div>` : ""}`
 }
@@ -270,7 +284,7 @@ return `<p class="sectionIntro">Each past tournament, picked before it started w
 
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
-cbbNormCdf, cbbPct, cbbSigned, cbbOrdinal, cbbMatchup, cbbTeamIndex, cbbRankingsHtml, cbbMatchupHtml, cbbGameRowHtml,
+cbbNormCdf, cbbPct, cbbSigned, cbbOrdinal, cbbMatchup, cbbBeatsAverage, cbbTeamIndex, cbbRankingsHtml, cbbMatchupHtml, cbbGameRowHtml,
 cbbGamesHtml, cbbRecordHtml, cbbBracketOddsHtml, cbbRegionHtml, cbbFavoritesHtml, cbbBracketNote, cbbBacktestHtml,
 cbbUpsetsHtml,
 cbbDateLabel,

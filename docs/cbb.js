@@ -52,7 +52,7 @@ function renderCbbRankings(){
 const search = document.getElementById("cbbSearch").value
 const conference = document.getElementById("cbbConference").value
 const filtered = Boolean(search || conference)
-document.getElementById("cbbRankings").innerHTML = cbbRankingsHtml(cbb.data.teams, {search, conference, limit: cbb.allTeams || filtered ? null : 50})
+document.getElementById("cbbRankings").innerHTML = cbbRankingsHtml(cbb.data.teams, {search, conference, league: cbb.data.league, limit: cbb.allTeams || filtered ? null : 50})
 const more = document.getElementById("cbbRankingsMore")
 more.style.display = cbb.allTeams || filtered ? "none" : ""
 more.onclick = () => { cbb.allTeams = true; renderCbbRankings() }

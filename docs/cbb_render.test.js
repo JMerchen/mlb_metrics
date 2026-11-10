@@ -61,6 +61,12 @@ test("rankings table: search, conference, limit", () => {
   assert.doesNotMatch(r.cbbRankingsHtml([duke, yale], { conference: "ACC" }), /Yale/)
   assert.match(r.cbbRankingsHtml([duke, yale], { limit: 1 }), /Showing 1 of 2/)
   assert.match(r.cbbRankingsHtml([duke, yale], { search: "zzz" }), /No teams match/)
+  // With the league's numbers, Deep dive gets adjusted efficiency and the chance of beating an average team.
+  const deep = text(r.cbbRankingsHtml([duke, yale], { league }))
+  assert.match(deep, /Scores Allows Beats avg Pace/)
+  assert.match(deep, /1 Duke ACC 20–2 \+30\.0 \+14\.0 4th \+16\.0 1st 119\.0 89\.0 97% 70\.0/)
+  assert.ok(Math.abs(r.cbbBeatsAverage(duke, league) - r.cbbNormCdf(30 * 0.70 / 11)) < 1e-9)
+  assert.ok(Math.abs(r.cbbBeatsAverage({ net: 0, tempo: 68 }, league) - 0.5) < 1e-9)
 })
 
 test("game rows: the pick, the expected score, and the result once played", () => {
