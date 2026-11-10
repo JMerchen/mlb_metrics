@@ -86,10 +86,12 @@ return {asOf, todaysPicks, summary, topApproach: qualified[0] || null}
 // docs/nfl.js's own renderNflTodaysGamePicks, which groups the same way).
 async function loadGamePicksSection(prefix, {groupByWeek = false} = {}){
 
-const [picks, summaryRows, byVersion] = await Promise.all([
+const [picks, summaryRows, byVersion, confidence] = await Promise.all([
 loadCSV(`./data/${prefix}_picks.csv`),
 loadCSV(`./data/${prefix}_summary.csv`),
 loadCSV(`./data/${prefix}_summary_by_version.csv`).catch(() => []),
+// NFL: how picks this sure, and picks against Vegas, have done.
+prefix === 'nfl_game_picks' ? loadCSV('./data/nfl_pick_confidence.csv').catch(() => []) : Promise.resolve([]),
 ])
 
 const summary = summaryRows[0] || {}
@@ -98,7 +100,7 @@ const summary = summaryRows[0] || {}
 summary.current = byVersion.find(r => r.model_version && r.model_version !== 'all_time') || null
 
 if(!picks.length){
-return {asOf: null, upcomingPicks: [], summary}
+return {asOf: null, upcomingPicks: [], summary, confidence}
 }
 
 let upcoming
@@ -114,7 +116,7 @@ upcoming = picks.filter(p => p.date === asOf)
 
 upcoming = upcoming.slice().sort((a, b) => a.home_team.localeCompare(b.home_team))
 
-return {asOf, upcomingPicks: upcoming, summary}
+return {asOf, upcomingPicks: upcoming, summary, confidence}
 
 }
 
@@ -137,7 +139,7 @@ statEl.textContent = ''
 return
 }
 statEl.innerHTML = gamePicksRecordHtml(data.summary, data.summary.current)
-listEl.innerHTML = gamePicksListHtml(data.upcomingPicks, sport)
+listEl.innerHTML = gamePicksListHtml(data.upcomingPicks, sport, {confidence: data.confidence})
 }
 
 (async () => {

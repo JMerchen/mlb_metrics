@@ -2317,6 +2317,11 @@ NFL_QB_CONTINUITY_WEIGHT = 0.5
 # degradation contract as GAME_PICK_CALIBRATION_MODEL_PATH: a no-op
 # until/unless a real trained artifact clears its own real-holdout bar.
 NFL_GAME_PICK_CALIBRATION_MODEL_PATH = "data/models/nfl_game_pick_calibration_model.joblib"
+# How often the live win model's picks were right in its walk-forward
+# backtest, by how sure it was and by whether it sided with Vegas
+# (nfl_game_evaluation.confidence_counts; written by
+# scripts/train_nfl_elo_margin_model.py, shown in the site's track record).
+NFL_PICK_CONFIDENCE_BACKTEST_PATH = "data/backtest/nfl_pick_confidence_backtest.csv"
 
 # Same purpose as GAME_PICK_MODEL_VERSION, for nfl_game_predictions.py.
 # Bumped v1 -> v2 (2026-09-02, tightened windows + turnover_margin added
@@ -2325,7 +2330,35 @@ NFL_GAME_PICK_CALIBRATION_MODEL_PATH = "data/models/nfl_game_pick_calibration_mo
 # real picks made under this new logic - same "never silently rewrite
 # already-logged history" discipline as MLB's own model_version bumps.
 # v2 -> v3 (2026-11-01): offensive/defensive edges per play, model retrained.
-NFL_GAME_PICK_MODEL_VERSION = "v3"
+NFL_GAME_PICK_MODEL_VERSION = "v4"
+# v4 (2026-11-10, "which [NFL models] can you improve"): the win chance is
+# the plain average of two models (ml_models.BlendedWinModel) - v3's logistic
+# regression, and a ridge regression of the final MARGIN (home minus away
+# points) on seven inputs: the Elo difference, each side's pass and rush EPA
+# per play differences (offense and defense), and each starter's QB+, turned
+# into a win chance through the normal curve (ml_models.MarginWinModel). A
+# margin says more than a win or loss does (a 30-point win and a 1-point win
+# are the same "1" to a classifier), Elo remembers more than the last season
+# and a half, and passing and rushing aren't worth the same. Every week of
+# 2017-2026 replayed, scored walk-forward on 2019-2026 (1,999 games, refit
+# each season on the earlier ones), log loss (Vegas's closing line 0.6094):
+#   v3                    0.6362
+#   margin model alone    0.6310  (-0.0052, 95% CI -0.0117 to +0.0015; 6 of 8 seasons)
+#   v4, the two averaged  0.6307  (-0.0054, 95% CI -0.0090 to -0.0021; 7 of 8 seasons)
+# The average is kept because its gain is the steadier one (the range clears
+# zero); picks are right about as often either way (64-65%). The Elo settings
+# below are the standard ones and every nearby value (K 15-30, keeping 1/2 to
+# 3/4 between seasons, home edge 30-65) lands within 0.0006.
+# scripts/train_nfl_elo_margin_model.py.
+NFL_ELO_START = 1505.0
+NFL_ELO_K = 20.0
+NFL_ELO_HOME_EDGE = 48.0
+NFL_ELO_SEASON_KEEP = 2 / 3
+# Pass and rush EPA per play: each team's last 17, 8 and 4 games (weights
+# as NFL_TOTALS_WINDOWS), each window pulled toward the league rate by this
+# many plays.
+NFL_PASS_RUSH_SHRINK_PLAYS = 150.0
+NFL_MARGIN_MODEL_ALPHA = 30.0
 # offensive_edge / defensive_edge as EPA per play from play-by-play
 # (nfl_team_strength.compute_team_epa_per_play) rather than EPA per game
 # from team stats - see that function's docstring for the backtest.
@@ -2360,6 +2393,14 @@ NFL_TOTALS_SHRINK_FADE = 0.03
 NFL_TOTALS_SHRINK_FADE_BAD_DEFENSE = None
 # The listed starting QB's own EPA per dropback: his last 16 games, shrunk
 # with 150 pseudo-dropbacks toward replacement level (league rate - 0.10).
+# Settings sweep (2026-11-10, "hyper parameters or honestly any change";
+# walk-forward as scripts/backtest_nfl_totals.py, 8 seasons, live MAE
+# 10.475): recency weights .4/.3/.3 +0.007, .6/.3/.1 +0.022, the 17-game
+# window alone +0.055, windows 17/10/6 +0.019, 17/8/3 -0.003; shrink 150
+# plays -0.001, 600 +0.002; shrink fade .02 -0.001, .05 +0.003; QB over 24
+# games +0.004, 10 games -0.002; QB shrink 75 dropbacks -0.010 (95% CI
+# -0.021 to 0.000), 300 +0.018; QB replacement gap .05 +0.009, .15 -0.006.
+# Nothing clears its own noise, so the settings stay.
 NFL_TOTALS_QB_GAMES = 16
 NFL_TOTALS_QB_SHRINK_DROPBACKS = 150.0
 NFL_TOTALS_QB_REPLACEMENT_GAP = 0.10
@@ -2407,6 +2448,18 @@ NFL_TOTAL_BAND_HALF_WIDTH = 9
 # The design choices (weather terms, shrink fade) were tried on these same
 # seasons, so expect live results somewhat below the backtest's.
 NFL_TOTAL_LEAN_MIN_GAP = 5.0
+# The 5+ point backtest above, for the site's track-record table.
+NFL_TOTAL_LEAN_BACKTEST = {"games": 237, "won_rate": 0.62}
+# Our margin next to Vegas's point spread (nfl_game_evaluation.spread_sides):
+# the win chance read back off a normal curve this many points wide (the
+# margin model's own miss, scripts/train_nfl_elo_margin_model.py). Shown as
+# context and graded, never a lean: walk-forward 2019-2026, taking our side
+# of the closing spread won 49-51% of ~1,900 games whichever margin was
+# used (the win model's, the margin model's, the points model's, a blend),
+# at every gap from 0 to 6 points, and none added anything to the spread in
+# a regression of the real margin on both (p 0.5-0.98). 52.4% breaks even.
+NFL_WIN_MARGIN_SIGMA = 13.1
+NFL_SPREAD_BACKTEST = {"games": 1923, "won_rate": 0.50}
 # What the line still misses for the weather, beyond our total's own
 # weather terms (2026-11-06, scripts/backtest_nfl_totals_vs_market.py):
 # points added to a lean's edge per unit of nfl_weather's wx_rain (chance

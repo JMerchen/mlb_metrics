@@ -54,9 +54,8 @@ test("NFL game row: outlined and labelled by the injury report; MLB rows aren't"
     injury_report: "after", injury_note: "Patrick Mahomes (QB; Gardner Minshew starts)",
   }, "nfl")
   assert.match(after, /class="game report-after"/)
-  // Who's out is left to the What if? panel; the pick just says which side of the report it's on.
   assert.match(text(after), /After the final injury report/)
-  assert.doesNotMatch(text(after), /Out:|Mahomes/)
+  assert.match(text(after), /Out: Patrick Mahomes \(QB; Gardner Minshew starts\)/)
   assert.match(gamePickRowHtml({ home_team: "KC", away_team: "DEN", predicted_winner: "KC" }, "nfl"), /class="game report-before"/)
   const mlb = gamePickRowHtml({ home_team: "NYY", away_team: "BOS", predicted_winner: "NYY" }, "mlb")
   assert.match(mlb, /class="game"/)
@@ -102,7 +101,7 @@ test("NFL game row: predicted total next to Vegas's; nothing for MLB", () => {
     market_predicted_winner_probability: 0.57, bet_units: 0, predicted_total: 51.37, market_total: 54.5,
   }, "nfl")
   assert.equal(face(html), "Bills at Rams We say Rams 51% · Vegas 57%")
-  assert.equal(detail(html), "Bills 49%51% Rams 🗓️Forecast comes the day before the game Total points: we say 51 · Vegas 54.5 Before the final injury report")
+  assert.equal(detail(html), "Bills 49%51% Rams For the RamsPlaying at homeVegas agrees: Rams 57% 🗓️Forecast comes the day before the game Total points: we say 51 · Vegas 54.5 Before the final injury report")
   assert.equal(text(totalPointsText({ predicted_total: "47.6", market_total: "" })), "Total points: we say 48")
   // With the range from the export: the range, not one number.
   assert.equal(text(totalPointsText({ predicted_total: 47.6, predicted_total_low: 39, predicted_total_high: 57, market_total: 47.5 })),
@@ -217,4 +216,95 @@ test("NFL totals: a Tuesday lean on hold for the injury report", () => {
   const html = gamePickRowHtml(g, "nfl")
   assert.match(face(html), /Lean on hold/)
   assert.match(detail(html), /Lean on hold until this week's injury report: KC QB Patrick Mahomes \(questionable on the last report\)\./)
+})
+
+test("record line falls back to every pick on record right after a model change", () => {
+  const line = text(gamePicksRecordHtml(
+    { betting_enabled: false, model_vs_market_n: 120, model_pick_accuracy: 0.65, market_pick_accuracy: 0.7 },
+    { model_vs_market_n: 0 },
+  ))
+  assert.equal(line, "Right on 78 of 120 games so far (Vegas: 84 of 120). Not suggesting moneyline bets right now.")
+})
+
+test("NFL spread: Vegas's number, ours, and the side that puts us on", () => {
+  const { spreadText, spreadInfo } = require("./summary_render.js")
+  const g = { home_team: "MIN", away_team: "BUF", predicted_winner: "BUF", predicted_probability: 0.58,
+    spread_line: -3.5, predicted_margin: -2.6, spread_side: "MIN" }
+  assert.equal(text(spreadText(g, "nfl")), "Spread: Vegas has Bills by 3.5 · we have Bills by 2.5 (our side: Vikings +3.5)")
+  assert.equal(text(spreadText({ ...g, predicted_margin: -6.1, spread_side: "BUF", spread_result: "win" }, "nfl")),
+    "Spread: Vegas has Bills by 3.5 · we have Bills by 6 (our side: Bills −3.5, covered)")
+  assert.equal(text(spreadText({ ...g, spread_line: 0, predicted_margin: 0.1, spread_side: "MIN" }, "nfl")),
+    "Spread: Vegas has a pick'em · we have it even (our side: Vikings pick'em)")
+  assert.equal(spreadInfo({ ...g, spread_line: "" }, "nfl"), null)
+  assert.equal(spreadText({ home_team: "MIN", away_team: "BUF" }, "nfl"), "")
+  const card = detail(gamePickRowHtml(g, "nfl"))
+  assert.match(card, /Spread: Vegas has Bills by 3\.5/)
+  assert.match(card, /coin flip in testing/)
+  assert.doesNotMatch(gamePickRowHtml({ home_team: "NYY", away_team: "BOS", predicted_winner: "NYY", spread_line: 1, predicted_margin: 2 }, "mlb"), /Spread/)
+})
+
+test("NFL card: the case for the pick and what cuts against it", () => {
+  const { pickReasons, pickReasonsHtml } = require("./summary_render.js")
+  const g = { home_team: "MIN", away_team: "BUF", predicted_winner: "BUF", predicted_probability: 0.58,
+    market_predicted_winner_probability: 0.62,
+    away_off_rank: 1, home_off_rank: 28, away_def_rank: 23, home_def_rank: 2,
+    away_qb: "Josh Allen", home_qb: "Carson Wentz", away_qb_rank: 2, home_qb_rank: 25,
+    injury_out_home: "Kyler Murray (QB), Jauan Jennings (WR), Byron Murphy (CB)", injury_out_away: "" }
+  const r = pickReasons(g, "nfl")
+  assert.equal(r.pick, "Bills")
+  assert.deepEqual(r.for, [
+    "Better offense: 1st to the Vikings' 28th",
+    "The Vikings are without Kyler Murray at quarterback; Carson Wentz starts",
+    "Better quarterback play lately: Josh Allen ranks 2nd among this week's starters, Carson Wentz 25th",
+    "The Vikings are missing 2 regulars",
+    "Vegas agrees: Bills 62%",
+  ])
+  assert.deepEqual(r.against, ["The Vikings have the better defense: 2nd to 23rd", "Playing on the road"])
+  const html = pickReasonsHtml(g, "nfl")
+  assert.match(html, /For the Bills/)
+  assert.match(html, /class="whyAgainst"/)
+  // Close ranks aren't an edge either way; a pick against Vegas says so.
+  const even = pickReasons({ home_team: "KC", away_team: "DEN", predicted_winner: "KC", home_off_rank: 10, away_off_rank: 12,
+    market_predicted_winner_probability: 0.44 }, "nfl")
+  assert.deepEqual(even.for, ["Playing at home"])
+  assert.deepEqual(even.against, ["Vegas favors the Broncos (56%)"])
+})
+
+test("NFL card: who's out, or in doubt before the final report", () => {
+  const { injuryLineHtml } = require("./summary_render.js")
+  const g = { home_team: "MIN", away_team: "BUF", injury_report: "after" }
+  assert.equal(text(injuryLineHtml({ ...g, injury_out_home: "Kyler Murray (QB), Jauan Jennings (WR)", injury_out_away: "Josh Palmer (WR)" }, "nfl")),
+    "Out: Bills - Josh Palmer (WR) · Vikings - Kyler Murray (QB), Jauan Jennings (WR)")
+  // A repriced pick from before the by-team lists keeps its one note.
+  assert.equal(text(injuryLineHtml({ ...g, injury_note: "Jauan Jennings, Josh Palmer" }, "nfl")), "Out: Jauan Jennings, Josh Palmer")
+  assert.equal(text(injuryLineHtml(g, "nfl")), "The final injury report took no regulars out.")
+  assert.equal(text(injuryLineHtml({ home_team: "MIN", away_team: "BUF", injury_report: "before",
+    starters_in_doubt: "MIN QB Kyler Murray (questionable on the last report)" }, "nfl")),
+    "In doubt: MIN QB Kyler Murray (questionable on the last report)")
+  assert.equal(injuryLineHtml({ home_team: "MIN", away_team: "BUF", injury_report: "before" }, "nfl"), "")
+})
+
+test("NFL card and page: the track record behind a pick", () => {
+  const { trackRecordNote, trackRecordTableHtml } = require("./summary_render.js")
+  const table = [
+    { group: "confidence", label: "55–60%", low: "0.55", high: "0.6", season_games: "23", season_right: "16", backtest_games: "421", backtest_right: "240" },
+    { group: "confidence", label: "75%+", low: "0.75", high: "1.0", season_games: "0", season_right: "0", backtest_games: "", backtest_right: "" },
+    { group: "vegas", label: "with", low: "", high: "", season_games: "104", season_right: "74", backtest_games: "1650", backtest_right: "1122" },
+    { group: "vegas", label: "against", low: "", high: "", season_games: "31", season_right: "17", backtest_games: "310", backtest_right: "136" },
+  ]
+  const g = { home_team: "MIN", away_team: "BUF", predicted_winner: "BUF", predicted_probability: 0.58, market_predicted_winner_probability: 0.62 }
+  assert.equal(trackRecordNote(g, table), "Picks this sure (55–60%) have been right 57% of the time in testing (421 games), 16 of 23 this season.")
+  assert.equal(trackRecordNote({ ...g, market_predicted_winner_probability: 0.45 }, table),
+    "Picks this sure (55–60%) have been right 57% of the time in testing (421 games), 16 of 23 this season."
+    + " This one goes against Vegas's favorite; those picks have been right 44% of the time in testing (310 games), 17 of 31 this season.")
+  assert.equal(trackRecordNote({ ...g, predicted_probability: 0.9 }, table), "")   // a band with no games yet
+  assert.equal(trackRecordNote(g, []), "")
+  assert.match(detail(gamePickRowHtml(g, "nfl", { confidence: table })), /Picks this sure \(55–60%\)/)
+  const html = text(trackRecordTableHtml(table, { total_leans_won: 5, total_leans_lost: 3, total_lean_backtest_games: 237,
+    total_lean_backtest_won_rate: 0.62, spread_sides_won: 0, spread_sides_lost: 0, spread_backtest_games: 1923, spread_backtest_won_rate: 0.5 }))
+  assert.match(html, /We say 55–60%16 of 23 70%57% of 421/)
+  assert.match(html, /We pick against Vegas's favorite17 of 31 55%44% of 310/)
+  assert.match(html, /Over\/under leans5 of 8 63%62% of 237/)
+  assert.match(html, /Our side of the spread-50% of 1,923/)
+  assert.equal(trackRecordTableHtml([], {}), "")
 })

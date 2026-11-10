@@ -33,6 +33,11 @@ import pandas as pd
 
 from mlb_metrics import config, game_picks, kelly, market_odds, nfl_totals, nfl_weather
 
+# Shown on each game's card: each side's starting QB with his QB+ rating
+# (the export ranks the week's starters by it), and the players the final
+# injury report took out (nfl_whatif.card_details).
+CARD_COLUMNS = ["home_qb", "away_qb", "home_qb_plus", "away_qb_plus", "injury_out_home", "injury_out_away"]
+
 NFL_GAME_PREDICTION_COLUMNS = [
     "date", "season", "week", "game_id", "home_team", "away_team", "predicted_winner",
     "predicted_probability", "above_threshold", "metric", "actual_winner", "game_played", "model_version",
@@ -51,6 +56,9 @@ NFL_GAME_PREDICTION_COLUMNS = [
     # Why a Tuesday over/under lean is held (starters in doubt on the
     # latest injury report - nfl_whatif.starter_doubts), blank otherwise.
     "lean_hold",
+    # Vegas's point spread when the pick was made (positive = home team
+    # favored by that many), and the card's player details.
+    "market_spread", *CARD_COLUMNS,
 ]
 
 POINT_PREDICTION_COLUMNS = ["predicted_home_points", "predicted_away_points", "predicted_total"]
@@ -261,7 +269,9 @@ def select_game_picks(
     else:
         picks["market_total"] = pd.NA
     picks["actual_total"] = pd.NA
-    for column in [*nfl_weather.WEATHER_DISPLAY_COLUMNS, "lean_hold"]:
+    picks["market_spread"] = picks["game_id"].map(schedule_games_df.set_index("game_id")["spread_line"]) \
+        if "spread_line" in schedule_games_df.columns else pd.NA
+    for column in [*nfl_weather.WEATHER_DISPLAY_COLUMNS, "lean_hold", *CARD_COLUMNS]:
         picks[column] = picks["game_id"].map(schedule_games_df.set_index("game_id")[column]) \
             if column in schedule_games_df.columns else pd.NA
     picks["injury_report"] = "before"
@@ -286,11 +296,13 @@ def append_game_predictions(picks: pd.DataFrame, log_path: str) -> pd.DataFrame:
         combined = picks
 
     # The first-logged row for a game stays, except that display-only
-    # columns it predates (team EPA added 2026-10-17) are filled in from a
-    # re-run, so a week already logged still gets them.
+    # columns it predates (team EPA added 2026-10-17; the spread and the
+    # starting QBs 2026-11-10) are filled in from a re-run, so a week
+    # already logged still gets them.
     if os.path.exists(log_path):
         fresh = picks.drop_duplicates(subset=["game_id", "metric"]).set_index(["game_id", "metric"])
-        for column in nfl_totals.EPA_DISPLAY_COLUMNS:
+        for column in [*nfl_totals.EPA_DISPLAY_COLUMNS, "market_spread", "home_qb", "away_qb",
+                       "home_qb_plus", "away_qb_plus"]:
             if column not in fresh.columns:
                 continue
             if column not in combined.columns:
@@ -353,13 +365,31 @@ def resolve_game_predictions(log_path: str, schedules_df: pd.DataFrame) -> pd.Da
     # holds once the game is played - for every played game still without
     # one (finished games logged before this column existed included), so
     # each over/under lean can be graded against where the line closed.
+    played = (merged["_home_score"].notna() & merged["_away_score"].notna()).to_numpy()
     if "total_line" in schedules_df.columns:
         if "closing_total" not in log.columns:
             log["closing_total"] = float("nan")
         closing = log["game_id"].map(schedules_df.drop_duplicates("game_id").set_index("game_id")["total_line"])
-        played = (merged["_home_score"].notna() & merged["_away_score"].notna()).to_numpy()
         fill = log["closing_total"].isna() & played & closing.notna()
         log.loc[fill, "closing_total"] = closing[fill]
+
+    # The final margin (home minus away) and the closing spread (positive =
+    # home favored), for every played game still without them, so our side
+    # of the spread can be graded.
+    for column in ("actual_margin", "closing_spread"):
+        if column not in log.columns:
+            log[column] = float("nan")
+    margin = (pd.to_numeric(merged["_home_score"], errors="coerce")
+              - pd.to_numeric(merged["_away_score"], errors="coerce")).to_numpy(dtype=float)
+    fill = log["actual_margin"].isna().to_numpy() & played
+    if fill.any():
+        log.loc[fill, "actual_margin"] = margin[fill]
+    if "spread_line" in schedules_df.columns:
+        closing = pd.to_numeric(
+            log["game_id"].map(schedules_df.drop_duplicates("game_id").set_index("game_id")["spread_line"]), errors="coerce")
+        fill = (log["closing_spread"].isna() & played & closing.notna()).to_numpy()
+        if fill.any():
+            log.loc[fill, "closing_spread"] = closing.to_numpy(dtype=float)[fill]
 
     # Real units won/lost, only for newly-finalized rows where a real bet
     # was advised (bet_units > 0 - the single "was a bet advised" signal).

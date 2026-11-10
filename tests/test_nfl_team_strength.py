@@ -568,9 +568,12 @@ def test_assemble_team_metrics_real_season_shape():
         "Confidence", "pyth_Confidence", "Confidence_Delta", "true_power",
         "offensive_edge", "defensive_edge", "turnover_margin", "points_per_drive",
         "games_played", "win_rate", "win_rate_CI_Low", "win_rate_CI_High",
+        "elo", *nfl_team_strength.PASS_RUSH_COLUMNS,
     }
     assert set(master.columns) == expected_cols
-    assert not master.isna().any().any()
+    # This play-by-play has no pass/rush flags, so those four are blank; everything else is filled.
+    assert not master.drop(columns=nfl_team_strength.PASS_RUSH_COLUMNS).isna().any().any()
+    assert master["elo"].between(1300, 1700).all() and master["elo"].nunique() > 1
     assert (master["games_played"] == 4).all()
 
 

@@ -164,6 +164,30 @@ def write_nfl_game_picks_export(predictions_log_path: str, output_dir: str) -> N
     picks.to_csv(os.path.join(output_dir, "nfl_game_picks_picks.csv"), index=False)
     summary.to_csv(os.path.join(output_dir, "nfl_game_picks_summary.csv"), index=False)
     by_version_summary.to_csv(os.path.join(output_dir, "nfl_game_picks_summary_by_version.csv"), index=False)
+    # The track record behind a pick: how often picks this sure, and picks
+    # with or against Vegas, have been right - this season and in the
+    # model's backtest.
+    backtest = pd.read_csv(config.NFL_PICK_CONFIDENCE_BACKTEST_PATH) \
+        if os.path.exists(config.NFL_PICK_CONFIDENCE_BACKTEST_PATH) else None
+    nfl_game_evaluation.confidence_table(picks, backtest).to_csv(
+        os.path.join(output_dir, "nfl_pick_confidence.csv"), index=False)
+
+
+ELO_FIRST_SEASON = 2016
+
+
+def _elo_schedules(raw_dir: str, fresh_schedules: pd.DataFrame, season: int, week: int) -> pd.DataFrame:
+    """Every completed game to rate teams' Elo from
+    (nfl_team_strength.compute_elo_ratings): each earlier season on file
+    since ELO_FIRST_SEASON, plus this season's games before `week`."""
+    frames = []
+    for earlier in range(ELO_FIRST_SEASON, season):
+        table = nfl_data.load_persisted_table(raw_dir, "schedules", earlier)
+        if table is not None and not table.empty:
+            frames.append(table)
+    if fresh_schedules is not None and not fresh_schedules.empty and "week" in fresh_schedules.columns:
+        frames.append(fresh_schedules[(fresh_schedules["season"] == season) & (fresh_schedules["week"] < week)])
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
 def _history_before(fresh: dict, prior_season: dict, week: int, rosters_through: int | None = None) -> dict:
@@ -197,7 +221,8 @@ def _history_before(fresh: dict, prior_season: dict, week: int, rosters_through:
     return history
 
 
-def _write_last_week_whatif(fresh: dict, prior_season: dict, season: int, week: int, output_dir: str) -> None:
+def _write_last_week_whatif(fresh: dict, prior_season: dict, season: int, week: int, output_dir: str,
+                            raw_dir: str = config.NFL_RAW_DATA_DIR) -> None:
     """The "What if?" panel's last-week view: the week just finished,
     replayed with only what was known before it (history, rosters and the
     live model, market tie-break and calibration exactly as a forward run
@@ -213,7 +238,8 @@ def _write_last_week_whatif(fresh: dict, prior_season: dict, season: int, week: 
         return
     history = _history_before(fresh, prior_season, last, rosters_through=last)
     master = nfl_team_strength.assemble_team_metrics(
-        history["schedules"], history["team_stats"], history["pbp"], current_season=season
+        history["schedules"], history["team_stats"], history["pbp"], current_season=season,
+        elo_schedules_df=_elo_schedules(raw_dir, schedules, season, last),
     )
     qb_continuity = nfl_team_strength.compute_qb_continuity_adjustment(
         history["snap_counts"], history["weekly"], history["rosters_weekly"]
@@ -320,7 +346,8 @@ def run(
             # season-carryover feature exists to handle correctly (real
             # follow-up, 2026-09-04).
             master = nfl_team_strength.assemble_team_metrics(
-                history["schedules"], history["team_stats"], history["pbp"], current_season=season
+                history["schedules"], history["team_stats"], history["pbp"], current_season=season,
+                elo_schedules_df=_elo_schedules(raw_dir, schedules, season, week),
             )
             qb_continuity = nfl_team_strength.compute_qb_continuity_adjustment(
                 history["snap_counts"], history["weekly"], history["rosters_weekly"]
@@ -330,7 +357,7 @@ def run(
                 (schedules["season"] == season) & (schedules["game_type"] == "REG") & (schedules["week"] == week)
             ][["game_id", "season", "week", "home_team", "away_team", "home_qb_id", "away_qb_id",
                "gameday", "home_moneyline", "away_moneyline"]]
-            for column in ("total_line", "roof", "stadium_id", "gametime", "home_qb_name", "away_qb_name"):
+            for column in ("total_line", "spread_line", "roof", "stadium_id", "gametime", "home_qb_name", "away_qb_name"):
                 if column in schedules.columns:
                     this_week_games[column] = schedules.loc[this_week_games.index, column]
             # The feed's listed starters can be stale (a QB on injured
@@ -457,8 +484,13 @@ def run(
                 history.get("snap_counts", pd.DataFrame()),
             )
             this_week_games["lean_hold"] = this_week_games["game_id"].map(doubts)
+            # Each card's starting QBs (and where they rank this week), and
+            # for a repriced game the players the final report took out.
+            card = nfl_whatif.card_details(whatif)
+            for column in card.columns:
+                this_week_games[column] = this_week_games["game_id"].map(card[column])
             nfl_whatif.save_json(os.path.join(output_dir, "nfl_whatif.json"), whatif)
-            _write_last_week_whatif(fresh, prior_season, season, week, output_dir)
+            _write_last_week_whatif(fresh, prior_season, season, week, output_dir, raw_dir)
 
             # The weather at kickoff (nfl_weather.py) for every game still
             # to be played: Tuesday's pick gets the early forecast (five or
@@ -511,8 +543,12 @@ def run(
                 after_probs = probs.copy()
                 after_probs["home_win_probability"] = after_probs["game_id"].map(
                     {g: r["probability"] for g, r in repriced.items()}).fillna(after_probs["home_win_probability"])
+                after_games = this_week_games.copy()
+                after_card = nfl_whatif.card_details(whatif, after_report=True)
+                for column in after_card.columns:
+                    after_games[column] = after_games["game_id"].map(after_card[column])
                 after = nfl_game_predictions.select_game_picks(
-                    after_probs, this_week_games, market_probabilities=market, confidence=master,
+                    after_probs, after_games, market_probabilities=market, confidence=master,
                     point_predictions=points,
                 )
                 after = after[after["game_id"].isin(repriced)].copy()

@@ -3582,6 +3582,55 @@ swapped into a frozen model), this season only, stretching extreme ratings,
 counting last season more (`backtest_nfl_defense_carryover.py`,
 `backtest_nfl_extreme_shrink.py`).
 
+**Elo, pass/rush EPA and a margin model, averaged with v3 (2026-11-10,
+model v4).** Asked to improve the NFL models any way that worked. The win
+chance is now the plain average (`ml_models.BlendedWinModel`) of v3's
+logistic regression and a ridge regression of the final margin
+(`ml_models.MarginWinModel`) on seven inputs: the Elo difference
+(`nfl_team_strength.compute_elo_ratings`, every season since 2016 carried
+over), pass and rush EPA per play differences on offense and defense
+(`compute_pass_rush_epa`), and each starter's QB+. Every week of 2017-2026
+replayed, scored walk-forward on 2019-2026 (1,999 games, Vegas 0.6094):
+
+| Model | Log loss | vs v3 (95% CI) | Seasons better | Picks right |
+| --- | --- | --- | --- | --- |
+| v3 | 0.6362 | | | 64.5% |
+| margin model alone | 0.6310 | -0.0052 (-0.0117 to +0.0015) | 6 of 8 | 65.2% |
+| v4, the two averaged | 0.6307 | -0.0054 (-0.0090 to -0.0021) | 7 of 8 | 64.2% |
+
+The average ships because its gain is the steady one. Picks are right
+about as often as before; the chances attached to them are better. What
+didn't help is listed in `scripts/train_nfl_elo_margin_model.py`
+(opponent-adjusted pass/rush EPA, success rate, pace, rest, other Elo
+settings). The points model was swept too and left alone: every setting
+within its own noise (`config.NFL_TOTALS_QB_GAMES` comment), and
+opponent adjustment that counts later games no better
+(`scripts/backtest_nfl_opponent_adjusted.py`).
+
+**What the cards add for someone making picks (2026-11-10).** "What is
+missing that may not inform the models but would inform the user making
+picks?" Three things, on the home page's NFL cards and the NFL page:
+- *The case for and against* (`summary_render.js` `pickReasons`): a gap of
+  6+ places in offense, defense or starting-QB rank, a QB or 2+ more
+  regulars out, home or road, and whether Vegas agrees. The log now keeps
+  each side's starter and QB+ and who the final report took out by team
+  (`nfl_whatif.card_details`); the export ranks a week's starters once 16
+  are rated.
+- *Track record* (`nfl_game_evaluation.confidence_counts`,
+  `docs/data/nfl_pick_confidence.csv`): how often picks this sure, and
+  picks with or against Vegas's favorite, have been right, this season
+  next to the walk-forward backtest (`data/backtest/nfl_pick_confidence_backtest.csv`,
+  with the live market tie-break applied). Backtest: 50-55% picks right
+  48%, 55-60% 58%, 60-65% 67%, 65-70% 72%, 70-75% 71%, 75%+ 79%; with
+  Vegas's favorite 68% of 1,739, against it 43% of 260.
+- *The spread, as context* (`nfl_game_evaluation.spread_sides`): Vegas's
+  spread next to our margin (the win chance read back off a 13.1-point
+  normal curve) and the side that puts us on, graded. Not a lean: against
+  closing spreads 2019-2026 our side won 49-51% of ~1,900 games with every
+  margin tried (v3's, the margin model's, the points model's, a blend) at
+  every gap from 0 to 6 points, and none added to the spread in a
+  regression (p 0.5-0.98).
+
 **Listed starters are checked against the roster**
 (`nfl_game_picks.correct_listed_starters`, 2026-10-31). The schedule
 feed's `home_qb_id`/`away_qb_id` can be stale: it kept listing Jalen Hurts

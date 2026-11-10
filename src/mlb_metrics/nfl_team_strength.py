@@ -507,6 +507,91 @@ def compute_team_epa_per_play(
     return result.reset_index()
 
 
+def compute_elo_ratings(schedules_df: pd.DataFrame, current_season: int = None) -> pd.Series:
+    """Each team's Elo rating after every completed regular-season game in
+    `schedules_df` (pass only games before the one being predicted - and
+    as many seasons back as there are, since Elo's memory is the point):
+    the standard recipe - config.NFL_ELO_K points at stake a game, scaled
+    by the margin (log of it, less for a favorite), the home team spotted
+    config.NFL_ELO_HOME_EDGE, and each rating pulled a third of the way
+    back to average between seasons (config.NFL_ELO_SEASON_KEEP). Indexed
+    by today's team codes (nfl_totals._canonical). `current_season` after
+    the last game's season applies that pull once more - week 1."""
+    from mlb_metrics import nfl_totals
+
+    start = config.NFL_ELO_START
+    games = schedules_df
+    if "game_type" in games.columns:
+        games = games[games["game_type"] == "REG"]
+    games = games.dropna(subset=["home_score", "away_score"])
+    order = [c for c in ("season", "week", "gameday", "game_id") if c in games.columns]
+    games = games.sort_values(order).assign(
+        _home=nfl_totals._canonical(games["home_team"]), _away=nfl_totals._canonical(games["away_team"]))
+    elo, last = {}, None
+    for season, home, away, home_score, away_score in zip(
+            games["season"], games["_home"], games["_away"], games["home_score"], games["away_score"]):
+        if last is not None and season != last:
+            elo = {t: start + (r - start) * config.NFL_ELO_SEASON_KEEP for t, r in elo.items()}
+        last = season
+        home_elo, away_elo = elo.get(home, start), elo.get(away, start)
+        gap = home_elo + config.NFL_ELO_HOME_EDGE - away_elo
+        expected = 1 / (1 + 10 ** (-gap / 400))
+        margin = home_score - away_score
+        result = 1.0 if margin > 0 else 0.0 if margin < 0 else 0.5
+        winner_gap = gap if margin > 0 else -gap
+        scale = np.log(abs(margin) + 1) * 2.2 / (winner_gap * 0.001 + 2.2)
+        shift = config.NFL_ELO_K * scale * (result - expected)
+        elo[home], elo[away] = home_elo + shift, away_elo - shift
+    if current_season is not None and last is not None and current_season > last:
+        elo = {t: start + (r - start) * config.NFL_ELO_SEASON_KEEP for t, r in elo.items()}
+    return pd.Series(elo, dtype=float, name="elo")
+
+
+PASS_RUSH_PBP_COLUMNS = {"game_id", "season", "week", "season_type", "posteam", "defteam", "epa", "pass", "rush"}
+PASS_RUSH_COLUMNS = ["pass_off_epa", "pass_def_epa", "rush_off_epa", "rush_def_epa"]
+
+
+def compute_pass_rush_epa(pbp_df: pd.DataFrame) -> pd.DataFrame:
+    """One row per team (today's codes): EPA per play on its dropbacks
+    (`pass_off_epa`) and designed runs (`rush_off_epa`), and allowed on
+    each (`pass_def_epa`, `rush_def_epa`), as the gap from the league's
+    rate. Each is a blend of the team's last 17, 8 and 4 games
+    (config.NFL_TOTALS_WINDOWS), each window pulled toward the league by
+    config.NFL_PASS_RUSH_SHRINK_PLAYS plays. Kneels and spikes are out.
+    Passing and rushing are kept apart because they aren't worth the same:
+    a team's passing says more about its next game than its running."""
+    from mlb_metrics import nfl_totals
+
+    empty = pd.DataFrame(columns=["team", *PASS_RUSH_COLUMNS])
+    if pbp_df is None or pbp_df.empty or not PASS_RUSH_PBP_COLUMNS <= set(pbp_df.columns):
+        return empty
+    p = pbp_df[(pbp_df["season_type"] == "REG") & pbp_df["epa"].notna() & pbp_df["posteam"].notna()
+               & pbp_df["defteam"].notna()]
+    for flag in ("qb_kneel", "qb_spike"):
+        if flag in p.columns:
+            p = p[p[flag] != 1]
+    if p.empty:
+        return empty
+    shrink = config.NFL_PASS_RUSH_SHRINK_PLAYS
+    out = {}
+    for kind in ("pass", "rush"):
+        plays = p[p[kind] == 1]
+        games = plays.groupby(["game_id", "season", "week", "posteam", "defteam"], as_index=False).agg(
+            s=("epa", "sum"), n=("epa", "size")).sort_values(["season", "week"])
+        league = games["s"].sum() / max(1, games["n"].sum())
+        for side, key in (("off", "posteam"), ("def", "defteam")):
+            rating = None
+            for n_games, weight in config.NFL_TOTALS_WINDOWS:
+                window = games.groupby(key).tail(n_games).groupby(key).agg(s=("s", "sum"), n=("n", "sum"))
+                rate = (window["s"] + shrink * league) / (window["n"] + shrink)
+                rating = rate * weight if rating is None else rating.add(rate * weight, fill_value=0)
+            out[f"{kind}_{side}_epa"] = rating - league
+    result = pd.DataFrame(out)
+    result.index = nfl_totals._canonical(pd.Series(result.index, index=result.index))
+    result.index.name = "team"
+    return result.groupby(level=0).mean().reset_index()[["team", *PASS_RUSH_COLUMNS]]
+
+
 def compute_team_turnover_margin(
     team_stats_df: pd.DataFrame, current_season: int = None,
     carryover_regression: float = None, carryover_prior_strength: float = None, season_aware: bool = False,
@@ -675,7 +760,7 @@ def compute_qb_continuity_adjustment(
 def assemble_team_metrics(
     schedules_df: pd.DataFrame, team_stats_df: pd.DataFrame, pbp_df: pd.DataFrame, current_season: int = None,
     carryover_regression: float = None, carryover_prior_strength: float = None, season_aware: bool = False,
-    opponent_adjustment_weight: float = None,
+    opponent_adjustment_weight: float = None, elo_schedules_df: pd.DataFrame = None,
 ) -> pd.DataFrame:
     """Build the final NFL team output table - direct structural port of
     teams.assemble_team_metrics. See module docstring for the full
@@ -704,7 +789,11 @@ def assemble_team_metrics(
     "config default, explicit override" pattern (None ->
     config.NFL_OPPONENT_ADJUSTMENT_WEIGHT) letting
     scripts/backtest_nfl_opponent_adjustment.py sweep candidates the same
-    way."""
+    way. `elo_schedules_df` is every completed game to rate teams' Elo
+    from (`compute_elo_ratings` - as many seasons back as there are, where
+    `schedules_df` is only last season and this one); without it Elo
+    starts from `schedules_df`. The table also carries `elo` and
+    PASS_RUSH_COLUMNS (`compute_pass_rush_epa`) for the v4 win model."""
     current_season = int(schedules_df["season"].max()) if current_season is None else current_season
     record = build_team_record(schedules_df)
     current_strength, sos = compute_strength_metrics(record)
@@ -773,10 +862,21 @@ def assemble_team_metrics(
     win_rate_ci = teams.compute_team_win_rate_ci(record)
     master = master.merge(win_rate_ci, on="team", how="left")
 
+    # The v4 win model's inputs, keyed by today's team codes (the schedule
+    # keeps OAK/SD/STL for the seasons they played under them).
+    from mlb_metrics import nfl_totals
+    today = nfl_totals._canonical(master["team"])
+    elo = compute_elo_ratings(schedules_df if elo_schedules_df is None else elo_schedules_df, current_season)
+    master["elo"] = today.map(elo).fillna(config.NFL_ELO_START).to_numpy()
+    pass_rush = compute_pass_rush_epa(pbp_df).set_index("team")
+    for column in PASS_RUSH_COLUMNS:
+        master[column] = today.map(pass_rush[column]).to_numpy() if column in pass_rush.columns else float("nan")
+
     output_columns = [
         "team", "current", "Strength", "pyth_Strength", "SOS", "pyth_SOS",
         "Confidence", "pyth_Confidence", "Confidence_Delta", "true_power",
         "offensive_edge", "defensive_edge", "turnover_margin", "points_per_drive",
         "games_played", "win_rate", "win_rate_CI_Low", "win_rate_CI_High",
+        "elo", *PASS_RUSH_COLUMNS,
     ]
     return master[output_columns]

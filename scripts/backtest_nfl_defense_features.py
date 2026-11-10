@@ -172,7 +172,8 @@ def main():
     snaps = carry._snapshots()
     games = defense_games()
     artifact = ml_models.load_model(config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH)
-    c = artifact["model"].get_params()["C"] if artifact else 1.0
+    # The live logistic regression's C when these were run (v3); the v4 margin model has none.
+    c = artifact["model"].get_params().get("C", 3.0) if artifact else 1.0
     results = {}
     live_rows = None
     for variant in VARIANTS:

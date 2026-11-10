@@ -18,7 +18,13 @@ side's adjusted EPA then goes through the usual recency windows
 backtest_nfl_totals.py (history = prior season + this season's earlier
 weeks; the regression refit on earlier seasons).
 
-RESULT: not run yet (prepared 2026-11-08; the first run was stopped).
+RESULT (2026-11-10; walk-forward, 8 seasons; live MAE 10.475, Vegas 10.39):
+    adjusted at half strength  MAE 10.472 (-0.003, 95% CI -0.014 to +0.006), better in 4 of 8 seasons
+    adjusted at full strength  MAE 10.469 (-0.006, 95% CI -0.025 to +0.011), better in 4 of 8 seasons
+  Over/under leans (5+ points from Vegas): live right 62.0% of 237, half
+  61.7% of 240, full 61.3% of 235. Dallas's defense, the case that
+  prompted this, is 31st of 32 every way (+0.196, +0.199, +0.200 EPA per
+  play allowed). No gain worth a change: the points model is left as it is.
 
 Usage:
     python scripts/backtest_nfl_opponent_adjusted.py

@@ -1198,6 +1198,21 @@ template already relies on these exact names. */
 .gameDetail .total{font-size:12px;color:var(--text-dim);margin-top:6px;}
 .gameDetail .totalNote{font-size:11px;color:var(--text-dim);opacity:.85;}
 .gameDetail .leanNote{color:var(--text);opacity:1;font-weight:600;}
+.pickWhy{margin-top:10px;}
+.pickWhyHead{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);margin-top:6px;}
+.pickWhy ul{list-style:none;margin:2px 0 0;padding:0;font-size:13px;}
+.pickWhy li{position:relative;padding:1px 0 1px 18px;}
+.pickWhy li::before{position:absolute;left:0;font-weight:700;}
+.pickWhy .whyFor li::before{content:"+";color:var(--success);}
+.pickWhy .whyAgainst li::before{content:"−";color:var(--danger);}
+.injuryLine{margin-top:8px;font-size:12px;color:var(--text);}
+.gameDetail .trackNote{margin-top:6px;font-size:12px;}
+.pickCard .pickNote{font-size:12px;color:var(--text-dim);margin-top:4px;}
+.pickCard .pickWhy,.pickCard .injuryLine{text-align:left;}
+.trackRecord{width:auto;min-width:min(100%,520px);border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums;margin:0 0 18px;}
+.trackRecord th,.trackRecord td{padding:6px 10px 6px 0;text-align:right;border-bottom:1px solid var(--border);}
+.trackRecord th:first-child,.trackRecord td:first-child{text-align:left;}
+.trackRecord th{font-size:12px;color:var(--text-dim);font-weight:600;}
 .gameWeather{display:flex;align-items:center;gap:8px;margin-top:10px;color:var(--text);}
 .gameWeather .wxIcon{font-size:24px;line-height:1;}
 .pickBar{margin-top:4px;}

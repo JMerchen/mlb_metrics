@@ -321,3 +321,41 @@ def test_starter_doubts_flags_a_listed_qb_or_several_regulars_on_the_last_report
     assert "g2" not in nfl_whatif.starter_doubts(data, report2, rosters2, None)
     assert "g3" not in notes
     assert nfl_whatif.starter_doubts(data, pd.DataFrame(), rosters, None) == {}
+
+
+def _card_data():
+    return {"games": [
+        {"game_id": "g1",
+         "home": {"team": "MIN", "qbs": [{"id": "murray", "name": "Kyler Murray", "qb_plus": -0.03, "listed": True},
+                                         {"id": "wentz", "name": "Carson Wentz", "qb_plus": -0.10, "listed": False}],
+                  "regulars": [{"id": "wr1", "name": "Jauan Jennings", "group": "WR", "share": 0.8},
+                               {"id": "cb1", "name": "Byron Murphy", "group": "CB", "share": 0.9}]},
+         "away": {"team": "BUF", "qbs": [{"id": "allen", "name": "Josh Allen", "qb_plus": 0.20, "listed": True}],
+                  "regulars": [{"id": "wr2", "name": "Josh Palmer", "group": "WR", "share": 0.5}]},
+         "injury_report": {"out": {"home": ["wr1", "cb1"], "away": []}, "qb": {"home": "wentz"}, "note": ""}},
+        {"game_id": "g2",
+         "home": {"team": "KC", "qbs": [{"id": "mahomes", "name": "Patrick Mahomes", "qb_plus": 0.10, "listed": True}], "regulars": []},
+         "away": {"team": "DEN", "qbs": [], "regulars": []}},
+    ]}
+
+
+def test_card_details_names_each_starting_qb_with_his_rating():
+    card = nfl_whatif.card_details(_card_data())
+    assert list(card.columns) == nfl_whatif.QB_CARD_COLUMNS
+    assert card.loc["g1", "home_qb"] == "Kyler Murray" and card.loc["g1", "away_qb"] == "Josh Allen"
+    assert card.loc["g1", "away_qb_plus"] == 0.20 and card.loc["g1", "home_qb_plus"] == -0.03
+    assert pd.isna(card.loc["g2", "away_qb"]) and pd.isna(card.loc["g2", "away_qb_plus"])
+
+
+def test_card_details_after_the_report_lists_who_is_out_by_team_and_starts_the_backup():
+    card = nfl_whatif.card_details(_card_data(), after_report=True)
+    # The QB first, then the regulars from most used to least.
+    assert card.loc["g1", "injury_out_home"] == "Kyler Murray (QB), Byron Murphy (CB), Jauan Jennings (WR)"
+    assert card.loc["g1", "injury_out_away"] is None or pd.isna(card.loc["g1", "injury_out_away"])
+    assert card.loc["g1", "home_qb"] == "Carson Wentz" and card.loc["g1", "home_qb_plus"] == -0.10
+    # A game the report isn't final for keeps its listed starter and has nobody out.
+    assert card.loc["g2", "home_qb"] == "Patrick Mahomes" and pd.isna(card.loc["g2", "injury_out_home"])
+
+
+def test_card_details_of_no_games_is_empty():
+    assert nfl_whatif.card_details({"games": []}).empty
