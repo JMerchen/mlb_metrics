@@ -2902,3 +2902,53 @@ PLAYER_NAME_ALIASES: dict[str, str] = {}
 # with this many pseudo at-bats (plate appearances, for on-base) before it
 # becomes the bar a hitter's results are measured against.
 PITCHERS_FACED_SHRINK = 100
+
+
+# ---------------------------------------------------------------------------
+# College basketball (cbb_ratings.py; user request 2026-11-10, "create a
+# college basketball tab to try and predict March madness").
+# ---------------------------------------------------------------------------
+CBB_SEASON = 2027                         # the season that ends in this year
+CBB_FIRST_SEASON = 2008                   # hoopR's ESPN data starts 2003; box scores are solid from here
+# A free-throw trip's share of a possession, and the scoring and pace of an
+# average Division I game (used only where a box score is missing and
+# before a season has games).
+CBB_FREE_THROW_POSSESSION_WEIGHT = 0.475
+CBB_POINTS_PER_POSSESSION = 1.03
+CBB_AVERAGE_TEMPO = 68.0
+# Rating settings, tuned in scripts/backtest_cbb_ratings.py: every season
+# from 2009 replayed week by week (ratings refit each week from earlier
+# games only), scored on 2010-2026. With these: 92,350 games, margin off by
+# 8.84, favorite won 72.9%, log loss 0.5249; NCAA tournament games from
+# Selection Sunday's ratings (2009-2026): favorite won 791 of 1,130, log
+# loss 0.549. What the sweeps found is in that script's docstring.
+# Strengths are in games: a rating is pulled toward its prior as if the
+# prior were that many extra games.
+CBB_RIDGE_GAMES = 4.0                     # a team with no prior, toward average
+CBB_PRIOR_GAMES = 6.0                     # toward last season's rating...
+CBB_PRIOR_CARRYOVER = 0.85                # ...of which this share carries over
+CBB_TEMPO_CARRYOVER = 0.7
+CBB_TEMPO_RIDGE_GAMES = 3.0
+CBB_HOME_EDGE_PRIOR = 2.6                 # points per 100 possessions, each end
+CBB_HOME_EDGE_PRIOR_GAMES = 1e7           # held there: a freely fit edge soaks up November's mismatches
+# A team in the preseason AP top 25 starts this much higher (net points per
+# 100 possessions) than its carryover: 2023-26, those 100 teams finished
+# 4.5 better than last season's rating alone said (p 0.0007); where in the
+# 25 added nothing. The poll sees the transfers and departures we don't.
+CBB_AP_PRESEASON_BONUS = 4.5
+CBB_HALF_LIFE_DAYS = None                 # None = every game counts the same
+CBB_MARGIN_CAP = None                     # None = no cap on one game's efficiency
+CBB_MARGIN_SIGMA = 11.2                   # points a game lands from its expected margin (sd)
+# The bracket (cbb_bracket.py). Which regions meet in the national
+# semifinals changes every year and isn't in the data until those games are
+# scheduled: add the season here on Selection Sunday, e.g.
+# {2027: [["East", "West"], ["South", "Midwest"]]}. Until then it's assumed.
+CBB_FINAL_FOUR_PAIRS = {}
+CBB_BRACKET_SIMS = 20000
+# The daily run (cbb_pipeline.py): a pick is logged for every game between
+# Division I teams from today through this many days on (the first one
+# logged for a game is the one graded), and the page lists the games from
+# this many days back.
+CBB_PICK_DAYS = 2
+CBB_RESULT_DAYS = 2
+CBB_MODEL_VERSION = "v1"

@@ -142,6 +142,25 @@ statEl.innerHTML = gamePicksRecordHtml(data.summary, data.summary.current)
 listEl.innerHTML = gamePicksListHtml(data.upcomingPicks, sport, {confidence: data.confidence})
 }
 
+// College hoops: today's five best games by rating (cbb_render.js), shown
+// only on a day with games. The full list and the bracket odds are on the
+// College Hoops page.
+async function loadCollegeHoops(){
+try{
+const response = await fetch(`./data/cbb.json?t=${Date.now()}`, {cache: "no-store"})
+if(!response.ok){ return }
+const data = await response.json()
+const byId = cbbTeamIndex(data.teams)
+const today = localIsoDate()
+const games = (data.games || []).filter(g => g.date === today)
+if(!games.length){ return }
+document.getElementById('cbb-list').innerHTML = cbbGamesHtml(games, byId, today, 5).replace(/<div class="cbbMore">[\s\S]*?<\/div>/, "")
+const record = data.record || {}
+document.getElementById('cbb-stat-line').innerHTML = record.games ? `Right on <b>${record.right} of ${record.games}</b> games so far.` : ""
+document.getElementById('cbb-panel').style.display = ""
+}catch(e){ console.log("no cbb.json yet", e) }
+}
+
 (async () => {
 
 const [bts, mlb, nfl] = await Promise.all([
@@ -164,5 +183,6 @@ document.getElementById('bts-panel').style.display = 'none'
 }
 renderGamePicks('mlb', mlb)
 renderGamePicks('nfl', nfl)
+loadCollegeHoops()
 
 })()

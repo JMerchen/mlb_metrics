@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8">
+
+<title>Stats Reference - College Hoops</title>
+
+<link
+rel="icon"
+type="image/svg+xml"
+href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjQ2IiBoZWlnaHQ9IjQ2IiByeD0iMTIiIGZpbGw9IiMxNDE3MWMiIHN0cm9rZT0iIzNhNDE1MCIvPjx0ZXh0IHg9IjE3IiB5PSIyOSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9Ii1hcHBsZS1zeXN0ZW0sIEJsaW5rTWFjU3lzdGVtRm9udCwgJ1NlZ29lIFVJJywgUm9ib3RvLCBJbnRlciwgSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC13ZWlnaHQ9IjkwMCIgZm9udC1zaXplPSIyMSIgZmlsbD0iI2M4MTAyZSI+UzwvdGV4dD48dGV4dCB4PSIzMSIgeT0iMjkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSItYXBwbGUtc3lzdGVtLCBCbGlua01hY1N5c3RlbUZvbnQsICdTZWdvZSBVSScsIFJvYm90bywgSW50ZXIsIEhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtd2VpZ2h0PSI5MDAiIGZvbnQtc2l6ZT0iMjEiIGZpbGw9IiNmZmZmZmYiPlI8L3RleHQ+PHJlY3QgeD0iMTEiIHk9IjMzIiB3aWR0aD0iMjYiIGhlaWdodD0iMi42IiByeD0iMS4zIiBmaWxsPSIjZjJhOTNjIi8+PC9zdmc+">
+
+<script src="./mode.js"></script>
+
+<link
+rel="stylesheet"
+href="./style.css">
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link rel="manifest" href="./manifest.webmanifest">
+
+<meta name="theme-color" content="#0b0d10">
+
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+
+<meta name="apple-mobile-web-app-title" content="Stats Reference">
+
+<style>
+/* This page's own football-green theme, overriding style.css's shared
+baseball-orange brand accent - NFL only, no other page is affected since
+this block isn't in the shared stylesheet. */
+:root{
+--accent:#4caf6b;
+--accent-strong:#7ed9a0;
+--on-accent:#0c1f13;
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="siteHeader">
+
+<div class="brandRow">
+<svg class="brandBadge" viewBox="0 0 48 48" role="img" aria-label="Stats Reference" xmlns="http://www.w3.org/2000/svg">
+<rect x="1" y="1" width="46" height="46" rx="12" fill="#14171c" stroke="#3a4150"/><text x="17" y="29" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, Helvetica, Arial, sans-serif" font-weight="900" font-size="21" fill="#c8102e">S</text><text x="31" y="29" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, Helvetica, Arial, sans-serif" font-weight="900" font-size="21" fill="#ffffff">R</text><rect x="11" y="33" width="26" height="2.6" rx="1.3" fill="#f2a93c"/>
+</svg>
+<div class="brandText">
+<h1>Stats <span class="brandAccent">Reference</span></h1>
+<span class="brandTag">The numbers driving the leagues, by Jackson Merchen</span>
+</div>
+</div>
+
+<div class="tabGroup pageTabs">
+<a class="tabButton" href="./index.html">Today</a>
+<a class="tabButton" href="./predictive.html">MLB</a>
+<a class="tabButton" href="./nfl.html">NFL</a>
+<a class="tabButton active" href="./cbb.html"><span class="navLong">College </span>Hoops</a>
+<a class="tabButton" href="./methodology.html">How it works</a>
+</div>
+
+</div>
+
+<div class="sportHeader">
+<svg class="sportMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+<circle cx="16" cy="16" r="13.5" fill="#e0762b" stroke="#8a3f10" stroke-width="1"/>
+<path d="M2.5 16 H29.5 M16 2.5 V29.5" stroke="#3a1d08" stroke-width="1.3" fill="none"/>
+<path d="M6.5 6.5 C12 11, 12 21, 6.5 25.5 M25.5 6.5 C20 11, 20 21, 25.5 25.5" stroke="#3a1d08" stroke-width="1.3" fill="none"/>
+</svg>
+<h2 class="sportHeading">College <span class="brandAccent">Hoops</span></h2>
+</div>
+
+<p class="subtitle" id="cbbUpdated">Men's Division I. Loading...</p>
+
+<div class="tabGroup" id="cbbTabs">
+<button class="tabButton active" data-cbb-tab="madness" onclick="selectCbbTab('madness')">March Madness</button>
+<button class="tabButton" data-cbb-tab="games" onclick="selectCbbTab('games')">Games</button>
+<button class="tabButton" data-cbb-tab="rankings" onclick="selectCbbTab('rankings')">Rankings</button>
+<button class="tabButton" data-cbb-tab="matchup" onclick="selectCbbTab('matchup')">Matchup</button>
+</div>
+
+<div id="cbbMadnessSection">
+
+<h3>Who wins it all</h3>
+
+<p class="sectionIntro" id="cbbBracketNote">Loading...</p>
+
+<div class="streakStats" id="cbbFavorites"></div>
+
+<h3>Every team's chances</h3>
+
+<p class="sectionIntro">How often each team got that far. "Win a game" is winning its first game of the main bracket.</p>
+
+<div class="tableScroll" id="cbbOdds">Loading...</div>
+<button class="whatIfAction" id="cbbOddsMore" style="display:none">Show all 68 teams</button>
+
+<h3>The bracket, first round</h3>
+
+<p class="sectionIntro">Each region from the top of the bracket down, with each side's chance of winning its first game.</p>
+
+<div id="cbbUpsets"></div>
+
+<div class="cbbRegions" id="cbbRegions"></div>
+
+<div id="cbbBacktestSection" style="display:none">
+<h3>How this would have done</h3>
+<div class="tableScroll" id="cbbBacktest"></div>
+</div>
+
+</div>
+
+<div id="cbbGamesSection" style="display:none">
+
+<h3>Game picks</h3>
+
+<p class="sectionIntro">Every game between two Division I teams, picked the morning of or before. The expected score comes from each team's offense against the other's defense and the pace both play at.</p>
+
+<div class="cbbRecordLine" id="cbbRecord">Loading...</div>
+
+<div class="tabGroup" id="cbbDays"></div>
+
+<div id="cbbGames">Loading...</div>
+<button class="whatIfAction" id="cbbGamesMore" style="display:none">Show every game</button>
+
+</div>
+
+<div id="cbbRankingsSection" style="display:none">
+
+<h3>Team rankings</h3>
+
+<p class="sectionIntro">Rating is how many points better than an average Division I team a team is over 100 possessions (about a game and a half), after adjusting for who it has played and where. It splits into offense (points scored above average) and defense (points allowed below average), each with its national rank. Early in the season the ratings lean on last season's; by January this season's games carry them.</p>
+
+<div class="cbbFilters">
+<input type="search" id="cbbSearch" placeholder="Find a team" aria-label="Find a team">
+<select id="cbbConference" aria-label="Conference"><option value="">All conferences</option></select>
+</div>
+
+<div class="tableScroll" id="cbbRankings">Loading...</div>
+<button class="whatIfAction" id="cbbRankingsMore" style="display:none">Show every team</button>
+
+</div>
+
+<div id="cbbMatchupSection" style="display:none">
+
+<h3>Any two teams</h3>
+
+<p class="sectionIntro">Pick two teams and where they play.</p>
+
+<div class="cbbFilters">
+<select id="cbbTeamA" aria-label="First team"></select>
+<select id="cbbTeamB" aria-label="Second team"></select>
+<select id="cbbSite" aria-label="Where">
+<option value="neutral">Neutral floor</option>
+<option value="a">First team at home</option>
+<option value="b">Second team at home</option>
+</select>
+</div>
+
+<div id="cbbMatchup"></div>
+
+</div>
+
+</div>
+
+<script src="./cbb_render.js"></script>
+
+<script src="./cbb.js"></script>
+
+<script src="./install.js"></script>
+
+</body>
+
+</html>

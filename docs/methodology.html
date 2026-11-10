@@ -147,6 +147,7 @@ color:var(--text);
 <a class="tabButton" href="./index.html">Today</a>
 <a class="tabButton" href="./predictive.html">MLB</a>
 <a class="tabButton" href="./nfl.html">NFL</a>
+<a class="tabButton" href="./cbb.html"><span class="navLong">College </span>Hoops</a>
 <a class="tabButton active" href="./methodology.html">How it works</a>
 </div>
 
@@ -257,6 +258,16 @@ sportsbook lines.</p>
 <h3>NFL · Prospects</h3>
 <p>Published college big boards for the next NFL draft, blended into one
 ranking; players already drafted are left out.</p>
+</div>
+
+<div class="methodCard">
+<h3>College Hoops</h3>
+<p>Men's Division I. <b>March Madness</b>: each team's chance of reaching
+every round, from playing the bracket out 20,000 times - the real bracket
+once it's announced, a stand-in built from our ratings before then.
+<b>Games</b>: a pick and an expected score for every game between Division I
+teams, graded as they finish. <b>Rankings</b>: every team's rating, split
+into offense and defense. <b>Matchup</b>: any two teams, anywhere.</p>
 </div>
 
 <div class="methodCard">
@@ -457,6 +468,38 @@ how often each side wins, the spread of margins and totals, and each
 player's averages - how often he scores, and how often he reaches 100
 yards.</p>
 <p><a href="#sim-nfl">Step by step, and checked against the league &rarr;</a></p>
+</div>
+
+<div class="methodCard">
+<h3>College basketball ratings and the bracket</h3>
+<p>Every team gets an offense number and a defense number: points scored
+above, and allowed below, what an average Division I team would manage
+over 100 possessions (pace is taken out, so a fast team's big scores don't
+flatter it). All of them are solved at once across every game of the
+season, so each performance is judged against the opponent it came against
+and where it was played; home court is worth about 3.5 points.
+Each rating starts the season at 85% of last season's (a little higher for a
+team in the preseason AP top 25, which knows about transfers and departures
+we don't) and is held there with the weight of six games, so by January
+this season's games carry it.
+Weighting recent games more was tested and made the picks worse.</p>
+<p>A game: the two ratings' gap, over the pace the two teams figure to
+play at, is the expected margin, and games land about 11 points either
+side of it - that spread gives the win chance. Replayed week by week over
+92,350 games since 2010, never using a game to predict itself, the favorite
+won 73% of the time and the percentages held up (teams we gave 70-80% won
+75% of the time).</p>
+<p>The bracket is those game odds played forward 20,000 times. On the
+1,130 NCAA tournament games since 2009, picked before each tournament began,
+our favorite won 70%; where the data has seeds (2023&ndash;2026), ours won
+186 of 247 games between different seeds and the better seed won
+182. That is the ceiling worth knowing: a good rating is roughly as good
+as the seeds at picking winners, and its value is in the percentages and in
+the games the seeds get wrong. Before Selection Sunday the bracket shown is
+our own: each conference's best-rated team plus the best of the rest,
+seeded down the ratings. Against real brackets that stand-in gets about 34
+of the 37 at-large teams right, and misses mostly on small-conference
+champions, who earn their spot by winning a conference tournament.</p>
 </div>
 
 <div class="methodCard">

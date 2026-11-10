@@ -55,6 +55,7 @@ href="./style.css">
 <a class="tabButton active" href="./index.html">Today</a>
 <a class="tabButton" href="./predictive.html">MLB</a>
 <a class="tabButton" href="./nfl.html">NFL</a>
+<a class="tabButton" href="./cbb.html"><span class="navLong">College </span>Hoops</a>
 <a class="tabButton" href="./methodology.html">How it works</a>
 </div>
 
@@ -65,7 +66,7 @@ href="./style.css">
     <h1>Today</h1>
     <span class="asof" id="asof-badge"></span>
   </header>
-  <p class="subtitle">Our picks for today in one place. The <a href="./predictive.html">MLB</a> and <a href="./nfl.html">NFL</a> pages have the full details, and <a href="./methodology.html">How it works</a> explains the models.</p>
+  <p class="subtitle">Our picks for today in one place. The <a href="./predictive.html">MLB</a>, <a href="./nfl.html">NFL</a> and <a href="./cbb.html">College Hoops</a> pages have the full details, and <a href="./methodology.html">How it works</a> explains the models.</p>
 
   <div class="stat-row" id="stat-row">Loading...</div>
 
@@ -84,6 +85,12 @@ href="./style.css">
     <div class="reportKey" style="padding:10px 16px 0"><span class="before">Before the final injury report</span><span class="after">After it</span></div>
     <div class="picks" id="nfl-gp-list">Loading...</div>
   </div>
+
+  <div class="panel" id="cbb-panel" style="display:none">
+    <div class="panel-head with-stats"><span>College hoops: today's best games</span><span class="stat-line" id="cbb-stat-line"></span></div>
+    <div class="picks cbbTodayList" id="cbb-list"></div>
+    <div class="cbbTodayMore"><a href="./cbb.html#games">Every game</a>&nbsp;&middot; <a href="./cbb.html">March Madness odds</a></div>
+  </div>
 </div>
 
 </div>
@@ -93,6 +100,8 @@ href="./style.css">
 <script src="./teams.js"></script>
 
 <script src="./summary_render.js"></script>
+
+<script src="./cbb_render.js"></script>
 
 <script src="./today.js"></script>
 
