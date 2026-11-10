@@ -164,6 +164,13 @@ def write_nfl_game_picks_export(predictions_log_path: str, output_dir: str) -> N
     picks.to_csv(os.path.join(output_dir, "nfl_game_picks_picks.csv"), index=False)
     summary.to_csv(os.path.join(output_dir, "nfl_game_picks_summary.csv"), index=False)
     by_version_summary.to_csv(os.path.join(output_dir, "nfl_game_picks_summary_by_version.csv"), index=False)
+    # The track record behind a pick: how often picks this sure, and picks
+    # with or against Vegas, have been right - this season and in the
+    # model's backtest.
+    backtest = pd.read_csv(config.NFL_PICK_CONFIDENCE_BACKTEST_PATH) \
+        if os.path.exists(config.NFL_PICK_CONFIDENCE_BACKTEST_PATH) else None
+    nfl_game_evaluation.confidence_table(picks, backtest).to_csv(
+        os.path.join(output_dir, "nfl_pick_confidence.csv"), index=False)
 
 
 ELO_FIRST_SEASON = 2016
@@ -350,7 +357,7 @@ def run(
                 (schedules["season"] == season) & (schedules["game_type"] == "REG") & (schedules["week"] == week)
             ][["game_id", "season", "week", "home_team", "away_team", "home_qb_id", "away_qb_id",
                "gameday", "home_moneyline", "away_moneyline"]]
-            for column in ("total_line", "roof", "stadium_id", "gametime", "home_qb_name", "away_qb_name"):
+            for column in ("total_line", "spread_line", "roof", "stadium_id", "gametime", "home_qb_name", "away_qb_name"):
                 if column in schedules.columns:
                     this_week_games[column] = schedules.loc[this_week_games.index, column]
             # The feed's listed starters can be stale (a QB on injured
@@ -477,6 +484,11 @@ def run(
                 history.get("snap_counts", pd.DataFrame()),
             )
             this_week_games["lean_hold"] = this_week_games["game_id"].map(doubts)
+            # Each card's starting QBs (and where they rank this week), and
+            # for a repriced game the players the final report took out.
+            card = nfl_whatif.card_details(whatif)
+            for column in card.columns:
+                this_week_games[column] = this_week_games["game_id"].map(card[column])
             nfl_whatif.save_json(os.path.join(output_dir, "nfl_whatif.json"), whatif)
             _write_last_week_whatif(fresh, prior_season, season, week, output_dir, raw_dir)
 
@@ -531,8 +543,12 @@ def run(
                 after_probs = probs.copy()
                 after_probs["home_win_probability"] = after_probs["game_id"].map(
                     {g: r["probability"] for g, r in repriced.items()}).fillna(after_probs["home_win_probability"])
+                after_games = this_week_games.copy()
+                after_card = nfl_whatif.card_details(whatif, after_report=True)
+                for column in after_card.columns:
+                    after_games[column] = after_games["game_id"].map(after_card[column])
                 after = nfl_game_predictions.select_game_picks(
-                    after_probs, this_week_games, market_probabilities=market, confidence=master,
+                    after_probs, after_games, market_probabilities=market, confidence=master,
                     point_predictions=points,
                 )
                 after = after[after["game_id"].isin(repriced)].copy()

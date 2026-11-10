@@ -117,3 +117,27 @@ def test_the_team_table_carries_elo_and_pass_rush_epa():
     source = inspect.getsource(nfl_team_strength.assemble_team_metrics)
     listed = source[source.index("output_columns = ["):]
     assert '"elo"' in listed and "PASS_RUSH_COLUMNS" in listed
+
+
+def test_blended_model_averages_its_members_each_on_its_own_columns():
+    class Fixed:
+        def __init__(self, column):
+            self.column = column
+
+        def predict_proba(self, X):
+            assert list(X.columns) == [self.column]
+            p = X[self.column].to_numpy()
+            return np.column_stack([1 - p, p])
+
+    X = pd.DataFrame({"a": [0.2, 0.9], "b": [0.6, 0.5], "unused": [1.0, 1.0]})
+    blend = ml_models.BlendedWinModel([(Fixed("a"), ["a"]), (Fixed("b"), ["b"])])
+    assert blend.predict_proba(X)[:, 1] == pytest.approx([0.4, 0.7])
+    assert blend.predict_proba(X).sum(axis=1) == pytest.approx([1.0, 1.0])
+    assert blend.get_params() == {}
+
+
+def test_blend_feature_columns_are_both_models_inputs_with_their_own_builder():
+    columns = nfl_game_picks.BLEND_FEATURE_COLUMNS
+    assert set(columns) == set(nfl_game_picks.QB_PLUS_FEATURE_COLUMNS) | set(nfl_game_picks.ELO_FEATURE_COLUMNS)
+    assert len(columns) == len(set(columns))
+    assert nfl_game_picks.resolve_feature_builder(columns) is nfl_game_picks.build_game_features_blend

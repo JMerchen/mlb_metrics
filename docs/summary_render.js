@@ -96,11 +96,14 @@ return gamePicksBaseRecordHtml(summary, current) + totalLeansRecordHtml(summary)
 function gamePicksBaseRecordHtml(summary, current){
 const s = summary || {}
 if(String(s.betting_enabled).toLowerCase() === "false"){
-const n = current ? srNum(current.model_vs_market_n) || 0 : 0
+// The model making picks now, or every pick on record while that one
+// has no finished games yet (just after a model change).
+const row = current && srNum(current.model_vs_market_n) ? current : s
+const n = srNum(row.model_vs_market_n) || 0
 const paused = "Not suggesting moneyline bets right now."
 if(!n){ return `No results yet this season. ${paused}` }
-const ours = Math.round((srNum(current.model_pick_accuracy) || 0) * n)
-const vegas = Math.round((srNum(current.market_pick_accuracy) || 0) * n)
+const ours = Math.round((srNum(row.model_pick_accuracy) || 0) * n)
+const vegas = Math.round((srNum(row.market_pick_accuracy) || 0) * n)
 return `Right on <b>${ours} of ${n}</b> games so far (Vegas: ${vegas} of ${n}). ${paused}`
 }
 
@@ -267,11 +270,175 @@ return `Finished ${actual} - ${miss} ${g.total_range_result} our range`
 return g.total_range_result === "in" ? `Finished ${actual} - inside our range` : ""
 }
 
+// "3.5" / "7" - a point count without a trailing .0
+function srPoints(x){
+const v = Math.abs(x)
+return v % 1 ? v.toFixed(1) : String(Math.round(v))
+}
+
+// NFL: Vegas's point spread next to our margin - {line, margin, vegas,
+// ours, side, sideLine, result} or null without a spread. `line` and
+// `margin` are home minus away (positive = home ahead); `side` is the team
+// our margin puts on the right side of the spread and `sideLine` its
+// number ("+3.5").
+function spreadInfo(g, sport){
+const line = srNum(g.spread_line), margin = srNum(g.predicted_margin)
+if(line === null || margin === null){ return null }
+const home = srTeam(g.home_team, sport), away = srTeam(g.away_team, sport)
+const by = (x, even) => Math.abs(x) < 0.25 ? even : `${x > 0 ? home : away} by ${srPoints(Math.round(Math.abs(x) * 2) / 2)}`
+const side = g.spread_side === g.home_team || g.spread_side === g.away_team ? g.spread_side : null
+const number = side === null ? null : (side === g.home_team ? -line : line)
+return {line, margin, vegas: by(line, "a pick'em"), ours: by(margin, "it even"),
+side: side === null ? null : srTeam(side, sport),
+sideLine: number === null ? "" : number === 0 ? "pick'em" : `${number > 0 ? "+" : "−"}${srPoints(number)}`,
+result: g.spread_result || ""}
+}
+
+// "Spread: Vegas has Bills by 3.5 · we have Bills by 2 (our side: Vikings +3.5)"
+function spreadText(g, sport){
+const s = spreadInfo(g, sport)
+if(!s){ return "" }
+const done = {win: ", covered", loss: ", didn't cover", push: ", push"}[s.result] || ""
+return `Spread: Vegas has ${srEsc(s.vegas)}&nbsp;&middot; we have ${srEsc(s.ours)}${s.side ? ` (our side: ${srEsc(s.side)} ${s.sideLine}${done})` : ""}`
+}
+
+// Why the spread line is context and not a lean.
+const SPREAD_NOTE = "Our side of the spread has been a coin flip in testing (about half of 1,900 past games), so read it as context, not a lean."
+
+// The players out on one side, from "Name (QB), Name (WR)".
+function srOutList(text){
+return String(text === undefined || text === null ? "" : text).split(",").map(x => x.trim()).filter(Boolean)
+}
+
+// NFL: the case for the pick and what cuts against it, from what the card
+// already knows - {pick, for: [...], against: [...]} of plain sentences.
+// A gap of 6+ places in a ranking counts as an edge.
+function pickReasons(g, sport){
+const pickHome = g.predicted_winner === g.home_team
+const mine = pickHome ? "home" : "away", theirs = pickHome ? "away" : "home"
+const pick = srTeam(g[`${mine}_team`], sport), opp = srTeam(g[`${theirs}_team`], sport)
+// Nicknames are plural: "the Vikings are", "the Vikings' 28th".
+const own = name => `the ${name}${/s$/.test(name) ? "'" : "'s"}`
+const out = {pick, for: [], against: []}
+const rank = (side, key) => srNum(g[`${side}_${key}_rank`])
+const GAP = 6
+const compare = (key, label) => {
+const a = rank(mine, key), b = rank(theirs, key)
+if(a === null || b === null){ return }
+if(a + GAP <= b){ out.for.push(`Better ${label}: ${srOrdinal(Math.round(a))} to ${own(opp)} ${srOrdinal(Math.round(b))}`) }
+else if(b + GAP <= a){ out.against.push(`The ${opp} have the better ${label}: ${srOrdinal(Math.round(b))} to ${srOrdinal(Math.round(a))}`) }
+}
+compare("off", "offense")
+compare("def", "defense")
+const myOut = srOutList(g[`injury_out_${mine}`]), theirOut = srOutList(g[`injury_out_${theirs}`])
+const lostQb = list => list.find(x => /\(QB\)$/.test(x))
+const myQb = g[`${mine}_qb`], theirQb = g[`${theirs}_qb`]
+if(lostQb(theirOut)){ out.for.push(`The ${opp} are without ${lostQb(theirOut).replace(/ \(QB\)$/, "")} at quarterback${theirQb ? `; ${theirQb} starts` : ""}`) }
+if(lostQb(myOut)){ out.against.push(`The ${pick} are without ${lostQb(myOut).replace(/ \(QB\)$/, "")} at quarterback${myQb ? `; ${myQb} starts` : ""}`) }
+const a = rank(mine, "qb"), b = rank(theirs, "qb")
+if(a !== null && b !== null && myQb && theirQb){
+if(a + GAP <= b){ out.for.push(`Better quarterback play lately: ${myQb} ranks ${srOrdinal(Math.round(a))} among this week's starters, ${theirQb} ${srOrdinal(Math.round(b))}`) }
+else if(b + GAP <= a){ out.against.push(`The ${opp} have had the better quarterback play: ${theirQb} ranks ${srOrdinal(Math.round(b))} among this week's starters, ${myQb} ${srOrdinal(Math.round(a))}`) }
+}
+const others = list => list.filter(x => !/\(QB\)$/.test(x)).length
+if(others(theirOut) >= others(myOut) + 2){ out.for.push(`The ${opp} are missing ${others(theirOut)} regulars${others(myOut) ? ` to ${own(pick)} ${others(myOut)}` : ""}`) }
+else if(others(myOut) >= others(theirOut) + 2){ out.against.push(`The ${pick} are missing ${others(myOut)} regulars${others(theirOut) ? ` to ${own(opp)} ${others(theirOut)}` : ""}`) }
+if(pickHome){ out.for.push("Playing at home") }else{ out.against.push("Playing on the road") }
+const vegas = srNum(g.market_predicted_winner_probability)
+if(vegas !== null){
+if(vegas >= 0.5){ out.for.push(`Vegas agrees: ${pick} ${srPct(vegas)}`) }
+else{ out.against.push(`Vegas favors the ${opp} (${srPct(1 - vegas)})`) }
+}
+return out
+}
+
+function pickReasonsHtml(g, sport){
+const r = pickReasons(g, sport)
+if(!r.for.length && !r.against.length){ return "" }
+const list = (items, cls) => items.length ? `<ul class="${cls}">${items.map(x => `<li>${srEsc(x)}</li>`).join("")}</ul>` : ""
+return `<div class="pickWhy">
+${r.for.length ? `<div class="pickWhyHead">For the ${srEsc(r.pick)}</div>${list(r.for, "whyFor")}` : ""}
+${r.against.length ? `<div class="pickWhyHead">Against</div>${list(r.against, "whyAgainst")}` : ""}
+</div>`
+}
+
+// NFL: who the final injury report took out on each side, or (before it)
+// the starters in doubt on the last one. Empty with nothing to say.
+function injuryLineHtml(g, sport){
+const sides = ["away", "home"].map(side => ({team: srTeam(g[`${side}_team`], sport), out: srOutList(g[`injury_out_${side}`])}))
+.filter(s => s.out.length)
+if(sides.length){
+return `<div class="injuryLine"><b>Out:</b> ${sides.map(s => `${srEsc(s.team)} - ${srEsc(s.out.join(", "))}`).join("&nbsp;&middot; ")}</div>`
+}
+if(g.injury_report === "after"){
+return g.injury_note ? `<div class="injuryLine"><b>Out:</b> ${srEsc(g.injury_note)}</div>`
+: `<div class="injuryLine">The final injury report took no regulars out.</div>`
+}
+return g.starters_in_doubt ? `<div class="injuryLine"><b>In doubt:</b> ${srEsc(g.starters_in_doubt)}</div>` : ""
+}
+
+// One "right N% of the time" phrase from a track-record row
+// (nfl_pick_confidence.csv): the backtest's rate and games, then this
+// season's count. "" when the row has no games either way.
+function trackPhrase(row){
+if(!row){ return "" }
+const games = srNum(row.backtest_games) || 0, right = srNum(row.backtest_right) || 0
+const sGames = srNum(row.season_games) || 0, sRight = srNum(row.season_right) || 0
+const parts = []
+if(games){ parts.push(`right ${Math.round(100 * right / games)}% of the time in testing (${games.toLocaleString("en-US")} games)`) }
+if(sGames){ parts.push(`${sRight} of ${sGames} this season`) }
+return parts.join(", ")
+}
+
+// NFL: how picks like this one have done - by how sure we are, and, when
+// we're against Vegas's favorite, how those picks have done.
+function trackRecordNote(g, table){
+const p = srNum(g.predicted_probability)
+if(p === null || !table || !table.length){ return "" }
+const band = table.find(r => r.group === "confidence" && p >= srNum(r.low) && (p < srNum(r.high) || srNum(r.high) >= 1))
+const lines = []
+const phrase = trackPhrase(band)
+if(phrase){ lines.push(`Picks this sure (${band.label}) have been ${phrase}.`) }
+const vegas = srNum(g.market_predicted_winner_probability)
+if(vegas !== null && vegas < 0.5){
+const against = trackPhrase(table.find(r => r.group === "vegas" && r.label === "against"))
+if(against){ lines.push(`This one goes against Vegas's favorite; those picks have been ${against}.`) }
+}
+return lines.join(" ")
+}
+
+// The NFL page's track-record table: each kind of pick, how it has done
+// this season and in testing.
+function trackRecordTableHtml(table, summary){
+const s = summary || {}
+const cell = (right, games) => games ? `${right} of ${games} <span class="dim">${Math.round(100 * right / games)}%</span>` : "-"
+const tested = (right, games) => games ? `${Math.round(100 * right / games)}% <span class="dim">of ${Number(games).toLocaleString("en-US")}</span>` : "-"
+const rows = (table || []).map(r => {
+const label = r.group === "confidence" ? `We say ${r.label}`
+: r.label === "with" ? "We pick Vegas's favorite" : "We pick against Vegas's favorite"
+return [label, cell(srNum(r.season_right) || 0, srNum(r.season_games) || 0), tested(srNum(r.backtest_right) || 0, srNum(r.backtest_games) || 0)]
+})
+const pair = (won, lost, rate, games, label) => {
+const w = srNum(won) || 0, l = srNum(lost) || 0, n = srNum(games) || 0, r = srNum(rate)
+if(!(w + l) && !n){ return }
+rows.push([label, cell(w, w + l), n && r !== null ? `${Math.round(100 * r)}% <span class="dim">of ${n.toLocaleString("en-US")}</span>` : "-"])
+}
+pair(s.total_leans_won, s.total_leans_lost, s.total_lean_backtest_won_rate, s.total_lean_backtest_games, "Over/under leans")
+pair(s.spread_sides_won, s.spread_sides_lost, s.spread_backtest_won_rate, s.spread_backtest_games, "Our side of the spread")
+if(!rows.length){ return "" }
+return `<table class="trackRecord">
+<thead><tr><th>When</th><th>This season</th><th>In testing</th></tr></thead>
+<tbody>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join("")}</tbody>
+</table>`
+}
+
 // One game: a card with the matchup and our pick ("Rays at Yankees", "We
 // say Yankees 59%"), a color bar down its left edge (NFL: before or after
 // the final injury report), and a click to open the rest: each team's
 // chance as a bar, the weather, the predicted total and each team's EPA.
-function gamePickRowHtml(g, sport){
+function gamePickRowHtml(g, sport, extras){
+const track = sport === "nfl" ? trackRecordNote(g, extras && extras.confidence) : ""
+const spread = sport === "nfl" ? spreadText(g, sport) : ""
 const homePicked = g.predicted_winner === g.home_team
 const away = srEsc(srTeam(g.away_team, sport))
 const home = srEsc(srTeam(g.home_team, sport))
@@ -307,6 +474,10 @@ ${sport === "nfl" ? totalLeanBadgeHtml(g) : ""}
 </summary>
 <div class="gameDetail">
 ${pickBarHtml(g, sport)}
+${track ? `<div class="totalNote trackNote">${srEsc(track)}</div>` : ""}
+${sport === "nfl" ? pickReasonsHtml(g, sport) : ""}
+${sport === "nfl" ? injuryLineHtml(g, sport) : ""}
+${spread ? `<div class="total">${spread}</div><div class="totalNote">${SPREAD_NOTE}</div>` : ""}
 ${weatherLine}
 ${total ? `<div class="total">${total}</div>` : ""}
 ${total && srNum(g.predicted_total_low) !== null ? `<div class="totalNote">About half of games finish inside our range.</div>` : ""}
@@ -320,11 +491,11 @@ ${reportNote}
 </details>`
 }
 
-function gamePicksListHtml(picks, sport){
+function gamePicksListHtml(picks, sport, extras){
 if(!picks || !picks.length){
 return '<div class="empty-note">No games scheduled yet.</div>'
 }
-return picks.map(g => gamePickRowHtml(g, sport)).join("")
+return picks.map(g => gamePickRowHtml(g, sport, extras)).join("")
 }
 
 if (typeof module !== "undefined" && module.exports) {
@@ -332,6 +503,6 @@ module.exports = {
 srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, gamePicksListHtml, totalPointsText,
 srWeather, pickBarHtml, totalLean, totalLeanBadgeHtml, totalRangeNote, totalLeanCloseNote, totalLeanReason,
 btsSeasonOver, btsSeasonOverHtml,
-teamEpaHtml,
+teamEpaHtml, spreadInfo, spreadText, pickReasons, pickReasonsHtml, injuryLineHtml, trackRecordNote, trackRecordTableHtml,
 }
 }

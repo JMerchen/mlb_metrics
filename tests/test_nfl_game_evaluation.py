@@ -446,3 +446,97 @@ def test_a_tuesday_lean_is_held_when_starters_are_in_doubt_and_uses_tuesdays_for
     assert pd.isna(picks.loc[g1, "tuesday_total_lean"]) and "Mahomes" in picks.loc[g1, "tuesday_total_lean_held"]
     assert picks.loc[g2, "tuesday_total_lean"] == "under" and picks.loc[g2, "total_lean"] == "under"
     assert pd.isna(picks.loc[g2, "tuesday_total_lean_held"])
+
+
+def test_spread_sides_put_our_margin_next_to_the_spread_and_grade_the_side():
+    picks = pd.DataFrame([
+        # We have KC by ~3.3 (60%); Vegas has KC by 6.5 -> our side is DEN +6.5; KC won by 3 -> covered.
+        {"home_team": "KC", "away_team": "DEN", "predicted_winner": "KC", "predicted_probability": 0.60,
+         "market_spread": 6.5, "actual_margin": 3},
+        # We have BUF (away) by ~6.8 (70%); Vegas has BUF by 3 (-3 for the home team) -> our side is BUF -3; BUF won by 3 -> push.
+        {"home_team": "MIA", "away_team": "BUF", "predicted_winner": "BUF", "predicted_probability": 0.70,
+         "market_spread": -3.0, "actual_margin": -3},
+        # No spread at pick time: the closing one stands in. We have SF by ~1.6 (55%), Vegas has LA by 2 -> SF +2; SF lost by 7 -> didn't cover.
+        {"home_team": "SF", "away_team": "LA", "predicted_winner": "SF", "predicted_probability": 0.55,
+         "market_spread": None, "closing_spread": -2.0, "actual_margin": -7},
+        # Not played yet, and one with no spread anywhere.
+        {"home_team": "DAL", "away_team": "NYG", "predicted_winner": "DAL", "predicted_probability": 0.80,
+         "market_spread": 4.0, "actual_margin": None},
+        {"home_team": "SEA", "away_team": "ARI", "predicted_winner": "SEA", "predicted_probability": 0.65,
+         "market_spread": None, "closing_spread": None, "actual_margin": None},
+    ])
+    out = nfl_game_evaluation.spread_sides(picks)
+    assert out["predicted_margin"].tolist() == pytest.approx([3.3, -6.9, 1.6, 11.0, 5.0], abs=0.11)
+    assert out["spread_line"].tolist()[:4] == [6.5, -3.0, -2.0, 4.0] and pd.isna(out["spread_line"][4])
+    assert out["spread_side"].tolist()[:4] == ["DEN", "BUF", "SF", "DAL"] and pd.isna(out["spread_side"][4])
+    assert out["spread_result"].tolist()[:3] == ["win", "push", "loss"]
+    assert pd.isna(out["spread_result"][3]) and pd.isna(out["spread_result"][4])
+    metrics = nfl_game_evaluation.spread_side_metrics(out)
+    assert (metrics["spread_sides_won"], metrics["spread_sides_lost"], metrics["spread_sides_pushed"]) == (1, 1, 1)
+    assert metrics["spread_backtest_games"] == config.NFL_SPREAD_BACKTEST["games"]
+
+
+def test_confidence_counts_by_how_sure_and_by_siding_with_vegas():
+    #            home chance, home won, Vegas home chance
+    games = [(0.52, 1, 0.60), (0.58, 0, 0.45), (0.30, 0, 0.40), (0.80, 1, None), (0.75, 0, 0.70), (0.55, 1, 0.50)]
+    counts = nfl_game_evaluation.confidence_counts(*map(list, zip(*games))).set_index(["group", "label"])
+    assert counts.loc[("confidence", "50–55%"), ["games", "right"]].tolist() == [1, 1]
+    assert counts.loc[("confidence", "55–60%"), ["games", "right"]].tolist() == [2, 1]   # 0.58 wrong, 0.55 right
+    assert counts.loc[("confidence", "70–75%"), ["games", "right"]].tolist() == [1, 1]   # the 30% home team lost
+    assert counts.loc[("confidence", "75%+"), ["games", "right"]].tolist() == [2, 1]
+    # Five games have a Vegas number; we went against it once (0.58 vs 0.45) and lost.
+    assert counts.loc[("vegas", "with"), ["games", "right"]].tolist() == [4, 3]
+    assert counts.loc[("vegas", "against"), ["games", "right"]].tolist() == [1, 0]
+    assert counts["games"].loc["confidence"].sum() == 6
+
+
+def test_confidence_table_sets_this_seasons_finished_picks_next_to_the_backtest():
+    picks = pd.DataFrame([
+        {"season": 2026, "status": "win", "home_team": "KC", "predicted_winner": "KC", "predicted_probability": 0.62,
+         "market_home_win_probability": 0.70},
+        {"season": 2026, "status": "loss", "home_team": "MIA", "predicted_winner": "BUF", "predicted_probability": 0.64,
+         "market_home_win_probability": 0.55},
+        {"season": 2026, "status": "pending", "home_team": "SF", "predicted_winner": "SF", "predicted_probability": 0.61,
+         "market_home_win_probability": 0.60},
+        {"season": 2025, "status": "win", "home_team": "SF", "predicted_winner": "SF", "predicted_probability": 0.61,
+         "market_home_win_probability": 0.60},
+    ])
+    backtest = pd.DataFrame([{"group": "confidence", "label": "60–65%", "low": 0.6, "high": 0.65, "games": 300, "right": 186},
+                             {"group": "vegas", "label": "against", "low": None, "high": None, "games": 200, "right": 90}])
+    table = nfl_game_evaluation.confidence_table(picks, backtest).set_index(["group", "label"])
+    assert table.loc[("confidence", "60–65%"), ["season_games", "season_right", "backtest_games", "backtest_right"]].tolist() == [2, 1, 300, 186]
+    assert table.loc[("vegas", "against"), ["season_games", "season_right", "backtest_games"]].tolist() == [1, 0, 200]
+    assert table.loc[("vegas", "with"), "season_games"] == 1 and pd.isna(table.loc[("vegas", "with"), "backtest_games"])
+    # No backtest file yet: this season's counts alone.
+    assert nfl_game_evaluation.confidence_table(picks)["backtest_games"].isna().all()
+
+
+def test_build_game_picks_export_carries_the_spread_and_card_columns():
+    predictions = _predictions()
+    predictions["market_spread"] = 3.0
+    predictions["home_qb"] = "Patrick Mahomes"
+    predictions["lean_hold"] = "KC QB Patrick Mahomes (questionable on the last report)"
+    picks, summary = nfl_game_evaluation.build_game_picks_export(predictions)
+    for column in [*nfl_game_evaluation.SPREAD_COLUMNS, *nfl_game_evaluation.CARD_COLUMNS, "starters_in_doubt"]:
+        assert column in picks.columns
+    assert (picks["spread_line"] == 3.0).all() and picks["predicted_margin"].notna().all()
+    assert (picks["starters_in_doubt"] == "KC QB Patrick Mahomes (questionable on the last report)").all()
+    assert {"spread_sides_won", "spread_backtest_won_rate", "total_lean_backtest_games"} <= set(summary.columns)
+
+
+def test_qb_ranks_order_a_weeks_starters_once_enough_of_them_are_rated():
+    teams = [f"T{i}" for i in range(16)]
+    week = pd.DataFrame({"season": 2026, "week": 10, "home_team": teams[:8], "away_team": teams[8:],
+                         "home_qb_plus": [0.30, 0.10, 0.05, 0.0, -0.05, -0.10, -0.15, -0.20],
+                         "away_qb_plus": [0.25, 0.12, 0.04, 0.01, -0.04, -0.11, -0.16, -0.30]})
+    home, away = nfl_game_evaluation.qb_ranks(week)
+    assert home.tolist()[:2] == [1, 4] and away.tolist()[:2] == [2, 3] and away.tolist()[-1] == 16
+    # Late in a week only the games still to play are rated: too few to rank.
+    late = week.assign(week=11).head(2)
+    home, away = nfl_game_evaluation.qb_ranks(pd.concat([week, late], ignore_index=True))
+    assert home.iloc[:8].notna().all() and home.iloc[8:].isna().all() and away.iloc[8:].isna().all()
+    # A log from before the ratings were kept has no ranks.
+    home, _ = nfl_game_evaluation.qb_ranks(week.drop(columns=["home_qb_plus", "away_qb_plus"]))
+    assert home.isna().all()
+    home, away = nfl_game_evaluation.qb_ranks(week.iloc[0:0])
+    assert home.empty and away.empty

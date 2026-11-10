@@ -346,6 +346,25 @@ def build_game_features_elo(
     return games[["game_id", "season", "week", "home_team", "away_team"] + ELO_FEATURE_COLUMNS]
 
 
+# The live v4 model averages two models (ml_models.BlendedWinModel): v3's
+# logistic regression on QB_PLUS_FEATURE_COLUMNS and the margin model on
+# ELO_FEATURE_COLUMNS. Its inputs are both lists together.
+BLEND_FEATURE_COLUMNS = QB_PLUS_FEATURE_COLUMNS + [c for c in ELO_FEATURE_COLUMNS if c not in QB_PLUS_FEATURE_COLUMNS]
+
+
+def build_game_features_blend(
+    master: pd.DataFrame, qb_continuity: pd.DataFrame, weekly_df: pd.DataFrame, schedule_games_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Returns [game_id, season, week, home_team, away_team] + BLEND_FEATURE_COLUMNS:
+    build_game_features_qb_plus' columns with build_game_features_elo's
+    differences alongside."""
+    games = build_game_features_qb_plus(master, qb_continuity, weekly_df, schedule_games_df)
+    elo = build_game_features_elo(master, qb_continuity, weekly_df, schedule_games_df)
+    for column in _ELO_MASTER_COLUMNS:
+        games[column] = games["game_id"].map(elo.set_index("game_id")[column]).to_numpy()
+    return games[["game_id", "season", "week", "home_team", "away_team"] + BLEND_FEATURE_COLUMNS]
+
+
 # Real follow-up (2026-09-11 - "it's a comparison... if the difference
 # between team A offense and team B defense is 15 and the difference
 # between team B offense and team A defense is 4, we're saying it'll be
@@ -507,6 +526,7 @@ _FEATURE_COLUMN_BUILDERS = [
     (MATCHUP_FOCUSED_FEATURE_COLUMNS, build_game_features_matchup),
     (QB_PLUS_FEATURE_COLUMNS, build_game_features_qb_plus),
     (ELO_FEATURE_COLUMNS, build_game_features_elo),
+    (BLEND_FEATURE_COLUMNS, build_game_features_blend),
 ]
 
 

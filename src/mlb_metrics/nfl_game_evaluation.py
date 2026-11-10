@@ -15,7 +15,17 @@ from scipy import stats
 from mlb_metrics import config, evaluation, nfl_totals, nfl_weather
 
 POINTS_COLUMNS = ["predicted_home_points", "predicted_away_points", "predicted_total", "market_total", "actual_total"]
-DISPLAY_COLUMNS = POINTS_COLUMNS + nfl_totals.EPA_DISPLAY_COLUMNS + nfl_weather.WEATHER_DISPLAY_COLUMNS
+CARD_COLUMNS = ["home_qb", "away_qb", "home_qb_rank", "away_qb_rank", "injury_out_home", "injury_out_away"]
+# A week's starting QBs are ranked once this many of them have a rating
+# (late in a week only the games still to play are rated afresh).
+QB_RANK_MIN_STARTERS = 16
+DISPLAY_COLUMNS = POINTS_COLUMNS + nfl_totals.EPA_DISPLAY_COLUMNS + nfl_weather.WEATHER_DISPLAY_COLUMNS + CARD_COLUMNS
+SPREAD_COLUMNS = ["predicted_margin", "spread_line", "spread_side", "spread_result"]
+
+# The track-record table's rows: how sure the pick was, then whether it
+# sided with Vegas's favorite.
+CONFIDENCE_BANDS = [(0.50, 0.55), (0.55, 0.60), (0.60, 0.65), (0.65, 0.70), (0.70, 0.75), (0.75, 1.0)]
+CONFIDENCE_COLUMNS = ["group", "label", "low", "high", "games", "right"]
 
 
 def _classify_outcome(df: pd.DataFrame) -> pd.Series:
@@ -110,6 +120,10 @@ def build_game_picks_export(
     for column in ("total_lean", "total_lean_line", "total_lean_result", "total_lean_clv"):
         picks[f"tuesday_{column}"] = tuesday[column].where(~held)
     picks["tuesday_total_lean_held"] = hold.where(held)
+    picks = picks.join(spread_sides(picks))
+    picks["home_qb_rank"], picks["away_qb_rank"] = qb_ranks(picks)
+    picks["starters_in_doubt"] = own_hold.where(own_hold.notna() & (own_hold.astype(str) != "")
+                                                & (picks["injury_report"] != "after"))
     picks_out = picks[
         [
             "date", "season", "week", "game_id", "home_team", "away_team", "predicted_winner", "predicted_loser",
@@ -122,6 +136,7 @@ def build_game_picks_export(
             "tuesday_total_lean", "tuesday_total_lean_line", "tuesday_total_lean_result", "tuesday_total_lean_clv",
             "tuesday_total_lean_held",
             "injury_report", "injury_note", "before_report_winner", "before_report_probability",
+            *SPREAD_COLUMNS, "starters_in_doubt",
         ]
     ].sort_values("date", ascending=False).reset_index(drop=True)
 
@@ -157,6 +172,7 @@ def build_game_picks_export(
                 **evaluation.model_vs_market(picks),
                 **points_total_metrics(picks),
                 **total_lean_metrics(picks),
+                **spread_side_metrics(picks),
                 **{f"tuesday_{k}": v for k, v in total_lean_metrics(
                     picks.rename(columns={"total_lean_result": "_shown_result", "total_lean_clv": "_shown_clv",
                                           "tuesday_total_lean_result": "total_lean_result",
@@ -273,6 +289,125 @@ def total_leans(picks: pd.DataFrame) -> pd.DataFrame:
     out["total_lean_close"] = closing.where(lean.notna())
     out["total_lean_clv"] = toward.where(lean.notna() & closing.notna())
     return out
+
+
+def spread_sides(picks: pd.DataFrame) -> pd.DataFrame:
+    """Our margin next to Vegas's point spread, for each pick:
+    predicted_margin (home minus away: the win chance read back off a
+    normal curve config.NFL_WIN_MARGIN_SIGMA points wide), spread_line (the
+    spread when the pick was made - the closing one for a pick logged before
+    spreads were, 2026-11-10 - positive = home favored), spread_side (the
+    team our margin puts on the right side of it) and, once played,
+    spread_result "win", "loss" or "push". Context, not a lean: see
+    config.NFL_WIN_MARGIN_SIGMA."""
+    def num(column):
+        return pd.to_numeric(picks[column], errors="coerce") if column in picks.columns \
+            else pd.Series(float("nan"), index=picks.index)
+    probability = num("predicted_probability")
+    home_picked = picks["predicted_winner"] == picks["home_team"]
+    home_probability = probability.where(home_picked, 1 - probability).clip(0.01, 0.99)
+    margin = pd.Series(stats.norm.ppf(home_probability.to_numpy(dtype=float)), index=picks.index) * config.NFL_WIN_MARGIN_SIGMA
+    line = num("market_spread").fillna(num("closing_spread"))
+    actual = num("actual_margin")
+    out = pd.DataFrame(index=picks.index)
+    out["predicted_margin"] = margin.round(1)
+    out["spread_line"] = line
+    side = pd.Series(pd.NA, index=picks.index, dtype=object)
+    known = margin.notna() & line.notna()
+    side[known & (margin > line)] = picks["home_team"][known & (margin > line)]
+    side[known & (margin < line)] = picks["away_team"][known & (margin < line)]
+    out["spread_side"] = side
+    result = pd.Series(pd.NA, index=picks.index, dtype=object)
+    settled = side.notna() & actual.notna()
+    home_covered = actual > line
+    result[settled & (actual == line)] = "push"
+    result[settled & (actual != line) & ((side == picks["home_team"]) == home_covered)] = "win"
+    result[settled & (actual != line) & ((side == picks["home_team"]) != home_covered)] = "loss"
+    out["spread_result"] = result
+    return out
+
+
+def qb_ranks(picks: pd.DataFrame) -> tuple[pd.Series, pd.Series]:
+    """Where each side's starting QB ranks among his week's starters by
+    QB+ (home_qb_plus/away_qb_plus; 1 = best), as (home ranks, away ranks).
+    Blank for a week with fewer than QB_RANK_MIN_STARTERS rated."""
+    def num(column):
+        return pd.to_numeric(picks[column], errors="coerce") if column in picks.columns \
+            else pd.Series(float("nan"), index=picks.index)
+    if picks.empty:
+        return pd.Series(dtype=float, index=picks.index), pd.Series(dtype=float, index=picks.index)
+    ratings = pd.concat([num("home_qb_plus"), num("away_qb_plus")], keys=["home", "away"])
+    week = pd.concat([picks["season"].astype(str) + "_" + picks["week"].astype(str)] * 2, keys=["home", "away"])
+    ranks = ratings.groupby(week).rank(ascending=False, method="min")
+    ranks = ranks.where(ratings.groupby(week).transform("count") >= QB_RANK_MIN_STARTERS)
+    return ranks["home"], ranks["away"]
+
+
+def spread_side_metrics(picks: pd.DataFrame) -> dict:
+    """How our side of the spread has done (won, lost, pushed), with the
+    backtest numbers the track-record table shows for it and for the
+    over/under leans."""
+    result = picks["spread_result"] if "spread_result" in picks.columns else pd.Series(dtype=object)
+    return {"spread_sides_won": int((result == "win").sum()), "spread_sides_lost": int((result == "loss").sum()),
+            "spread_sides_pushed": int((result == "push").sum()),
+            "total_lean_backtest_games": config.NFL_TOTAL_LEAN_BACKTEST["games"],
+            "total_lean_backtest_won_rate": config.NFL_TOTAL_LEAN_BACKTEST["won_rate"],
+            "spread_backtest_games": config.NFL_SPREAD_BACKTEST["games"],
+            "spread_backtest_won_rate": config.NFL_SPREAD_BACKTEST["won_rate"]}
+
+
+def confidence_counts(home_probability, home_won, market_home_probability) -> pd.DataFrame:
+    """The track record behind a pick, as [group, label, low, high, games,
+    right]: group "confidence" has one row per CONFIDENCE_BANDS band of how
+    sure the pick was (low <= chance < high), and group "vegas" has "with"
+    (we picked Vegas's favorite) and "against" (we picked the other side),
+    over the games with a Vegas number. A dead-even pick or line counts as
+    the home team."""
+    p = pd.to_numeric(pd.Series(home_probability), errors="coerce").reset_index(drop=True)
+    won = pd.to_numeric(pd.Series(home_won), errors="coerce").reset_index(drop=True)
+    market = pd.to_numeric(pd.Series(market_home_probability), errors="coerce").reset_index(drop=True)
+    known = p.notna() & won.notna()
+    p, won, market = p[known], won[known], market[known]
+    sure = p.where(p >= 0.5, 1 - p)
+    right = (p >= 0.5) == (won == 1)
+    rows = []
+    for low, high in CONFIDENCE_BANDS:
+        inside = (sure >= low) & ((sure < high) | (high >= 1.0))
+        label = f"{round(low * 100)}%+" if high >= 1.0 else f"{round(low * 100)}–{round(high * 100)}%"
+        rows.append({"group": "confidence", "label": label, "low": low, "high": high,
+                     "games": int(inside.sum()), "right": int(right[inside].sum())})
+    priced = market.notna()
+    with_vegas = (p >= 0.5) == (market >= 0.5)
+    for label, mask in (("with", priced & with_vegas), ("against", priced & ~with_vegas)):
+        rows.append({"group": "vegas", "label": label, "low": float("nan"), "high": float("nan"),
+                     "games": int(mask.sum()), "right": int(right[mask].sum())})
+    return pd.DataFrame(rows, columns=CONFIDENCE_COLUMNS)
+
+
+def confidence_table(picks: pd.DataFrame, backtest: pd.DataFrame | None = None) -> pd.DataFrame:
+    """The site's track-record table: confidence_counts over the latest
+    season's finished picks (`picks` is build_game_picks_export's table) as
+    season_games/season_right, next to the same counts from the model's
+    walk-forward backtest (backtest_games/backtest_right; `backtest` is
+    confidence_counts' output saved by scripts/train_nfl_elo_margin_model.py)."""
+    done = picks[picks["status"].isin(["win", "loss"])] if "status" in picks.columns else picks.iloc[0:0]
+    if not done.empty:
+        done = done[done["season"] == done["season"].max()]
+    probability = pd.to_numeric(done["predicted_probability"], errors="coerce")
+    home_picked = done["predicted_winner"] == done["home_team"]
+    season = confidence_counts(probability.where(home_picked, 1 - probability),
+                               ((done["status"] == "win") == home_picked).astype(float),
+                               done["market_home_win_probability"])
+    table = season.rename(columns={"games": "season_games", "right": "season_right"})
+    if backtest is not None and not backtest.empty:
+        past = backtest.set_index(["group", "label"])
+        keys = pd.MultiIndex.from_frame(table[["group", "label"]])
+        table["backtest_games"] = past["games"].reindex(keys).to_numpy()
+        table["backtest_right"] = past["right"].reindex(keys).to_numpy()
+    else:
+        table["backtest_games"] = float("nan")
+        table["backtest_right"] = float("nan")
+    return table
 
 
 def total_lean_weather(picks: pd.DataFrame) -> pd.Series:

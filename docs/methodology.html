@@ -306,10 +306,16 @@ enough, sized by fractional Kelly in units.</p>
 
 <div class="methodCard">
 <h3>NFL game picks</h3>
-<p>A logistic regression on each team's Pythagorean strength,
+<p>The average of two models. The first is a logistic regression on each team's Pythagorean strength,
 schedule-adjusted confidence, EPA per play on offense and allowed on defense
 (per play, so a defense isn't judged by how many snaps it faced), turnover
-margin and points per drive, plus each starting QB's QB+. The starter comes
+margin and points per drive, plus each starting QB's QB+. The second predicts
+the final margin, not just who wins (a 30-point win says more than a 1-point
+win): it uses an Elo rating that carries over from every past season, EPA per
+play split into passing and rushing on each side of the ball, and the same
+QB+, and reads the win chance off how far games usually land from the
+predicted margin (about 13 points). Averaged, they beat either alone in
+testing. The starter comes
 from the schedule, checked against the latest roster: one on injured reserve
 or otherwise inactive (who won't be on the injury report) is replaced by
 whoever has been starting. Trained on every
@@ -317,6 +323,15 @@ game since 2016 with each week predicted only from earlier games, the
 feature set chosen by walk-forward validation and checked on a season it
 never saw. When we disagree sharply with Vegas we defer to it (it's
 proven right more often there), then calibrate.</p>
+<p>Each game's card adds what a number can't: the case for the pick and what
+cuts against it (a gap of six or more places in offense, defense or
+quarterback rank counts as an edge), who the final injury report took out,
+and how picks like it have done. That record is on the NFL page: in testing
+on 2019&ndash;2026 our picks were right 68% of the time when they sided with
+Vegas's favorite and 43% when they went against it, and picks we call
+50&ndash;55% are coin flips. The card also sets Vegas's point spread next to
+our margin, as context only: taking our side of the spread won half of about
+1,900 past games, short of the 52.4% that breaks even.</p>
 </div>
 
 <div class="methodCard">
@@ -923,8 +938,8 @@ points - so a 100-yard edge is about a touchdown.</p>
 <a href="#odds">log-odds</a>, turned into a chance between 0 and 100%.</p>
 <p><span class="lbl">In sports</span> Win or lose: each input - point differential, the quarterback, turnovers -
 pushes the log-odds up or down by its weight.</p>
-<p><span class="lbl">On this site</span> The NFL game picks are a logistic regression on Pythagorean
-strength, EPA edges, turnover margin, points per drive and each starter's QB+.</p>
+<p><span class="lbl">On this site</span> Half of the NFL game pick is a logistic regression on Pythagorean
+strength, EPA edges, turnover margin, points per drive and each starter's QB+ (the other half predicts the margin).</p>
 <p class="where"><a href="https://en.wikipedia.org/wiki/Logistic_regression" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
 
 <dt id="gradient-boosting">Gradient boosting</dt>

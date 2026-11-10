@@ -410,3 +410,54 @@ def test_resolve_records_the_closing_total_for_played_games(tmp_path):
     # Newly final and already-final games both get the closing line; an unplayed game doesn't.
     assert log.loc["a", "closing_total"] == 45.5 and log.loc["b", "closing_total"] == 48.0
     assert pd.isna(log.loc["c", "closing_total"])
+
+
+def test_select_game_picks_records_the_spread_and_the_cards_player_details():
+    win_probs = _win_probabilities([
+        {"game_id": "g1", "season": 2026, "week": 10, "home_team": "MIN", "away_team": "BUF", "home_win_probability": 0.42},
+    ])
+    schedule = _schedule([{"game_id": "g1", "gameday": "2026-11-15", "spread_line": -3.5, "home_qb": "Carson Wentz",
+                           "away_qb": "Josh Allen", "home_qb_plus": -0.1, "away_qb_plus": 0.2,
+                           "injury_out_home": "Kyler Murray (QB)"}])
+    pick = nfl_game_predictions.select_game_picks(win_probs, schedule).iloc[0]
+    assert pick["market_spread"] == -3.5
+    assert pick["home_qb"] == "Carson Wentz" and pick["away_qb_plus"] == 0.2
+    assert pick["injury_out_home"] == "Kyler Murray (QB)" and pd.isna(pick["injury_out_away"])
+    # Without them in the schedule the columns are there and blank.
+    bare = nfl_game_predictions.select_game_picks(win_probs, _schedule([{"game_id": "g1", "gameday": "2026-11-15"}])).iloc[0]
+    assert pd.isna(bare["market_spread"]) and pd.isna(bare["home_qb"])
+
+
+def test_resolve_records_the_margin_and_the_closing_spread_for_played_games(tmp_path):
+    log_path = tmp_path / "log.csv"
+    rows = pd.DataFrame([
+        _resolved_pick("g1", "KC", "DEN"),
+        {**_resolved_pick("g2", "SF", "LA"), "game_played": 1, "actual_winner": "LA"},   # settled before these columns existed
+        _resolved_pick("g3", "BUF", "MIA"),
+    ])
+    rows.to_csv(log_path, index=False)
+    schedules = pd.DataFrame([
+        {"game_id": "g1", "home_score": 27, "away_score": 20, "spread_line": 3.5, "total_line": 45.5},
+        {"game_id": "g2", "home_score": 10, "away_score": 24, "spread_line": -1.0, "total_line": 41.0},
+        {"game_id": "g3", "home_score": None, "away_score": None, "spread_line": 6.5, "total_line": 48.0},
+    ])
+    log = nfl_game_predictions.resolve_game_predictions(str(log_path), schedules).set_index("game_id")
+    assert log.loc["g1", "actual_margin"] == 7 and log.loc["g1", "closing_spread"] == 3.5
+    assert log.loc["g2", "actual_margin"] == -14 and log.loc["g2", "closing_spread"] == -1.0
+    assert pd.isna(log.loc["g3", "actual_margin"]) and pd.isna(log.loc["g3", "closing_spread"])
+
+
+def test_append_game_predictions_rerun_fills_a_blank_spread_and_qbs(tmp_path):
+    log_path = str(tmp_path / "log.csv")
+    win_probs = _win_probabilities([
+        {"game_id": "g1", "season": 2026, "week": 10, "home_team": "MIN", "away_team": "BUF", "home_win_probability": 0.42},
+    ])
+    first = nfl_game_predictions.select_game_picks(win_probs, _schedule([{"game_id": "g1", "gameday": "2026-11-15"}]))
+    nfl_game_predictions.append_game_predictions(first, log_path)
+    again = nfl_game_predictions.select_game_picks(
+        win_probs.assign(home_win_probability=0.30),
+        _schedule([{"game_id": "g1", "gameday": "2026-11-15", "spread_line": -3.5, "home_qb": "Kyler Murray"}]))
+    log = nfl_game_predictions.append_game_predictions(again, log_path)
+    assert len(log) == 1
+    assert log.iloc[0]["market_spread"] == -3.5 and log.iloc[0]["home_qb"] == "Kyler Murray"
+    assert log.iloc[0]["predicted_probability"] == pytest.approx(0.58)   # the logged pick stays

@@ -1,6 +1,7 @@
-"""Trains and validates the v4 NFL win model: a ridge regression of the
-final margin on Elo, pass and rush EPA per play, and each starter's QB+
-(nfl_game_picks.ELO_FEATURE_COLUMNS, ml_models.MarginWinModel).
+"""Trains and validates the v4 NFL win model: the plain average
+(ml_models.BlendedWinModel) of v3's logistic regression and a ridge
+regression of the final margin on Elo, pass and rush EPA per play, and
+each starter's QB+ (nfl_game_picks.ELO_FEATURE_COLUMNS, ml_models.MarginWinModel).
 
 User request (2026-11-10): "look at the nfl models and see which ones you
 can improve either by bringing in new data not currently taken into
@@ -8,34 +9,55 @@ account or hyper parameters or honestly any change you can think of."
 
 Every week of 2017-2026 is replayed with only what was known before it
 (nfl_game_picks_backtest.build_multi_season_history - Elo from every
-earlier season on file), and both models are scored walk-forward on
+earlier season on file), and the models are scored walk-forward on
 2019-2026, refit each season on the earlier ones:
     live (v3)   logistic regression (C = 3) on nfl_game_picks.QB_PLUS_FEATURE_COLUMNS
-    v4          the margin model on ELO_FEATURE_COLUMNS
+    margin      the margin model on ELO_FEATURE_COLUMNS
+    new (v4)    the two averaged
 Reported: log loss, Brier and accuracy next to Vegas's closing moneyline
-on the same games, a paired bootstrap interval for v4 minus v3, and how
-many seasons v4 was better in. v4 is then fit on every replayed game and
-saved to config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH if it beat v3.
+on the same games, a paired bootstrap interval for each against v3, and how
+many seasons it was better in. Both are then fit on every replayed game
+and the average saved to config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH
+if it beat v3, with the site's track-record numbers
+(config.NFL_PICK_CONFIDENCE_BACKTEST_PATH).
 
-What was tried on the way (walk-forward 2019-2026, 1,972 games; change in
-log loss against v3's 0.6383; Vegas 0.6112):
+RESULT (2026-11-10; 1,999 games, Vegas 0.6094):
+    v3                    log loss 0.6362, right 64.5%
+    margin model alone    0.6310 (-0.0052, 95% CI -0.0117 to +0.0015), 6 of 8 seasons, right 65.2%
+    v4, the two averaged  0.6307 (-0.0054, 95% CI -0.0090 to -0.0021), 7 of 8 seasons, right 64.2%
+  The average is saved: the same gain, steadier (2026 so far is the one
+  season it trails v3, 0.6222 to 0.6205 over 134 games).
+  How often v4's picks were right by how sure it was: 50-55% 48%,
+  55-60% 58%, 60-65% 67%, 65-70% 72%, 70-75% 71%, 75%+ 79%. With Vegas's
+  favorite 68% of 1,739; against it 43% of 260.
+
+What was tried on the way (an earlier replay of the same seasons, 1,972
+games; change in log loss against v3):
     Elo added to v3's inputs                          -0.0045
     a margin-of-victory rating (SRS) instead          -0.0031
     pass and rush EPA split out                       -0.0032
     fitting the margin instead of win/loss            -0.0010
-    Elo + QB+ + pass/rush, margin model (v4)          -0.0066, 7 of 8 seasons
-    v4 plus success rate / points per drive /
-      turnovers / Pythagorean / pace / rest /
+    Elo + QB+ + pass/rush, margin model               -0.0058, 6 of 8 seasons
+    that averaged with v3 (v4)                        -0.0057, 8 of 8 seasons
+    weighted 70/30 toward the margin model            -0.0064, 7 of 8 seasons
+    margin model plus success rate / points per
+      drive / turnovers / Pythagorean / pace / rest /
       division game / explosive plays / EPA without
-      turnovers                                       within 0.0006 of v4
-    v4 with opponent-adjusted pass/rush EPA (every
+      turnovers                                       within 0.0006 of it
+    with opponent-adjusted pass/rush EPA (every
       offense and defense solved together, later
       games included)                                 +0.0012 to +0.0016 worse
-    v4 without QB+                                    +0.0052 worse
+    without QB+                                       +0.0052 worse
     Elo K 15-30, keeping 1/2-3/4 between seasons,
-      home edge 30-65, no margin scaling              within 0.0006 of v4
+      home edge 30-65, no margin scaling              within 0.0006
     garbage-time-free EPA, early-down EPA, the
       points model's ratings                          no help
+  Against the spread (the same replay, closing lines): no margin tried -
+  this model's, v3's, the points model's, a blend - beat it. Our side won
+  49-51% of ~1,900 games at every gap from 0 to 6 points, and none added
+  to the spread in a regression of the real margin on both (p 0.5-0.98).
+  So the site shows our margin next to the spread as context, not a lean
+  (config.NFL_WIN_MARGIN_SIGMA).
 
 Usage:
     PYTHONPATH=src python3 scripts/train_nfl_elo_margin_model.py [--no-save]
@@ -52,7 +74,7 @@ from sklearn.metrics import brier_score_loss, log_loss
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from mlb_metrics import config, ml_models, nfl_game_picks, nfl_game_picks_backtest as backtest  # noqa: E402
+from mlb_metrics import config, ml_models, nfl_game_evaluation, nfl_game_picks, nfl_game_picks_backtest as backtest  # noqa: E402
 
 RAW_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw", "nfl")
 SEASONS = list(range(2016, 2027))
@@ -97,8 +119,24 @@ def walk_forward(rows: pd.DataFrame) -> pd.DataFrame:
             nfl_game_picks.game_feature_matrix(train, new_cols), train["margin"])
         out.append(test[["game_id", "season", "home_won", "market"]].assign(
             live=live.predict_proba(test[live_cols].fillna(1.0))[:, 1],
-            new=new.predict_proba(nfl_game_picks.game_feature_matrix(test, new_cols))[:, 1]))
-    return pd.concat(out, ignore_index=True)
+            margin=new.predict_proba(nfl_game_picks.game_feature_matrix(test, new_cols))[:, 1]))
+    scored = pd.concat(out, ignore_index=True)
+    scored["new"] = (scored["live"] + scored["margin"]) / 2
+    return scored
+
+
+def write_confidence_backtest(scored: pd.DataFrame) -> pd.DataFrame:
+    """The site's track-record numbers from the walk-forward picks, as the
+    live pipeline makes them: the model's chance, replaced by Vegas's where
+    the two are config.NFL_GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD or more
+    apart (nfl_game_picks.apply_market_tiebreak)."""
+    far = (scored["new"] - scored["market"]).abs() >= config.NFL_GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD
+    shown = scored["new"].where(~far, scored["market"])
+    counts = nfl_game_evaluation.confidence_counts(shown, scored["home_won"], scored["market"])
+    path = os.path.join(os.path.dirname(__file__), "..", config.NFL_PICK_CONFIDENCE_BACKTEST_PATH)
+    counts.to_csv(path, index=False)
+    print(counts.assign(rate=(counts["right"] / counts["games"]).round(3)).to_string(index=False))
+    return counts
 
 
 def main():
@@ -118,20 +156,33 @@ def main():
     scored = walk_forward(rows)
     y = scored["home_won"].to_numpy()
     print(f"\nWalk-forward {TEST_SEASONS[0]}-{TEST_SEASONS[-1]}, {len(scored)} games")
-    for name in ("live", "new", "market"):
+    for name in ("live", "margin", "new", "market"):
         p = scored[name].clip(0.01, 0.99).to_numpy()
         print(f"  {name:7s} log loss {log_loss(y, p):.4f}  Brier {brier_score_loss(y, p):.4f}  right {((p > 0.5) == (y == 1)).mean():.3f}")
     point = lambda p: -(y * np.log(p) + (1 - y) * np.log(1 - p))
-    diff = point(scored["new"].clip(0.01, 0.99).to_numpy()) - point(scored["live"].clip(0.01, 0.99).to_numpy())
-    rng = np.random.default_rng(0)
-    boots = [diff[rng.integers(0, len(diff), len(diff))].mean() for _ in range(2000)]
     by_season = scored.groupby("season").apply(lambda g: pd.Series({
-        "live": log_loss(g["home_won"], g["live"]), "new": log_loss(g["home_won"], g["new"]),
-        "market": log_loss(g["home_won"], g["market"]), "games": len(g)}), include_groups=False)
-    better = int((by_season["new"] < by_season["live"]).sum())
-    print(f"  v4 - v3: {diff.mean():+.4f} (95% CI {np.percentile(boots, 2.5):+.4f} to {np.percentile(boots, 97.5):+.4f}),"
-          f" better in {better} of {len(by_season)} seasons")
+        **{name: log_loss(g["home_won"], g[name].clip(0.01, 0.99)) for name in ("live", "margin", "new", "market")},
+        "games": len(g)}), include_groups=False)
+    rng = np.random.default_rng(0)
+    diffs = {}
+    for name, label in (("margin", "margin model alone"), ("new", "v4 (the two averaged)")):
+        diff = point(scored[name].clip(0.01, 0.99).to_numpy()) - point(scored["live"].clip(0.01, 0.99).to_numpy())
+        boots = [diff[rng.integers(0, len(diff), len(diff))].mean() for _ in range(2000)]
+        better = int((by_season[name] < by_season["live"]).sum())
+        print(f"  {label} - v3: {diff.mean():+.4f} (95% CI {np.percentile(boots, 2.5):+.4f} to"
+              f" {np.percentile(boots, 97.5):+.4f}), better in {better} of {len(by_season)} seasons")
+        diffs[name] = diff
+    diff = diffs["new"]
     print(by_season.round(4).to_string())
+    # Picks by how sure the model was (the site's track-record table).
+    sure = np.maximum(scored["new"], 1 - scored["new"])
+    right = (scored["new"] > 0.5) == (scored["home_won"] == 1)
+    bands = pd.cut(sure, [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 1.0], include_lowest=True)
+    print(pd.DataFrame({"games": right.groupby(bands, observed=True).size(), "right": right.groupby(bands, observed=True).mean().round(3),
+                        "said": sure.groupby(bands, observed=True).mean().round(3)}).to_string())
+    scored.to_csv(os.path.join(os.path.dirname(__file__), "..", "data", "backtest", "nfl_win_model_v4_walk_forward.csv"), index=False)
+    if not args.no_save and diff.mean() < 0:
+        write_confidence_backtest(scored)
 
     final = ml_models.MarginWinModel(alpha=config.NFL_MARGIN_MODEL_ALPHA).fit(
         nfl_game_picks.game_feature_matrix(rows, nfl_game_picks.ELO_FEATURE_COLUMNS), rows["margin"])
@@ -144,7 +195,10 @@ def main():
     if diff.mean() >= 0:
         print("v4 did not beat v3 - not saved.")
         return
-    ml_models.save_model({"model": final, "feature_columns": nfl_game_picks.ELO_FEATURE_COLUMNS},
+    live_cols = nfl_game_picks.QB_PLUS_FEATURE_COLUMNS
+    logistic = LogisticRegression(C=3.0, max_iter=2000).fit(rows[live_cols].fillna(1.0), rows["home_won"])
+    blend = ml_models.BlendedWinModel([(logistic, live_cols), (final, nfl_game_picks.ELO_FEATURE_COLUMNS)])
+    ml_models.save_model({"model": blend, "feature_columns": nfl_game_picks.BLEND_FEATURE_COLUMNS},
                          config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH)
     print(f"-> saved to {config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH}")
 

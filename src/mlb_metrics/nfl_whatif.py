@@ -621,6 +621,47 @@ def apply_injury_report(data: dict, report: pd.DataFrame, rosters: pd.DataFrame 
     return results
 
 
+QB_CARD_COLUMNS = ["home_qb", "away_qb", "home_qb_plus", "away_qb_plus"]
+INJURY_CARD_COLUMNS = ["injury_out_home", "injury_out_away"]
+
+
+def card_details(data: dict, after_report: bool = False) -> pd.DataFrame:
+    """What each game's card says about its players, indexed by game_id:
+    each side's starting QB (home_qb/away_qb) and his QB+ rating
+    (home_qb_plus/away_qb_plus; the export ranks the week's starters by
+    it), and, with `after_report`, the regulars and starting QB the final injury
+    report took out on each side (injury_out_home/injury_out_away, "Name
+    (WR), Name (QB)", the most-used first) with the backup named as the
+    starter. Before the report the starter is the listed one."""
+    rows = []
+    for game in data.get("games", []):
+        row = {"game_id": game["game_id"]}
+        report = game.get("injury_report") if after_report else None
+        for side in ("home", "away"):
+            options = game[side].get("qbs", [])
+            listed = next((q for q in options if q.get("listed")), None)
+            starter = listed
+            out = []
+            if report:
+                swap = report.get("qb", {}).get(side)
+                if swap is not None:
+                    starter = next((q for q in options if q["id"] == swap), listed)
+                    if listed is not None:
+                        out.append(f"{listed['name']} (QB)")
+                gone = set(report.get("out", {}).get(side, []))
+                regulars = sorted((r for r in game[side].get("regulars", []) if r["id"] in gone),
+                                  key=lambda r: -(r.get("share") or 0))
+                out += [f"{r['name']} ({r['group']})" for r in regulars]
+                row[f"injury_out_{side}"] = ", ".join(out) if out else None
+            row[f"{side}_qb"] = starter["name"] if starter else None
+            row[f"{side}_qb_plus"] = starter.get("qb_plus") if starter else None
+        rows.append(row)
+    columns = ["game_id", *QB_CARD_COLUMNS, *(INJURY_CARD_COLUMNS if after_report else [])]
+    if not rows:
+        return pd.DataFrame(columns=columns).set_index("game_id")
+    return pd.DataFrame(rows).reindex(columns=columns).set_index("game_id")
+
+
 def add_results(data: dict, schedules: pd.DataFrame, week_snaps: pd.DataFrame) -> dict:
     """For a replayed week: each game's final score, the QBs who started
     (marked "started"), and each listed player's "played" - whether he took

@@ -264,6 +264,22 @@ class MarginWinModel:
         return {"alpha": self.alpha, "clip": self.clip}
 
 
+class BlendedWinModel:
+    """The plain average of several win models' home win chances. Each
+    member is (model, feature_columns) and reads only its own columns, so
+    `predict_proba` takes a DataFrame holding every member's columns."""
+
+    def __init__(self, members: list):
+        self.members = members
+
+    def predict_proba(self, X) -> np.ndarray:
+        p = np.mean([model.predict_proba(X[columns])[:, 1] for model, columns in self.members], axis=0)
+        return np.column_stack([1 - p, p])
+
+    def get_params(self, deep: bool = False) -> dict:
+        return {}
+
+
 def save_model(model, path: str) -> None:
     """joblib.dump, creating parent directories as needed - matches this
     project's existing pattern of committing binary data artifacts to git

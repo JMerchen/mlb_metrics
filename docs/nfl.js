@@ -103,8 +103,16 @@ picks = await loadCSV("./data/nfl_game_picks_picks.csv")
 console.log("no nfl_game_picks_picks.csv yet", e)
 }
 
+let confidence = []
+try{
+confidence = await loadCSV("./data/nfl_pick_confidence.csv")
+}catch(e){
+console.log("no nfl_pick_confidence.csv yet", e)
+}
+
 renderNflGamePickStats(summary)
-renderNflTodaysGamePicks(picks)
+renderNflTrackRecord(confidence, summary[0])
+renderNflTodaysGamePicks(picks, confidence)
 renderNflGamePickHistory(picks)
 loadNflWhatIf(picks)
 
@@ -584,7 +592,16 @@ el.innerHTML = html
 
 }
 
-function renderNflTodaysGamePicks(picks){
+// How each kind of pick has done, this season and in testing.
+function renderNflTrackRecord(confidence, summary){
+const el = document.getElementById("nflTrackRecord")
+if(!el){ return }
+const html = trackRecordTableHtml(confidence, summary)
+el.innerHTML = html
+document.getElementById("nflTrackRecordSection").style.display = html ? "" : "none"
+}
+
+function renderNflTodaysGamePicks(picks, confidence){
 
 const el = document.getElementById("nflTodaysGamePicks")
 
@@ -641,6 +658,10 @@ return `
 <div class="pickCard ${p.status} report-${report}${betAdvised ? " recommended" : ""}">
 <div class="pickName">${matchup}</div>
 <div class="pickProb">We say ${pick} ${pct0(p.predicted_probability)}${vegas ? ` &middot; Vegas ${vegas}` : ""}</div>
+${trackRecordNote(p, confidence) ? `<div class="pickNote">${trackRecordNote(p, confidence)}</div>` : ""}
+${pickReasonsHtml(p, "nfl")}
+${injuryLineHtml(p, "nfl")}
+${spreadText(p, "nfl") ? `<div class="pickProb">${spreadText(p, "nfl")}</div>` : ""}
 ${totalPointsText(p) ? `<div class="pickProb">${totalPointsText(p)} ${totalLeanBadgeHtml(p)}</div>` : ""}
 ${teamEpaHtml(p, "nfl")}
 ${reportNote}
