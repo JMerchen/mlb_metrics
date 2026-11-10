@@ -5112,6 +5112,27 @@ underdog reliably flags an upset (1,002 games; three-happy underdogs won
 35%, the rest 37%). Taking three-point shooting luck out of the scores
 before rating: no gain at half strength, worse at full.
 
+**Experience, guard shooting and free throws, tested and left out**
+(2026-11-10, `scripts/backtest_cbb_players.py`, hoopR player box scores;
+64,181 games 2013-2026). The question: do lower-ranked teams with good
+upper-class shooting guards pull more upsets? Experience is measured as
+earlier college seasons with 100+ minutes. A more experienced team beats
+its rating by half a point per standard deviation in the regular season
+(-0.0007 log loss, 14 of 14 seasons) but not in the tournament, where the
+sign flips (-1.2 points, differs p 0.01). Teams whose guards shoot a high
+percentage do slightly worse than their rating (some of the percentage
+is luck already banked). Free-throw percentage: nothing. Among 560
+tournament underdogs given 15-45%, the thirds by upper-class guard threes
+won 34.6%, 33.5% and 33.7%; underdogs with experienced, good-shooting
+guards won 34.9% against 33.6% for the rest, both about two points above
+our number. Nothing improves tournament picks.
+
+**Shown, not new information** (2026-11-10): the Rankings tab's Deep dive
+adds adjusted offensive and defensive efficiency as points per 100
+possessions and each team's chance of beating an average team on a
+neutral floor (`cbbBeatsAverage`, the idea behind Barthag) - both read
+straight off the ratings.
+
 **Not in it yet**: injuries, and the committee's actual selection rules
 before the bracket is out.
 

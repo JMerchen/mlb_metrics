@@ -38,7 +38,37 @@ Usage:
 (--raw as backtest_cbb_style_elo.py; --players holds hoopR's
 player_box_<season>.parquet files, downloaded there when missing.)
 
-RESULT: not run yet.
+RESULT (2026-11-10; 68,665 games 2012-2026 with both teams at least five
+games in, scored from 2013: 64,181 games, 865 in the NCAA tournament;
+base log loss 0.5422, margin off by 8.765):
+  1. The margin, walk-forward. Experience: -0.0007 (95% CI -0.0010 to
+     -0.0005), 14 of 14 seasons - a more experienced team beats its rating
+     by about half a point per standard deviation (t 6.1) - but +0.0007 on
+     tournament games. Guard shooting: -0.0006 (11 of 14 seasons), and the
+     sign is the opposite of the idea: a team whose guards shoot a high
+     percentage does WORSE than its rating (-0.57 points per standard
+     deviation, t -11), since some of a high percentage is luck that the
+     rating has already banked. Free-throw percentage: -0.0001, nothing.
+     All six: -0.0009 overall, +0.0019 (worse) on tournament games.
+  2. March (932 tournament games): nothing matters more there. The one
+     term that differs from the regular season is experience, and it
+     points the other way: -1.2 points per standard deviation in the
+     tournament (t -1.9; differs from the regular season p 0.01).
+  3. Upsets, our chance held fixed. NCAA tournament (865 games, 253
+     upsets; we said 28.0%, it was 29.2%): no trait is reliable - upper-
+     class guard threes +20% upset odds per standard deviation (p 0.25),
+     experience -18% (p 0.19), guard three-point percentage -5% (p 0.57),
+     free-throw percentage +6% (p 0.48). Neutral floors (4,106) and every
+     game (39,873): effects of 3-8%, with favorites' experience lowering
+     upset odds a little (-7%, p 0.00-0.06).
+  4. NCAA underdogs we gave 15-45% (560 games; they won 33.9%, we said
+     31.7%), by thirds of upper-class guard threes: 34.6%, 33.5%, 33.7%.
+     By guard three-point percentage: 37.4%, 31.7%, 32.6%. By experience:
+     34.2%, 34.4%, 33.2%. Underdogs with experienced guards who shoot
+     well: 34.9% of 152 (we said 32.5%); everyone else 33.6% of 408 (we
+     said 31.4%) - the same two points above our number either way.
+  So: experienced, good-shooting guards do not mark the underdogs that
+  win, and nothing here helps tournament picks. Not added to the model.
 """
 
 import argparse
