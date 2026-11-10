@@ -247,6 +247,100 @@ picks.sort((x, y) => y.chance - x.chance)
 return `<div class="cbbUpsets"><b>Upsets to consider:</b> ${picks.map(u => `${u.text} (${cbbPct(u.chance)}, ${cbbEsc(u.region)})`).join("; ")}.</div>`
 }
 
+// A small seedable random number generator (mulberry32): the same seed
+// plays the same bracket.
+function cbbRng(seed){
+let a = seed >>> 0
+return function(){
+a = (a + 0x6D2B79F5) >>> 0
+let t = a
+t = Math.imul(t ^ (t >>> 15), t | 1)
+t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+}
+}
+
+const CBB_REGION_ROUNDS = ["Round of 64", "Round of 32", "Sweet 16", "Elite 8"]
+
+// Plays the whole bracket once. `random` is a function returning 0-1 (a
+// game goes to the side whose chance it lands under) or null to take the
+// favorite every time. Games already played (bracket.results) keep their
+// real winner. Returns {regions: [{region, firstFour: [game], rounds:
+// [[game]]}], finalFour: [game], final: game, champion, upsets: [game]}
+// where a game is {round, region, winner, loser, chance, upset, played}:
+// winner and loser are bracket team rows, `chance` is what the winner had
+// going in, and `upset` means the worse seed won.
+function cbbPlayBracket(bracket, byId, league, random){
+const played = new Map()
+;(bracket.results || []).forEach(g => {
+const winner = Number(g.home_score) > Number(g.away_score) ? Number(g.home_id) : Number(g.away_id)
+played.set(`${Math.min(g.home_id, g.away_id)}-${Math.max(g.home_id, g.away_id)}`, winner)
+})
+const upsets = []
+const play = (a, b, round, region) => {
+const teamA = byId.get(Number(a.team_id)), teamB = byId.get(Number(b.team_id))
+const chanceA = teamA && teamB ? cbbMatchup(teamA, teamB, "neutral", league).winA : 0.5
+const known = played.get(`${Math.min(a.team_id, b.team_id)}-${Math.max(a.team_id, b.team_id)}`)
+const aWins = known !== undefined ? known === Number(a.team_id) : random ? random() < chanceA : chanceA >= 0.5
+const winner = aWins ? a : b, loser = aWins ? b : a
+const game = {round, region, winner, loser, chance: aWins ? chanceA : 1 - chanceA, upset: winner.seed > loser.seed, played: known !== undefined}
+if(game.upset){ upsets.push(game) }
+return game
+}
+const regions = [].concat(...(bracket.final_four_pairs || [])).map(region => {
+const inRegion = (bracket.teams || []).filter(t => t.region === region)
+const firstFour = []
+let alive = CBB_SEED_ORDER.map(seed => {
+const entry = inRegion.filter(t => t.seed === seed)
+if(entry.length < 2){ return entry[0] }
+const game = play(entry[0], entry[1], "First Four", region)
+firstFour.push(game)
+return game.winner
+})
+const rounds = []
+CBB_REGION_ROUNDS.forEach(round => {
+const games = []
+for(let i = 0; i + 1 < alive.length; i += 2){
+if(alive[i] && alive[i + 1]){ games.push(play(alive[i], alive[i + 1], round, region)) }
+}
+rounds.push(games)
+alive = games.map(g => g.winner)
+})
+return {region, firstFour, rounds, winner: alive[0]}
+})
+const finalFour = []
+for(let i = 0; i + 1 < regions.length; i += 2){
+if(regions[i].winner && regions[i + 1].winner){ finalFour.push(play(regions[i].winner, regions[i + 1].winner, "Final Four", null)) }
+}
+const final = finalFour.length === 2 ? play(finalFour[0].winner, finalFour[1].winner, "Championship", null) : null
+return {regions, finalFour, final, champion: final ? final.winner : null, upsets}
+}
+
+// One played-out bracket: the champion and the upsets up top, then each
+// region round by round.
+function cbbPlayedBracketHtml(sim, byId){
+if(!sim || !sim.champion){ return '<div class="empty-note">No bracket to play yet.</div>' }
+const name = t => cbbEsc((byId.get(Number(t.team_id)) || {team: `Team ${t.team_id}`}).team)
+const line = g => `<div class="cbbPlayed${g.upset ? " upset" : ""}"><span class="cbbSeed">${g.winner.seed}</span><span class="cbbSlotName"><b>${name(g.winner)}</b> <span class="dim">over ${g.loser.seed} ${name(g.loser)}</span></span>${
+g.played ? '<span class="cbbPlayedTag">final</span>' : g.upset ? `<span class="cbbPlayedTag">upset&nbsp;&middot; ${cbbPct(g.chance)}</span>` : ""}</div>`
+const biggest = sim.upsets.filter(g => !g.played).slice().sort((x, y) => x.chance - y.chance)[0]
+const made = sim.upsets.length
+const head = `<div class="cbbPlayedHead"><b>${name(sim.champion)}</b> wins it all (${sim.champion.seed} seed, ${cbbEsc(sim.champion.region)}). Final Four: ${
+sim.regions.map(r => `${name(r.winner)} (${r.winner.seed})`).join(", ")}. ${
+made ? `${made} upset${made === 1 ? "" : "s"} by seed${biggest ? `, the biggest ${biggest.winner.seed} ${name(biggest.winner)} over ${biggest.loser.seed} ${name(biggest.loser)} (a ${cbbPct(biggest.chance)} chance)` : ""}.` : "No upsets by seed."}</div>`
+const regions = sim.regions.map(r => `<div class="cbbRegion">
+<h4>${cbbEsc(r.region)}</h4>
+${r.firstFour.length ? `<div class="cbbPlayedRound">First Four</div>${r.firstFour.map(line).join("")}` : ""}
+${r.rounds.map((games, i) => games.length ? `<div class="cbbPlayedRound">${CBB_REGION_ROUNDS[i]}</div>${games.map(line).join("")}` : "").join("")}
+</div>`).join("")
+const last = `<div class="cbbRegion cbbFinalCard">
+<h4>Final Four</h4>
+${sim.finalFour.map(line).join("")}
+<div class="cbbPlayedRound">Championship</div>${line(sim.final)}
+</div>`
+return `${head}<div class="cbbRegions">${regions}${last}</div>`
+}
+
 // The headline: the four likeliest champions.
 function cbbFavoritesHtml(bracket, byId){
 const teams = ((bracket && bracket.teams) || []).slice().sort((x, y) => y.champion - x.champion).slice(0, 4)
@@ -286,7 +380,7 @@ if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 cbbNormCdf, cbbPct, cbbSigned, cbbOrdinal, cbbMatchup, cbbBeatsAverage, cbbTeamIndex, cbbRankingsHtml, cbbMatchupHtml, cbbGameRowHtml,
 cbbGamesHtml, cbbRecordHtml, cbbBracketOddsHtml, cbbRegionHtml, cbbFavoritesHtml, cbbBracketNote, cbbBacktestHtml,
-cbbUpsetsHtml,
+cbbUpsetsHtml, cbbRng, cbbPlayBracket, cbbPlayedBracketHtml,
 cbbDateLabel,
 }
 }

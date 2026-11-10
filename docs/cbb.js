@@ -23,6 +23,11 @@ more.onclick = () => { cbb.allOdds = true; renderCbbMadness() }
 const regions = [].concat(...(d.bracket.final_four_pairs || []))
 document.getElementById("cbbUpsets").innerHTML = cbbUpsetsHtml(d.bracket, cbb.byId)
 document.getElementById("cbbRegions").innerHTML = regions.map(r => cbbRegionHtml(d.bracket, cbb.byId, r, d.league)).join("")
+const playOut = random => {
+document.getElementById("cbbPlayed").innerHTML = cbbPlayedBracketHtml(cbbPlayBracket(d.bracket, cbb.byId, d.league, random), cbb.byId)
+}
+document.getElementById("cbbPlayRandom").onclick = () => playOut(cbbRng(Date.now()))
+document.getElementById("cbbPlayFavorites").onclick = () => playOut(null)
 const backtest = cbbBacktestHtml(d.backtest)
 document.getElementById("cbbBacktest").innerHTML = backtest
 document.getElementById("cbbBacktestSection").style.display = backtest ? "" : "none"

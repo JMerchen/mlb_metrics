@@ -5127,6 +5127,19 @@ won 34.6%, 33.5% and 33.7%; underdogs with experienced, good-shooting
 guards won 34.9% against 33.6% for the rest, both about two points above
 our number. Nothing improves tournament picks.
 
+**Upsets happen as often as the odds say** (2026-11-10, asked "what do we
+need to have a better chance at predicting upsets"). Over 16 tournaments
+(1,066 games, picked from Selection Sunday's ratings) our odds expected
+19.3 upsets of the favorite a tournament and there were 19.9 (13 to 26).
+The miss is no wider in the tournament (sd 11.5 points against 11.2 over
+all games), and widening the spread for tournament games does not help
+(best multiplier 1.05, log loss 0.5516 to 0.5515; chosen leaving one
+season out it is better in 6 of 16). So the odds give underdogs the right
+chance as a group; which ones hit is not in the box scores. The page's
+"Play it out" (`cbb_render.js` `cbbPlayBracket`) plays one whole bracket
+with those odds - or the favorites only - so a bracket with a realistic
+number of upsets can be seen, not just the averages.
+
 **Shown, not new information** (2026-11-10): the Rankings tab's Deep dive
 adds adjusted offensive and defensive efficiency as points per 100
 possessions and each team's chance of beating an average team on a
