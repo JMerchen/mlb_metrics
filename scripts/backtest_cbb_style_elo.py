@@ -36,12 +36,50 @@ top is walk-forward: fit on the seasons before, scored on the season.
    60-90% favorite: does the underdog's style say more than our chance
    already does?
 
+5. Shooting luck (--luck). What 2 turned up - teams that force turnovers
+   and rebound beat their rating a little - suggests the ratings count
+   hot and cold shooting at face value. So: each game's points are
+   adjusted toward what its threes (and free throws) "should" have made,
+   from the team's own percentage before the game (200 attempts of the
+   league's mixed in; 100 for free throws), the ratings are refit on the
+   adjusted scores, and the real games are predicted.
+
 Usage:
-    PYTHONPATH=src python3 scripts/backtest_cbb_style_elo.py --raw DIR
+    PYTHONPATH=src python3 scripts/backtest_cbb_style_elo.py --raw DIR [--luck]
 (DIR holds hoopR's full mbb_schedule_<season>.parquet and
 team_box_<season>.parquet files; missing ones are downloaded into it.)
 
-RESULT: not run yet.
+RESULT (2026-11-10; 86,985 games 2011-2026; base log loss 0.5262, margin
+off by 8.862, favorite won 72.8%; 1,002 NCAA tournament games 0.5504):
+  1. Elo (best of 18 settings: K 20, keeps 90%, home edge 100) alone:
+     0.5388, +0.0126 (95% CI +0.0114 to +0.0137), better in 0 of 16
+     seasons. Blended with our margin: 0.0000 (-0.0001 to 0.0000); in a
+     regression of the real margin on both, ours gets 0.986 (t 80) and
+     Elo 0.05 points per 100 Elo (t 1.1). Elo adds nothing.
+  2. Matchup terms (offense's lean x defense's lean, four of them):
+     0.0000 (-0.0001 to +0.0002), 5 of 16 seasons. Nothing.
+     Plain style differences (eight): -0.0010 (-0.0012 to -0.0008), 16 of
+     16 seasons, margin off by 8.858 - but +0.0011 on NCAA tournament
+     games. Points of margin per standard deviation: forcing turnovers
+     +0.32, offensive rebounding +0.29, keeping opponents off the
+     offensive glass +0.32, shooting threes +0.20, getting to the line
+     +0.18. Real, tiny (about 0.2% of the log loss), and no help in March.
+  3. A spread of the miss that moves with pace, threes and how lopsided
+     the game is: -0.0002 (-0.0002 to -0.0001). The miss is a bit bigger
+     in fast games (sd 11.5 against 10.9 in slow ones) and three-heavy
+     ones (11.6 against 10.8), but the win chance barely moves.
+  4. Upsets. NCAA tournament (1,002 games, 300 upsets; we said 28.6%, it
+     was 29.9%): no trait of the underdog is reliable - forcing turnovers
+     +15% upset odds per standard deviation (p 0.07), the rest p > 0.1;
+     three-happy underdogs we gave 20-45% won 35%, the others 37%. Over
+     every game with a 60-90% favorite (53,250), underdogs that shoot
+     threes (+6%), force turnovers (+4%) and rebound their misses (+7%)
+     win a little more than we say - the same small effect as in 2.
+  5. Shooting luck taken out of the scores: half of it 0.0000 (-0.0005 to
+     +0.0006; margin off by 8.845), all of it +0.0067 worse (0 of 16
+     seasons), three quarters plus free throws +0.0038 worse. A team's
+     shooting on the night is mostly signal about the team.
+  Nothing here is worth adding to the live model.
 """
 
 import argparse
@@ -154,6 +192,48 @@ def elo_margins(games: pd.DataFrame, k: float, keep: float, home: float) -> pd.S
     return pd.Series(edges, index=g["game_id"].to_numpy())
 
 
+def shooting_luck(box: pd.DataFrame, games: pd.DataFrame) -> pd.DataFrame:
+    """Points each team scored above what its threes and free throws
+    "should" have made in each game (luck3, luckft), indexed by (game_id,
+    team_id): makes minus attempts times the team's own percentage before
+    the game, with 200 three-point attempts (100 free throws) of the
+    league's percentage mixed in."""
+    num = lambda c: pd.to_numeric(box[c], errors="coerce")
+    b = pd.DataFrame({"game_id": box["game_id"].astype(str), "team_id": box["team_id"].astype(int),
+                      "tpa": num("three_point_field_goals_attempted"), "tpm": num("three_point_field_goals_made"),
+                      "fta": num("free_throws_attempted"), "ftm": num("free_throws_made")})
+    b = b.drop_duplicates(["game_id", "team_id"]).dropna().merge(games[["game_id", "date"]], on="game_id")
+    b = b.sort_values(["team_id", "date", "game_id"])
+    group = b.groupby("team_id")
+    for made, attempts, k in (("tpm", "tpa", 200.0), ("ftm", "fta", 100.0)):
+        league = b[made].sum() / b[attempts].sum()
+        b[f"exp_{made}"] = ((group[made].cumsum() - b[made]) + k * league) / ((group[attempts].cumsum() - b[attempts]) + k)
+    b["luck3"] = 3 * (b["tpm"] - b["tpa"] * b["exp_tpm"])
+    b["luckft"] = b["ftm"] - b["fta"] * b["exp_ftm"]
+    return b.set_index(["game_id", "team_id"])[["luck3", "luckft"]]
+
+
+def luck_test(games_by_season: dict, luck_by_season: dict, base_rows: pd.DataFrame) -> None:
+    print("\n5. SHOOTING LUCK TAKEN OUT OF THE SCORES")
+    real = pd.concat(games_by_season.values())[["game_id", "home_score", "away_score"]]
+    b0 = base_rows[base_rows["season"] >= FIRST_SCORED].set_index("game_id")
+    for name, (w3, wft) in {"half the three-point luck": (0.5, 0.0), "all of it": (1.0, 0.0),
+                            "three quarters, and free throws": (0.75, 1.0)}.items():
+        adjusted = {}
+        for season, games in games_by_season.items():
+            g, luck = games.copy(), luck_by_season[season]
+            for side in ("home", "away"):
+                key = pd.MultiIndex.from_arrays([g["game_id"], g[f"{side}_id"]])
+                g[f"{side}_score"] = (g[f"{side}_score"] - w3 * luck["luck3"].reindex(key).fillna(0).to_numpy()
+                                      - wft * luck["luckft"].reindex(key).fillna(0).to_numpy())
+            adjusted[season] = g
+        rows = base.replay(adjusted).merge(real, on="game_id")
+        rows["actual"] = rows["home_score"] - rows["away_score"]          # the real result, not the adjusted one
+        r = rows.set_index("game_id").reindex(b0.index)
+        sigma = np.sqrt(((r["actual"] - r["margin"]) ** 2).mean())
+        compare(name, b0.reset_index(), norm.cdf(r["margin"].to_numpy() / sigma), b0["p"].to_numpy(), r["margin"].to_numpy())
+
+
 def log_loss(p, won) -> np.ndarray:
     p = np.clip(np.asarray(p, dtype=float), 1e-6, 1 - 1e-6)
     return -np.where(np.asarray(won, dtype=bool), np.log(p), np.log(1 - p))
@@ -195,15 +275,17 @@ def walk_forward(rows: pd.DataFrame, features: list, target: str) -> np.ndarray:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--raw", required=True)
+    parser.add_argument("--luck", action="store_true", help="also run test 5 (three more replays)")
     args = parser.parse_args()
     pd.set_option("display.width", 250)
 
-    games_by_season, style_rows = {}, []
+    games_by_season, style_rows, luck_by_season = {}, [], {}
     for season in SEASONS:
         schedules, box = load_raw(args.raw, "schedules", season), load_raw(args.raw, "team_box", season)
         games_by_season[season] = cbb_ratings.prepare_games(schedules, box)
         base._RANKED[season] = cbb_ratings.preseason_ranked(schedules)
         style_rows.append(style_before(team_games(box, games_by_season[season])))
+        luck_by_season[season] = shooting_luck(box, games_by_season[season])
     style = pd.concat(style_rows, ignore_index=True)
     all_games = pd.concat(games_by_season.values(), ignore_index=True)
 
@@ -232,6 +314,10 @@ def main():
           f" favorite won {((s['p'] > 0.5) == won).mean():.3f}; NCAA tournament {int(s['tournament'].sum())} games,"
           f" log loss {log_loss(s.loc[s['tournament'], 'p'], won[s['tournament']]).mean():.4f}")
 
+    if args.luck:
+        luck_test(games_by_season, luck_by_season, rows)
+        return
+
     # ---- 1. Elo ---------------------------------------------------------------------------------------
     print("\n1. ELO")
     best = None
@@ -254,7 +340,6 @@ def main():
           f" Elo edge per 100 points {100 * weights.params['elo_edge']:.3f} (t {weights.tvalues['elo_edge']:.1f})")
     s = rows[scored].reset_index(drop=True)
     for name, column in (("Elo alone, as a margin", "elo_only"), ("our margin + Elo", "blend")):
-        resid = np.sqrt(((s["actual"] - s[column]) ** 2).groupby(s["season"]).transform("mean"))   # same-season spread: generous to the new one
         compare(name, s, norm.cdf(s[column] / s["sigma"]), s["p"], s[column])
 
     # ---- 2. Style, the average ---------------------------------------------------------------------------

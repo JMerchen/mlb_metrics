@@ -5096,6 +5096,22 @@ pick for every Division I game in the next two days (the first pick
 logged is the one graded, `data/predictions/cbb_game_predictions.csv`),
 simulate the bracket, write `docs/data/cbb.json`.
 
+**Elo and style matchups, tested and left out** (2026-11-10,
+`scripts/backtest_cbb_style_elo.py`; 86,985 replayed games 2011-2026,
+every add-on fit walk-forward). Elo alone is worse in all 16 seasons
+(log loss +0.0126) and adds nothing blended in (t 1.1 next to our
+margin's 80). Matchup terms - a three-happy offense against a defense
+that allows threes, and the same for turnovers, offensive rebounds and
+free throws - change nothing (0.0000). Plain style differences do carry a
+little: teams that force turnovers and win the offensive glass beat
+their rating by about a third of a point per standard deviation (-0.0010
+log loss, 16 of 16 seasons), but it is 0.2% of the log loss and makes
+tournament picks no better (+0.0011), so it isn't in the model. A spread
+that moves with pace and threes: -0.0002. No trait of a tournament
+underdog reliably flags an upset (1,002 games; three-happy underdogs won
+35%, the rest 37%). Taking three-point shooting luck out of the scores
+before rating: no gain at half strength, worse at full.
+
 **Not in it yet**: injuries, and the committee's actual selection rules
 before the bracket is out.
 
