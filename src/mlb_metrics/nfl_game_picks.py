@@ -318,6 +318,34 @@ def build_game_features_qb_plus(
     return games[["game_id", "season", "week", "home_team", "away_team"] + QB_PLUS_FEATURE_COLUMNS]
 
 
+ELO_FEATURE_COLUMNS = [
+    "elo_diff", "pass_off_diff", "pass_def_diff", "rush_off_diff", "rush_def_diff", "home_qb_plus", "away_qb_plus",
+]
+_ELO_MASTER_COLUMNS = {"elo_diff": "elo", "pass_off_diff": "pass_off_epa", "pass_def_diff": "pass_def_epa",
+                       "rush_off_diff": "rush_off_epa", "rush_def_diff": "rush_def_epa"}
+
+
+def build_game_features_elo(
+    master: pd.DataFrame, qb_continuity: pd.DataFrame, weekly_df: pd.DataFrame, schedule_games_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Returns [game_id, season, week, home_team, away_team] + ELO_FEATURE_COLUMNS,
+    the v4 win model's inputs (config.NFL_GAME_PICK_MODEL_VERSION): home
+    minus away in Elo and in pass and rush EPA per play on offense and
+    defense (nfl_team_strength.compute_elo_ratings/compute_pass_rush_epa,
+    carried in `master`), and each listed starter's QB+ - kept one column a
+    side so the What if? panel can swap a quarterback. A `master` without
+    those columns gives blank differences, and the game keeps its
+    heuristic probability."""
+    games = build_game_features_qb_plus(master, qb_continuity, weekly_df, schedule_games_df)
+    by_team = master.set_index("team")
+    for feature, column in _ELO_MASTER_COLUMNS.items():
+        if column in by_team.columns:
+            games[feature] = (games["home_team"].map(by_team[column]) - games["away_team"].map(by_team[column])).to_numpy()
+        else:
+            games[feature] = float("nan")
+    return games[["game_id", "season", "week", "home_team", "away_team"] + ELO_FEATURE_COLUMNS]
+
+
 # Real follow-up (2026-09-11 - "it's a comparison... if the difference
 # between team A offense and team B defense is 15 and the difference
 # between team B offense and team A defense is 4, we're saying it'll be
@@ -478,6 +506,7 @@ _FEATURE_COLUMN_BUILDERS = [
     (MATCHUP_ADDED_FEATURE_COLUMNS, build_game_features_matchup),
     (MATCHUP_FOCUSED_FEATURE_COLUMNS, build_game_features_matchup),
     (QB_PLUS_FEATURE_COLUMNS, build_game_features_qb_plus),
+    (ELO_FEATURE_COLUMNS, build_game_features_elo),
 ]
 
 

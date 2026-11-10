@@ -344,6 +344,9 @@ def build_multi_season_history(
                 history_sched, history_stats, history_pbp, current_season=season,
                 carryover_regression=carryover_regression, carryover_prior_strength=carryover_prior_strength,
                 season_aware=season_aware, opponent_adjustment_weight=opponent_adjustment_weight,
+                elo_schedules_df=pd.concat(
+                    [schedules_df[(schedules_df["season"] < season) & (schedules_df["game_type"] == "REG")],
+                     reg[reg["week"] < week]], ignore_index=True),
             )
             qb_continuity = nfl_team_strength.compute_qb_continuity_adjustment(
                 history_snaps, history_weekly, history_rosters

@@ -130,7 +130,8 @@ def win_rows(snaps, variant):
 def win_picks():
     snaps = carry._snapshots()
     artifact = ml_models.load_model(config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH)
-    c = artifact["model"].get_params()["C"] if artifact else 1.0
+    # The live logistic regression's C when these were run (v3); the v4 margin model has none.
+    c = artifact["model"].get_params().get("C", 3.0) if artifact else 1.0
     variants = ["live", "season_only", "stretch_d_1.3", "stretch_d_1.6", "stretch_od_1.3"]
     live_rows = carry.feature_rows(snaps, None)
     z = config.NFL_NORMALIZATION_Z_SCALE

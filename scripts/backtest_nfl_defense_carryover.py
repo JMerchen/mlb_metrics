@@ -155,7 +155,8 @@ def main():
     snaps = _snapshots()
     print(f"{len(snaps)} replayed weeks")
     artifact = ml_models.load_model(config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH)
-    c = artifact["model"].get_params()["C"] if artifact else 1.0
+    # The live logistic regression's C when these were run (v3); the v4 margin model has none.
+    c = artifact["model"].get_params().get("C", 3.0) if artifact else 1.0
     results = {name: walk_forward(feature_rows(snaps, v), c) for name, v in VARIANTS.items()}
     base = results["live"].set_index("game_id")
     rng = np.random.default_rng(0)

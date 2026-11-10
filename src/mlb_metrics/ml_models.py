@@ -230,6 +230,40 @@ def fit_probability_calibration(raw_probability: pd.Series, actual: pd.Series, m
     raise ValueError(f"Unknown calibration method {method!r} - expected 'isotonic' or 'sigmoid'.")
 
 
+class MarginWinModel:
+    """A win-probability model fit on the final MARGIN rather than on who
+    won: ridge regression of (home points - away points) on standardized
+    features, with the home win chance read off a normal curve whose
+    spread is the regression's own miss (about 13 points in the NFL).
+    Exposes `predict_proba` like a classifier, so everything that takes
+    the saved win model takes this one."""
+
+    def __init__(self, alpha: float = 30.0, clip: float = 0.01):
+        self.alpha = alpha
+        self.clip = clip
+
+    def fit(self, X, margin):
+        from sklearn.linear_model import Ridge
+        from sklearn.pipeline import make_pipeline
+        from sklearn.preprocessing import StandardScaler
+
+        self.pipeline_ = make_pipeline(StandardScaler(), Ridge(alpha=self.alpha)).fit(X, margin)
+        self.sigma_ = float(np.sqrt(np.mean((np.asarray(margin, dtype=float) - self.pipeline_.predict(X)) ** 2)))
+        return self
+
+    def predict_margin(self, X) -> np.ndarray:
+        return self.pipeline_.predict(X)
+
+    def predict_proba(self, X) -> np.ndarray:
+        from scipy.stats import norm
+
+        p = np.clip(norm.cdf(self.predict_margin(X) / self.sigma_), self.clip, 1 - self.clip)
+        return np.column_stack([1 - p, p])
+
+    def get_params(self, deep: bool = False) -> dict:
+        return {"alpha": self.alpha, "clip": self.clip}
+
+
 def save_model(model, path: str) -> None:
     """joblib.dump, creating parent directories as needed - matches this
     project's existing pattern of committing binary data artifacts to git

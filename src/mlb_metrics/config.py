@@ -2325,7 +2325,29 @@ NFL_GAME_PICK_CALIBRATION_MODEL_PATH = "data/models/nfl_game_pick_calibration_mo
 # real picks made under this new logic - same "never silently rewrite
 # already-logged history" discipline as MLB's own model_version bumps.
 # v2 -> v3 (2026-11-01): offensive/defensive edges per play, model retrained.
-NFL_GAME_PICK_MODEL_VERSION = "v3"
+NFL_GAME_PICK_MODEL_VERSION = "v4"
+# v4 (2026-11-10, "which [NFL models] can you improve"): the win model is a
+# ridge regression of the final MARGIN (home minus away points) on seven
+# inputs - the Elo difference, each side's pass and rush EPA per play
+# differences (offense and defense), and each starter's QB+ - turned into a
+# win chance through the normal curve (ml_models.MarginWinModel). A margin
+# says more than a win or loss does (a 30-point win and a 1-point win are
+# the same "1" to a classifier), Elo remembers more than the last season
+# and a half, and passing and rushing aren't worth the same. Walk-forward
+# 2019-2026 (1,972 games, refit on earlier seasons): log loss 0.6383 ->
+# 0.6316 (Vegas's closing line 0.6112), better in 7 of 8 seasons; the Elo
+# settings below are the standard ones and every nearby value (K 15-30,
+# keeping 1/2 to 3/4 between seasons, home edge 30-65) lands within 0.0003.
+# scripts/train_nfl_elo_margin_model.py.
+NFL_ELO_START = 1505.0
+NFL_ELO_K = 20.0
+NFL_ELO_HOME_EDGE = 48.0
+NFL_ELO_SEASON_KEEP = 2 / 3
+# Pass and rush EPA per play: each team's last 17, 8 and 4 games (weights
+# as NFL_TOTALS_WINDOWS), each window pulled toward the league rate by this
+# many plays.
+NFL_PASS_RUSH_SHRINK_PLAYS = 150.0
+NFL_MARGIN_MODEL_ALPHA = 30.0
 # offensive_edge / defensive_edge as EPA per play from play-by-play
 # (nfl_team_strength.compute_team_epa_per_play) rather than EPA per game
 # from team stats - see that function's docstring for the backtest.
