@@ -5015,6 +5015,67 @@ nothing is written and the prior week's real CSV is left in place, same
 `board_runner.run_board` already establishes for the 3 consensus
 boards. Shown on `docs/nfl.html`'s "Player Props" tab.
 
+## College basketball (`docs/cbb.html`, `cbb_ratings.py`, `cbb_bracket.py`, `cbb_pipeline.py`)
+
+User request (2026-11-10): "create a college basketball tab to try and
+predict March madness." Men's Division I.
+
+**Data** (`cbb_data.py`): hoopR's ESPN schedules and team box scores
+(`sportsdataverse/hoopR-mbb-data`, one parquet a season, updated daily),
+every game since 2008. A team with a conference is Division I. NCAA
+tournament games are read from the schedule note ("Men's Basketball
+Championship - East Region - Sweet 16"); seeds are in the data from 2023.
+
+**Ratings** (`cbb_ratings.fit_ratings`): offense and defense for every
+team, in points per 100 possessions better than average, by ridge
+regression over all the season's Division I games at once (efficiency =
+league average + offense - opponent's defense + home edge). Possessions
+come from the box score (FGA - OREB + TO + 0.475 FTA). Each rating is
+pulled toward a prior - CBB_CARRY of last season's rating, plus CBB_AP for a
+team in the preseason AP top 25 - with the weight of CBB_PRIOR games. A game's
+expected margin is the net-rating gap over the two teams' pace (plus home
+court), and the win chance is a normal curve CBB_SIGMA points wide around it.
+
+**Backtest** (`scripts/backtest_cbb_ratings.py`): every season from 2009
+replayed week by week (ratings refit each week from earlier games only),
+scored on 2010-2026, CBB_GAMES games:
+
+CBB_TABLE
+
+What the settings sweep found (log loss over all games): recency
+weighting hurts at every half-life tried (45 days +0.0101, 90 +0.0033,
+180 +0.0012); capping blowouts does nothing; a freely fit home edge is
+worse than holding it at 2.6 points per 100 possessions a side (+0.0019,
+in November it soaks up big programs hosting small ones); carrying over
+85% of last season's rating beats 70% (-0.0014) and 100%; the prior's
+weight is flat from 3 to 6 games and worse past 8. CBB_APLINE
+
+**The bracket** (`cbb_bracket.py`): `official_field` reads the real
+bracket from the schedule once the round of 64 is posted with seeds;
+before that `projected_field` builds one from the ratings (each
+conference's best-rated team, the best of the rest at large, seeded down
+the ratings, regions snaked). Against the real 2025 and 2026 fields the
+projection had 34 of the 37 at-large teams and 55 of 68 overall - the
+misses are conference-tournament winners. `simulate` plays the bracket
+20,000 times from the game odds; played games count as they finished.
+**On Selection Sunday set `config.CBB_FINAL_FOUR_PAIRS`** for the season
+(which regions meet in the semifinals isn't in the data until those games
+are scheduled; until then East-West / South-Midwest is assumed and the
+page says so).
+
+**Past tournaments** (`--table`, `data/backtest/cbb_tournament_backtest.csv`,
+shown on the page): every tournament game picked from the ratings before
+the first game. CBB_TLINE
+
+**Daily run** (`cbb_pipeline.py`, `.github/workflows/cbb_daily_update.yml`,
+every day November to early April): refit, grade finished picks, log a
+pick for every Division I game in the next two days (the first pick
+logged is the one graded, `data/predictions/cbb_game_predictions.csv`),
+simulate the bracket, write `docs/data/cbb.json`.
+
+**Not in it yet**: injuries, and the committee's actual selection rules
+before the bracket is out.
+
 ## Running
 
 ```

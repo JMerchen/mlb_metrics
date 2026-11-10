@@ -1,0 +1,73 @@
+name: College Basketball Daily Update
+
+on:
+  # Every day of the season (November to early April), 15:37 UTC (10:37 AM
+  # Eastern in winter): hoopR's overnight scrape of yesterday's games is in
+  # by then, and it is before the day's first tip-off. Off the top of the
+  # hour to avoid peak scheduled-workflow load.
+  schedule:
+    - cron: "37 15 * 11,12,1,2,3 *"
+    - cron: "37 15 1-10 4 *"
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season to run (the year it ends in; defaults to config.CBB_SEASON)"
+        required: false
+
+concurrency:
+  group: cbb-daily-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run college basketball pipeline
+        run: |
+          mkdir -p docs/data data/raw/cbb data/predictions
+          if [ -n "${{ inputs.season }}" ]; then
+            python scripts/cbb_pipeline.py --season "${{ inputs.season }}"
+          else
+            python scripts/cbb_pipeline.py
+          fi
+
+      - name: Commit updates
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          # Every output path the pipeline writes is listed here.
+          for f in docs/data/cbb.json data/predictions/cbb_game_predictions.csv data/raw/cbb; do
+            [ -e "$f" ] && git add "$f"
+          done
+
+          git commit -m "College basketball daily update" || echo "No changes"
+
+          branch=$(git rev-parse --abbrev-ref HEAD)
+          for attempt in 1 2 3 4 5; do
+            if git push; then
+              exit 0
+            fi
+            echo "Push attempt $attempt failed - pulling/rebasing and retrying..."
+            git pull --rebase origin "$branch"
+            sleep 5
+          done
+          echo "::error::Failed to push after 5 attempts"
+          exit 1
