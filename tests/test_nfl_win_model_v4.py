@@ -108,3 +108,12 @@ def test_v4_features_are_home_minus_away_and_keep_each_starters_qb_plus(monkeypa
     # A master from before these columns existed: blank differences, so the game keeps its fallback probability.
     old = nfl_game_picks.build_game_features_elo(master[["team"]], None, None, games)
     assert old["elo_diff"].isna().all()
+
+
+def test_the_team_table_carries_elo_and_pass_rush_epa():
+    """assemble_team_metrics returns a fixed column list - the v4 inputs have to be on it."""
+    import inspect
+
+    source = inspect.getsource(nfl_team_strength.assemble_team_metrics)
+    listed = source[source.index("output_columns = ["):]
+    assert '"elo"' in listed and "PASS_RUSH_COLUMNS" in listed

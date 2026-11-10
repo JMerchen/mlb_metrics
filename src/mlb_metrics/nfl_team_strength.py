@@ -877,5 +877,6 @@ def assemble_team_metrics(
         "Confidence", "pyth_Confidence", "Confidence_Delta", "true_power",
         "offensive_edge", "defensive_edge", "turnover_margin", "points_per_drive",
         "games_played", "win_rate", "win_rate_CI_Low", "win_rate_CI_High",
+        "elo", *PASS_RUSH_COLUMNS,
     ]
     return master[output_columns]
