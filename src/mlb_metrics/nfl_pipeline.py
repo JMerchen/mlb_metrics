@@ -300,6 +300,24 @@ def run(
         print(f"No real {season} schedule available at all - cannot proceed this run.")
         return
 
+    # Trades reach the depth charts a day or more before the weekly
+    # rosters: move anyone the latest depth chart has on another team, so
+    # the starters check, What if?, the props and the simulation rosters
+    # (which read the saved roster file) all see him on his new team.
+    current_week = determine_predictable_week(schedules, season)
+    if current_week is not None and not fresh.get("rosters_weekly", pd.DataFrame()).empty:
+        try:
+            depth_chart = nfl_data.fetch_depth_chart(season)
+        except Exception as exc:
+            print(f"WARNING: no depth chart this run ({exc}); rosters are the weekly file's.")
+            depth_chart = pd.DataFrame()
+        fresh["rosters_weekly"], moves = nfl_data.apply_depth_chart_teams(
+            fresh["rosters_weekly"], depth_chart, season, current_week)
+        for _, move in moves.iterrows():
+            print(f"  Depth chart: {move['full_name']} ({move['position']}) {move['from_team']} -> {move['to_team']}")
+        if len(moves):
+            nfl_data.persist_table(fresh["rosters_weekly"], raw_dir, "rosters_weekly", season)
+
     # Resolve any still-pending picks against this season's freshly
     # fetched real final scores - a single bulk match, no per-date fetch
     # loop needed (see nfl_game_predictions.resolve_game_predictions's own

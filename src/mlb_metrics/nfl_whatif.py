@@ -205,6 +205,10 @@ def games_missed_record(snap_counts: pd.DataFrame, yards: pd.DataFrame, regulars
 
 
 MAX_QB_OPTIONS = 4
+# A teammate counts as a QB option from his passing once he has dropped
+# back this often for the team this season (a running back's trick-play
+# pass or a punter's fake doesn't make him one).
+MIN_OPTION_DROPBACKS = 10
 
 
 def _group_of(position: str):
@@ -312,7 +316,10 @@ def average_regular_shares(regulars: pd.DataFrame) -> dict:
 def qb_options(weekly: pd.DataFrame, rosters: pd.DataFrame, games: pd.DataFrame) -> dict:
     """{team: [{id, name, qb_plus, listed}]} - the listed starter first, then
     up to MAX_QB_OPTIONS - 1 teammates (most dropbacks for the team this
-    season, then the latest roster's QBs), each rated as QB+."""
+    season, at least MIN_OPTION_DROPBACKS; then the latest roster's QBs),
+    each rated as QB+. A QB who
+    threw for the team earlier but is now on another team's roster (a
+    trade) isn't one of its options."""
     qb_games = nfl_game_picks.qb_games_from_weekly(weekly)
     season = games["season"].max()
     rosters = rosters if rosters is not None else pd.DataFrame()
@@ -333,6 +340,11 @@ def qb_options(weekly: pd.DataFrame, rosters: pd.DataFrame, games: pd.DataFrame)
             latest = latest[latest["week"] == latest.groupby("team")["week"].transform("max")]
             latest = latest[latest["status"].isin(["ACT", "RES", "INA"])]
             roster_qbs = latest.groupby("team")["gsis_id"].apply(list).to_dict()
+    # Where each player is now: his team in his latest week on any roster.
+    now_on = {}
+    if {"season", "week", "team", "gsis_id"} <= set(rosters.columns):
+        placed = rosters[(rosters["season"] == season) & rosters["gsis_id"].notna()].sort_values("week")
+        now_on = placed.drop_duplicates("gsis_id", keep="last").set_index("gsis_id")["team"].to_dict()
 
     options = {}
     for side in ("home", "away"):
@@ -342,7 +354,9 @@ def qb_options(weekly: pd.DataFrame, rosters: pd.DataFrame, games: pd.DataFrame)
             if isinstance(listed, str) and isinstance(listed_name, str):
                 names.setdefault(listed, listed_name)
             if not thrown.empty and team in thrown.index.get_level_values(0):
-                ids += [q for q in thrown.loc[team].sort_values(ascending=False).index if q not in ids]
+                passers = thrown.loc[team]
+                ids += [q for q in passers[passers >= MIN_OPTION_DROPBACKS].sort_values(ascending=False).index
+                        if q not in ids and now_on.get(q, team) == team]
             ids += [q for q in roster_qbs.get(team, []) if q not in ids]
             ids = ids[:MAX_QB_OPTIONS]
             rating = nfl_totals.starter_qb_epa(qb_games, pd.Series(ids, dtype=object))

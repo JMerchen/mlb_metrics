@@ -359,3 +359,31 @@ def test_card_details_after_the_report_lists_who_is_out_by_team_and_starts_the_b
 
 def test_card_details_of_no_games_is_empty():
     assert nfl_whatif.card_details({"games": []}).empty
+
+
+def test_qb_options_drop_a_quarterback_traded_to_another_team():
+    weekly = pd.DataFrame([_weekly("love", "Jordan Love", "GB", w, 30, 5.0) for w in range(1, 5)]
+                          + [_weekly("cousins", "Kirk Cousins", "GB", w, 30, 2.0) for w in range(5, 8)]
+                          + [_weekly("young", "Bryce Young", "CAR", w, 30, 1.0) for w in range(1, 8)])
+    def roster(gsis, name, team, week):
+        return {"season": 2026, "week": week, "team": team, "position": "QB", "gsis_id": gsis, "full_name": name, "status": "ACT"}
+    rosters = pd.DataFrame([roster("love", "Jordan Love", "GB", 8), roster("cousins", "Kirk Cousins", "GB", 7),
+                            roster("cousins", "Kirk Cousins", "MIN", 8), roster("young", "Bryce Young", "CAR", 8)])
+    options = nfl_whatif.qb_options(weekly, rosters, _games())
+    assert [q["name"] for q in options["GB"]][:2] == ["Jordan Love", "Average starter"]
+    # Before the trade reached the roster he was still one of Green Bay's options.
+    before = nfl_whatif.qb_options(weekly, rosters[rosters["week"] <= 7].assign(week=8), _games())
+    assert "Kirk Cousins" in [q["name"] for q in before["GB"]]
+
+
+def test_qb_options_ignore_a_trick_play_passer_and_include_a_new_roster_quarterback():
+    weekly = pd.DataFrame([_weekly("love", "Jordan Love", "GB", w, 30, 5.0) for w in range(1, 8)]
+                          + [_weekly("jacobs", "Josh Jacobs", "GB", 3, 1, 0.5)]            # a running back's one pass
+                          + [_weekly("young", "Bryce Young", "CAR", w, 30, 1.0) for w in range(1, 8)])
+    rosters = pd.DataFrame([
+        {"season": 2026, "week": 8, "team": "GB", "position": "QB", "gsis_id": "love", "full_name": "Jordan Love", "status": "ACT"},
+        {"season": 2026, "week": 8, "team": "GB", "position": "QB", "gsis_id": "brissett", "full_name": "Jacoby Brissett", "status": "ACT"},
+        {"season": 2026, "week": 8, "team": "GB", "position": "RB", "gsis_id": "jacobs", "full_name": "Josh Jacobs", "status": "ACT"},
+    ])
+    names = [q["name"] for q in nfl_whatif.qb_options(weekly, rosters, _games())["GB"]]
+    assert names == ["Jordan Love", "Jacoby Brissett", "Average starter"]
