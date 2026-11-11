@@ -2202,3 +2202,10 @@ td.form-down b{color:var(--danger);}
 .cbbPlayed.upset .cbbPlayedTag{color:var(--accent);font-weight:600;}
 .cbbFinalCard{border-color:var(--accent);}
 .cbbFilters .whatIfAction{margin:0;}
+.cbbEraPick{display:flex;gap:8px;flex:1 1 300px;max-width:400px;min-width:0;}
+.cbbFilters select.cbbEraSeason{flex:0 0 112px;}
+.cbbEraTeam{font-size:15px;margin-bottom:4px;}
+.cbbEraTeam .dim{color:var(--text-dim);font-weight:400;font-size:12px;}
+.cbbEraTeam + .cbbBar{margin-top:10px;}
+.cbbEraFinal{font-size:16px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);}
+.cbbEraTable .cbbMarch{text-align:left;padding-left:14px;}

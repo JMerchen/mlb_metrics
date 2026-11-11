@@ -2909,6 +2909,7 @@ PITCHERS_FACED_SHRINK = 100
 # college basketball tab to try and predict March madness").
 # ---------------------------------------------------------------------------
 CBB_SEASON = 2027                         # the season that ends in this year
+# (when this moves on, rerun scripts/build_cbb_history.py so the Time Machine gains the finished season)
 CBB_FIRST_SEASON = 2008                   # hoopR's ESPN data starts 2003; box scores are solid from here
 # A free-throw trip's share of a possession, and the scoring and pace of an
 # average Division I game (used only where a box score is missing and

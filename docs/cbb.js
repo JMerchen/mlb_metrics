@@ -1,8 +1,14 @@
 // College Hoops page: loads docs/data/cbb.json (cbb_pipeline.py) and wires
-// the four tabs. The rendering and the matchup math are in cbb_render.js.
+// the tabs. The Time Machine tab has its own file, docs/data/cbb_history.json
+// (scripts/build_cbb_history.py), fetched the first time the tab is opened.
+// The rendering and the matchup math are in cbb_render.js.
 
-const CBB_TABS = ["madness", "games", "rankings", "matchup"]
-const CBB_SECTIONS = {madness: "cbbMadnessSection", games: "cbbGamesSection", rankings: "cbbRankingsSection", matchup: "cbbMatchupSection"}
+const CBB_TABS = ["madness", "games", "rankings", "matchup", "era"]
+const CBB_SECTIONS = {madness: "cbbMadnessSection", games: "cbbGamesSection", rankings: "cbbRankingsSection", matchup: "cbbMatchupSection", era: "cbbEraSection"}
+// How many times the all-time bracket is played for its odds (a fixed
+// seed, so the numbers are the same on every visit).
+const CBB_ERA_SIMS = 5000
+const cbbEra = {started: false, teams: null, byId: null, league: null, bracket: null, tally: null, allOdds: false, bestLimit: 25}
 const cbb = {data: null, byId: new Map(), day: null, allOdds: false, allGames: false, allTeams: false}
 
 function selectCbbTab(tab){
@@ -10,6 +16,122 @@ if(!CBB_TABS.includes(tab)){ tab = "madness" }
 document.querySelectorAll("#cbbTabs .tabButton").forEach(b => b.classList.toggle("active", b.dataset.cbbTab === tab))
 CBB_TABS.forEach(t => { document.getElementById(CBB_SECTIONS[t]).style.display = t === tab ? "" : "none" })
 if(window.location.hash.replace("#", "") !== tab){ history.replaceState(null, "", `#${tab}`) }
+if(tab === "era" && !cbbEra.started){ loadCbbEra() }
+}
+
+// ---- Time Machine ----
+
+function cbbEraPicked(side){
+return cbbEra.byId.get(Number(document.getElementById(`cbbEraTeam${side}`).value))
+}
+
+// Fills one side's team list with its season's teams (A to Z) and selects `teamId`.
+function fillCbbEraTeams(side, teamId){
+const season = Number(document.getElementById(`cbbEraSeason${side}`).value)
+const teams = cbbEra.teams.filter(t => t.season === season).sort((x, y) => x.school.localeCompare(y.school))
+const select = document.getElementById(`cbbEraTeam${side}`)
+select.innerHTML = teams.map(t => `<option value="${t.team_id}">${cbbEsc(t.school)}</option>`).join("")
+const best = teams.slice().sort((x, y) => x.rank - y.rank)[0]
+select.value = teams.some(t => t.team_id === teamId) ? teamId : best.team_id
+}
+
+function setCbbEraTeam(side, team){
+document.getElementById(`cbbEraSeason${side}`).value = team.season
+fillCbbEraTeams(side, team.team_id)
+}
+
+function renderCbbEraMatchup(){
+document.getElementById("cbbEraMatchup").innerHTML = cbbEraMatchupHtml(cbbEraPicked("A"), cbbEraPicked("B"), cbbEra.league, cbbEra.tally)
+}
+
+function playCbbEraGames(count){
+const a = cbbEraPicked("A"), b = cbbEraPicked("B")
+if(!a || !b || a.team_id === b.team_id){ return }
+const random = cbbRng(Date.now())
+const tally = cbbEra.tally || {games: 0, winsA: 0, last: null}
+for(let i = 0; i < count; i++){
+tally.last = cbbPlayGame(a, b, cbbEra.league, random)
+tally.games += 1
+tally.winsA += tally.last.scoreA > tally.last.scoreB ? 1 : 0
+}
+cbbEra.tally = tally
+renderCbbEraMatchup()
+}
+
+function renderCbbEraBracket(){
+const b = cbbEra.bracket
+const champions = b.teams.filter(t => cbbEra.byId.get(t.team_id).march === 8).length
+document.getElementById("cbbEraBracketNote").textContent = `One bracket for the whole era: all ${champions} national champions since 2009, then the best of everyone else, ${b.teams.length} teams seeded straight down the ratings and played out ${CBB_ERA_SIMS.toLocaleString("en-US")} times. There are no easy games in a field like this - most of the 15 and 16 seeds were top-five teams in their own year - so even the favorite rarely gets through.`
+document.getElementById("cbbEraFavorites").innerHTML = cbbFavoritesHtml(b, cbbEra.byId)
+document.getElementById("cbbEraOdds").innerHTML = cbbAllTimeOddsHtml(b, cbbEra.byId, cbbEra.allOdds ? null : 16)
+const more = document.getElementById("cbbEraOddsMore")
+more.style.display = cbbEra.allOdds ? "none" : ""
+more.onclick = () => { cbbEra.allOdds = true; renderCbbEraBracket() }
+}
+
+function renderCbbEraBest(){
+const search = document.getElementById("cbbEraSearch").value
+document.getElementById("cbbEraBest").innerHTML = cbbBestEverHtml(cbbEra.teams, search ? 60 : cbbEra.bestLimit, search)
+const more = document.getElementById("cbbEraBestMore")
+more.style.display = search || cbbEra.bestLimit >= 100 ? "none" : ""
+more.onclick = () => { cbbEra.bestLimit = 100; renderCbbEraBest() }
+}
+
+async function loadCbbEra(){
+cbbEra.started = true
+let history
+try{
+const response = await fetch("./data/cbb_history.json")
+if(!response.ok){ throw new Error(`cbb_history.json ${response.status}`) }
+history = await response.json()
+}catch(e){
+console.log("no cbb_history.json", e)
+cbbEra.started = false
+document.getElementById("cbbEraMatchup").innerHTML = '<div class="empty-note">The Time Machine couldn\'t load. Try again in a moment.</div>'
+return
+}
+cbbEra.teams = cbbEraTeams(history)
+cbbEra.byId = cbbTeamIndex(cbbEra.teams)
+cbbEra.league = cbbEraLeague(history)
+const seasons = [...new Set(cbbEra.teams.map(t => t.season))].sort((x, y) => y - x)
+const seasonOptions = seasons.map(s => `<option value="${s}">${s - 1}–${String(s).slice(2)}</option>`).join("")
+;["A", "B"].forEach(side => {
+document.getElementById(`cbbEraSeason${side}`).innerHTML = seasonOptions
+document.getElementById(`cbbEraSeason${side}`).onchange = () => { fillCbbEraTeams(side, null); cbbEra.tally = null; renderCbbEraMatchup() }
+document.getElementById(`cbbEraTeam${side}`).onchange = () => { cbbEra.tally = null; renderCbbEraMatchup() }
+})
+// Opens on the best team of the era against the latest champion (or the next best team).
+const first = cbbEra.teams[0]
+const latestChampion = cbbEra.teams.filter(t => t.march === 8 && t.team_id !== first.team_id).sort((x, y) => y.season - x.season)[0]
+setCbbEraTeam("A", first)
+setCbbEraTeam("B", latestChampion || cbbEra.teams[1])
+document.getElementById("cbbEraPlay").onclick = () => playCbbEraGames(1)
+document.getElementById("cbbEraSeries").onclick = () => playCbbEraGames(100)
+document.getElementById("cbbEraRandom").onclick = () => {
+const random = cbbRng(Date.now())
+const pool = cbbEra.teams.slice(0, 150)
+const a = pool[Math.floor(random() * pool.length)]
+let b = a
+while(b.team_id === a.team_id || b.season === a.season){ b = pool[Math.floor(random() * pool.length)] }
+setCbbEraTeam("A", a); setCbbEraTeam("B", b)
+cbbEra.tally = null
+renderCbbEraMatchup()
+}
+renderCbbEraMatchup()
+document.getElementById("cbbEraSearch").oninput = renderCbbEraBest
+renderCbbEraBest()
+// The bracket's odds take a moment, so the rest of the tab is drawn first.
+cbbEra.bracket = cbbAllTimeBracket(cbbEra.teams)
+setTimeout(() => {
+const odds = cbbBracketOdds(cbbEra.bracket, cbbEra.byId, cbbEra.league, CBB_ERA_SIMS, cbbRng(2009))
+cbbEra.bracket.teams.forEach(t => { Object.assign(t, odds.get(t.team_id) || {final_four: 0, champion: 0}) })
+renderCbbEraBracket()
+const playOut = random => {
+document.getElementById("cbbEraPlayed").innerHTML = cbbPlayedBracketHtml(cbbPlayBracket(cbbEra.bracket, cbbEra.byId, cbbEra.league, random), cbbEra.byId)
+}
+document.getElementById("cbbEraPlayRandom").onclick = () => playOut(cbbRng(Date.now()))
+document.getElementById("cbbEraPlayFavorites").onclick = () => playOut(null)
+}, 0)
 }
 
 function renderCbbMadness(){
