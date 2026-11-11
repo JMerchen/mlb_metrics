@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8">
+
+<title>Stats Reference - Step In</title>
+
+<link
+rel="icon"
+type="image/svg+xml"
+href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA0OCA0OCI+PHJlY3QgeD0iMSIgeT0iMSIgd2lkdGg9IjQ2IiBoZWlnaHQ9IjQ2IiByeD0iMTIiIGZpbGw9IiMxNDE3MWMiIHN0cm9rZT0iIzNhNDE1MCIvPjx0ZXh0IHg9IjE3IiB5PSIyOSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9Ii1hcHBsZS1zeXN0ZW0sIEJsaW5rTWFjU3lzdGVtRm9udCwgJ1NlZ29lIFVJJywgUm9ib3RvLCBJbnRlciwgSGVsdmV0aWNhLCBBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC13ZWlnaHQ9IjkwMCIgZm9udC1zaXplPSIyMSIgZmlsbD0iI2M4MTAyZSI+UzwvdGV4dD48dGV4dCB4PSIzMSIgeT0iMjkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtZmFtaWx5PSItYXBwbGUtc3lzdGVtLCBCbGlua01hY1N5c3RlbUZvbnQsICdTZWdvZSBVSScsIFJvYm90bywgSW50ZXIsIEhlbHZldGljYSwgQXJpYWwsIHNhbnMtc2VyaWYiIGZvbnQtd2VpZ2h0PSI5MDAiIGZvbnQtc2l6ZT0iMjEiIGZpbGw9IiNmZmZmZmYiPlI8L3RleHQ+PHJlY3QgeD0iMTEiIHk9IjMzIiB3aWR0aD0iMjYiIGhlaWdodD0iMi42IiByeD0iMS4zIiBmaWxsPSIjZjJhOTNjIi8+PC9zdmc+">
+
+<script src="./mode.js"></script>
+
+<link
+rel="stylesheet"
+href="./style.css">
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<link rel="manifest" href="./manifest.webmanifest">
+
+<meta name="theme-color" content="#0b0d10">
+
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+
+<meta name="apple-mobile-web-app-capable" content="yes">
+
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+
+<meta name="apple-mobile-web-app-title" content="Stats Reference">
+
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="siteHeader">
+
+<div class="brandRow">
+<svg class="brandBadge" viewBox="0 0 48 48" role="img" aria-label="Stats Reference" xmlns="http://www.w3.org/2000/svg">
+<rect x="1" y="1" width="46" height="46" rx="12" fill="#14171c" stroke="#3a4150"/><text x="17" y="29" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, Helvetica, Arial, sans-serif" font-weight="900" font-size="21" fill="#c8102e">S</text><text x="31" y="29" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, Helvetica, Arial, sans-serif" font-weight="900" font-size="21" fill="#ffffff">R</text><rect x="11" y="33" width="26" height="2.6" rx="1.3" fill="#f2a93c"/>
+</svg>
+<div class="brandText">
+<h1>Stats <span class="brandAccent">Reference</span></h1>
+<span class="brandTag">The numbers driving the leagues, by Jackson Merchen</span>
+</div>
+</div>
+
+<div class="tabGroup pageTabs">
+<a class="tabButton" href="./index.html">Today</a>
+<a class="tabButton active" href="./predictive.html">MLB</a>
+<a class="tabButton" href="./nfl.html">NFL</a>
+<a class="tabButton" href="./cbb.html"><span class="navLong">College </span>Hoops</a>
+<a class="tabButton" href="./methodology.html">How it works</a>
+</div>
+
+</div>
+
+<div class="sportHeader">
+<svg class="sportMark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+<circle cx="16" cy="16" r="14" fill="#ffffff" stroke="#d9d4c7" stroke-width="1"/>
+<path d="M10 4 C14 10, 14 22, 10 28" stroke="#c8102e" stroke-width="1.6" fill="none"/><path d="M10.6 8.2 L13 7.4 M11.7 12 L14.1 11.5 M12.1 16 L14.6 16 M11.7 20 L14.1 20.5 M10.6 23.8 L13 24.6" stroke="#c8102e" stroke-width="1.1" fill="none"/>
+<path d="M22 4 C18 10, 18 22, 22 28" stroke="#c8102e" stroke-width="1.6" fill="none"/><path d="M21.4 8.2 L19 7.4 M20.3 12 L17.9 11.5 M19.9 16 L17.4 16 M20.3 20 L17.9 20.5 M21.4 23.8 L19 24.6" stroke="#c8102e" stroke-width="1.1" fill="none"/>
+</svg>
+<h2 class="sportHeading">MLB <span class="brandAccent">Metrics</span></h2>
+</div>
+
+<div class="tabGroup" id="mlbSubTabs">
+<a class="tabButton" href="./predictive.html">Picks</a>
+<a class="tabButton" href="./stats.html">Stats</a>
+<a class="tabButton deep-only" href="./age-curves.html">Age Curves</a>
+<a class="tabButton" href="./prospects.html">Prospects</a>
+<a class="tabButton deep-only" href="./payroll.html">Payroll</a>
+<a class="tabButton active" href="./batting.html">Step In</a>
+</div>
+
+<h2>Step in against a real pitcher</h2>
+
+<p class="sectionIntro">Pick any pitcher from last season and take your at-bats. He throws his real pitches at his real speeds, as often as he really throws each one in that count. You get three innings.</p>
+
+<div class="cbbFilters batSetup">
+<select id="batTeam" aria-label="Team"></select>
+<select id="batPitcher" aria-label="Pitcher"></select>
+<select id="batSide" aria-label="Which side you bat from">
+<option value="R">Bat right-handed</option>
+<option value="L">Bat left-handed</option>
+</select>
+<select id="batSpeed" aria-label="Speed"></select>
+<button class="whatIfAction" id="batRandom">Surprise me</button>
+</div>
+
+<div class="batScout" id="batScout"></div>
+
+<div class="batBoard" aria-label="Scoreboard">
+<div class="batStat"><span>Inning</span><b id="batInning">1 of 3</b></div>
+<div class="batStat"><span>Outs</span><b id="batOuts">○○○</b></div>
+<div class="batStat"><span>Count</span><b id="batCount">0–0</b></div>
+<div class="batStat"><span>Runs</span><b id="batRuns">0</b></div>
+<svg class="batBases" viewBox="0 0 60 44" role="img" aria-label="Runners on base">
+<rect id="batSecond" class="batBase" x="24" y="2" width="12" height="12" transform="rotate(45 30 8)"/>
+<rect id="batThird" class="batBase" x="6" y="20" width="12" height="12" transform="rotate(45 12 26)"/>
+<rect id="batFirst" class="batBase" x="42" y="20" width="12" height="12" transform="rotate(45 48 26)"/>
+</svg>
+</div>
+
+<div class="batStage" id="batStage">
+<canvas id="batCanvas" width="720" height="540" aria-label="The view from behind home plate"></canvas>
+<button class="batStart" id="batStart" style="display:none">Play ball</button>
+</div>
+
+<div class="batCall" id="batCall" aria-live="polite">Loading the pitchers...</div>
+
+<div class="batSummary" id="batSummary" style="display:none"></div>
+
+<h3>How to play</h3>
+
+<ul class="batHow">
+<li><b>Swing</b> by clicking or tapping the spot where the ball crosses the plate, at the moment it gets there. With a mouse, the gold ring is your bat; the space bar swings wherever the ring is.</li>
+<li><b>Timing</b> decides where it goes: early pulls it, late pushes it the other way, and too far off either way is a foul or a miss. <b>Aim</b> decides how well you hit it: dead on is a line drive, a little under lifts it, over the top is a ground ball.</li>
+<li><b>Don't swing</b> at pitches outside the white box. Four balls is a walk; a pitch in the box you let go is a strike.</li>
+<li>After each pitch a ring shows where it crossed (red for a strike, green for a ball, gold if you hit it) and a cross shows where your bat was.</li>
+<li>Start at half speed. Real speed is what a hitter actually gets: about four tenths of a second.</li>
+</ul>
+
+<p class="secondaryLine">What's real: each pitcher's pitch types, the speed of each, and how often he throws each one when he's ahead, behind or even in the count, to left- and right-handed batters (2026 season). What's typical: how each kind of pitch moves and where it's aimed is the same for every pitcher who throws it. What's made up: how a swing turns into a hit. It's a game, not one of our models.</p>
+
+</div>
+
+<script src="./teams.js"></script>
+
+<script src="./batting_game.js"></script>
+
+<script src="./batting.js"></script>
+
+<script src="./install.js"></script>
+
+</body>
+
+</html>

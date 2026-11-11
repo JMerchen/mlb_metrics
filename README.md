@@ -5191,6 +5191,40 @@ directory: it downloads every season's files).
 **Not in it yet**: injuries, and the committee's actual selection rules
 before the bracket is out.
 
+## Step In: a batting game (`docs/batting.html`, `batting_game.js`, `batting.js`)
+
+User request (2026-11-11): "something a little more interactive for the
+user. It doesn't directly have to be connected to the data, the data could
+just inform it." A playable at-bat on the MLB section: pick any pitcher
+from `docs/data/mlb_sim_profiles.json` (the same file the game simulation
+uses, so it updates with it) and bat against him for three innings.
+
+**What is real**: his pitch types, each one's speed and how much it varies
+(`velo`), and how often he throws each when the count is 0-0, he is ahead,
+even or behind, to left- and right-handed batters (`mix`). The time the
+ball takes to arrive follows from the speed (`batFlightSeconds`: 54.5 feet
+from the hand, losing about a tenth of its speed), so at "Real speed" a 100
+mph fastball gets there in 0.39 seconds; half and three-quarter speed
+slow the flight.
+
+**What is typical, not his own**: how each kind of pitch moves and where
+it is aimed (`BAT_MOVEMENT`, `BAT_TARGETS`: one set for every pitcher,
+mirrored for left-handers). About 48% of pitches are strikes.
+
+**What is made up**: what a swing does (`batSwingResult`). A swing is a
+time and a spot on the plate. Within 60 ms and 0.9 feet it is contact:
+timing sets the direction (early pulls, late goes the other way, the edges
+are foul), how square it is sets how hard, and being under or over the
+ball sets how high. Hard and high enough clears a fence that is 330 feet
+down the lines and 400 to center. This part is a game, not a model, and
+nothing else on the site reads from it.
+
+`batApply` keeps the count, outs, runners and score (`node --test
+docs/batting_game.test.js`, 14 tests, including that every pitcher in the
+real file can throw a pitch). `batting.js` draws the view from behind the
+plate on a canvas and takes swings from a click, a tap or the space bar.
+The best score at each speed is kept in the browser only.
+
 ## Running
 
 ```
