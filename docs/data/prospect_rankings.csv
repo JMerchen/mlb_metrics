@@ -46,7 +46,7 @@ consensus_rank,rank,player_name,team,position,highest_level,age,eta,fv,source_ur
 45,1.0,Konnor Griffin,PIT,SS,AA,19.8,2026,70,https://blogs.fangraphs.com/2026-top-100-prospects/,63.333333333333336,1,"{'MLB Pipeline': None, 'Just Baseball': None, 'FanGraphs': 1.0}"
 46,43.0,Jhonny Level,San Francisco Giants,SS,A+,19,2029,50,https://www.mlb.com/prospects/stats/top-prospects,63.666666666666664,3,"{'MLB Pipeline': 43.0, 'Just Baseball': 71.0, 'FanGraphs': 77.0}"
 47,50.0,Kendry Chourio,Kansas City Royals,RHP,A+,19,2028,50+,https://www.mlb.com/prospects/stats/top-prospects,63.666666666666664,2,"{'MLB Pipeline': 50.0, 'Just Baseball': 55.0, 'FanGraphs': None}"
-48,32.0,Edward Florentino,Pittsburgh Pirates,OF,A+,19,2028,50,https://www.mlb.com/prospects/stats/top-prospects,64.33333333333333,3,"{'MLB Pipeline': 32.0, 'Just Baseball': 60.0, 'FanGraphs': 101.0}"
+48,32.0,Edward Florentino,Pittsburgh Pirates,OF,A+,20,2028,50,https://www.mlb.com/prospects/stats/top-prospects,64.33333333333333,3,"{'MLB Pipeline': 32.0, 'Just Baseball': 60.0, 'FanGraphs': 101.0}"
 49,45.0,Anthony Eyanson,Baltimore Orioles,RHP,AA,22,2027,50+,https://www.mlb.com/prospects/stats/top-prospects,64.66666666666667,2,"{'MLB Pipeline': 45.0, 'Just Baseball': 63.0, 'FanGraphs': None}"
 50,5.0,Kevin McGonigle,DET,3B,AA,21.5,2026,60,https://blogs.fangraphs.com/2026-top-100-prospects/,64.66666666666667,1,"{'MLB Pipeline': None, 'Just Baseball': None, 'FanGraphs': 5.0}"
 51,25.0,Luis Hernández,San Francisco Giants,SS,A,17,2029,50,https://www.mlb.com/prospects/stats/top-prospects,65.33333333333333,2,"{'MLB Pipeline': 25.0, 'Just Baseball': 85.0, 'FanGraphs': None}"
