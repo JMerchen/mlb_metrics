@@ -3631,6 +3631,25 @@ picks?" Three things, on the home page's NFL cards and the NFL page:
   every gap from 0 to 6 points, and none added to the spread in a
   regression (p 0.5-0.98).
 
+**Trades reach the rosters through the depth charts** (2026-11-11,
+`nfl_data.apply_depth_chart_teams`). The weekly roster file lags trades by
+a day or more: the morning after the 2026 deadline it still had Kirk
+Cousins on the Raiders, so the starters check below threw out the
+schedule's (correct) listing of him as the Vikings' starter, and Amani
+Hooker, Jessie Bates, Josh Downs, Keenan Allen and Daiyan Henley were on
+their old teams too - 12 players in all. nflverse's depth charts are
+rebuilt from ESPN several times a day and had every one. Each run now
+takes the latest snapshot and moves anyone it has on a different team,
+for the week being predicted only, before anything reads the rosters; the
+corrected file is saved, so the simulation and Stats builds see it too.
+It is skipped when the snapshot is over three days old or would move more
+than 60 players. The depth chart is used for teams only, not for naming
+starters: over 814 team-games in 2025-26 its first-string QB was the real
+starter 91% of the time, barely ahead of "whoever started last game"
+(89%), and it had the new starter in only half of the games where the
+starter changed. What if? also stops offering a traded QB as an option
+for his old team (`nfl_whatif.qb_options`).
+
 **Listed starters are checked against the roster**
 (`nfl_game_picks.correct_listed_starters`, 2026-10-31). The schedule
 feed's `home_qb_id`/`away_qb_id` can be stale: it kept listing Jalen Hurts

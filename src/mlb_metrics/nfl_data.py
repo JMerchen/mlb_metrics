@@ -116,6 +116,90 @@ def fetch_rosters_weekly(seasons: list[int]) -> pd.DataFrame:
     return nflreadpy.load_rosters_weekly(seasons).to_pandas()
 
 
+DEPTH_CHART_COLUMNS = ["dt", "team", "gsis_id", "player_name", "pos_abb", "pos_rank"]
+# A snapshot older than this isn't trusted over the roster file, and more
+# moves than this in one go means the two files disagree for some other
+# reason (an offseason file, a changed team code).
+DEPTH_CHART_MAX_AGE_DAYS = 3
+DEPTH_CHART_MAX_MOVES = 60
+
+
+def latest_depth_chart(charts: pd.DataFrame) -> pd.DataFrame:
+    """The most recent snapshot in a season's depth charts
+    (DEPTH_CHART_COLUMNS, rows with a player id only)."""
+    if charts is None or charts.empty or "dt" not in charts.columns:
+        return pd.DataFrame(columns=DEPTH_CHART_COLUMNS)
+    stamp = pd.to_datetime(charts["dt"], utc=True)
+    latest = charts[stamp == stamp.max()].copy()
+    latest["dt"] = stamp.max()
+    return latest.reindex(columns=DEPTH_CHART_COLUMNS).dropna(subset=["gsis_id"]).reset_index(drop=True)
+
+
+def fetch_depth_chart(season: int) -> pd.DataFrame:
+    """The latest depth-chart snapshot for `season` (latest_depth_chart).
+    nflverse rebuilds these from ESPN's team depth charts several times a
+    day, so a trade shows up here a day or more before it reaches the
+    weekly rosters (2026-11-11: Kirk Cousins was the Vikings' first-string
+    QB here the morning after the deadline while the roster file still
+    had him on the Raiders)."""
+    import nflreadpy
+
+    return latest_depth_chart(nflreadpy.load_depth_charts([season]).to_pandas())
+
+
+def apply_depth_chart_teams(rosters: pd.DataFrame, depth_chart: pd.DataFrame, season: int, week: int,
+                            now=None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """`rosters` (weekly rosters) with every player the depth chart has on
+    a different team moved to that team for `week`: his row for that week
+    is changed, or, when he has none (his old team is on its bye), his
+    latest row is copied into it. Only players the depth chart lists are
+    touched, and nothing before `week`. Returns (rosters, moves) where
+    moves is [gsis_id, full_name, position, from_team, to_team].
+
+    Nothing is changed when the snapshot is more than
+    DEPTH_CHART_MAX_AGE_DAYS old or it would move more than
+    DEPTH_CHART_MAX_MOVES players."""
+    moves = pd.DataFrame(columns=["gsis_id", "full_name", "position", "from_team", "to_team"])
+    needed = {"season", "week", "team", "gsis_id"}
+    if rosters is None or rosters.empty or not needed <= set(rosters.columns) or depth_chart is None or depth_chart.empty:
+        return rosters, moves
+    now = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+    now = now.tz_localize("UTC") if now.tzinfo is None else now
+    stamp = pd.to_datetime(depth_chart["dt"], utc=True).max()
+    if pd.isna(stamp) or (now - stamp) > pd.Timedelta(days=DEPTH_CHART_MAX_AGE_DAYS):
+        return rosters, moves
+    chart_team = depth_chart.groupby("gsis_id")["team"].agg(lambda t: t.mode().iloc[0])
+    so_far = rosters[(rosters["season"] == season) & (rosters["week"] <= week) & rosters["gsis_id"].notna()]
+    latest = so_far.sort_values("week").drop_duplicates("gsis_id", keep="last").set_index("gsis_id")
+    known = latest.index.intersection(chart_team.index)
+    moved = [player for player in known if latest.at[player, "team"] != chart_team[player]]
+    if not moved or len(moved) > DEPTH_CHART_MAX_MOVES:
+        if len(moved) > DEPTH_CHART_MAX_MOVES:
+            print(f"WARNING: the depth chart would move {len(moved)} players - too many to be trades; rosters left as they are.")
+        return rosters, moves
+    out = rosters.copy()
+    this_week = (out["season"] == season) & (out["week"] == week)
+    added = []
+    for player in moved:
+        rows = this_week & (out["gsis_id"] == player)
+        if rows.any():
+            out.loc[rows, "team"] = chart_team[player]
+        else:
+            row = latest.loc[player].copy()
+            row["gsis_id"], row["week"], row["team"] = player, week, chart_team[player]
+            added.append(row)
+    if added:
+        out = pd.concat([out, pd.DataFrame(added)[out.columns]], ignore_index=True)
+    moves = pd.DataFrame({
+        "gsis_id": moved,
+        "full_name": [latest.at[p, "full_name"] if "full_name" in latest.columns else None for p in moved],
+        "position": [latest.at[p, "position"] if "position" in latest.columns else None for p in moved],
+        "from_team": [latest.at[p, "team"] for p in moved],
+        "to_team": [chart_team[p] for p in moved],
+    })
+    return out, moves
+
+
 def fetch_snap_counts(seasons: list[int]) -> pd.DataFrame:
     """One row per player per game with real Pro-Football-Reference-sourced
     snap counts - confirmed live columns include `pfr_player_id` (the join
