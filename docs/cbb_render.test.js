@@ -212,3 +212,136 @@ test("playing a bracket: First Four pairs play for their spot, and played games 
   assert.match(html, /upsets? by seed/)
   assert.match(r.cbbPlayedBracketHtml(r.cbbPlayBracket({ teams: [], final_four_pairs: [] }, ids, league, null), ids), /No bracket to play yet/)
 })
+
+// ---- Time Machine ----
+
+// Three seasons of 60 teams. In 2011 the best teams stand further above the
+// pack than in the other two, as the real ones have lately.
+function eraHistory(){
+  const season = (lift, champion) => ({ efficiency: 100, tempo: 70, tournament: champion !== null,
+    teams: Array.from({ length: 60 }, (_, i) => {
+      const net = (i < 50 ? 30 + lift : 0) - i * 0.5
+      return [i + 1, net / 2, net / 2, i === 0 ? 74 : 70, 30 - Math.floor(i / 3), 5 + Math.floor(i / 3), i + 1 === champion ? 8 : i < 2 ? 5 : 0]
+    }) })
+  const names = {}
+  for(let i = 1; i <= 60; i++){ names[i] = i === 1 ? "Alpha" : i === 2 ? "Beta" : `School ${i}` }
+  return { sigma: 11.2, names, colors: { 1: "112233" }, seasons: { 2009: season(0, 1), 2010: season(0, null), 2011: season(6, 55) } }
+}
+
+test("era teams: every season on one scale, measured against its own best teams", () => {
+  const teams = r.cbbEraTeams(eraHistory())
+  assert.equal(teams.length, 180)
+  assert.deepEqual(teams.slice(0, 5).map(t => t.rank), [1, 2, 3, 4, 5])
+  assert.ok(teams.every((t, i) => t.team_id === i && (i === 0 || teams[i - 1].net >= t.net)))
+  // 2011's top teams were 6 points further above average, but no further above their own peers.
+  const best = season => teams.find(t => t.team === `${season} Alpha`)
+  assert.ok(Math.abs(best(2011).net - best(2009).net) < 0.11)
+  assert.ok(Math.abs(best(2009).net - 32) < 0.11)             // raw 30, lifted a third of 2011's extra 6
+  assert.equal(best(2009).offense + best(2009).defense, best(2009).net)
+  // Pace is carried as fast or slow for its season, on the shared floor.
+  assert.equal(best(2009).tempo, 72)
+  assert.equal(teams.find(t => t.team === "2009 Beta").tempo, 68)
+  assert.equal(best(2009).color, "112233")
+  assert.equal(r.cbbMarchLabel(best(2009)), "National champion")
+  assert.equal(r.cbbMarchLabel(best(2011)), "Lost in the Elite 8")
+  assert.equal(r.cbbMarchLabel(teams.find(t => t.team === "2009 School 9")), "Missed the tournament")
+  assert.equal(r.cbbMarchLabel(best(2010)), "No tournament that year")
+  assert.deepEqual(r.cbbEraTeams(null), [])
+  const league = r.cbbEraLeague(eraHistory())
+  assert.equal(league.sigma, 11.2)
+  assert.equal(league.home_edge, 0)
+})
+
+test("the all-time bracket: champions get in, the rest by rating, seeded and snaked", () => {
+  const teams = r.cbbEraTeams(eraHistory())
+  const bracket = r.cbbAllTimeBracket(teams)
+  assert.equal(bracket.teams.length, 64)
+  const ids = new Set(bracket.teams.map(t => t.team_id))
+  assert.equal(ids.size, 64)
+  // 2011's champion was its 55th-best team: far below the cut, in anyway, as the last seed.
+  const cinderella = teams.find(t => t.team === "2011 School 55")
+  assert.ok(cinderella.rank > 64 && ids.has(cinderella.team_id))
+  assert.equal(bracket.teams[63].team_id, cinderella.team_id)
+  assert.equal(bracket.teams[63].seed, 16)
+  // So the 63rd-best team is the one left out.
+  assert.ok(ids.has(teams[62].team_id) && !ids.has(teams[63].team_id))
+  // Four teams to a seed line, one per region; the top seed's region gets the worst 2 seed.
+  for(let seed = 1; seed <= 16; seed++){
+    assert.deepEqual(bracket.teams.filter(t => t.seed === seed).map(t => t.region).sort(), ["East", "Midwest", "South", "West"])
+  }
+  assert.equal(bracket.teams[0].region, "East")
+  assert.equal(bracket.teams[7].region, "East")
+  assert.deepEqual(bracket.final_four_pairs, [["East", "Midwest"], ["West", "South"]])
+  assert.equal(r.cbbAllTimeBracket(teams, 16).teams.length, 16)
+})
+
+test("all-time bracket odds: shares of the runs, and the table that shows them", () => {
+  const teams = r.cbbEraTeams(eraHistory())
+  const byEra = r.cbbTeamIndex(teams), eraLeague = r.cbbEraLeague(eraHistory())
+  const bracket = r.cbbAllTimeBracket(teams)
+  const odds = r.cbbBracketOdds(bracket, byEra, eraLeague, 300, r.cbbRng(3))
+  const sum = key => [...odds.values()].reduce((s, v) => s + v[key], 0)
+  assert.ok(Math.abs(sum("champion") - 1) < 1e-9)
+  assert.ok(Math.abs(sum("final_four") - 4) < 1e-9)
+  assert.ok((odds.get(bracket.teams[0].team_id) || { champion: 0 }).champion > (odds.get(bracket.teams[63].team_id) || { champion: 0 }).champion)
+  // Favorites only is one fixed bracket: the top seed wins every run.
+  const chalk = r.cbbBracketOdds(bracket, byEra, eraLeague, 3, null)
+  assert.ok(Math.abs(chalk.get(bracket.teams[0].team_id).champion - 1) < 1e-9)
+  bracket.teams.forEach(t => Object.assign(t, odds.get(t.team_id) || { final_four: 0, champion: 0 }))
+  const html = r.cbbAllTimeOddsHtml(bracket, byEra, 16)
+  assert.match(text(html), /Seed Team Region Record That March Final Four here Wins it all/)
+  assert.match(text(html), /Showing 16 of 64 teams/)
+  assert.equal((r.cbbAllTimeOddsHtml(bracket, byEra, null).match(/<tr>/g) || []).length, 65)
+  assert.match(text(r.cbbFavoritesHtml(bracket, byEra)), /\d+% (2009|2010|2011) Alpha 1 seed/)
+})
+
+test("playing one cross-era game: a real-looking score, no ties, and wins in line with the odds", () => {
+  const teams = r.cbbEraTeams(eraHistory())
+  const eraLeague = r.cbbEraLeague(eraHistory())
+  const a = teams[0], b = teams[40]
+  const expected = r.cbbMatchup(a, b, "neutral", eraLeague).winA
+  const random = r.cbbRng(11)
+  let wins = 0, overtime = 0, points = 0
+  for(let i = 0; i < 2000; i++){
+    const g = r.cbbPlayGame(a, b, eraLeague, random)
+    assert.ok(Number.isInteger(g.scoreA) && Number.isInteger(g.scoreB) && g.scoreA !== g.scoreB && g.scoreB > 20)
+    wins += g.scoreA > g.scoreB ? 1 : 0
+    overtime += g.overtime ? 1 : 0
+    points += g.scoreA + g.scoreB
+  }
+  assert.ok(Math.abs(wins / 2000 - expected) < 0.04)
+  assert.ok(overtime > 0 && overtime < 200)
+  assert.ok(points / 2000 > 125 && points / 2000 < 165)
+  // The same seed plays the same game.
+  assert.deepEqual(r.cbbPlayGame(a, b, eraLeague, r.cbbRng(5)), r.cbbPlayGame(a, b, eraLeague, r.cbbRng(5)))
+})
+
+test("the cross-era matchup card and the best-teams list", () => {
+  const teams = r.cbbEraTeams(eraHistory())
+  const eraLeague = r.cbbEraLeague(eraHistory())
+  const a = teams.find(t => t.team === "2009 Alpha"), b = teams.find(t => t.team === "2011 School 55")
+  const card = text(r.cbbEraMatchupHtml(a, b, eraLeague, null))
+  assert.match(card, /2009 Alpha 30–5 · 🏆 National champion · rated \+32\.0, \d+(st|nd|rd|th) of the era/)
+  assert.match(card, /2011 School 55 12–23 · 🏆 National champion/)
+  assert.match(card, /On a neutral floor: 2009 Alpha \d+, 2011 School 55 \d+ on average/)
+  assert.doesNotMatch(card, /Final/)
+  const one = text(r.cbbEraMatchupHtml(a, b, eraLeague, { games: 1, winsA: 0, last: { scoreA: 70, scoreB: 75, overtime: true } }))
+  assert.match(one, /Final \(overtime\): 2011 School 55 75 , 2009 Alpha 70/)
+  assert.match(one, /One game played\./)
+  const many = text(r.cbbEraMatchupHtml(a, b, eraLeague, { games: 100, winsA: 91, last: { scoreA: 80, scoreB: 61, overtime: false } }))
+  assert.match(many, /Final: 2009 Alpha 80 , 2011 School 55 61/)
+  assert.match(many, /100 games played: 2009 Alpha 91, 2011 School 55 9\./)
+  assert.match(r.cbbEraMatchupHtml(a, a, eraLeague, null), /Pick two different teams/)
+  assert.match(r.cbbEraMatchupHtml(a, undefined, eraLeague, null), /Pick two different teams/)
+
+  const best = r.cbbBestEverHtml(teams, 25)
+  assert.equal((best.match(/<tr>/g) || []).length, 26)
+  assert.match(text(best), /# Team Record Rating Offense Defense That March 1 20(09|10|11) Alpha/)
+  assert.match(text(best), /Showing 25 of 180\./)
+  // A school search keeps each team's place in the full list.
+  const beta = text(r.cbbBestEverHtml(teams, 60, "beta"))
+  assert.equal((beta.match(/Beta/g) || []).length, 3)
+  assert.doesNotMatch(beta, /Alpha|Showing/)
+  assert.match(beta, new RegExp(`${teams.find(t => t.team === "2009 Beta").rank} 2009 Beta`))
+  assert.match(r.cbbBestEverHtml(teams, 60, "no such school"), /No school by that name/)
+})

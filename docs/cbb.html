@@ -88,6 +88,7 @@ this block isn't in the shared stylesheet. */
 <button class="tabButton" data-cbb-tab="games" onclick="selectCbbTab('games')">Games</button>
 <button class="tabButton" data-cbb-tab="rankings" onclick="selectCbbTab('rankings')">Rankings</button>
 <button class="tabButton" data-cbb-tab="matchup" onclick="selectCbbTab('matchup')">Matchup</button>
+<button class="tabButton" data-cbb-tab="era" onclick="selectCbbTab('era')">Time Machine</button>
 </div>
 
 <div id="cbbMadnessSection">
@@ -179,6 +180,64 @@ this block isn't in the shared stylesheet. */
 </div>
 
 <div id="cbbMatchup"></div>
+
+</div>
+
+<div id="cbbEraSection" style="display:none">
+
+<h3>Any team, any year</h3>
+
+<p class="sectionIntro">Every Division I team since 2009 on one floor. Pick two, see who the ratings like, then play the game - a 30% underdog wins three times in ten, so play it more than once.</p>
+
+<div class="cbbFilters">
+<div class="cbbEraPick">
+<select id="cbbEraSeasonA" class="cbbEraSeason" aria-label="First team's season"></select>
+<select id="cbbEraTeamA" aria-label="First team"></select>
+</div>
+<div class="cbbEraPick">
+<select id="cbbEraSeasonB" class="cbbEraSeason" aria-label="Second team's season"></select>
+<select id="cbbEraTeamB" aria-label="Second team"></select>
+</div>
+</div>
+
+<div class="cbbFilters">
+<button class="whatIfAction" id="cbbEraPlay">Play a game</button>
+<button class="whatIfAction" id="cbbEraSeries">Play 100</button>
+<button class="whatIfAction" id="cbbEraRandom">Surprise me</button>
+</div>
+
+<div id="cbbEraMatchup">Loading...</div>
+
+<h3>The all-time bracket</h3>
+
+<p class="sectionIntro" id="cbbEraBracketNote">Loading...</p>
+
+<div class="streakStats" id="cbbEraFavorites"></div>
+
+<div class="tableScroll" id="cbbEraOdds"></div>
+<button class="whatIfAction" id="cbbEraOddsMore" style="display:none">Show all 64 teams</button>
+
+<div class="cbbFilters">
+<button class="whatIfAction" id="cbbEraPlayRandom">Simulate a bracket</button>
+<button class="whatIfAction" id="cbbEraPlayFavorites">Favorites only</button>
+</div>
+
+<div id="cbbEraPlayed"></div>
+
+<h3>The best teams since 2009</h3>
+
+<p class="sectionIntro">Every team of every season in one list. Type a school to see where each of its teams lands.</p>
+
+<div class="cbbFilters">
+<input type="search" id="cbbEraSearch" placeholder="Find a school" aria-label="Find a school">
+</div>
+
+<div class="tableScroll" id="cbbEraBest"></div>
+<button class="whatIfAction" id="cbbEraBestMore" style="display:none">Show the top 100</button>
+
+<h3>How teams from different years are compared</h3>
+
+<p class="sectionIntro">Each team's rating is its end-of-season one, tournament games included, measured against the 50 best teams of its own season. So this compares how far each team stood above the good teams of its day - not how a 2010 roster would handle today's pace, three-point shooting or older, transfer-built lineups, which nothing here can know. (Against the average Division I team instead, the last two seasons would take most of the top spots: the best teams have pulled further away from the pack lately.) Games are on a neutral floor at an average pace, and a single game lands about 11 points either side of the expected margin, the same as in our real picks.</p>
 
 </div>
 

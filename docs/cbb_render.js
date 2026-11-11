@@ -341,6 +341,169 @@ ${sim.finalFour.map(line).join("")}
 return `${head}<div class="cbbRegions">${regions}${last}</div>`
 }
 
+// ---- Time Machine: any team from any year (docs/data/cbb_history.json) ----
+
+// The floor every cross-era game is played on: an average pace and
+// scoring level, so only how far each team stood above its own season's
+// average carries over.
+const CBB_ERA_LEAGUE = {efficiency: 104, tempo: 68, home_edge: 0}
+const CBB_MARCH = ["Missed the tournament", "Lost in the First Four", "Lost in the round of 64", "Lost in the round of 32",
+"Lost in the Sweet 16", "Lost in the Elite 8", "Lost in the Final Four", "Lost the title game", "National champion"]
+
+// How a team's March ended, in words. A season with no tournament (2020) says so.
+function cbbMarchLabel(team){
+return team.tournament === false ? "No tournament that year" : (CBB_MARCH[team.march] || CBB_MARCH[0])
+}
+
+// How many of a season's best teams set its yardstick (see cbbEraTeams).
+const CBB_ERA_PEERS = 50
+
+// Every team-season in the history file as one flat list, best first. Each
+// is a team the matchup math can use: `tempo` is moved onto the shared
+// floor (its own pace above or below its season's average), the team is
+// named "2015 Kentucky", and `team_id` is its place in the list.
+//
+// Teams are measured against the CBB_ERA_PEERS best teams of their own
+// season, not the average Division I team: lately the top has pulled away
+// from the pack (the best 25 teams of 2026 average 31 points better than
+// an average team; from 2009 to 2023 it was 22-26), so on the raw scale the
+// last two seasons would crowd out everyone else.
+function cbbEraTeams(history){
+const out = []
+const seasons = Object.keys((history && history.seasons) || {})
+const peerLevel = {}
+seasons.forEach(season => {
+const nets = history.seasons[season].teams.map(r => r[1] + r[2]).sort((x, y) => y - x).slice(0, CBB_ERA_PEERS)
+peerLevel[season] = nets.reduce((sum, v) => sum + v, 0) / Math.max(nets.length, 1)
+})
+const everyYear = seasons.reduce((sum, season) => sum + peerLevel[season], 0) / Math.max(seasons.length, 1)
+seasons.forEach(season => {
+const s = history.seasons[season]
+const shift = (everyYear - peerLevel[season]) / 2
+s.teams.forEach(row => {
+const [id, rawOffense, rawDefense, tempo, wins, losses, march] = row
+const offense = Math.round((rawOffense + shift) * 10) / 10, defense = Math.round((rawDefense + shift) * 10) / 10
+const name = history.names[String(id)] || `Team ${id}`
+out.push({season: Number(season), school_id: id, team: `${season} ${name}`, school: name, color: history.colors[String(id)],
+offense, defense, net: Math.round((offense + defense) * 10) / 10, tempo: CBB_ERA_LEAGUE.tempo + tempo - s.tempo,
+wins, losses, march, tournament: s.tournament})
+})
+})
+out.sort((x, y) => y.net - x.net)
+out.forEach((t, i) => { t.team_id = i; t.rank = i + 1 })
+return out
+}
+
+function cbbEraLeague(history){
+return {...CBB_ERA_LEAGUE, sigma: (history && history.sigma) || 11.2}
+}
+
+// The all-time bracket: every national champion gets in, then the best of
+// everyone else, `size` teams in all, seeded straight down the ratings
+// with the regions snaked. `teams` is cbbEraTeams' list (best first).
+function cbbAllTimeBracket(teams, size = 64){
+const champions = teams.filter(t => t.march === 8)
+const rest = teams.filter(t => t.march !== 8).slice(0, Math.max(0, size - champions.length))
+const field = champions.concat(rest).sort((x, y) => y.net - x.net).slice(0, size)
+const regions = ["East", "West", "South", "Midwest"]
+return {kind: "alltime", results: [], final_four_pairs: [[regions[0], regions[3]], [regions[1], regions[2]]],
+teams: field.map((t, i) => {
+const line = Math.floor(i / 4), spot = i % 4
+return {team_id: t.team_id, seed: line + 1, region: regions[line % 2 === 0 ? spot : 3 - spot]}
+})}
+}
+
+// Plays the bracket `sims` times: {team_id: {final_four, champion}} as shares of the runs.
+function cbbBracketOdds(bracket, byId, league, sims, random){
+const count = new Map()
+const bump = (id, key) => {
+if(!count.has(id)){ count.set(id, {final_four: 0, champion: 0}) }
+count.get(id)[key] += 1 / sims
+}
+for(let i = 0; i < sims; i++){
+const sim = cbbPlayBracket(bracket, byId, league, random)
+sim.regions.forEach(r => { if(r.winner){ bump(r.winner.team_id, "final_four") } })
+if(sim.champion){ bump(sim.champion.team_id, "champion") }
+}
+return count
+}
+
+// The all-time field as a table: seed, team, its record, how its real
+// March ended, and its chances here (final_four and champion on each
+// bracket team row, as cbbBracketOdds counted them).
+function cbbAllTimeOddsHtml(bracket, byId, limit){
+const rows = bracket.teams.map(t => ({...t, team: byId.get(t.team_id)}))
+.sort((x, y) => (y.champion || 0) - (x.champion || 0) || (y.final_four || 0) - (x.final_four || 0) || x.seed - y.seed)
+const shown = limit ? rows.slice(0, limit) : rows
+return `<table class="cbbTable cbbOdds cbbEraTable">
+<thead><tr><th>Seed</th><th>Team</th><th>Region</th><th>Record</th><th class="cbbMarch">That March</th><th>Final Four here</th><th>Wins it all</th></tr></thead>
+<tbody>${shown.map(r => `<tr><td>${r.seed}</td><td class="cbbTeamCell">${cbbDot(r.team)}${cbbEsc(r.team.team)}</td><td>${cbbEsc(r.region)}</td>
+<td>${r.team.wins}–${r.team.losses}</td><td class="cbbMarch">${r.team.march === 8 ? "🏆 " : ""}${cbbEsc(cbbMarchLabel(r.team))}</td>
+<td>${cbbPct(r.final_four || 0)}</td><td class="cbbTitle">${cbbPct(r.champion || 0)}</td></tr>`).join("")}</tbody>
+</table>${shown.length < rows.length ? `<div class="cbbMore">Showing ${shown.length} of ${rows.length} teams.</div>` : ""}`
+}
+
+// A standard normal draw from two uniform ones (Box-Muller).
+function cbbNormal(random){
+return Math.sqrt(-2 * Math.log(1 - random())) * Math.cos(2 * Math.PI * random())
+}
+
+// One game between two teams on the shared floor: a final score drawn
+// around the expected one (the margin lands `league.sigma` points either
+// side, the total about 15). A tie goes to overtime. Returns {scoreA,
+// scoreB, overtime}.
+function cbbPlayGame(a, b, league, random){
+const m = cbbMatchup(a, b, "neutral", league)
+const margin = m.margin + league.sigma * cbbNormal(random)
+const total = Math.max(80, m.pointsA + m.pointsB + 15 * cbbNormal(random))
+let scoreA = Math.round((total + margin) / 2), scoreB = Math.round((total - margin) / 2)
+let overtime = false
+if(scoreA === scoreB){
+overtime = true
+const extra = 6 + Math.floor(random() * 7), edge = 1 + Math.floor(random() * 5)
+const aWins = random() < m.winA
+scoreA += extra + (aWins ? edge : 0)
+scoreB += extra + (aWins ? 0 : edge)
+}
+return {scoreA, scoreB, overtime}
+}
+
+// The cross-era matchup card: the odds, the expected score, each team's
+// real record and March, and (once played) the games played so far.
+function cbbEraMatchupHtml(a, b, league, tally){
+if(!a || !b || a.team_id === b.team_id){ return '<div class="empty-note">Pick two different teams.</div>' }
+const m = cbbMatchup(a, b, "neutral", league)
+const fav = m.winA >= 0.5 ? a : b, dog = m.winA >= 0.5 ? b : a
+const favPts = m.winA >= 0.5 ? m.pointsA : m.pointsB, dogPts = m.winA >= 0.5 ? m.pointsB : m.pointsA
+const line = t => `<div class="cbbEraTeam">${cbbDot(t)}<b>${cbbEsc(t.team)}</b> <span class="dim">${t.wins}–${t.losses}&nbsp;&middot; ${t.march === 8 ? "🏆 " : ""}${cbbEsc(cbbMarchLabel(t))}&nbsp;&middot; rated ${cbbSigned(t.net)}, ${cbbOrdinal(t.rank)} of the era</span></div>`
+const last = tally && tally.last
+const played = tally && tally.games
+? `<div class="cbbEraFinal">Final${last.overtime ? " (overtime)" : ""}: <b>${cbbEsc(last.scoreA > last.scoreB ? a.team : b.team)} ${Math.max(last.scoreA, last.scoreB)}</b>, ${cbbEsc(last.scoreA > last.scoreB ? b.team : a.team)} ${Math.min(last.scoreA, last.scoreB)}</div>
+<div class="cbbMatchupLine dim">${tally.games === 1 ? "One game played." : `${tally.games} games played: ${cbbEsc(a.team)} ${tally.winsA}, ${cbbEsc(b.team)} ${tally.games - tally.winsA}.`}</div>` : ""
+return `<div class="cbbMatchup">
+${line(a)}${line(b)}
+<div class="pickBarTrack cbbBar"><span class="pickBarAway${m.winA >= 0.5 ? " picked" : ""}" style="width:${(m.winA * 100).toFixed(1)}%"></span><span class="pickBarHome${m.winA >= 0.5 ? "" : " picked"}"></span></div>
+<div class="pickBarLabels"><span>${cbbEsc(a.team)} <b>${cbbPct(m.winA)}</b></span><span><b>${cbbPct(1 - m.winA)}</b> ${cbbEsc(b.team)}</span></div>
+<div class="cbbMatchupLine">On a neutral floor: ${cbbEsc(fav.team)} ${Math.round(favPts)}, ${cbbEsc(dog.team)} ${Math.round(dogPts)} on average.</div>
+${played}
+</div>`
+}
+
+// The best teams of the era: rank, team, record, rating and how March
+// ended. `search` narrows it to schools whose name contains it (each keeps
+// its place in the full list).
+function cbbBestEverHtml(teams, limit = 25, search = ""){
+const wanted = String(search || "").trim().toLowerCase()
+const matching = (teams || []).filter(t => !wanted || t.school.toLowerCase().includes(wanted))
+const rows = limit ? matching.slice(0, limit) : matching
+if(!rows.length){ return '<div class="empty-note">No school by that name.</div>' }
+return `<table class="cbbTable cbbEraTable">
+<thead><tr><th>#</th><th>Team</th><th>Record</th><th>Rating</th><th>Offense</th><th>Defense</th><th class="cbbMarch">That March</th></tr></thead>
+<tbody>${rows.map(t => `<tr><td>${t.rank}</td><td class="cbbTeamCell">${cbbDot(t)}${cbbEsc(t.team)}</td><td>${t.wins}–${t.losses}</td>
+<td><b>${cbbSigned(t.net)}</b></td><td>${cbbSigned(t.offense)}</td><td>${cbbSigned(t.defense)}</td><td class="cbbMarch">${t.march === 8 ? "🏆 " : ""}${cbbEsc(cbbMarchLabel(t))}</td></tr>`).join("")}</tbody>
+</table>${rows.length < matching.length ? `<div class="cbbMore">Showing ${rows.length} of ${matching.length.toLocaleString("en-US")}.</div>` : ""}`
+}
+
 // The headline: the four likeliest champions.
 function cbbFavoritesHtml(bracket, byId){
 const teams = ((bracket && bracket.teams) || []).slice().sort((x, y) => y.champion - x.champion).slice(0, 4)
@@ -381,6 +544,8 @@ module.exports = {
 cbbNormCdf, cbbPct, cbbSigned, cbbOrdinal, cbbMatchup, cbbBeatsAverage, cbbTeamIndex, cbbRankingsHtml, cbbMatchupHtml, cbbGameRowHtml,
 cbbGamesHtml, cbbRecordHtml, cbbBracketOddsHtml, cbbRegionHtml, cbbFavoritesHtml, cbbBracketNote, cbbBacktestHtml,
 cbbUpsetsHtml, cbbRng, cbbPlayBracket, cbbPlayedBracketHtml,
+cbbEraTeams, cbbEraLeague, cbbAllTimeBracket, cbbBracketOdds, cbbAllTimeOddsHtml, cbbPlayGame, cbbEraMatchupHtml,
+cbbBestEverHtml, cbbMarchLabel, cbbNormal,
 cbbDateLabel,
 }
 }

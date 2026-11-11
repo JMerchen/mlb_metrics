@@ -5165,6 +5165,29 @@ possessions and each team's chance of beating an average team on a
 neutral floor (`cbbBeatsAverage`, the idea behind Barthag) - both read
 straight off the ratings.
 
+**Time Machine** (2026-11-11; the page's fifth tab, for fun rather than
+picks): `scripts/build_cbb_history.py` rates every season from 2009 on all
+of its games, tournament included, and writes every team's final offense,
+defense, pace, record and how its March ended to
+`docs/data/cbb_history.json` (6,348 team-seasons, 190 KB, fetched only
+when the tab is opened). `cbb_render.js` then puts them on one scale
+(`cbbEraTeams`): each team is measured against the 50 best teams of its
+own season, because against the average Division I team the last two
+seasons would crowd the top (the 25 best teams average +28.6 in 2025 and
++30.6 in 2026, against 22-26 from 2009 to 2024, so five of the top five
+would be from those two years). Pace is carried as faster or slower than
+the season's average. Any two teams can then be matched on a neutral floor
+with the usual game odds, and "Play a game" draws a final score
+(`cbbPlayGame`: the margin about 11 points either side of the expected
+one, a tie going to overtime). The all-time bracket (`cbbAllTimeBracket`)
+takes every national champion plus the best of everyone else, 64 in all,
+seeded by rating, and is played 5,000 times in the browser for its odds;
+the best-teams list is the same teams in order, searchable by school. It
+measures how far a team stood above the good teams of its own year, not
+how rosters from different years would really match up. Rerun the script
+once a year when `config.CBB_SEASON` moves on (pass `--cache` a scratch
+directory: it downloads every season's files).
+
 **Not in it yet**: injuries, and the committee's actual selection rules
 before the bracket is out.
 
