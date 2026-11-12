@@ -62,6 +62,9 @@ jobs:
       - name: Run cbb_render.js unit tests
         run: node --test docs/cbb_render.test.js
 
+      - name: Run batting_game.js unit tests
+        run: node --test docs/batting_game.test.js
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

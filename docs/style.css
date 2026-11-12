@@ -2209,3 +2209,30 @@ td.form-down b{color:var(--danger);}
 .cbbEraTeam + .cbbBar{margin-top:10px;}
 .cbbEraFinal{font-size:16px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);}
 .cbbEraTable .cbbMarch{text-align:left;padding-left:14px;}
+
+/* Step In (batting.html): the batting game. */
+.batScout{background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin:0 0 12px;max-width:720px;}
+.batScoutName{font-size:16px;margin-bottom:6px;}
+.batScout .dim{color:var(--text-dim);font-weight:400;}
+.batScoutName .dim{font-size:13px;}
+.batPitches{display:flex;flex-wrap:wrap;gap:6px 8px;}
+.batPitch{font-size:13px;border:1px solid var(--border);border-radius:999px;padding:3px 10px;white-space:nowrap;}
+.batScoutLine{font-size:12px;margin-top:8px;}
+.batBoard{display:flex;align-items:center;gap:18px;flex-wrap:wrap;max-width:720px;margin:0 0 8px;font-variant-numeric:tabular-nums;}
+.batStat{display:flex;flex-direction:column;line-height:1.2;}
+.batStat span{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;}
+.batStat b{font-size:18px;}
+.batBases{width:60px;height:44px;margin-left:auto;}
+.batBase{fill:none;stroke:var(--text-dim);stroke-width:1.5;}
+.batBase.on{fill:var(--accent);stroke:var(--accent);}
+.batStage{position:relative;max-width:720px;border-radius:12px;overflow:hidden;line-height:0;background:#16233f;}
+.batStage canvas{display:block;touch-action:manipulation;cursor:crosshair;user-select:none;-webkit-user-select:none;}
+.batStart{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);font:inherit;font-size:20px;font-weight:800;line-height:1.2;padding:14px 30px;border-radius:999px;border:0;background:var(--accent);color:var(--on-accent,#1a1205);cursor:pointer;box-shadow:0 6px 24px rgba(0,0,0,.45);}
+.batCall{max-width:720px;min-height:44px;margin:10px 0 12px;font-size:15px;}
+.batSummary{background:var(--bg-card);border:1px solid var(--accent);border-radius:12px;padding:14px 16px;max-width:720px;margin:0 0 16px;}
+.batFinal{font-size:18px;margin-bottom:4px;}
+.batFinalLine{font-size:14px;margin-top:2px;}
+.batFinalLine.dim{color:var(--text-dim);font-size:13px;}
+.batHow{max-width:720px;padding-left:20px;font-size:14px;line-height:1.5;}
+.batHow li{margin-bottom:6px;}
+.batSetup select{flex:1 1 150px;max-width:220px;}
