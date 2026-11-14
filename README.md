@@ -5191,6 +5191,21 @@ directory: it downloads every season's files).
 **Not in it yet**: injuries, and the committee's actual selection rules
 before the bracket is out.
 
+## NFL schedule sheet: a unit a week (`nfl_season_views.team_schedule`, `nfl_stats.js`)
+
+User request (2026-11-14): "on the schedule view, put how many units
+someone would be up putting one unit weekly on that team's opponent."
+`team_schedule` now carries each side's moneyline from nflverse's schedule
+(`moneyline`, `opponent_moneyline`; the closing line once a game is
+played), and the NFL Stats schedule sheet totals two season-long bets
+(`nflWeeklyBets`): one unit every week on the team's opponent to win, and
+one on the team. A winner pays its moneyline (+140 pays 1.4 units, -170
+pays 0.59), a loser costs the unit, a tie returns it; only played games
+with a line count. Each week's tooltip shows both lines. On 2026-11-14
+betting against the Cowboys was up 5.64 units through nine games (5 bets
+won, helped by Tampa Bay at +400), second only to betting against the
+winless Chargers (+8.22).
+
 ## Step In: a batting game (`docs/batting.html`, `batting_game.js`, `batting.js`)
 
 User request (2026-11-11): "something a little more interactive for the

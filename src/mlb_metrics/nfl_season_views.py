@@ -3,7 +3,7 @@ season stats, and players' season views.
 
 Team schedule (team_schedule): one row per team per week of the regular
 season - opponent, home or away, final score and result once played,
-and a "BYE" row for the week off.
+each side's moneyline, and a "BYE" row for the week off.
 
 Team stats (team_stats): record, points for and against, and EPA per play
 on offense and defense (overall, passing, rushing) plus turnovers, from
@@ -64,16 +64,24 @@ MIN_GAMES = config.NFL_SKILL_MIN_GAMES
 
 def team_schedule(schedules: pd.DataFrame) -> pd.DataFrame:
     """One row per team per regular-season week, oldest first: [season,
-    week, team, date, opponent, home, points_for, points_against, result,
-    margin]. result is W/L/T once played, "" before, and BYE on the bye
-    week (no opponent)."""
+    week, team, date, opponent, home, points_for, points_against,
+    moneyline, opponent_moneyline, margin, result]. result is W/L/T once
+    played, "" before, and BYE on the bye week (no opponent). The
+    moneylines are nflverse's (American odds; the closing line once the
+    game is played), blank where the schedule has none - the page uses
+    them for "one unit on this team's opponent every week"."""
     games = schedules[schedules["game_type"] == "REG"]
+    if "home_moneyline" not in games.columns or "away_moneyline" not in games.columns:
+        games = games.assign(home_moneyline=np.nan, away_moneyline=np.nan)
     home = games.assign(team=games["home_team"], opponent=games["away_team"], home=1,
-                        points_for=games["home_score"], points_against=games["away_score"])
+                        points_for=games["home_score"], points_against=games["away_score"],
+                        moneyline=games["home_moneyline"], opponent_moneyline=games["away_moneyline"])
     away = games.assign(team=games["away_team"], opponent=games["home_team"], home=0,
-                        points_for=games["away_score"], points_against=games["home_score"])
+                        points_for=games["away_score"], points_against=games["home_score"],
+                        moneyline=games["away_moneyline"], opponent_moneyline=games["home_moneyline"])
     rows = pd.concat([home, away], ignore_index=True)[
-        ["season", "week", "team", "gameday", "opponent", "home", "points_for", "points_against"]
+        ["season", "week", "team", "gameday", "opponent", "home", "points_for", "points_against",
+         "moneyline", "opponent_moneyline"]
     ].rename(columns={"gameday": "date"})
     played = rows["points_for"].notna() & rows["points_against"].notna()
     rows["margin"] = (rows["points_for"] - rows["points_against"]).where(played)

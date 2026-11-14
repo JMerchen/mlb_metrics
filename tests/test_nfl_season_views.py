@@ -25,6 +25,21 @@ def test_team_schedule_results_byes_and_upcoming():
     assert rows[(rows["team"] == "BUF") & (rows["week"] == 1)]["result"].tolist() == ["BYE"]
 
 
+def test_team_schedule_carries_each_sides_moneyline():
+    schedules = _schedules().assign(home_moneyline=[-250, -130, 150, -110, -400], away_moneyline=[205, 110, -180, -110, 310])
+    rows = views.team_schedule(schedules)
+    kc = rows[rows["team"] == "KC"].set_index("week")
+    assert kc.loc[1, ["moneyline", "opponent_moneyline"]].tolist() == [-250, 205]      # at home
+    assert kc.loc[2, ["moneyline", "opponent_moneyline"]].tolist() == [110, -130]      # on the road
+    den = rows[rows["team"] == "DEN"].set_index("week")
+    assert den.loc[1, ["moneyline", "opponent_moneyline"]].tolist() == [205, -250]
+    # A schedule without odds still builds; the columns are blank.
+    plain = views.team_schedule(_schedules())
+    assert plain["moneyline"].isna().all() and plain["opponent_moneyline"].isna().all()
+    assert list(plain.columns) == ["season", "week", "team", "date", "opponent", "home", "points_for", "points_against",
+                                   "moneyline", "opponent_moneyline", "margin", "result"]
+
+
 def test_team_stats_record_points_and_epa():
     rows = views.team_schedule(_schedules())
     pbp = pd.DataFrame([
