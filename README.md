@@ -5218,7 +5218,7 @@ view?"): `team_schedule.team_games` takes the ESPN closing lines that
 (`data/raw/market_odds/espn_mlb_odds_<season>.parquet`; 2026 was
 backfilled for this) and matches them to games by date and teams, a
 doubleheader in start-time order (`game_moneylines`; on 2025 it matched
-2,427 of 2,430 games). The Stats page's schedule sheet shows the same two
+2,427 of 2,430 games, and on 2026 2,428 of 2,429). The Stats page's schedule sheet shows the same two
 bets per game, with the last 10 games beside each total
 (`MLB_BET_TREND_GAMES`; three games of baseball is noise). The shared
 arithmetic is in `mlb_render.js` (`seasonBets`, `seasonBetsHtml`), which
