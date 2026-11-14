@@ -5201,7 +5201,13 @@ played), and the NFL Stats schedule sheet totals two season-long bets
 (`nflWeeklyBets`): one unit every week on the team's opponent to win, and
 one on the team. A winner pays its moneyline (+140 pays 1.4 units, -170
 pays 0.59), a loser costs the unit, a tie returns it; only played games
-with a line count. Each week's tooltip shows both lines. On 2026-11-14
+with a line count. Each week's tooltip shows both lines. Next to each
+season total is the same bet over the last three games only
+(`NFL_BET_TREND_GAMES`; user request the same day: "if the Chargers all of
+a sudden win three in a row, we don't want this section to show +5.22 and
+have someone think it's a smart bet now"), shown once a team has played
+more than three; that day five teams were up for the season as a fade but
+down over the last three (the Rams +4.23 and -3.00). On 2026-11-14
 betting against the Cowboys was up 5.64 units through nine games (5 bets
 won, helped by Tampa Bay at +400), second only to betting against the
 winless Chargers (+8.22).

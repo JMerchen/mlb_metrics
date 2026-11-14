@@ -70,22 +70,27 @@ const m = Number(moneyline)
 return nflMoneylineProfit(moneyline) === null ? "" : `${m > 0 ? "+" : "−"}${Math.abs(Math.round(m))}`
 }
 
+// How many games back the schedule sheet's "lately" figure looks.
+const NFL_BET_TREND_GAMES = 3
+
 // One unit every week on this team's opponent to win, and one on the team
-// itself, at each game's moneyline: {against: {units, bets, won}, on:
-// {...}}. Only played games with a line count; a tie returns the stake.
-function nflWeeklyBets(weeks){
-const out = {against: {units: 0, bets: 0, won: 0}, on: {units: 0, bets: 0, won: 0}}
-;(weeks || []).forEach(g => {
-if(!["W", "L", "T"].includes(g.result)){ return }
-;[["against", g.opponent_moneyline, "L"], ["on", g.moneyline, "W"]].forEach(([side, line, wins]) => {
-const profit = nflMoneylineProfit(line)
+// itself, at each game's moneyline: {against: {units, bets, won, recent:
+// {units, bets, won}}, on: {...}}. `recent` is the same bet over only the
+// last `trend` games, so a season total built early doesn't hide that it
+// has turned. Only played games with a line count; a tie returns the stake.
+function nflWeeklyBets(weeks, trend = NFL_BET_TREND_GAMES){
+const played = (weeks || []).filter(g => ["W", "L", "T"].includes(g.result)).sort((a, b) => Number(a.week) - Number(b.week))
+const total = games => games.reduce((sum, g) => ({units: sum.units + g.units, bets: sum.bets + 1, won: sum.won + (g.won ? 1 : 0)}), {units: 0, bets: 0, won: 0})
+const side = (line, wins) => {
+const games = []
+played.forEach(g => {
+const profit = nflMoneylineProfit(g[line])
 if(profit === null){ return }
-out[side].bets += 1
-if(g.result === wins){ out[side].units += profit; out[side].won += 1 }
-else if(g.result !== "T"){ out[side].units -= 1 }
+games.push({won: g.result === wins, units: g.result === wins ? profit : g.result === "T" ? 0 : -1})
 })
-})
-return out
+return {...total(games), recent: total(games.slice(-trend))}
+}
+return {against: side("opponent_moneyline", "L"), on: side("moneyline", "W")}
 }
 
 // "up 5.64 units", "down 2.34 units", "even".
@@ -126,7 +131,11 @@ const diff = played.reduce((sum, g) => sum + (mlbNum(g.margin) || 0), 0)
 const next = weeks.find(g => g.result === "")
 const nextText = next ? ` · next: ${String(next.home).startsWith("1") ? "vs." : "at"} ${nflTeam(next.opponent)}${next.date ? `, ${mlbShortDate(next.date)}` : ""}` : ""
 const bets = nflWeeklyBets(weeks)
-const betLine = bets.against.bets ? `<div class="paperBets">One unit on their opponent to win every week: <b class="${bets.against.units > 0.004 ? "betUp" : bets.against.units < -0.004 ? "betDown" : ""}">${nflUnitsText(bets.against.units)}</b> (${bets.against.won} of ${bets.against.bets} bets won). One unit on the ${mlbEsc(nflTeam(team))} every week: <b class="${bets.on.units > 0.004 ? "betUp" : bets.on.units < -0.004 ? "betDown" : ""}">${nflUnitsText(bets.on.units)}</b>. <span class="paperBetsNote">At each game's closing odds.</span></div>` : ""
+const tone = units => units > 0.004 ? "betUp" : units < -0.004 ? "betDown" : ""
+// The last few games on their own, once there are more games than that.
+const lately = b => b.bets > b.recent.bets ? `; last ${b.recent.bets === 3 ? "three" : b.recent.bets} games: <b class="${tone(b.recent.units)}">${nflUnitsText(b.recent.units)}</b>` : ""
+const betLine = bets.against.bets ? `<div class="paperBets"><div>One unit on their opponent to win every week: <b class="${tone(bets.against.units)}">${nflUnitsText(bets.against.units)}</b> (${bets.against.won} of ${bets.against.bets} bets won)${lately(bets.against)}.</div>
+<div>One unit on the ${mlbEsc(nflTeam(team))} every week: <b class="${tone(bets.on.units)}">${nflUnitsText(bets.on.units)}</b>${lately(bets.on)}. <span class="paperBetsNote">At each game's closing odds.</span></div></div>` : ""
 const per = Math.ceil(weeks.length / 3)
 const panels = [0, 1, 2].map(c => `<div class="paperPanel" style="--panel:${c}">${weeks.slice(c * per, (c + 1) * per).map(nflWeekRow).join("")}</div>`).join("")
 const key = (result, margins) => margins.map(m => `${nflMarkSvg(result, nflScheduleInk(result, result === "L" ? -m : m))}<small>${m === NFL_DEEPEST_MARGIN ? `${m}+` : m}</small>`).join("")
