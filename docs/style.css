@@ -1707,6 +1707,10 @@ radial-gradient(circle at 40% 45%,rgba(0,0,0,.18),transparent 60%);}
 .paperTeam .mlbLogo > span,.paperPanels .mlbLogo > span{color:#5c544a;}
 .paperKey{display:flex;flex-wrap:wrap;align-items:center;gap:4px;font-size:11px;color:#5c544a;}
 .paperKey span{margin-left:10px;}
+.paperBets{flex-basis:100%;font-size:13px;color:#3d372f;line-height:1.5;}
+.paperBets .betUp{color:#0b6e2e;}
+.paperBets .betDown{color:#a00e12;}
+.paperBetsNote{color:#6b6257;font-size:12px;}
 .paperKey .schedMark{position:static;width:20px;height:20px;}
 .paperPanels{display:grid;grid-template-columns:repeat(4,1fr);}
 .paperPanel{padding:4px 10px 0;transform-origin:left center;
