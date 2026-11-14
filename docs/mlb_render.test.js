@@ -202,3 +202,36 @@ test("schedule: series in order, ink deepens with the margin, four panels", () =
   const picker = r.scheduleTeamPickerHtml(["SD", "LAD"], "SD")
   assert.ok(picker.indexOf("LAD") < picker.indexOf('"SD"') && picker.includes('class="schedPick schedPicked" data-sched-team="SD"'))
 })
+
+test("schedule: a unit a game on the opponent and on the team, with the last ten games on their own", () => {
+  assert.equal(r.betProfit("140.0"), 1.4)
+  assert.ok(Math.abs(r.betProfit(-170) - 0.5882) < 1e-4)
+  assert.equal(r.betProfit(""), null)
+  assert.equal(r.betLineText("-170.0"), "−170")
+  assert.equal(r.betLineText(""), "")
+  assert.equal(r.betUnitsText(-1), "down 1.00 unit")
+  assert.equal(r.betUnitsText(0.001), "even")
+  // Lost twelve straight as a +150 underdog (the other side -180), then won ten straight at -120 (the other side +100).
+  const game = (n, result, line, other) => ({ team: "SD", game_no: String(n), series: String(Math.ceil(n / 3)), opponent: "DET", home: "1",
+    result, run_diff: result === "W" ? "1" : "-1", runs_for: "5", runs_against: "4", date: "2026-04-01", moneyline: String(line), opponent_moneyline: String(other) })
+  const games = Array.from({ length: 12 }, (_, i) => game(i + 1, "L", 150, -180)).concat(Array.from({ length: 10 }, (_, i) => game(i + 13, "W", -120, 100)))
+  const bets = r.seasonBets(games, r.MLB_BET_TREND_GAMES)
+  assert.equal(r.MLB_BET_TREND_GAMES, 10)
+  assert.ok(Math.abs(bets.against.units - (12 * 100 / 180 - 10)) < 1e-9)
+  assert.deepEqual([bets.against.bets, bets.against.won], [22, 12])
+  assert.deepEqual(bets.against.recent, { units: -10, bets: 10, won: 0 })
+  assert.ok(Math.abs(bets.on.units - (-12 + 10 * 100 / 120)) < 1e-9)
+  assert.ok(Math.abs(bets.on.recent.units - 10 * 100 / 120) < 1e-9)
+  const sheet = r.scheduleSheetHtml(games, "SD")
+  assert.ok(text(sheet).includes("One unit on their opponent to win every game: down 3.33 units (12 of 22 bets won); last 10 games: down 10.00 units."))
+  assert.ok(text(sheet).includes("One unit on the Padres every game: down 3.67 units; last 10 games: up 8.33 units. At each game's closing odds."))
+  assert.ok(sheet.includes("Apr 1 vs. Tigers: W 5-4 (Padres −120, Tigers +100 to win)"))
+  // A game without a line is left out of the bets; with no lines at all the sheet says nothing about them.
+  const partial = r.seasonBets(games.map((g, i) => i < 12 ? { ...g, moneyline: "", opponent_moneyline: "" } : g), 10)
+  assert.deepEqual([partial.against.bets, partial.against.units], [10, -10])
+  const bare = games.map(g => ({ ...g, moneyline: "", opponent_moneyline: "" }))
+  assert.ok(!r.scheduleSheetHtml(bare, "SD").includes("paperBets"))
+  assert.equal(r.seasonBetsHtml(r.seasonBets([], 10), "Padres", "game"), "")
+  // Ten or fewer games: the last ten would repeat the season, so it isn't shown.
+  assert.ok(!text(r.scheduleSheetHtml(games.slice(0, 10), "SD")).includes("last 10 games"))
+})
