@@ -1,14 +1,14 @@
-"""A quarterback-adjusted Elo: team ratings that know who is under center.
+"""A quarterback-adjusted Elo that also learns from the betting line: the
+NFL win model (v5).
 
-Why (2026-11-15, scripts/research_nfl_bets.py and the user's "if there are
-better models out there ... leverage what they have that we don't"): the
-public nfelo model scored a log loss of 0.6197 on the 1,766 games our v4
-model scored 0.6305 on. Taking nfelo apart, its team ratings alone were no
-better than ours (0.6300); the whole gap was its quarterback adjustment,
-the one FiveThirtyEight designed. Our own QB+ term never captured it,
-because it rates the starter on his own and not against what his team has
-been getting at the position. This module is that design, built from our
-own data.
+Why (2026-11-15; the user's "if there are better models out there ...
+leverage what they have that we don't", then "could we recreate their
+inputs instead of just tailing or combining?"): the public nfelo model
+scored a log loss of 0.6197 on the 1,766 games our v4 model scored 0.6305
+on. Taking nfelo apart, its team ratings alone were no better than ours
+(0.6300); the gap was its quarterback adjustment - the one FiveThirtyEight
+designed - and its use of the market's lines. This module rebuilds both
+from our own data. It reads nothing from nfelo.
 
 How it works:
   * Every quarterback game gets a VALUE from the box score
@@ -18,36 +18,45 @@ How it works:
   * A quarterback's rating is a running average of his values (a tenth of
     the way to each new game); a team's is the same over whoever played
     (a twentieth); a defense's is what it has allowed.
-  * A team's Elo is the standard one (20 points a game, scaled by the
-    margin, a third of the way back to average between seasons), except
-    that each game's expectation includes the two starters' adjustments -
-    3.3 Elo points for every point of value the listed starter is above
-    or below his team's running level. So the team rating is the team
-    with its usual quarterback play, and a backup starting, or a starter
-    back, moves the game and not the rating.
+  * A team's Elo moves with each result (config.NFL_QB_ELO_K points at
+    stake, scaled by the margin, a third of the way back to average
+    between seasons), and each game's expectation includes the two
+    starters' adjustments: 3.3 Elo points for every point of value the
+    listed starter is above or below his team's running level. So the
+    team rating is the team with its usual quarterback play, and a backup
+    starting, or a starter back, moves the game and not the rating.
+  * After each game the two teams' gap also moves a quarter of the way
+    (config.NFL_QB_ELO_MARKET_PULL) to what that game's closing point
+    spread said it was. A past line is public before the next game, and it
+    knows things a final score doesn't: who was hurt, who rested starters.
+    The line of the game being predicted is never used.
 
 Walk-forward by construction (each game is predicted from the ratings as
 they stood before it; nothing is fit), 2019-2026, 1,999 games:
-                             log loss   winners
-    our v4 model              0.6307     1,284
-    this rating alone         0.6242     1,299
-    the two averaged (v5)     0.6242     1,306
-    Vegas                     0.6094     1,332
-The average beats v4 by 0.0065 (t 3.7) and in all 8 seasons - about a
-third of the distance v4 was from Vegas - and its picks against Vegas come
-out near break-even at the closing moneyline (219 bets, -3.0 units; v4's
-were -12.1 on 260). The settings are FiveThirtyEight's except the home
-edge (40 Elo points, not 48: home field has shrunk) and a new
-quarterback's starting value (0.4 of the league's); fifteen variations all
-landed within 0.002 of each other on both halves of the history, so
-nothing here is tuned finely. scripts/train_nfl_qb_elo_blend.py prints
-these and saves the model.
+                                  log loss   winners
+    v4 (the model this replaced)   0.6307     1,284
+    QB adjustment, no lines        0.6242     1,299
+    this model                     0.6197     1,303
+    this model and v4 averaged     0.6221     1,310
+    Vegas                          0.6094     1,332
+It beats v4 by 0.0111 (t 3.2) and in all 8 seasons - about half the
+distance v4 was from Vegas - and on nfelo's own 1,766 games it scores
+0.6177 to nfelo's 0.6197. Averaging v4 back in made it worse at every
+weight tried, so v4 is retired. Two more of nfelo's inputs were tried and
+left out: an EPA-based margin in place of the score (worse: 0.6251 at
+half weight) and a bonus after a bye (within noise). The settings were
+chosen where both halves of the history agreed (2019-22 and 2023-26), and
+nine neighbouring settings all landed within 0.001.
+scripts/train_nfl_qb_elo.py prints these and saves the model.
 """
 
 import numpy as np
 import pandas as pd
 
 from mlb_metrics import config, nfl_totals
+
+# The What if? panel's "Average starter" option (nfl_whatif.AVERAGE_QB_ID).
+AVERAGE_QB_ID = "average"
 
 VALUE_COLUMNS = ["attempts", "completions", "passing_yards", "passing_tds", "passing_interceptions",
                  "sacks_suffered", "carries", "rushing_yards", "rushing_tds"]
@@ -92,6 +101,8 @@ class QbEloState:
         team_level = self.team_value.get(team, config.NFL_QB_ELO_LEAGUE_VALUE)
         if not isinstance(qb_id, str) or not qb_id:
             return 0.0
+        if qb_id == AVERAGE_QB_ID:
+            return self.average_qb_adjustment(team)
         return config.NFL_QB_ELO_QB_WEIGHT * (self.qb_value.get(qb_id, self.new_qb_value()) - team_level)
 
     def average_qb_adjustment(self, team: str) -> float:
@@ -146,7 +157,7 @@ def rate(schedules_df: pd.DataFrame, weekly_df: pd.DataFrame, current_season=Non
     by_player = values.set_index(["season", "week", "team", "player_id"])["value"].to_dict()
     by_team = values.groupby(["season", "week", "team"])["value"].sum().to_dict()
     league = config.NFL_QB_ELO_LEAGUE_VALUE
-    has = {c: c in games.columns for c in ("home_qb_id", "away_qb_id", "location", "game_type")}
+    has = {c: c in games.columns for c in ("home_qb_id", "away_qb_id", "location", "game_type", "spread_line")}
     for row in games.itertuples(index=False):
         season, week = row.season, row.week
         home, away = nfl_totals.NFL_TEAM_ALIASES.get(row.home_team, row.home_team), nfl_totals.NFL_TEAM_ALIASES.get(row.away_team, row.away_team)
@@ -161,7 +172,12 @@ def rate(schedules_df: pd.DataFrame, weekly_df: pd.DataFrame, current_season=Non
         expected = float(gap_to_probability(gap))
         result = 1.0 if margin > 0 else 0.0 if margin < 0 else 0.5
         winner_gap = gap if margin > 0 else -gap
-        shift = config.NFL_ELO_K * np.log(abs(margin) + 1) * 2.2 / (winner_gap * 0.001 + 2.2) * (result - expected)
+        shift = config.NFL_QB_ELO_K * np.log(abs(margin) + 1) * 2.2 / (winner_gap * 0.001 + 2.2) * (result - expected)
+        # What the closing line said about these two teams, which is public
+        # before either plays again: the gap moves part of the way to it.
+        spread = getattr(row, "spread_line", None) if has["spread_line"] else None
+        if spread is not None and not pd.isna(spread):
+            shift += config.NFL_QB_ELO_MARKET_PULL * (spread * config.NFL_QB_ELO_POINTS - gap) / 2
         start = config.NFL_ELO_START
         state.elo[home] = state.elo.get(home, start) + shift
         state.elo[away] = state.elo.get(away, start) - shift

@@ -399,14 +399,6 @@ def pairing_log_odds(master, qb_continuity, weekly, games: pd.DataFrame, options
     if artifact is not None and {"home_qb_plus", "away_qb_plus"} <= set(artifact["feature_columns"]):
         columns = artifact["feature_columns"]
         features = nfl_game_picks.resolve_feature_builder(columns)(master, qb_continuity, weekly, games)
-        # The quarterback-adjusted Elo's part of each option: his own
-        # adjustment, or a league-average quarterback's for "Average starter".
-        state = nfl_game_picks.qb_elo_state(master)
-
-        def elo_adjustment(team, qb_id):
-            team = nfl_totals._canonical(pd.Series([team])).iloc[0]
-            return state.average_qb_adjustment(team) if qb_id == AVERAGE_QB_ID else state.qb_adjustment(team, qb_id)
-
         rows, keys = [], []
         for _, f in features.iterrows():
             if f[columns].drop(["home_qb_plus", "away_qb_plus"]).isna().any():
@@ -415,11 +407,7 @@ def pairing_log_odds(master, qb_continuity, weekly, games: pd.DataFrame, options
                 for a in options.get(f["away_team"], []):
                     if h["qb_plus"] is None or a["qb_plus"] is None:
                         continue
-                    row = {**f.to_dict(), "home_qb_plus": h["qb_plus"], "away_qb_plus": a["qb_plus"]}
-                    if state is not None and "home_qb_elo_adj" in columns:
-                        row["home_qb_elo_adj"] = elo_adjustment(f["home_team"], h["id"])
-                        row["away_qb_elo_adj"] = elo_adjustment(f["away_team"], a["id"])
-                    rows.append(row)
+                    rows.append({**f.to_dict(), "home_qb_plus": h["qb_plus"], "away_qb_plus": a["qb_plus"]})
                     keys.append((f["game_id"], f"{h['id']}|{a['id']}"))
         if not rows:
             return {}
@@ -429,11 +417,14 @@ def pairing_log_odds(master, qb_continuity, weekly, games: pd.DataFrame, options
             out.setdefault(game_id, {})[key] = round(_log_odds(p), 4)
         return out
 
+    # The quarterback-adjusted Elo (the live model) can rate an average
+    # starter itself; a model that can't skips that option.
+    rates_average = artifact is not None and artifact["feature_columns"] == nfl_game_picks.QB_ELO_FEATURE_COLUMNS
     rows = []
     for _, g in games.iterrows():
         for h in options.get(g["home_team"], []):
             for a in options.get(g["away_team"], []):
-                if AVERAGE_QB_ID in (h["id"], a["id"]):
+                if AVERAGE_QB_ID in (h["id"], a["id"]) and not rates_average:
                     continue
                 rows.append({**g.to_dict(), "game_id": f"{g['game_id']}|{h['id']}|{a['id']}",
                              "home_qb_id": h["id"], "away_qb_id": a["id"]})

@@ -75,21 +75,54 @@ def test_gap_to_probability_is_the_elo_curve_and_the_model_member_adds_its_colum
     assert ml_models.EloGapModel().predict_proba(X).sum(axis=1) == pytest.approx([1.0, 1.0])
 
 
-def test_v5_columns_are_v4s_plus_the_elo_and_resolve_to_their_builder():
-    assert nfl_game_picks.V5_FEATURE_COLUMNS == nfl_game_picks.BLEND_FEATURE_COLUMNS + nfl_game_picks.QB_ELO_FEATURE_COLUMNS
+def test_the_closing_line_pulls_the_gap_toward_it_after_the_game():
+    # Same result, but the line had the home team a 10-point favorite: the gap ends up wider.
+    plain = nfl_qb_elo.rate(pd.DataFrame([_game(2025, 1, "KC", "DEN", 24, 21)]), pd.DataFrame())
+    lined = nfl_qb_elo.rate(pd.DataFrame([{**_game(2025, 1, "KC", "DEN", 24, 21), "spread_line": 10.0}]), pd.DataFrame())
+    gap = lambda state: state.elo["KC"] - state.elo["DEN"]
+    pull = config.NFL_QB_ELO_MARKET_PULL * (10.0 * config.NFL_QB_ELO_POINTS - config.NFL_QB_ELO_HOME_EDGE)
+    assert gap(lined) == pytest.approx(gap(plain) + pull)
+    # A game with no line on file just skips the pull.
+    blank = nfl_qb_elo.rate(pd.DataFrame([{**_game(2025, 1, "KC", "DEN", 24, 21), "spread_line": None}]), pd.DataFrame())
+    assert gap(blank) == pytest.approx(gap(plain))
+
+
+def test_v5_features_are_the_elo_gap_and_each_starters_adjustment():
+    assert nfl_game_picks.V5_FEATURE_COLUMNS == nfl_game_picks.QB_ELO_FEATURE_COLUMNS
     assert nfl_game_picks.resolve_feature_builder(nfl_game_picks.V5_FEATURE_COLUMNS) is nfl_game_picks.build_game_features_v5
+    schedules = pd.DataFrame([_game(2025, 1, "KC", "DEN", 31, 10, "MAHOMES", "NIX"), _game(2025, 2, "DEN", "KC", 17, 20, "NIX", "MAHOMES")])
+    weekly = pd.DataFrame([_line(2025, 1, "KC", "MAHOMES", yards=350, tds=4), _line(2025, 1, "DEN", "NIX", yards=150, tds=0, ints=2),
+                           _line(2025, 2, "KC", "MAHOMES", yards=300, tds=2), _line(2025, 2, "DEN", "NIX", yards=200, tds=1)])
+    state = nfl_qb_elo.rate(schedules, weekly)
+    master = state.team_table()
+    master.attrs["qb_elo_state"] = state
+    games = pd.DataFrame([
+        {"game_id": "g1", "season": 2025, "week": 3, "home_team": "KC", "away_team": "DEN", "home_qb_id": "MAHOMES", "away_qb_id": "NIX"},
+        {"game_id": "g2", "season": 2025, "week": 3, "home_team": "KC", "away_team": "DEN", "home_qb_id": "BACKUP", "away_qb_id": nfl_qb_elo.AVERAGE_QB_ID},
+    ])
+    features = nfl_game_picks.build_game_features_v5(master, None, None, games).set_index("game_id")
+    assert features.loc["g1", "qb_elo_base"] == pytest.approx(state.gap("KC", "DEN"))
+    assert features.loc["g1", "home_qb_elo_adj"] == pytest.approx(state.qb_adjustment("KC", "MAHOMES"))
+    assert features.loc["g2", "home_qb_elo_adj"] == pytest.approx(state.qb_adjustment("KC", "BACKUP"))
+    assert features.loc["g2", "home_qb_elo_adj"] < features.loc["g1", "home_qb_elo_adj"]
+    assert features.loc["g2", "away_qb_elo_adj"] == pytest.approx(state.average_qb_adjustment("DEN"))
+    p = ml_models.EloGapModel().predict_proba(features[nfl_game_picks.V5_FEATURE_COLUMNS])[:, 1]
+    assert p[0] == pytest.approx(nfl_qb_elo.gap_to_probability(state.gap("KC", "DEN", "MAHOMES", "NIX")))
+    assert p[1] < p[0]                                         # the backup against an average quarterback
+    # No rating on the team table: blank features, and the pick falls back to the heuristic.
     assert nfl_game_picks.qb_elo_state(pd.DataFrame({"team": ["KC"]})) is None
+    blank = nfl_game_picks.build_game_features_v5(pd.DataFrame({"team": ["KC", "DEN"]}), None, None, games)
+    assert blank[nfl_game_picks.V5_FEATURE_COLUMNS].isna().all().all()
 
 
 def test_the_saved_model_is_v5_and_its_walk_forward_file_shows_the_gain():
     artifact = ml_models.load_model(config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH)
     assert artifact["feature_columns"] == nfl_game_picks.V5_FEATURE_COLUMNS
     members = artifact["model"].members
-    assert len(members) == 2 and isinstance(members[1][0], ml_models.EloGapModel)
-    assert members[0][1] == nfl_game_picks.BLEND_FEATURE_COLUMNS and members[1][1] == nfl_game_picks.QB_ELO_FEATURE_COLUMNS
+    assert len(members) == 1 and isinstance(members[0][0], ml_models.EloGapModel)
     assert config.NFL_GAME_PICK_MODEL_VERSION == "v5"
     scored = pd.read_csv("data/backtest/nfl_win_model_v4_walk_forward.csv").dropna(subset=["v5", "market"])
     scored = scored[scored["home_won"].isin([0, 1])]
     loss = lambda column: float(-(scored["home_won"] * np.log(scored[column]) + (1 - scored["home_won"]) * np.log(1 - scored[column])).mean())
-    assert loss("v5") < loss("new") - 0.004          # the recorded result: 0.6242 against 0.6307
+    assert loss("v5") < loss("new") - 0.008          # the recorded result: 0.6197 against 0.6307
     assert loss("market") < loss("v5")               # and Vegas is still ahead

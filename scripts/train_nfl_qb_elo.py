@@ -1,32 +1,31 @@
-"""Builds and checks the v5 NFL win model: v4 averaged with the
-quarterback-adjusted Elo (src/mlb_metrics/nfl_qb_elo.py, which has the
-why and the method).
+"""Checks and saves the v5 NFL win model: the quarterback-adjusted Elo
+that also learns from past closing lines (src/mlb_metrics/nfl_qb_elo.py,
+which has the why and the method).
 
-Nothing is fit here. The quarterback-adjusted Elo is walk-forward by
-construction (every game is predicted from the ratings as they stood
-before it), and v4's walk-forward predictions are the ones
-scripts/train_nfl_elo_margin_model.py saved. This script:
-  1. replays the Elo over every schedule and weekly-stats file on disk,
-  2. scores v4, the Elo alone, their plain average (v5) and Vegas on the
-     same games, by season,
+Nothing is fit here. The rating is walk-forward by construction (every
+game is predicted from the ratings as they stood before it). This script:
+  1. replays it over every schedule and weekly-stats file on disk,
+  2. scores it, v4 (the walk-forward predictions
+     scripts/train_nfl_elo_margin_model.py saved), their average and
+     Vegas on the same games, by season,
   3. writes the predictions back to the walk-forward file (columns
      qb_elo and v5) and the track record's backtest counts for v5,
-  4. saves the live model: ml_models.BlendedWinModel of the v4 model and
-     ml_models.EloGapModel, reading nfl_game_picks.V5_FEATURE_COLUMNS.
+  4. saves the live model: ml_models.EloGapModel reading
+     nfl_game_picks.V5_FEATURE_COLUMNS.
 
 RESULT (2026-11-15, 1,999 games 2019-2026):
-                      log loss   winners
-    v4                 0.6307     1,284
-    QB-adjusted Elo    0.6242     1,299
-    v5 (the average)   0.6242     1,306
-    Vegas              0.6094     1,332
-v5 beats v4 by 0.0065 (t 3.7) and in all 8 seasons - about a third of the
+                           log loss   winners
+    v4                      0.6307     1,284
+    v5: QB-adjusted Elo     0.6197     1,303
+    v4 and v5 averaged      0.6221     1,310
+    Vegas                   0.6094     1,332
+v5 beats v4 by 0.0111 (t 3.2) and in all 8 seasons - about half the
 distance v4 was from Vegas. It still does not beat the closing line (see
 scripts/research_nfl_bets.py): this makes the picks more accurate, it does
 not make winners a bet.
 
 Usage:
-    PYTHONPATH=src python3 scripts/train_nfl_qb_elo_blend.py [--no-save]
+    PYTHONPATH=src python3 scripts/train_nfl_qb_elo.py [--no-save]
 """
 
 import argparse
@@ -67,18 +66,19 @@ def main():
     args = parser.parse_args()
 
     scored = pd.read_csv(WALK_FORWARD).drop(columns=["qb_elo", "v5"], errors="ignore").merge(replay(), on="game_id", how="left")
-    scored["v5"] = (scored["new"] + scored["qb_elo"]) / 2
+    scored["v5"] = scored["qb_elo"]
     games = scored[scored["home_won"].isin([0, 1]) & scored["market"].notna() & scored["v5"].notna()]
     y = games["home_won"]
     print(f"{len(games)} games {int(games['season'].min())}-{int(games['season'].max())}")
-    for label, column in (("v4", "new"), ("QB-adjusted Elo", "qb_elo"), ("v5 (the average)", "v5"), ("Vegas", "market")):
+    games = games.assign(half=(games["new"] + games["v5"]) / 2)
+    for label, column in (("v4", "new"), ("v5: QB-adjusted Elo", "v5"), ("v4 and v5 averaged", "half"), ("Vegas", "market")):
         print(f"  {label:18s} log loss {log_loss(games[column], y).mean():.4f}   winners {int(((games[column] > 0.5) == (y == 1)).sum())}")
     gain = log_loss(games["new"], y) - log_loss(games["v5"], y)
     by_season = gain.groupby(games["season"]).mean()
     print(f"  v5 over v4: {gain.mean():+.4f} (t {gain.mean() / (gain.std() / np.sqrt(len(gain))):.1f}), "
           f"better in {int((by_season > 0).sum())} of {len(by_season)} seasons")
     table = games.groupby("season").apply(lambda s: pd.Series(
-        {c: log_loss(s[c], s["home_won"]).mean() for c in ("new", "qb_elo", "v5", "market")}))
+        {c: log_loss(s[c], s["home_won"]).mean() for c in ("new", "v5", "market")}))
     print(table.round(4).T.to_string())
     if args.no_save:
         return
@@ -87,19 +87,8 @@ def main():
     import train_nfl_elo_margin_model as v4_script
     v4_script.write_confidence_backtest(scored.assign(new=scored["v5"]).dropna(subset=["new"]))
 
-    artifact = ml_models.load_model(config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH)
-    if artifact is None:
-        raise SystemExit("No saved win model to build on - run scripts/train_nfl_elo_margin_model.py first.")
-    v4_model = artifact["model"]
-    if artifact["feature_columns"] == nfl_game_picks.V5_FEATURE_COLUMNS:      # already v5: rebuild around its v4 member
-        v4_model = artifact["model"].members[0][0]
-    elif artifact["feature_columns"] != nfl_game_picks.BLEND_FEATURE_COLUMNS:
-        raise SystemExit("The saved win model is not v4's blend.")
-    model = ml_models.BlendedWinModel([
-        (v4_model, nfl_game_picks.BLEND_FEATURE_COLUMNS),
-        (ml_models.EloGapModel(), nfl_game_picks.QB_ELO_FEATURE_COLUMNS),
-    ])
-    ml_models.save_model({**artifact, "model": model, "feature_columns": nfl_game_picks.V5_FEATURE_COLUMNS},
+    model = ml_models.BlendedWinModel([(ml_models.EloGapModel(), nfl_game_picks.QB_ELO_FEATURE_COLUMNS)])
+    ml_models.save_model({"model": model, "feature_columns": nfl_game_picks.V5_FEATURE_COLUMNS},
                          config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH)
     print(f"saved {config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH}")
 

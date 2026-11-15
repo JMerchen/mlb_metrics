@@ -365,12 +365,13 @@ def build_game_features_blend(
     return games[["game_id", "season", "week", "home_team", "away_team"] + BLEND_FEATURE_COLUMNS]
 
 
-# The live v5 model (2026-11-15) averages v4 with the quarterback-adjusted
-# Elo (nfl_qb_elo.py, read by ml_models.EloGapModel): the Elo gap with home
-# field, and each listed starter's adjustment kept one column a side so
-# the What if? panel can swap a quarterback.
+# The live v5 model (2026-11-15) is the quarterback-adjusted Elo on its own
+# (nfl_qb_elo.py, read by ml_models.EloGapModel): the Elo gap with home
+# field, and each listed starter's adjustment kept one column a side. It
+# replaced v4's blend rather than joining it: any weight on v4 made it
+# worse in testing.
 QB_ELO_FEATURE_COLUMNS = ["qb_elo_base", "home_qb_elo_adj", "away_qb_elo_adj"]
-V5_FEATURE_COLUMNS = BLEND_FEATURE_COLUMNS + QB_ELO_FEATURE_COLUMNS
+V5_FEATURE_COLUMNS = QB_ELO_FEATURE_COLUMNS
 
 
 def qb_elo_state(master: pd.DataFrame):
@@ -383,22 +384,29 @@ def build_game_features_v5(
     master: pd.DataFrame, qb_continuity: pd.DataFrame, weekly_df: pd.DataFrame, schedule_games_df: pd.DataFrame,
 ) -> pd.DataFrame:
     """Returns [game_id, season, week, home_team, away_team] + V5_FEATURE_COLUMNS:
-    build_game_features_blend's columns plus the quarterback-adjusted Elo's
-    gap (home minus away, home field included) and each listed starter's
-    adjustment. Blank - so the game keeps its heuristic chance - when
-    `master` carries no quarterback-adjusted Elo."""
+    the quarterback-adjusted Elo's gap (home minus away, home field
+    included) and each listed starter's adjustment (a starter listed as
+    nfl_qb_elo.AVERAGE_QB_ID is a league-average quarterback). Blank - so
+    the game keeps its heuristic chance - when `master` carries no
+    quarterback-adjusted Elo."""
     from mlb_metrics import nfl_totals
-    games = build_game_features_blend(master, qb_continuity, weekly_df, schedule_games_df)
+    keep = [c for c in ("game_id", "season", "week", "home_team", "away_team") if c in schedule_games_df.columns]
+    games = schedule_games_df[keep].copy().reset_index(drop=True)
+    for column in ("season", "week"):
+        if column not in games.columns:
+            games[column] = float("nan")
     state = qb_elo_state(master)
     if state is None:
         for column in QB_ELO_FEATURE_COLUMNS:
             games[column] = float("nan")
     else:
-        starters = schedule_games_df.set_index("game_id")[["home_qb_id", "away_qb_id"]].reindex(games["game_id"])
+        starters = schedule_games_df.reset_index(drop=True)
+        home_qb = starters["home_qb_id"] if "home_qb_id" in starters.columns else [None] * len(games)
+        away_qb = starters["away_qb_id"] if "away_qb_id" in starters.columns else [None] * len(games)
         home, away = nfl_totals._canonical(games["home_team"]), nfl_totals._canonical(games["away_team"])
         games["qb_elo_base"] = [state.gap(h, a) for h, a in zip(home, away)]
-        games["home_qb_elo_adj"] = [state.qb_adjustment(h, q) for h, q in zip(home, starters["home_qb_id"])]
-        games["away_qb_elo_adj"] = [state.qb_adjustment(a, q) for a, q in zip(away, starters["away_qb_id"])]
+        games["home_qb_elo_adj"] = [state.qb_adjustment(h, q) for h, q in zip(home, home_qb)]
+        games["away_qb_elo_adj"] = [state.qb_adjustment(a, q) for a, q in zip(away, away_qb)]
     return games[["game_id", "season", "week", "home_team", "away_team"] + V5_FEATURE_COLUMNS]
 
 

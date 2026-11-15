@@ -1,9 +1,9 @@
 group,label,low,high,games,right
-confidence,50–55%,0.5,0.55,389,201
-confidence,55–60%,0.55,0.6,380,223
-confidence,60–65%,0.6,0.65,342,221
-confidence,65–70%,0.65,0.7,280,202
-confidence,70–75%,0.7,0.75,249,177
-confidence,75%+,0.75,1.0,359,284
-vegas,with,,,1780,1209
-vegas,against,,,219,99
+confidence,50–55%,0.5,0.55,374,196
+confidence,55–60%,0.55,0.6,358,201
+confidence,60–65%,0.6,0.65,321,194
+confidence,65–70%,0.65,0.7,297,209
+confidence,70–75%,0.7,0.75,255,185
+confidence,75%+,0.75,1.0,394,323
+vegas,with,,,1812,1225
+vegas,against,,,187,83
