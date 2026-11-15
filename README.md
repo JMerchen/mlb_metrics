@@ -5259,6 +5259,18 @@ target) - none beat the live model's 58.6% of 174 on 5-point gaps; and 25
 years of market-bias angles for totals and sides - nothing dependable.
 Those were exploratory runs and are not kept as scripts.
 
+**Head-to-head history: tested, not used** (2026-11-15; the user's "the
+Cowboys are abysmal against the 49ers"). Regular-season games 2003-2026
+where the two teams had met at least twice in the previous four seasons:
+each point of past head-to-head margin was worth +0.004 points beyond the
+closing spread (t 0.19, 3,889 games); backing the team that had won the
+last four or more meetings by 10+ a game covered 46.6% of 506, and one
+that had won every one of its last three or more covered 47.7% of 333
+(52.4% breaks even); added to v5 it took a weight of -0.035 per 10 points
+(p 0.44) and made the walk-forward log loss slightly worse (0.6234 from
+0.6232). The ratings already hold the reason one team kept beating the
+other. Exploratory run, not kept as a script.
+
 **How it is wired.** `assemble_team_metrics(qb_elo_weekly_df=...)` runs the
 ratings over every season on file and carries the state on the team
 table; `build_game_features_v5` gives `qb_elo_base`, `home_qb_elo_adj` and
