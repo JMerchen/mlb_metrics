@@ -291,7 +291,6 @@ def test_apply_injury_report_marks_regulars_out_and_starts_the_backup_qb():
     # The model's own move for the quarterback change alone (what the spread
     # bet's margin follows): the swap's -0.4, without the cornerback.
     assert out["2026_08_CAR_GB"]["qb_log_odds_shift"] == pytest.approx(-0.4)
-    assert out["2026_08_CAR_GB"]["qb_teams"] == ["GB"]
     assert nfl_whatif.qb_log_odds_shift(game) == 0.0
     assert nfl_whatif.qb_log_odds_shift(game, {"home": "nobody"}) == 0.0   # a pairing the model didn't rate
 

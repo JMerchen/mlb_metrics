@@ -13,16 +13,18 @@ game is predicted from the ratings as they stood before it). This script:
   4. saves the live model: ml_models.EloGapModel reading
      nfl_game_picks.V5_FEATURE_COLUMNS.
 
-RESULT (2026-11-15, 1,999 games 2019-2026):
+RESULT (2026-11-15, 1,999 games 2019-2026; with the rest, backup and
+resting-starters terms of scripts/research_nfl_model_gaps.py - before
+them v5 was 0.6197 and 1,303):
                            log loss   winners
     v4                      0.6307     1,284
-    v5: QB-adjusted Elo     0.6197     1,303
-    v4 and v5 averaged      0.6221     1,310
+    v5: QB-adjusted Elo     0.6162     1,304
+    v4 and v5 averaged      0.6198     1,313
     Vegas                   0.6094     1,332
-v5 beats v4 by 0.0111 (t 3.2) and in all 8 seasons - about half the
-distance v4 was from Vegas. It still does not beat the closing line (see
-scripts/research_nfl_bets.py): this makes the picks more accurate, it does
-not make winners a bet.
+v5 beats v4 by 0.0145 (t 3.8) and in all 8 seasons - two thirds of the
+distance v4 was from Vegas. Picking winners it is still behind the
+closing line; where its margin is 3.5+ points from the closing spread its
+side has won (scripts/research_nfl_spread_edge.py).
 
 Usage:
     PYTHONPATH=src python3 scripts/train_nfl_qb_elo.py [--no-save]

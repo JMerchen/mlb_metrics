@@ -63,9 +63,6 @@ NFL_GAME_PREDICTION_COLUMNS = [
     # is deferred to Vegas or recalibrated (nfl_game_picks.apply_ml_model):
     # what a spread bet is judged on. Blank on picks from before v5.
     "model_margin",
-    # The teams starting a different quarterback from their last game
-    # ("SEA" or "SEA, LV"; blank for none): a spread bet skips those games.
-    "qb_change",
 ]
 
 POINT_PREDICTION_COLUMNS = ["predicted_home_points", "predicted_away_points", "predicted_total"]
@@ -278,7 +275,7 @@ def select_game_picks(
     picks["actual_total"] = pd.NA
     picks["market_spread"] = picks["game_id"].map(schedule_games_df.set_index("game_id")["spread_line"]) \
         if "spread_line" in schedule_games_df.columns else pd.NA
-    for column in [*nfl_weather.WEATHER_DISPLAY_COLUMNS, "lean_hold", *CARD_COLUMNS, "qb_change"]:
+    for column in [*nfl_weather.WEATHER_DISPLAY_COLUMNS, "lean_hold", *CARD_COLUMNS]:
         picks[column] = picks["game_id"].map(schedule_games_df.set_index("game_id")[column]) \
             if column in schedule_games_df.columns else pd.NA
     picks["injury_report"] = "before"

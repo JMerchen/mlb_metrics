@@ -2375,7 +2375,38 @@ NFL_QB_ELO_QB_WEIGHT = 3.3         # Elo points per point of quarterback value
 NFL_QB_ELO_QB_GAMES = 10.0         # a quarterback's rating moves a tenth of the way to each new game
 NFL_QB_ELO_TEAM_GAMES = 20.0       # a team's and a defense's, a twentieth
 NFL_QB_ELO_LEAGUE_VALUE = 50.0     # an average team's quarterback value in a game (50.6 over 2016-2026)
-NFL_QB_ELO_NEW_QB_SHARE = 0.4      # a quarterback not seen before starts at this share of it
+NFL_QB_ELO_NEW_QB_SHARE = 0.4
+# Three things the rating was blind to, found by replaying it over 25
+# seasons (2002-2026, 6,636 games) and asking what its misses had in common
+# (scripts/research_nfl_model_gaps.py; 2026-11-15, the user's "only number
+# 3 helps the nfl model" - go after the model itself). Each is positive in
+# all three eras, and together they cut the log loss from 0.6190 to 0.6166
+# (t 3.8, better in 21 of 25 seasons; Vegas 0.6106):
+#   * Rest. Each day of extra rest over the opponent (a bye, a Thursday
+#     game behind it), capped at a week, is worth this many Elo points.
+#   * A backup in for the regular starter. When the quarterback with the
+#     most starts this season (at least NFL_QB_ELO_STARTER_MIN_STARTS) is
+#     not the one starting, the stand-in plays about a point worse than his
+#     own box-score rating says: it was earned in other seasons and other
+#     roles. Teams in that spot won 37.4% where the rating expected 40.4%
+#     (1,582 of them), 1.1 points worse than expected.
+#   * Resting starters. A team with NFL_QB_ELO_SITTING_MIN_WINS or more wins
+#     that sits its regular quarterback in the last week of the regular
+#     season is sitting the rest of its starters too: 62 such teams were
+#     expected to win 56.1% and won 32.3% (5.8 points worse than expected).
+#     The last week, 6% of games, was 18% of the whole distance to Vegas.
+# Tried on the same 25 seasons and left out: a home edge that drifts with
+# recent results (helps before 2019, hurts since), a smaller home edge in
+# division games, a flat penalty for any new starter, learning faster from
+# the line in September, travel and time zones, turnover and fumble luck,
+# dome teams in the cold, first-year coaches, night games; and no other
+# setting above moved more than 0.0005.
+NFL_QB_ELO_REST_PER_DAY = 3.0
+NFL_QB_ELO_REST_CAP_DAYS = 7.0
+NFL_QB_ELO_BACKUP_PENALTY = 25.0
+NFL_QB_ELO_STARTER_MIN_STARTS = 4
+NFL_QB_ELO_SITTING_PENALTY = 140.0
+NFL_QB_ELO_SITTING_MIN_WINS = 10      # a quarterback not seen before starts at this share of it
 # Pass and rush EPA per play: each team's last 17, 8 and 4 games (weights
 # as NFL_TOTALS_WINDOWS), each window pulled toward the league rate by this
 # many plays.
@@ -2497,9 +2528,10 @@ NFL_TOTAL_LEAN_BACKTEST = {"games": 174, "won_rate": 0.586, "units": 21.9, "winn
 # to Vegas (NFL_GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD). Both lose about
 # the bookmaker's cut; neither is a bet on its own. (The model's raw picks,
 # without that deferral: 1,691 bets -53.2 and 308 bets -10.7.)
-# v5 (2026-11-15): with Vegas 1,812 bets -63.7 units; against 187 bets,
-# 44.4% right, -8.7 units. (v4 had been 1,739 at -62.5 and 260 at -12.1.)
-NFL_VEGAS_SPLIT_BACKTEST = {"with": {"bets": 1812, "units": -63.7}, "against": {"bets": 187, "units": -8.7}}
+# v5 (2026-11-15): with Vegas 1,823 bets -69.3 units; against 176 bets,
+# 42.6% right (needing 46.8%), -17.0 units. (v4 had been 1,739 at -62.5
+# and 260 at -12.1.)
+NFL_VEGAS_SPLIT_BACKTEST = {"with": {"bets": 1823, "units": -69.3}, "against": {"bets": 176, "units": -17.0}}
 # Our margin next to Vegas's point spread (nfl_game_evaluation.spread_sides):
 # the win chance read back off a normal curve this many points wide (the
 # margin model's own miss, scripts/train_nfl_elo_margin_model.py). Shown as
@@ -2512,25 +2544,25 @@ NFL_WIN_MARGIN_SIGMA = 13.1
 NFL_SPREAD_BACKTEST = {"games": 6464, "won_rate": 0.515}
 # v5 CHANGED THIS (2026-11-15, scripts/research_nfl_spread_edge.py): the
 # paragraph above was v4. v5's own margin (its rating gap in points) was
-# replayed over 2002-2026 - 17 of those seasons never seen when its
+# replayed over 2002-2026 - 17 of those seasons never seen when its first
 # settings were chosen - and its bigger disagreements with the closing
-# spread won: 3.5+ points apart, 54.6% of 885 (+37.1 units at -110, 15 of
-# 25 seasons), against 51.5% over every game. The real margin regressed on
-# the closing line and ours together gives ours t 4.1 (2.0 / 3.8 / 1.6 by
-# era). It is not just the underdog (every underdog blindly: 51.0%, -164
-# units), not quarterback news (55.6% with the same starters as last
-# week), and not one setting (t 2.9-4.3 across nine neighbours, the rule
-# itself 52-55%). The caution: 2023-26 went 44-41.
-# Where the edge is: games where both teams start the quarterback who
-# started their last game - 55.6% of 567 (+34.4 units, 16 of 25 seasons; t
-# 3.8 beyond the line; 2023-26 19-19). With a quarterback change, 52.8% of
-# 318 (+2.7 units, t 1.4): break-even, and where a box-score rating knows
-# least and the line most. So a spread side NFL_SPREAD_BET_MIN_GAP or more
-# from the line, in a game with no quarterback change, is a bet; any other
-# side is still only context.
+# spread won: 3.5+ points apart, 57.3% of 848 (+79.8 units at -110, 19 of
+# 25 seasons; 54.0% / 61.2% / 57.9% by era), against 51.5% over every
+# game. The real margin regressed on the closing line and ours together
+# gives ours t 5.1 (2.8 / 4.3 / 2.0 by era). It is not just the underdog
+# (every underdog blindly: 51.0%, -164 units), and not one setting (seven
+# neighbours with a quarterback term: 54.9-57.6%, t 4.5-5.2). The
+# caution: 2023-26 went 35-36.
+# So a spread side NFL_SPREAD_BET_MIN_GAP or more from the line is a bet;
+# inside it, the side is still only context.
+# (Before the rating learned about backups and resting starters -
+# NFL_QB_ELO_BACKUP_PENALTY - the same rule read 54.6% of 885, and bets in
+# a week either team changed quarterbacks only broke even, 52.8% of 318,
+# so for a few hours the rule skipped them. With the backups fixed at the
+# source those bets win like the rest, 59.5% of 279, and the skip is gone.)
 NFL_SPREAD_BET_MIN_GAP = 3.5
-NFL_SPREAD_BET_BACKTEST = {"games": 567, "won_rate": 0.556, "units": 34.4, "winning_seasons": 16, "seasons": 25,
-                           "first_season": 2002, "last_season": 2026, "recent_won": 19, "recent_lost": 19,
+NFL_SPREAD_BET_BACKTEST = {"games": 848, "won_rate": 0.573, "units": 79.8, "winning_seasons": 19, "seasons": 25,
+                           "first_season": 2002, "last_season": 2026, "recent_won": 35, "recent_lost": 36,
                            "recent_seasons": "2023-26"}
 # What the line still misses for the weather, beyond our total's own
 # weather terms (2026-11-06, scripts/backtest_nfl_totals_vs_market.py):

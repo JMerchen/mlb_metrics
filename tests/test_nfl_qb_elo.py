@@ -126,3 +126,97 @@ def test_the_saved_model_is_v5_and_its_walk_forward_file_shows_the_gain():
     loss = lambda column: float(-(scored["home_won"] * np.log(scored[column]) + (1 - scored["home_won"]) * np.log(1 - scored[column])).mean())
     assert loss("v5") < loss("new") - 0.008          # the recorded result: 0.6197 against 0.6307
     assert loss("market") < loss("v5")               # and Vegas is still ahead
+
+
+def _season_of_starts(team="KC", opponent="DEN", starter="MAHOMES", games=5, season=2025):
+    """`team` wins `games` home games with `starter`, the opponent using one quarterback throughout."""
+    return pd.DataFrame([_game(season, week, team, opponent, 30, 10, starter, "NIX") for week in range(1, games + 1)])
+
+
+def test_a_backup_for_the_regular_starter_is_marked_down_and_an_average_starter_is_not():
+    state = nfl_qb_elo.rate(_season_of_starts(), pd.DataFrame())
+    assert state.regular_starter("KC") == "MAHOMES" and state.wins["KC"] == 5 and state.wins["DEN"] == 0
+    assert state.backup_penalty("KC", "MAHOMES") == 0.0
+    assert state.backup_penalty("KC", "BACKUP") == config.NFL_QB_ELO_BACKUP_PENALTY
+    # With no box scores every quarterback is rated the same, so the penalty is the whole difference.
+    assert state.qb_adjustment("KC", "MAHOMES") - state.qb_adjustment("KC", "BACKUP") == pytest.approx(config.NFL_QB_ELO_BACKUP_PENALTY)
+    assert state.qb_adjustment("KC", nfl_qb_elo.AVERAGE_QB_ID) == pytest.approx(state.average_qb_adjustment("KC"))
+    # Before anyone has config.NFL_QB_ELO_STARTER_MIN_STARTS starts there is no regular starter to stand in for.
+    early = nfl_qb_elo.rate(_season_of_starts(games=config.NFL_QB_ELO_STARTER_MIN_STARTS - 1), pd.DataFrame())
+    assert early.regular_starter("KC") is None and early.backup_penalty("KC", "BACKUP") == 0.0
+    # A new season starts the count again.
+    rolled = nfl_qb_elo.rate(_season_of_starts(), pd.DataFrame(), current_season=2026)
+    assert rolled.regular_starter("KC") is None and rolled.wins == {}
+
+
+def test_a_winning_team_sitting_its_starter_in_the_final_week_is_resting_everyone():
+    wins = config.NFL_QB_ELO_SITTING_MIN_WINS
+    state = nfl_qb_elo.rate(_season_of_starts(games=wins), pd.DataFrame())
+    both = config.NFL_QB_ELO_BACKUP_PENALTY + config.NFL_QB_ELO_SITTING_PENALTY
+    assert state.backup_penalty("KC", "BACKUP", final_week=True) == both
+    assert state.backup_penalty("KC", "BACKUP", final_week=False) == config.NFL_QB_ELO_BACKUP_PENALTY
+    assert state.backup_penalty("KC", "MAHOMES", final_week=True) == 0.0                 # the starter plays: nothing
+    assert state.gap("KC", "DEN", "MAHOMES", "NIX", final_week=True) - state.gap("KC", "DEN", "BACKUP", "NIX", final_week=True) \
+        == pytest.approx(both)
+    # A team short of the wins is only starting a backup. (Denver lost them all.)
+    short = nfl_qb_elo.rate(_season_of_starts(games=wins - 1), pd.DataFrame())
+    assert short.backup_penalty("KC", "BACKUP", final_week=True) == config.NFL_QB_ELO_BACKUP_PENALTY
+    assert state.backup_penalty("DEN", "STIDHAM", final_week=True) == config.NFL_QB_ELO_BACKUP_PENALTY
+
+
+def test_final_week_is_the_last_of_the_regular_season():
+    assert nfl_qb_elo.final_regular_week(2020) == 17 and nfl_qb_elo.final_regular_week(2021) == 18
+    assert nfl_qb_elo.is_final_week(2026, 18) and not nfl_qb_elo.is_final_week(2026, 17)
+    assert nfl_qb_elo.is_final_week(2019, 17) and not nfl_qb_elo.is_final_week(2019, 17, "WC")
+    assert not nfl_qb_elo.is_final_week(float("nan"), 18)
+
+
+def test_rest_moves_the_gap_and_is_capped():
+    state = nfl_qb_elo.QbEloState()
+    level = state.gap("KC", "DEN")
+    assert state.gap("KC", "DEN", rest_diff=3) == pytest.approx(level + 3 * config.NFL_QB_ELO_REST_PER_DAY)
+    assert state.gap("KC", "DEN", rest_diff=-3) == pytest.approx(level - 3 * config.NFL_QB_ELO_REST_PER_DAY)
+    cap = config.NFL_QB_ELO_REST_CAP_DAYS
+    assert state.gap("KC", "DEN", rest_diff=30) == pytest.approx(level + cap * config.NFL_QB_ELO_REST_PER_DAY)
+    assert state.gap("KC", "DEN", rest_diff=float("nan")) == pytest.approx(level)
+    # rate() reads the schedule's rest days when they are there.
+    games = pd.DataFrame([{**_game(2025, 1, "KC", "DEN", 20, 17), "home_rest": 14, "away_rest": 7}])
+    _, gaps = nfl_qb_elo.rate(games, pd.DataFrame(), record=True)
+    assert gaps.iloc[0]["qb_elo_gap"] == pytest.approx(config.NFL_QB_ELO_HOME_EDGE + 7 * config.NFL_QB_ELO_REST_PER_DAY)
+
+
+def test_live_features_carry_rest_the_neutral_field_and_the_final_week():
+    wins = config.NFL_QB_ELO_SITTING_MIN_WINS
+    state = nfl_qb_elo.rate(_season_of_starts(games=wins, season=2026), pd.DataFrame())
+    master = pd.DataFrame({"team": ["KC", "DEN"]})
+    master.attrs["qb_elo_state"] = state
+    games = pd.DataFrame([
+        {"game_id": "final", "season": 2026, "week": 18, "game_type": "REG", "home_team": "KC", "away_team": "DEN",
+         "home_qb_id": "BACKUP", "away_qb_id": "NIX", "location": "Home", "home_rest": 7, "away_rest": 10},
+        {"game_id": "earlier", "season": 2026, "week": 12, "game_type": "REG", "home_team": "KC", "away_team": "DEN",
+         "home_qb_id": "BACKUP", "away_qb_id": "NIX", "location": "Neutral", "home_rest": 7, "away_rest": 7},
+    ])
+    features = nfl_game_picks.build_game_features_v5(master, pd.DataFrame(), pd.DataFrame(), games).set_index("game_id")
+    assert features.loc["final", "qb_elo_base"] == pytest.approx(state.gap("KC", "DEN", rest_diff=-3))
+    assert features.loc["earlier", "qb_elo_base"] == pytest.approx(state.gap("KC", "DEN", neutral=True))
+    assert features.loc["final", "home_qb_elo_adj"] == pytest.approx(state.qb_adjustment("KC", "BACKUP", final_week=True))
+    assert features.loc["earlier", "home_qb_elo_adj"] == pytest.approx(state.qb_adjustment("KC", "BACKUP"))
+    assert features.loc["earlier", "home_qb_elo_adj"] - features.loc["final", "home_qb_elo_adj"] \
+        == pytest.approx(config.NFL_QB_ELO_SITTING_PENALTY)
+
+
+def test_a_listed_starter_who_never_threw_a_pass_gives_way_to_the_one_who_did():
+    # The feed lists LOCK for weeks 2-5, but DARNOLD threw every pass.
+    schedules = pd.DataFrame([_game(2026, week, "SEA", "LA", 24, 20, "LOCK" if week > 1 else "DARNOLD", "STAFFORD") for week in range(1, 6)])
+    weekly = pd.DataFrame([_line(2026, week, "SEA", "DARNOLD", yards=320, tds=3) for week in range(1, 6)]
+                          + [_line(2026, week, "LA", "STAFFORD") for week in range(1, 6)])
+    state = nfl_qb_elo.rate(schedules, weekly)
+    assert state.starts["SEA"] == {"DARNOLD": 5} and state.regular_starter("SEA") == "DARNOLD"
+    assert "LOCK" not in state.qb_value and state.qb_value["DARNOLD"] > state.new_qb_value()
+    # A starter knocked out early still started: he threw a pass, so he keeps the start.
+    hurt = pd.DataFrame([_line(2026, 1, "SEA", "DARNOLD", attempts=3, completions=2, yards=20, tds=0),
+                         _line(2026, 1, "SEA", "LOCK", attempts=30)])
+    state = nfl_qb_elo.rate(schedules.iloc[:1], hurt)
+    assert state.starts["SEA"] == {"DARNOLD": 1}
+    # With no box score for the game the listed starter stands.
+    assert nfl_qb_elo.rate(schedules.iloc[:1], pd.DataFrame()).starts["SEA"] == {"DARNOLD": 1}

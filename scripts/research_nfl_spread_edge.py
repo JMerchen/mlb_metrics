@@ -16,55 +16,54 @@ predicted from ratings as they stood before it, the game's own line is
 never used, and the starters are the ones who started (which the closing
 line also knew).
 
-RESULT (2026-11-15; 6,636 games 2002-2026, regular season and playoffs):
+RESULT (2026-11-15; 6,636 games 2002-2026, regular season and playoffs;
+the model with its rest, backup and resting-starters terms -
+scripts/research_nfl_model_gaps.py):
   Taking our side of the closing spread at -110 (52.4% breaks even):
-    gap 1+      4,309 bets  52.3%    -4.0 units
-    gap 2+      2,564 bets  52.6%   +11.4
-    gap 3+      1,293 bets  53.6%   +30.0
-    gap 3.5+      885 bets  54.6%   +37.1   15 of 25 seasons   <- the rule
-    gap 4+        591 bets  55.2%   +31.4
-    gap 5+        289 bets  54.3%   +10.7
-  By gap band: 0-1 49.8%, 1-2 51.9%, 2-3 51.6%, 3-4 52.3%, 4-5 56.0%,
-  5+ 54.3%. Every game: 51.5% of 6,464.
-  By era at 3.5+: 2002-10 51.4% of 370; 2011-18 56.7% of 275 (never seen
-  when the settings were chosen); 2019-26 57.1% of 240. But the last four
-  seasons, 2023-26, are 44-41.
+    gap 1+      4,260 bets  52.3%    -4.6 units
+    gap 2+      2,472 bets  53.5%   +53.7
+    gap 3+      1,240 bets  55.8%   +81.1
+    gap 3.5+      848 bets  57.3%   +79.8   19 of 25 seasons   <- the rule
+    gap 4+        556 bets  57.0%   +49.2
+    gap 5+        264 bets  58.0%   +28.1
+  By gap band: 0-1 49.8%, 1-2 50.7%, 2-3 51.2%, 3-4 54.8%, 4-5 56.2%,
+  5+ 58.0%. Every game: 51.5% of 6,464.
+  By era at 3.5+: 2002-10 54.0% of 361; 2011-18 61.2% of 278; 2019-26
+  57.9% of 209. But the last four seasons, 2023-26, are 35-36.
   Real margin regressed on the closing line and our margin together: ours
-  +0.315 (t 4.1); with a flexible curve in the line, t 3.8. In every era:
-  t 2.0, 3.8, 1.6. So the rating knows something the closing line doesn't.
+  +0.388 (t 5.1); with a flexible curve in the line, t 4.8. In every era:
+  t 2.8, 4.3, 2.0. So the rating knows something the closing line doesn't.
 
-  Is it only "take the underdog"? No. 90% of the 3.5+ bets are underdogs,
+  Is it only "take the underdog"? No. 87% of the 3.5+ bets are underdogs,
   but every underdog blindly covered 51.0% of 6,445 and lost 164 units.
-  Within underdogs our gap sorts them: we like the favorite 49.2% of
-  1,832; like the dog by 0-1.5 50.9%; 1.5-3.5 51.3%; 3.5+ 55.0% of 795.
+  Within underdogs our gap sorts them: we like the favorite 49.3% of
+  1,967; like the dog by 0-1.5 51.2%; 1.5-3.5 50.0%; 3.5+ 58.0% of 742.
   With our margins stretched to be as wide as the line's (no built-in
-  lean): 54.5% of 861.
-  Is it quarterback news the line was slow on? No, the reverse: games
-  where both teams start the quarterback who started their last game,
-  55.6% of 567 (+34.4 units, 16 of 25 seasons; ours beyond the line t 3.8;
-  by era 51.4% of 245, 58.5% of 195, 59.1% of 127; 2023-26 19-19); with a
-  change, 52.8% of 318 (+2.7 units, t 1.4). A new starter is where a
-  box-score rating knows least and the line most, so the rule skips those
-  games.
-  Is it one lucky setting? The rule's record moves with the settings
-  (market pull 0 / 0.1 / 0.4 / 0.6: 53.6 / 53.9 / 53.3 / 52.7%; K 8 / 20:
-  54.1 / 52.2%; quarterback weight 0 / 2 / 5: 52.2 / 55.0 / 53.8%), but
-  the regression's t stays between 2.9 and 4.3 in all of them. Read the
-  rule as "about 53-55%", not as 54.6% to the decimal.
-  Moneyline instead of the points (2006 on, 688 of the bets): +6.8% a bet
-  against the spread, -0.3% on the moneyline overall - but when our side
-  was a small underdog (priced 33-45% to win, about +120 to +200) the
-  moneyline made +20% a bet on 163 against +12% with the points, and when
-  it was a big underdog (under 20%) the moneyline lost 34% a bet.
+  lean): 57.3% of 839.
+  Is it quarterback news the line was slow on? No: with the same two
+  starters as each team's last game 56.2% of 569, with a change 59.5% of
+  279. (Before the model had its backup and resting-starters terms the
+  whole rule read 54.6% of 885 and the quarterback-change bets only broke
+  even, 52.8% of 318; the model was overrating stand-ins. Fixed there,
+  not by skipping the games.)
+  Is it one lucky setting? Market pull 0 / 0.1 / 0.4 / 0.6: 54.9 / 55.8 /
+  57.6 / 56.0%; K 8 / 20: 56.3 / 55.6%; quarterback weight 2: 57.0%; the
+  regression's t 4.5-5.2 in all of them. (With no quarterback term at all:
+  52.7%.) Read the rule as "about 55-57% in a replay", and expect less
+  live.
+  Moneyline instead of the points (2006 on, 649 of the bets): +11.2% a bet
+  against the spread, +9.1% on the moneyline - better than the points when
+  our side was a small underdog (priced 33-45% to win, about +120 to +200:
+  +24.2% a bet on 165 against +19.2%), and losing 20.3% a bet when it was
+  a big one (under 20%).
   That fits how moneylines are priced in general (5,202 games 2006-26, a
   unit on every side): underdogs priced 33-45% +1.3% a bet over 2,070
   bets, every other band loses, and the longest shots (under 20%) lose
   16.7% a bet.
 
 WHAT THE SITE DOES WITH IT: a spread bet when our margin is
-config.NFL_SPREAD_BET_MIN_GAP or more from the line and neither team has
-changed quarterbacks since its last game (nfl_game_evaluation.spread_sides,
-nfl_game_picks.quarterback_changes), with that record beside it.
+config.NFL_SPREAD_BET_MIN_GAP or more from the line
+(nfl_game_evaluation.spread_sides), with that record beside it.
 
 Also here, --wind: unders in windy outdoor games against the closing
 total, 1999-2026 (kickoff wind from the gamebook, so the bettor has a

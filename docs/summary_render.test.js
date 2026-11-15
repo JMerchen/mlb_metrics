@@ -240,9 +240,9 @@ test("this week's bets: only tested bets, with the worst line and price worth ta
   assert.match(flat(betsPanelHtml([played], summary)), /No games left to bet this week\./)
   assert.match(flat(betsPanelHtml([], {})), /No games left to bet this week\./)
   // Spread bets: the side the pipeline marked, why, the worst number worth taking, and their own record.
-  const sideSummary = { ...summary, spread_bet_min_gap: "3.5", spread_bet_backtest_won_rate: "0.556", spread_bet_backtest_games: "567",
-    spread_bet_backtest_units: "34.4", spread_bet_backtest_winning_seasons: "16", spread_bet_backtest_seasons: "25",
-    spread_bet_backtest_first_season: "2002", spread_bet_backtest_last_season: "2026", spread_bet_recent_won: "19", spread_bet_recent_lost: "19",
+  const sideSummary = { ...summary, spread_bet_min_gap: "3.5", spread_bet_backtest_won_rate: "0.573", spread_bet_backtest_games: "848",
+    spread_bet_backtest_units: "79.8", spread_bet_backtest_winning_seasons: "19", spread_bet_backtest_seasons: "25",
+    spread_bet_backtest_first_season: "2002", spread_bet_backtest_last_season: "2026", spread_bet_recent_won: "35", spread_bet_recent_lost: "36",
     spread_bet_recent_seasons: "2023-26", spread_bets_won: "2", spread_bets_lost: "1", spread_bet_units: "0.82", spread_bet_clv_n: "3", spread_bet_clv_mean: "-0.5" }
   // Vegas has the Chiefs (home) by 6.5, we have them by 1.2: the Broncos +6.5, worth taking down to +5 (1.2 + 3.5 = 4.7, up to the half point).
   const dog = { status: "pending", home_team: "KC", away_team: "DEN", spread_line: "6.5", predicted_margin: "1.2", spread_side: "DEN", spread_bet: "DEN" }
@@ -254,12 +254,12 @@ test("this week's bets: only tested bets, with the worst line and price worth ta
   assert.equal(spreadBetWorstLine(homeSide, 3.5), "−0.5")
   assert.equal(spreadBetWorstLine(closeOne, 3.5), "")
   const sides = flat(betsPanelHtml([dog, homeSide, sideHeld, closeOne, over], sideSummary))
-  assert.match(sides, /Broncos \+6\.5 Broncos at Chiefs Vegas has Chiefs by 6\.5; we have Chiefs by 1\. That is 5\.5 points apart\. Stake 1 unit\. Worth taking at \+5 or better, at -115 or better\./)
-  assert.match(sides, /Dolphins \+1 Bills at Dolphins Vegas has Bills by 1; we have Dolphins by 4\. That is 5 points apart\. Stake 1 unit\. Worth taking at −0\.5 or better, at -115 or better\./)
+  assert.match(sides, /Broncos \+6\.5 Broncos at Chiefs Vegas has Chiefs by 6\.5; we have Chiefs by 1\. That is 5\.5 points apart\. Stake 1 unit\. Worth taking at \+5 or better, at -120 or better\./)
+  assert.match(sides, /Dolphins \+1 Bills at Dolphins Vegas has Bills by 1; we have Dolphins by 4\. That is 5 points apart\. Stake 1 unit\. Worth taking at −0\.5 or better, at -120 or better\./)
   assert.match(sides, /Over 39\.5 Rams at Cardinals/)
   assert.match(sides, /Waiting on the injury report: Seahawks at 49ers\./)
   assert.doesNotMatch(sides, /Giants at Cowboys/)
-  assert.match(sides, /Spreads\. Sides 3\.5 or more points from the line, in games where neither team changed quarterbacks, won 55\.6% of 567 against the closing spread in testing \(2002–2026: up 34\.4 units, a winning record in 16 of 25 seasons\)\. The caution: 2023-26 went only 19–19, so treat it as a thinner edge than the over\/unders\. This season: 2–1, up 0\.82 units\. The line has closed 0\.5 points against us on average after we took it \(3 bets\)\./)
+  assert.match(sides, /Spreads\. Sides 3\.5 or more points from the line won 57\.3% of 848 against the closing spread in testing \(2002–2026: up 79\.8 units, a winning record in 19 of 25 seasons\)\. The caution: 2023-26 went only 35–36, so treat it as a thinner edge than the over\/unders\. This season: 2–1, up 0\.82 units\. The line has closed 0\.5 points against us on average after we took it \(3 bets\)\./)
 })
 
 test("NFL card: a spread side far from the line is badged as a bet, a close one is context", () => {
@@ -274,8 +274,6 @@ test("NFL card: a spread side far from the line is badged as a bet, a close one 
   assert.doesNotMatch(gamePickRowHtml(close, "nfl"), /Bet Broncos/)
   assert.match(spreadNote(close, "nfl"), /context, not a bet/)
   assert.match(spreadNote({ ...close, spread_bet_held: "the Chiefs' quarterback is questionable" }, "nfl"), /waits for the injury report: the Chiefs' quarterback is questionable\./)
-  assert.match(spreadNote({ ...close, spread_bet_skip: "DEN" }, "nfl"), /the Broncos are starting a different quarterback from last game\. We don't bet those/)
-  assert.match(spreadNote({ ...close, spread_bet_skip: "KC, DEN" }, "nfl"), /the Chiefs and the Broncos are starting/)
 })
 
 test("track record: with and against Vegas also show units at the closing odds", () => {

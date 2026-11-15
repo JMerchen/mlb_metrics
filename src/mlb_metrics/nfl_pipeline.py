@@ -270,7 +270,8 @@ def _write_last_week_whatif(fresh: dict, prior_season: dict, season: int, week: 
         history["snap_counts"], history["weekly"], history["rosters_weekly"]
     )
     columns = ["game_id", "season", "week", "home_team", "away_team", "home_qb_id", "away_qb_id",
-               "gameday", "home_moneyline", "away_moneyline", "home_qb_name", "away_qb_name"]
+               "gameday", "home_moneyline", "away_moneyline", "home_qb_name", "away_qb_name",
+               "location", "home_rest", "away_rest", "game_type"]
     games = games[[c for c in columns if c in games.columns]]
     games = nfl_game_picks.correct_listed_starters(games, history["weekly"], history["rosters_weekly"])
     probs = nfl_game_picks.compute_game_win_probabilities(master, qb_continuity, history["weekly"], games)
@@ -401,7 +402,10 @@ def run(
                 (schedules["season"] == season) & (schedules["game_type"] == "REG") & (schedules["week"] == week)
             ][["game_id", "season", "week", "home_team", "away_team", "home_qb_id", "away_qb_id",
                "gameday", "home_moneyline", "away_moneyline"]]
-            for column in ("total_line", "spread_line", "roof", "stadium_id", "gametime", "home_qb_name", "away_qb_name"):
+            # (location, rest and game type: the win model's neutral field,
+            # rest and final-week terms - nfl_game_picks.build_game_features_v5.)
+            for column in ("total_line", "spread_line", "roof", "stadium_id", "gametime", "home_qb_name", "away_qb_name",
+                           "location", "home_rest", "away_rest", "game_type"):
                 if column in schedules.columns:
                     this_week_games[column] = schedules.loc[this_week_games.index, column]
             # The feed's listed starters can be stale (a QB on injured
@@ -528,9 +532,6 @@ def run(
                 history.get("snap_counts", pd.DataFrame()),
             )
             this_week_games["lean_hold"] = this_week_games["game_id"].map(doubts)
-            # Teams starting a different quarterback from their last game:
-            # no spread bet on those games.
-            this_week_games["qb_change"] = nfl_game_picks.quarterback_changes(this_week_games, history["schedules"])
             # Each card's starting QBs (and where they rank this week), and
             # for a repriced game the players the final report took out.
             card = nfl_whatif.card_details(whatif)
@@ -592,19 +593,15 @@ def run(
                     {g: r["probability"] for g, r in repriced.items()}).fillna(after_probs["home_win_probability"])
                 # The rating's own margin moves only for a quarterback
                 # change - what the spread bet was tested on (the starter
-                # who played; other absences added nothing to it). Natural
-                # log-odds to Elo points to points.
+                # who played, with the backup penalty his stand-in gets;
+                # other absences added nothing to it). Natural log-odds to
+                # Elo points to points.
                 if "model_margin" in after_probs.columns:
                     shift = after_probs["game_id"].map(
                         {g: r.get("qb_log_odds_shift", 0.0) for g, r in repriced.items()}).fillna(0.0)
                     after_probs["model_margin"] = after_probs["model_margin"] + shift * 400.0 / (
                         math.log(10) * config.NFL_QB_ELO_POINTS)
                 after_games = this_week_games.copy()
-                # A backup the report put in is a quarterback change too.
-                swapped = {g: r.get("qb_teams", []) for g, r in repriced.items()}
-                after_games["qb_change"] = [
-                    ", ".join(dict.fromkeys([t for t in str(before or "").split(", ") if t] + swapped.get(game_id, [])))
-                    for game_id, before in zip(after_games["game_id"], after_games["qb_change"])]
                 after_card = nfl_whatif.card_details(whatif, after_report=True)
                 for column in after_card.columns:
                     after_games[column] = after_games["game_id"].map(after_card[column])

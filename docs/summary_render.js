@@ -305,11 +305,11 @@ const recentWon = srNum(s.spread_bet_recent_won), recentLost = srNum(s.spread_be
 const recent = recentWon !== null && recentLost !== null ? ` The caution: ${s.spread_bet_recent_seasons} went only ${recentWon}–${recentLost}, so treat it as a thinner edge than the over/unders.` : ""
 const sideSeason = seasonText(srNum(s.spread_bets_won) || 0, srNum(s.spread_bets_lost) || 0, srNum(s.spread_bet_units))
 const sideClv = closeText(srNum(s.spread_bet_clv_n) || 0, srNum(s.spread_bet_clv_mean))
-const sideRecord = sideRate !== null && sideTested ? `<div class="betRecord"><b>Spreads.</b> Sides ${sideGap} or more points from the line, in games where neither team changed quarterbacks, won <b>${Math.round(1000 * sideRate) / 10}% of ${sideTested}</b> against the closing spread in testing (${s.spread_bet_backtest_first_season}–${s.spread_bet_backtest_last_season}: ${upDown(s.spread_bet_backtest_units)}, a winning record in ${s.spread_bet_backtest_winning_seasons} of ${s.spread_bet_backtest_seasons} seasons).${recent}${sideSeason}${sideClv}</div>` : ""
+const sideRecord = sideRate !== null && sideTested ? `<div class="betRecord"><b>Spreads.</b> Sides ${sideGap} or more points from the line won <b>${Math.round(1000 * sideRate) / 10}% of ${sideTested}</b> against the closing spread in testing (${s.spread_bet_backtest_first_season}–${s.spread_bet_backtest_last_season}: ${upDown(s.spread_bet_backtest_units)}, a winning record in ${s.spread_bet_backtest_winning_seasons} of ${s.spread_bet_backtest_seasons} seasons).${recent}${sideSeason}${sideClv}</div>` : ""
 const none = !bets.length && !sides.length ? `<div class="betNone">${upcoming.length ? "No bets yet this week: no game's spread or total is far enough from ours." : "No games left to bet this week."}</div>` : ""
 return `<div class="betsPanel">
 ${sideRows}${rows}${none}${waiting}${sideRecord}${record}
-<div class="betFine">We only recommend what has beaten the closing line in testing: spread sides where our margin sits ${sideGap} or more points from Vegas's, and over/unders where our total sits ${minGap} or more from theirs. Take them early: when our number and the opening line disagreed, the line moved toward us far more often than away. We skip a spread bet the week either team changes quarterbacks (those only broke even in testing). Most spread bets are underdogs; when ours is a big one, take the points, not the moneyline, which has lost 17% a bet on longshots since 2006. Our game winners alone have not beaten the closing line, so they are picks, not bets.</div>
+<div class="betFine">We only recommend what has beaten the closing line in testing: spread sides where our margin sits ${sideGap} or more points from Vegas's, and over/unders where our total sits ${minGap} or more from theirs. Take them early: when our number and the opening line disagreed, the line moved toward us far more often than away. Most spread bets are underdogs; when ours is a big one, take the points, not the moneyline, which has lost 17% a bet on longshots since 2006. Our game winners alone have not beaten the closing line, so they are picks, not bets.</div>
 </div>`
 }
 
@@ -412,10 +412,6 @@ return `Vegas has ${s.vegas}; we have ${s.ours}. That is ${srPoints(gap)} points
 function spreadNote(g, sport){
 if(spreadBet(g, sport)){ return "Our margin is far enough from the line for this side to be a bet: sides like it have beaten the closing line in testing." }
 if(g.spread_bet_held){ return `Our margin is far enough from the line to bet this side, but it waits for the injury report: ${g.spread_bet_held}.` }
-if(g.spread_bet_skip){
-const teams = String(g.spread_bet_skip).split(", ").map(code => srTeam(code, sport))
-return `Our margin is far from the line here, but the ${teams.join(" and the ")} are starting a different quarterback from last game. We don't bet those: our rating knows a new starter least, and in testing those bets only broke even.`
-}
 return "Close to the line our side has been a coin flip in testing, so here it is context, not a bet."
 }
 
@@ -549,7 +545,7 @@ rows.push([label, cell(w, w + l), n && r !== null ? `${Math.round(1000 * r) / 10
 }
 pair(s.total_leans_won, s.total_leans_lost, s.total_lean_backtest_won_rate, s.total_lean_backtest_games, "Over/under leans")
 if(srNum(s.spread_bet_backtest_games)){
-pair(s.spread_bets_won, s.spread_bets_lost, s.spread_bet_backtest_won_rate, s.spread_bet_backtest_games, `Spread bets (${srNum(s.spread_bet_min_gap) || 3.5}+ points from the line, no quarterback change)`)
+pair(s.spread_bets_won, s.spread_bets_lost, s.spread_bet_backtest_won_rate, s.spread_bet_backtest_games, `Spread bets (${srNum(s.spread_bet_min_gap) || 3.5}+ points from the line)`)
 }
 pair(s.spread_sides_won, s.spread_sides_lost, s.spread_backtest_won_rate, s.spread_backtest_games, "Our side of the spread, every game")
 if(!rows.length){ return "" }

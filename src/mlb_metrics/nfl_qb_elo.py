@@ -30,18 +30,26 @@ How it works:
     spread said it was. A past line is public before the next game, and it
     knows things a final score doesn't: who was hurt, who rested starters.
     The line of the game being predicted is never used.
+  * Three terms from a 25-season replay of the rating's own misses (see
+    config.NFL_QB_ELO_REST_PER_DAY): extra days of rest; a point off a
+    backup standing in for the season's regular starter; and, in the last
+    week of the regular season, a large penalty for a 10-win team sitting
+    that starter, because the rest of its starters are sitting too.
 
 Walk-forward by construction (each game is predicted from the ratings as
 they stood before it; nothing is fit), 2019-2026, 1,999 games:
                                   log loss   winners
     v4 (the model this replaced)   0.6307     1,284
     QB adjustment, no lines        0.6242     1,299
-    this model                     0.6197     1,303
-    this model and v4 averaged     0.6221     1,310
+    + past closing lines           0.6197     1,303
+    + rest, backups, resting       0.6162     1,304   <- this model
+    this model and v4 averaged     0.6198     1,313
     Vegas                          0.6094     1,332
-It beats v4 by 0.0111 (t 3.2) and in all 8 seasons - about half the
-distance v4 was from Vegas - and on nfelo's own 1,766 games it scores
-0.6177 to nfelo's 0.6197. Averaging v4 back in made it worse at every
+It beats v4 by 0.0145 (t 3.8) and in all 8 seasons - two thirds of the
+distance v4 was from Vegas - and on nfelo's own 1,766 games the version
+before the last three terms scored 0.6177 to nfelo's 0.6197. Over 25
+seasons (2002-2026, scripts/research_nfl_model_gaps.py): 0.6166 to Vegas's
+0.6106. Averaging v4 back in made it worse at every
 weight tried, so v4 is retired. Two more of nfelo's inputs were tried and
 left out: an EPA-based margin in place of the score (worse: 0.6251 at
 half weight) and a bonus after a bye (within noise). The settings were
@@ -65,8 +73,8 @@ VALUE_COLUMNS = ["attempts", "completions", "passing_yards", "passing_tds", "pas
 def qb_game_values(weekly_df: pd.DataFrame) -> pd.DataFrame:
     """One row per (season, week, team, passer) with at least one pass
     attempt in a regular-season game: his VALUE that day. Columns: season,
-    week, team, player_id, value."""
-    columns = ["season", "week", "team", "player_id", "value"]
+    week, team, player_id, value, attempts."""
+    columns = ["season", "week", "team", "player_id", "value", "attempts"]
     if weekly_df is None or weekly_df.empty or not {"player_id", "attempts", "season", "week"}.issubset(weekly_df.columns):
         return pd.DataFrame(columns=columns)
     rows = weekly_df
@@ -79,7 +87,8 @@ def qb_game_values(weekly_df: pd.DataFrame) -> pd.DataFrame:
                      + 11.3 * stat["passing_tds"] - 14.1 * stat["passing_interceptions"] - 8 * stat["sacks_suffered"]
                      - 1.1 * stat["carries"] + 0.6 * stat["rushing_yards"] + 15.9 * stat["rushing_tds"])
     rows["team"] = nfl_totals._canonical(rows[team_column])
-    return rows.groupby(["season", "week", "team", "player_id"], as_index=False)["value"].sum()[columns]
+    rows["attempts"] = stat["attempts"]
+    return rows.groupby(["season", "week", "team", "player_id"], as_index=False)[["value", "attempts"]].sum()[columns]
 
 
 class QbEloState:
@@ -89,21 +98,51 @@ class QbEloState:
 
     def __init__(self):
         self.elo, self.team_value, self.defense_value, self.qb_value = {}, {}, {}, {}
+        # This season so far: each team's wins and each quarterback's starts
+        # for it (regular season), for the backup and resting-starters terms.
+        self.wins, self.starts = {}, {}
         self.season = None
 
     def new_qb_value(self) -> float:
         return config.NFL_QB_ELO_LEAGUE_VALUE * config.NFL_QB_ELO_NEW_QB_SHARE
 
-    def qb_adjustment(self, team: str, qb_id) -> float:
-        """Elo points the listed starter adds to (or takes from) his team.
-        0 with no starter listed; a quarterback not seen before is a new
-        one."""
+    def regular_starter(self, team: str):
+        """The quarterback with the most starts for `team` this season, once
+        he has config.NFL_QB_ELO_STARTER_MIN_STARTS of them; None before
+        that."""
+        starts = self.starts.get(team)
+        if not starts:
+            return None
+        regular = max(starts, key=starts.get)
+        return regular if starts[regular] >= config.NFL_QB_ELO_STARTER_MIN_STARTS else None
+
+    def backup_penalty(self, team: str, qb_id, final_week: bool = False) -> float:
+        """Elo points off for a quarterback standing in for his team's
+        regular starter: config.NFL_QB_ELO_BACKUP_PENALTY, and in the last
+        week of the regular season, for a team with
+        config.NFL_QB_ELO_SITTING_MIN_WINS wins - one resting its starters
+        for the playoffs - config.NFL_QB_ELO_SITTING_PENALTY more."""
+        regular = self.regular_starter(team)
+        if regular is None or qb_id == regular:
+            return 0.0
+        penalty = config.NFL_QB_ELO_BACKUP_PENALTY
+        if final_week and self.wins.get(team, 0) >= config.NFL_QB_ELO_SITTING_MIN_WINS:
+            penalty += config.NFL_QB_ELO_SITTING_PENALTY
+        return penalty
+
+    def qb_adjustment(self, team: str, qb_id, final_week: bool = False) -> float:
+        """Elo points the listed starter adds to (or takes from) his team:
+        his own rating against his team's usual level, less the backup
+        penalty when he is standing in for the regular starter. 0 with no
+        starter listed; a quarterback not seen before is a new one; the
+        What if? panel's average starter is never a backup."""
         team_level = self.team_value.get(team, config.NFL_QB_ELO_LEAGUE_VALUE)
         if not isinstance(qb_id, str) or not qb_id:
             return 0.0
         if qb_id == AVERAGE_QB_ID:
             return self.average_qb_adjustment(team)
-        return config.NFL_QB_ELO_QB_WEIGHT * (self.qb_value.get(qb_id, self.new_qb_value()) - team_level)
+        return (config.NFL_QB_ELO_QB_WEIGHT * (self.qb_value.get(qb_id, self.new_qb_value()) - team_level)
+                - self.backup_penalty(team, qb_id, final_week))
 
     def average_qb_adjustment(self, team: str) -> float:
         """The same for a league-average quarterback (the What if? panel's
@@ -111,11 +150,18 @@ class QbEloState:
         return config.NFL_QB_ELO_QB_WEIGHT * (
             config.NFL_QB_ELO_LEAGUE_VALUE - self.team_value.get(team, config.NFL_QB_ELO_LEAGUE_VALUE))
 
-    def gap(self, home: str, away: str, home_qb=None, away_qb=None, neutral: bool = False) -> float:
-        """Home minus away in Elo points, home field and both starters included."""
+    def gap(self, home: str, away: str, home_qb=None, away_qb=None, neutral: bool = False,
+            rest_diff: float = 0.0, final_week: bool = False) -> float:
+        """Home minus away in Elo points: the ratings, home field, the
+        home team's extra days of rest (`rest_diff`, home minus away) and
+        both starters. `final_week` marks the last week of the regular
+        season, when a winning team's backup means resting starters."""
         start = config.NFL_ELO_START
+        cap = config.NFL_QB_ELO_REST_CAP_DAYS
+        rest = 0.0 if rest_diff is None or pd.isna(rest_diff) else float(np.clip(rest_diff, -cap, cap))
         return (self.elo.get(home, start) - self.elo.get(away, start) + (0.0 if neutral else config.NFL_QB_ELO_HOME_EDGE)
-                + self.qb_adjustment(home, home_qb) - self.qb_adjustment(away, away_qb))
+                + config.NFL_QB_ELO_REST_PER_DAY * rest
+                + self.qb_adjustment(home, home_qb, final_week) - self.qb_adjustment(away, away_qb, final_week))
 
     def roll_season(self, season) -> None:
         """Between seasons: Elo a third of the way back to average, the
@@ -125,6 +171,7 @@ class QbEloState:
             self.elo = {t: start + (r - start) * config.NFL_ELO_SEASON_KEEP for t, r in self.elo.items()}
             self.team_value = {t: v + (league - v) / 4 for t, v in self.team_value.items()}
             self.defense_value = {t: v + (league - v) / 4 for t, v in self.defense_value.items()}
+            self.wins, self.starts = {}, {}
         self.season = season
 
     def team_table(self) -> pd.DataFrame:
@@ -133,6 +180,18 @@ class QbEloState:
         return pd.DataFrame({"team": teams,
                              "qb_elo": [self.elo.get(t, config.NFL_ELO_START) for t in teams],
                              "qb_team_value": [self.team_value.get(t, config.NFL_QB_ELO_LEAGUE_VALUE) for t in teams]})
+
+
+def final_regular_week(season) -> int:
+    """The last week of the regular season: 18 since 2021, 17 before."""
+    return 18 if int(season) >= 2021 else 17
+
+
+def is_final_week(season, week, game_type="REG") -> bool:
+    """Whether a game is in the last week of the regular season."""
+    if pd.isna(season) or pd.isna(week) or (isinstance(game_type, str) and game_type != "REG"):
+        return False
+    return int(week) == final_regular_week(season)
 
 
 def gap_to_probability(gap) -> np.ndarray:
@@ -156,16 +215,33 @@ def rate(schedules_df: pd.DataFrame, weekly_df: pd.DataFrame, current_season=Non
     values = qb_game_values(weekly_df)
     by_player = values.set_index(["season", "week", "team", "player_id"])["value"].to_dict()
     by_team = values.groupby(["season", "week", "team"])["value"].sum().to_dict()
+    # Who threw the most passes for each team in each game: the starter
+    # when the schedule's listed one never threw a pass. The feed's
+    # starters for the current season can be stale for weeks (2026: Drew
+    # Lock listed for Seattle in weeks 3-6, Sam Darnold threw every pass),
+    # which left the real starter's rating untouched and miscounted starts.
+    top_passer = (values.sort_values("attempts").drop_duplicates(["season", "week", "team"], keep="last")
+                  .set_index(["season", "week", "team"])["player_id"].to_dict()) if not values.empty else {}
+
+    def played(listed, season, week, team):
+        top = top_passer.get((season, week, team))
+        if top is None or (isinstance(listed, str) and (season, week, team, listed) in by_player):
+            return listed
+        return top
     league = config.NFL_QB_ELO_LEAGUE_VALUE
-    has = {c: c in games.columns for c in ("home_qb_id", "away_qb_id", "location", "game_type", "spread_line")}
+    has = {c: c in games.columns for c in ("home_qb_id", "away_qb_id", "location", "game_type", "spread_line",
+                                           "home_rest", "away_rest")}
     for row in games.itertuples(index=False):
         season, week = row.season, row.week
         home, away = nfl_totals.NFL_TEAM_ALIASES.get(row.home_team, row.home_team), nfl_totals.NFL_TEAM_ALIASES.get(row.away_team, row.away_team)
         state.roll_season(season)
-        home_qb = row.home_qb_id if has["home_qb_id"] else None
-        away_qb = row.away_qb_id if has["away_qb_id"] else None
+        home_qb = played(row.home_qb_id if has["home_qb_id"] else None, season, week, home)
+        away_qb = played(row.away_qb_id if has["away_qb_id"] else None, season, week, away)
         neutral = has["location"] and row.location == "Neutral"
-        gap = state.gap(home, away, home_qb, away_qb, neutral)
+        regular_season = not has["game_type"] or row.game_type == "REG"
+        rest_diff = row.home_rest - row.away_rest if has["home_rest"] and has["away_rest"] else 0.0
+        gap = state.gap(home, away, home_qb, away_qb, neutral, rest_diff,
+                        is_final_week(season, week) and regular_season)
         if record:
             gaps.append((row.game_id, gap))
         margin = row.home_score - row.away_score
@@ -181,8 +257,13 @@ def rate(schedules_df: pd.DataFrame, weekly_df: pd.DataFrame, current_season=Non
         start = config.NFL_ELO_START
         state.elo[home] = state.elo.get(home, start) + shift
         state.elo[away] = state.elo.get(away, start) - shift
-        if has["game_type"] and row.game_type != "REG":
+        if not regular_season:
             continue
+        for team, won, starter in ((home, margin > 0, home_qb), (away, margin < 0, away_qb)):
+            state.wins[team] = state.wins.get(team, 0) + int(won)
+            if isinstance(starter, str) and starter:
+                counts = state.starts.setdefault(team, {})
+                counts[starter] = counts.get(starter, 0) + 1
         for team, opponent, starter in ((home, away, home_qb), (away, home, away_qb)):
             raw = by_team.get((season, week, team))
             if raw is None:

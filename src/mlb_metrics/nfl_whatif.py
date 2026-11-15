@@ -605,9 +605,9 @@ def apply_injury_report(data: dict, report: pd.DataFrame, rosters: pd.DataFrame 
     stored on the game as "injury_report" {"out": {side: [ids]}, "qb":
     {side: id}, "note"} with the probability that gives ("posted_probability").
     A listed QB who's out is replaced by his team's next QB option. Returns
-    {game_id: {"probability", "note", "qb_log_odds_shift", "qb_teams"}} for
-    the games it changed or confirmed - the model's own move for the
-    quarterback change alone (0 without one) and the teams it changed."""
+    {game_id: {"probability", "note", "qb_log_odds_shift"}} for the games it
+    changed or confirmed - the last being the model's own move for the
+    quarterback change alone (0 without one)."""
     if report is None or report.empty or not {"gsis_id", "report_status"} <= set(report.columns):
         return {}
     out_report = report[report["report_status"].isin(REPORT_OUT_STATUSES)]
@@ -645,8 +645,7 @@ def apply_injury_report(data: dict, report: pd.DataFrame, rosters: pd.DataFrame 
         game["injury_report"] = entry
         game["posted_probability"] = round(probability, 4)
         results[game["game_id"]] = {"probability": probability, "note": entry["note"],
-                                    "qb_log_odds_shift": qb_log_odds_shift(game, entry["qb"]),
-                                    "qb_teams": [game[side]["team"] for side in ("home", "away") if side in entry["qb"]]}
+                                    "qb_log_odds_shift": qb_log_odds_shift(game, entry["qb"])}
     return results
 
 
