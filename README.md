@@ -5277,16 +5277,18 @@ better than ours. What it had that we didn't:
 |---|---|---|
 | v4 | 0.6307 | 1,284 |
 | QB adjustment only | 0.6242 | 1,299 |
-| **v5: QB adjustment + past lines** | **0.6197** | **1,303** |
-| v5 and v4 averaged | 0.6221 | 1,310 |
+| v5 as first built: QB adjustment + past lines | 0.6197 | 1,303 |
+| **v5 now: + rest, backups, resting starters** (below) | **0.6162** | **1,304** |
+| v5 and v4 averaged | 0.6198 | 1,313 |
 | Vegas | 0.6094 | 1,332 |
 
-v5 beats v4 by 0.0111 (t 3.2) and in all 8 seasons: about half the
-distance v4 was from Vegas, four times v3 -> v4's gain. On nfelo's own
-1,766 games it scores 0.6177 to nfelo's 0.6197. Averaging v4 back in was
-worse at every weight (0.6199 at 20%, 0.6221 at 50%), so v4 is retired.
-It is still not a bet on winners: at the closing moneyline its picks with
-Vegas lost 63.7 units on 1,812 and against Vegas 8.7 on 187.
+v5 beats v4 by 0.0145 (t 3.8) and in all 8 seasons: two thirds of the
+distance v4 was from Vegas. On nfelo's own 1,766 games the first build
+scored 0.6177 to nfelo's 0.6197. Averaging v4 back in was worse at every
+weight, so v4 is retired. Its winners alone are still not a bet: at the
+closing moneyline its picks with Vegas lost 69.3 units on 1,823 and
+against Vegas 17.0 on 176. (Its spread sides far from the line are: see
+below.)
 
 **Tried and left out.** From nfelo: an EPA-based margin in place of the
 score (0.6251 at half weight, worse) and a bonus after a bye (within
@@ -5311,56 +5313,98 @@ that had won every one of its last three or more covered 47.7% of 333
 0.6232). The ratings already hold the reason one team kept beating the
 other. Exploratory run, not kept as a script.
 
-**v5 against the point spread: a bet when it disagrees by 3.5+ and no one changed quarterbacks**
+**What the model's misses had in common: rest, backups, resting
+starters** (2026-11-15, `scripts/research_nfl_model_gaps.py`; the user's
+"only number 3 helps the nfl model" - of that day's leads only one aimed
+at the model itself, and it added nothing). The rating needs only scores,
+quarterback box scores and past closing lines, so it was replayed over
+2002-2026 (6,636 games) and its misses sorted. It was 0.6190 to Vegas's
+0.6106, and the distance was not spread evenly:
+
+| Where | Behind Vegas by, a game | Share of the whole |
+| --- | --- | --- |
+| week 1 | 0.0187 | 13% |
+| weeks 2-8 | 0.0050 | 23% |
+| weeks 9 to the second-last | 0.0082 | 44% |
+| the last week | 0.0266 | 18% (6% of games) |
+| a regular starter sitting | 0.0168 | 50% (a quarter of games) |
+
+- **Resting starters.** In the last week a team with 10+ wins sitting its
+  regular quarterback was expected to win 56.1% and won 32.3% (62 teams,
+  5.8 points worse than expected): the other starters sit too. With fewer
+  wins there was no miss (37.0% and 37.1%).
+- **Backups.** Any earlier week, a stand-in for the season's regular
+  starter won 37.4% where the rating expected 40.4% (1,582 teams, 1.1
+  points worse). His rating was earned in other seasons and other roles.
+- **Rest.** Of 28 other things screened one at a time, only extra days of
+  rest was consistent (z 3.1, positive in every era). Travel and time
+  zones, division games, dome teams in the cold, wind, turnover and
+  fumble luck, last game's surprise, rookies, first-year coaches and
+  night games were not.
+
+Each became a term in the rating (`config.NFL_QB_ELO_REST_PER_DAY`,
+`_BACKUP_PENALTY`, `_SITTING_PENALTY`): together 0.6190 to **0.6166** (t
+3.8; +0.0023 / +0.0013 / +0.0036 by era; better in 21 of 25 seasons),
+over a quarter of the distance to Vegas, with twelve neighbouring
+settings within 0.0005. On the site's own 1,999-game replay 0.6197 became
+0.6162 (Vegas 0.6094).
+
+Found on the way: the schedule feed's listed starters are sometimes wrong
+for games already played in recent seasons (2026: Drew Lock listed for
+Seattle in weeks 3-6 while Sam Darnold threw every pass), so the real
+starter's rating never moved and the starts were miscounted - the dry run
+of the weekly job rated Seattle higher with its backup. `nfl_qb_elo.rate`
+now takes the team's top passer when the listed starter threw no pass
+(560 predictions from 2022 on change; the figures here include it). Left out after testing: a home edge that drifts with
+recent results, a smaller one in division games, a flat penalty for any
+new starter, learning faster from September's lines, and every other
+setting of the rating (none moved it 0.0005).
+
+**The model against the point spread: a bet when it disagrees by 3.5+**
 (2026-11-15, `scripts/research_nfl_spread_edge.py`; the first lead that
-was not the user's - "investigate outside of what I've told you"). v5 was
-built to pick winners, and on its own 8 seasons its bigger disagreements
-with the closing spread looked good and proved nothing (54.8% of 250, t
-1.5). But the rating needs only scores, quarterback box scores and past
-closing lines, all public since 1999, so it was replayed over 2002-2026:
-6,636 games, 17 of the seasons never seen when its settings were chosen.
+was not the user's - "investigate outside of what I've told you"). The
+same 25-season replay, 17 of the seasons never seen when the rating's
+first settings were chosen, against the closing spread:
 
 | Our margin vs the closing spread | Bets | Won | Units at -110 |
 | --- | --- | --- | --- |
-| every game | 6,464 | 51.5% | -110.5 |
-| 2+ points apart | 2,564 | 52.6% | +11.4 |
-| 3+ | 1,293 | 53.6% | +30.0 |
-| **3.5+ (the rule)** | **885** | **54.6%** | **+37.1** (15 of 25 seasons) |
-| 4+ | 591 | 55.2% | +31.4 |
-| 5+ | 289 | 54.3% | +10.7 |
+| every game | 6,464 | 51.5% | -114.4 |
+| 2+ points apart | 2,472 | 53.5% | +53.7 |
+| 3+ | 1,240 | 55.8% | +81.1 |
+| **3.5+ (the rule)** | **848** | **57.3%** | **+79.8** (19 of 25 seasons) |
+| 4+ | 556 | 57.0% | +49.2 |
+| 5+ | 264 | 58.0% | +28.1 |
 
-By era at 3.5+: 2002-10 51.4% of 370, 2011-18 56.7% of 275, 2019-26 57.1%
-of 240. The real margin regressed on the closing line and our margin
-together gives ours +0.315 (t 4.1; 2.0 / 3.8 / 1.6 by era; 3.8 with a
-flexible curve in the line). Controls:
-- *Only the underdog?* 90% of the bets are underdogs, but every underdog
+By era at 3.5+: 2002-10 54.0% of 361, 2011-18 61.2% of 278, 2019-26 57.9%
+of 209. The real margin regressed on the closing line and our margin
+together gives ours +0.388 (t 5.1; 2.8 / 4.3 / 2.0 by era). Controls:
+- *Only the underdog?* 87% of the bets are underdogs, but every underdog
   blindly covered 51.0% of 6,445 (-164 units), and within underdogs our
-  gap sorts them: 49.2% when we like the favorite, 50.9%, 51.3%, then
-  55.0% of 795 at 3.5+. With our margins stretched as wide as the line's,
-  54.5% of 861.
-- *Quarterback news the line was slow on?* The reverse. With both teams
-  starting the quarterback who started their last game: **55.6% of 567,
-  +34.4 units, 16 of 25 seasons** (t 3.8 beyond the line; 51.4% / 58.5% /
-  59.1% by era). With a change: 52.8% of 318, +2.7 units (t 1.4). A new
-  starter is where a box-score rating knows least and the line most, so
-  **the rule skips those games** and the 567 is the record the site shows.
-- *One lucky setting?* The rule's record moves (52.2-55.0% across nine
-  neighbouring settings) but the regression's t stays 2.9-4.3. Read it as
-  "about 53-55%".
-- **The caution:** 2023-26 went 44-41 (19-19 without quarterback changes).
-  The market may have caught up; the site says so next to the bets and
-  grades every one.
+  gap sorts them: 49.3% when we like the favorite, 51.2%, 50.0%, then
+  58.0% of 742 at 3.5+. With our margins stretched as wide as the line's,
+  57.3% of 839.
+- *Quarterback news the line was slow on?* No: 56.2% of 569 with the same
+  two starters as each team's last game, 59.5% of 279 with a change.
+- *One lucky setting?* Seven neighbours give 54.9-57.6% and a regression
+  t of 4.5-5.2. Read it as "about 55-57% in a replay", less live.
+- **The caution:** 2023-26 went 35-36. The market may have caught up; the
+  site says so next to the bets and grades every one.
+- *History of the rule:* before the model had its backup and resting
+  terms the rule read 54.6% of 885 and its bets in a quarterback-change
+  week only broke even (52.8% of 318), so for one merge it skipped those
+  weeks. That was the model overrating stand-ins; fixed there, the skip
+  was removed.
 
-On the same bets the moneyline was worse than the points overall (-0.3% a
-bet against +6.8%), better when our side was a small underdog (priced
-33-45%: +20% a bet on 163 against +12%), and far worse on big ones (under
-20%: -34%). That matches moneylines in general, 2006-26: a unit on every
-side priced 33-45% made +1.3% a bet over 2,070; every other band lost, the
-longshots 16.7% a bet. Also tested and adding nothing to v5: this week's
-injury report for non-quarterbacks (snap share of players out; log loss
-0.6224 from 0.6226, t 0.1). Windy-game unders (`--wind`): 54.9% of 1,882
-outdoor games with 10+ mph at kickoff since 1999 (57.7% of 359 in
-2020-26), measured with the kickoff reading, which a bettor does not have.
+On the same bets the moneyline made +9.1% a bet against the points'
++11.2%: better when our side was a small underdog (priced 33-45%: +24.2%
+a bet on 165 against +19.2%), and losing 20.3% a bet on big ones (under
+20%). That matches moneylines in general, 2006-26: a unit on every side
+priced 33-45% made +1.3% a bet over 2,070; every other band lost, the
+longshots 16.7% a bet. Also tested and adding nothing: this week's injury
+report for non-quarterbacks (snap share of players out; log loss 0.6224
+from 0.6226, t 0.1). Windy-game unders (`--wind`): 54.9% of 1,882 outdoor
+games with 10+ mph at kickoff since 1999 (57.7% of 359 in 2020-26),
+measured with the kickoff reading, which a bettor does not have.
 
 The same recipe does not carry over to over/unders (2026-11-15,
 exploratory): scoring ratings for each offense and defense, moved by every
@@ -5379,10 +5423,9 @@ On the site: `apply_ml_model` keeps the rating's own margin
 (`model_margin`, its gap at 25 Elo points a point) beside the chance,
 because the chance is later deferred to Vegas and recalibrated;
 `nfl_game_evaluation.spread_sides` makes the side a `spread_bet` at
-`NFL_SPREAD_BET_MIN_GAP` unless `nfl_game_picks.quarterback_changes` names
-a team (`qb_change` in the log; a backup the injury report puts in counts,
-and moves the margin by the model's own quarterback swap), held for the
-injury report when a starter is in doubt; "This week's bets" lists them
+`NFL_SPREAD_BET_MIN_GAP` (a backup the injury report puts in moves the
+margin by the model's own quarterback swap, backup penalty included), held
+for the injury report when a starter is in doubt; "This week's bets" lists them
 with the worst number worth taking, and the track record grades them. Picks from before v5 have no
 `model_margin` and are never bets.
 

@@ -21,7 +21,7 @@ CARD_COLUMNS = ["home_qb", "away_qb", "home_qb_rank", "away_qb_rank", "injury_ou
 QB_RANK_MIN_STARTERS = 16
 DISPLAY_COLUMNS = POINTS_COLUMNS + nfl_totals.EPA_DISPLAY_COLUMNS + nfl_weather.WEATHER_DISPLAY_COLUMNS + CARD_COLUMNS
 SPREAD_COLUMNS = ["predicted_margin", "spread_line", "spread_side", "spread_result",
-                  "spread_bet", "spread_bet_result", "spread_bet_clv", "spread_bet_held", "spread_bet_skip"]
+                  "spread_bet", "spread_bet_result", "spread_bet_clv", "spread_bet_held"]
 
 # The track-record table's rows: how sure the pick was, then whether it
 # sided with Vegas's favorite.
@@ -309,13 +309,10 @@ def spread_sides(picks: pd.DataFrame) -> pd.DataFrame:
     "push".
 
     spread_bet is that team when the model's margin is
-    config.NFL_SPREAD_BET_MIN_GAP or more points from the line and neither
-    team has changed quarterbacks since its last game (qb_change) - the
-    one kind of spread side that has beaten the closing line in testing
-    (see the note above that setting) - with spread_bet_result once played
-    and spread_bet_clv, the points the line then moved our way by kickoff.
-    A side far enough from the line in a game with a quarterback change is
-    not a bet; spread_bet_skip names the teams that changed.
+    config.NFL_SPREAD_BET_MIN_GAP or more points from the line - the one
+    kind of spread side that has beaten the closing line in testing (see
+    the note above that setting) - with spread_bet_result once played and
+    spread_bet_clv, the points the line then moved our way by kickoff.
     Only picks with a model_margin can be bets: the rule was tested on
     that margin, not on one read back off a chance that has since been
     deferred to Vegas or recalibrated."""
@@ -345,11 +342,7 @@ def spread_sides(picks: pd.DataFrame) -> pd.DataFrame:
     result[settled & (actual != line) & ((side == picks["home_team"]) == home_covered)] = "win"
     result[settled & (actual != line) & ((side == picks["home_team"]) != home_covered)] = "loss"
     out["spread_result"] = result
-    far = side.notna() & model.notna() & ((model - line).abs() >= config.NFL_SPREAD_BET_MIN_GAP)
-    change = picks["qb_change"] if "qb_change" in picks.columns else pd.Series(pd.NA, index=picks.index, dtype=object)
-    changed = change.notna() & (change.astype(str).str.strip() != "")
-    is_bet = far & ~changed
-    out["spread_bet_skip"] = change.where(far & changed)
+    is_bet = side.notna() & model.notna() & ((model - line).abs() >= config.NFL_SPREAD_BET_MIN_GAP)
     out["spread_bet"] = side.where(is_bet)
     out["spread_bet_result"] = result.where(is_bet)
     # A home bet got the better number when the line closed with the home

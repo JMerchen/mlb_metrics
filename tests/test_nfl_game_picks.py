@@ -629,25 +629,3 @@ def test_apply_ml_model_keeps_the_rating_models_own_margin(monkeypatch, tmp_path
     deferred = nfl_game_picks.apply_market_tiebreak(result.assign(home_team=["A", "C"], away_team=["B", "D"]), market, 0.2)
     assert deferred["home_win_probability"][0] == pytest.approx(0.2)
     assert deferred["model_margin"][0] == pytest.approx(4.0)
-
-
-def test_quarterback_changes_names_teams_starting_someone_new():
-    past = pd.DataFrame([
-        {"season": 2025, "week": 18, "gameday": "2026-01-04", "game_id": "a", "home_team": "KC", "away_team": "DEN",
-         "home_score": 20, "away_score": 17, "home_qb_id": "old_kc", "away_qb_id": "nix"},
-        {"season": 2026, "week": 1, "gameday": "2026-09-10", "game_id": "b", "home_team": "KC", "away_team": "LV",
-         "home_score": 24, "away_score": 10, "home_qb_id": "mahomes", "away_qb_id": "smith"},
-        # Not played yet: doesn't count as anyone's last game.
-        {"season": 2026, "week": 2, "gameday": "2026-09-17", "game_id": "c", "home_team": "DEN", "away_team": "LV",
-         "home_score": None, "away_score": None, "home_qb_id": "someone", "away_qb_id": "else"},
-    ])
-    games = pd.DataFrame([
-        {"home_team": "KC", "away_team": "DEN", "home_qb_id": "mahomes", "away_qb_id": "nix"},      # both the same as last time
-        {"home_team": "LV", "away_team": "KC", "home_qb_id": "rookie", "away_qb_id": "mahomes"},    # the Raiders changed
-        {"home_team": "DEN", "away_team": "LV", "home_qb_id": "backup", "away_qb_id": None},        # one changed, one unlisted
-        {"home_team": "NYJ", "away_team": "KC", "home_qb_id": "fields", "away_qb_id": "mahomes"},   # no earlier Jets game on file
-    ], index=[10, 11, 12, 13])
-    changes = nfl_game_picks.quarterback_changes(games, past)
-    assert changes.tolist() == ["", "LV", "DEN, LV", ""]
-    assert list(changes.index) == [10, 11, 12, 13]
-    assert nfl_game_picks.quarterback_changes(games.iloc[:1], pd.DataFrame()).tolist() == [""]

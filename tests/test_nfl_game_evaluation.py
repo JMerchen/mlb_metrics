@@ -524,19 +524,11 @@ def test_spread_bet_is_the_side_when_the_models_margin_is_far_from_the_line():
         # A pick from before v5: no model margin, so never a bet however far the chance is from the line.
         {"home_team": "SEA", "away_team": "ARI", "predicted_winner": "SEA", "predicted_probability": 0.90,
          "model_margin": None, "market_spread": 1.0, "closing_spread": None, "actual_margin": 20},
-        # Far from the line, but the Jets changed quarterbacks: a side, not a bet. And a change with a close line is nothing.
-        {"home_team": "NYJ", "away_team": "NE", "predicted_winner": "NE", "predicted_probability": 0.60,
-         "model_margin": -1.0, "market_spread": -7.0, "closing_spread": None, "actual_margin": -3, "qb_change": "NYJ"},
-        {"home_team": "CHI", "away_team": "GB", "predicted_winner": "GB", "predicted_probability": 0.60,
-         "model_margin": -1.0, "market_spread": -2.0, "closing_spread": None, "actual_margin": -3, "qb_change": "GB"},
     ])
     out = nfl_game_evaluation.spread_sides(picks)
     assert out["predicted_margin"].tolist()[:4] == [1.0, 2.0, 4.0, 3.0 + gap]
     assert out["spread_bet"].tolist()[:2] == ["DEN", "MIA"] and pd.isna(out["spread_bet"][2])
     assert out["spread_bet"][3] == "DAL" and pd.isna(out["spread_bet"][4])
-    assert pd.isna(out["spread_bet"][5]) and out["spread_bet_skip"][5] == "NYJ" and out["spread_side"][5] == "NYJ"
-    assert pd.isna(out["spread_bet"][6]) and pd.isna(out["spread_bet_skip"][6])
-    assert out["spread_bet_skip"].iloc[:5].isna().all()
     assert out["spread_side"][4] == "SEA" and out["spread_result"][4] == "win"
     assert out["spread_bet_result"].tolist()[:2] == ["win", "loss"]
     assert pd.isna(out["spread_bet_result"][2]) and pd.isna(out["spread_bet_result"][3])

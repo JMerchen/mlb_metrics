@@ -405,9 +405,18 @@ def build_game_features_v5(
         home_qb = starters["home_qb_id"] if "home_qb_id" in starters.columns else [None] * len(games)
         away_qb = starters["away_qb_id"] if "away_qb_id" in starters.columns else [None] * len(games)
         home, away = nfl_totals._canonical(games["home_team"]), nfl_totals._canonical(games["away_team"])
-        games["qb_elo_base"] = [state.gap(h, a) for h, a in zip(home, away)]
-        games["home_qb_elo_adj"] = [state.qb_adjustment(h, q) for h, q in zip(home, home_qb)]
-        games["away_qb_elo_adj"] = [state.qb_adjustment(a, q) for a, q in zip(away, away_qb)]
+        # Where the schedule says so: a neutral field, each side's days of
+        # rest, and the last week of the regular season (a winning team's
+        # backup then means resting starters - nfl_qb_elo.backup_penalty).
+        from mlb_metrics import nfl_qb_elo
+        neutral = (starters["location"] == "Neutral") if "location" in starters.columns else [False] * len(games)
+        rest = (pd.to_numeric(starters["home_rest"], errors="coerce") - pd.to_numeric(starters["away_rest"], errors="coerce")) \
+            if {"home_rest", "away_rest"} <= set(starters.columns) else [0.0] * len(games)
+        kind = starters["game_type"] if "game_type" in starters.columns else ["REG"] * len(games)
+        final = [nfl_qb_elo.is_final_week(s, w, k) for s, w, k in zip(games["season"], games["week"], kind)]
+        games["qb_elo_base"] = [state.gap(h, a, neutral=bool(n), rest_diff=r) for h, a, n, r in zip(home, away, neutral, rest)]
+        games["home_qb_elo_adj"] = [state.qb_adjustment(h, q, f) for h, q, f in zip(home, home_qb, final)]
+        games["away_qb_elo_adj"] = [state.qb_adjustment(a, q, f) for a, q, f in zip(away, away_qb, final)]
     return games[["game_id", "season", "week", "home_team", "away_team"] + V5_FEATURE_COLUMNS]
 
 
@@ -651,36 +660,6 @@ def apply_ml_model(
         chance = ml_probability.where(real_rows).clip(1e-6, 1 - 1e-6)
         result["model_margin"] = 400.0 * np.log10(chance / (1 - chance)) / config.NFL_QB_ELO_POINTS
     return result
-
-
-def quarterback_changes(games: pd.DataFrame, past_schedules: pd.DataFrame) -> pd.Series:
-    """For each game in `games` (same index): the teams whose listed
-    starter (home_qb_id / away_qb_id) is not the quarterback who started
-    their last completed game in `past_schedules`, as "SEA" or "SEA, LV";
-    "" when neither changed. A team with no listed starter counts as
-    changed; one with no earlier game on file does not.
-
-    Spread bets skip these games (nfl_game_evaluation.spread_sides): the
-    rating knows a new starter least and the line knows him most, and in
-    testing those bets only broke even (config.NFL_SPREAD_BET_BACKTEST)."""
-    last = {}
-    if past_schedules is not None and not past_schedules.empty and {"home_qb_id", "away_qb_id"} <= set(past_schedules.columns):
-        done = past_schedules.dropna(subset=["home_score", "away_score"])
-        done = done.sort_values([c for c in ("season", "week", "gameday", "game_id") if c in done.columns])
-        alias = nfl_totals.NFL_TEAM_ALIASES
-        for row in done.itertuples(index=False):
-            last[alias.get(row.home_team, row.home_team)] = row.home_qb_id
-            last[alias.get(row.away_team, row.away_team)] = row.away_qb_id
-    out = []
-    for _, game in games.iterrows():
-        changed = []
-        for side in ("home", "away"):
-            team = nfl_totals.NFL_TEAM_ALIASES.get(game[f"{side}_team"], game[f"{side}_team"])
-            starter = game.get(f"{side}_qb_id")
-            if not isinstance(starter, str) or not starter or (team in last and last[team] != starter):
-                changed.append(game[f"{side}_team"])
-        out.append(", ".join(changed))
-    return pd.Series(out, index=games.index, dtype=object)
 
 
 def apply_market_tiebreak(
