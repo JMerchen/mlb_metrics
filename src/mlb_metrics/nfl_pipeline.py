@@ -38,6 +38,7 @@ missing-market case.
 """
 
 import datetime
+import math
 import os
 from zoneinfo import ZoneInfo
 
@@ -527,6 +528,9 @@ def run(
                 history.get("snap_counts", pd.DataFrame()),
             )
             this_week_games["lean_hold"] = this_week_games["game_id"].map(doubts)
+            # Teams starting a different quarterback from their last game:
+            # no spread bet on those games.
+            this_week_games["qb_change"] = nfl_game_picks.quarterback_changes(this_week_games, history["schedules"])
             # Each card's starting QBs (and where they rank this week), and
             # for a repriced game the players the final report took out.
             card = nfl_whatif.card_details(whatif)
@@ -586,7 +590,21 @@ def run(
                 after_probs = probs.copy()
                 after_probs["home_win_probability"] = after_probs["game_id"].map(
                     {g: r["probability"] for g, r in repriced.items()}).fillna(after_probs["home_win_probability"])
+                # The rating's own margin moves only for a quarterback
+                # change - what the spread bet was tested on (the starter
+                # who played; other absences added nothing to it). Natural
+                # log-odds to Elo points to points.
+                if "model_margin" in after_probs.columns:
+                    shift = after_probs["game_id"].map(
+                        {g: r.get("qb_log_odds_shift", 0.0) for g, r in repriced.items()}).fillna(0.0)
+                    after_probs["model_margin"] = after_probs["model_margin"] + shift * 400.0 / (
+                        math.log(10) * config.NFL_QB_ELO_POINTS)
                 after_games = this_week_games.copy()
+                # A backup the report put in is a quarterback change too.
+                swapped = {g: r.get("qb_teams", []) for g, r in repriced.items()}
+                after_games["qb_change"] = [
+                    ", ".join(dict.fromkeys([t for t in str(before or "").split(", ") if t] + swapped.get(game_id, [])))
+                    for game_id, before in zip(after_games["game_id"], after_games["qb_change"])]
                 after_card = nfl_whatif.card_details(whatif, after_report=True)
                 for column in after_card.columns:
                     after_games[column] = after_games["game_id"].map(after_card[column])

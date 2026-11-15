@@ -20,7 +20,8 @@ CARD_COLUMNS = ["home_qb", "away_qb", "home_qb_rank", "away_qb_rank", "injury_ou
 # (late in a week only the games still to play are rated afresh).
 QB_RANK_MIN_STARTERS = 16
 DISPLAY_COLUMNS = POINTS_COLUMNS + nfl_totals.EPA_DISPLAY_COLUMNS + nfl_weather.WEATHER_DISPLAY_COLUMNS + CARD_COLUMNS
-SPREAD_COLUMNS = ["predicted_margin", "spread_line", "spread_side", "spread_result"]
+SPREAD_COLUMNS = ["predicted_margin", "spread_line", "spread_side", "spread_result",
+                  "spread_bet", "spread_bet_result", "spread_bet_clv", "spread_bet_held", "spread_bet_skip"]
 
 # The track-record table's rows: how sure the pick was, then whether it
 # sided with Vegas's favorite.
@@ -121,6 +122,12 @@ def build_game_picks_export(
         picks[f"tuesday_{column}"] = tuesday[column].where(~held)
     picks["tuesday_total_lean_held"] = hold.where(held)
     picks = picks.join(spread_sides(picks))
+    # A spread bet waits for the injury report the same way a lean does:
+    # with a starter in doubt the margin is for a lineup that may not play.
+    in_doubt = (picks["injury_report"] != "after") & own_hold.notna() & (own_hold.astype(str) != "")
+    picks["spread_bet_held"] = own_hold.where(in_doubt & picks["spread_bet"].notna())
+    for column in ("spread_bet", "spread_bet_result", "spread_bet_clv"):
+        picks[column] = picks[column].where(picks["spread_bet_held"].isna())
     picks["home_qb_rank"], picks["away_qb_rank"] = qb_ranks(picks)
     picks["starters_in_doubt"] = own_hold.where(own_hold.notna() & (own_hold.astype(str) != "")
                                                 & (picks["injury_report"] != "after"))
@@ -292,20 +299,35 @@ def total_leans(picks: pd.DataFrame) -> pd.DataFrame:
 
 def spread_sides(picks: pd.DataFrame) -> pd.DataFrame:
     """Our margin next to Vegas's point spread, for each pick:
-    predicted_margin (home minus away: the win chance read back off a
-    normal curve config.NFL_WIN_MARGIN_SIGMA points wide), spread_line (the
-    spread when the pick was made - the closing one for a pick logged before
-    spreads were, 2026-11-10 - positive = home favored), spread_side (the
-    team our margin puts on the right side of it) and, once played,
-    spread_result "win", "loss" or "push". Context, not a lean: see
-    config.NFL_WIN_MARGIN_SIGMA."""
+    predicted_margin (home minus away: the rating model's own margin,
+    model_margin, where the pick has one; for a pick from before v5, the
+    win chance read back off a normal curve config.NFL_WIN_MARGIN_SIGMA
+    points wide), spread_line (the spread when the pick was made - the
+    closing one for a pick logged before spreads were, 2026-11-10 -
+    positive = home favored), spread_side (the team our margin puts on the
+    right side of it) and, once played, spread_result "win", "loss" or
+    "push".
+
+    spread_bet is that team when the model's margin is
+    config.NFL_SPREAD_BET_MIN_GAP or more points from the line and neither
+    team has changed quarterbacks since its last game (qb_change) - the
+    one kind of spread side that has beaten the closing line in testing
+    (see the note above that setting) - with spread_bet_result once played
+    and spread_bet_clv, the points the line then moved our way by kickoff.
+    A side far enough from the line in a game with a quarterback change is
+    not a bet; spread_bet_skip names the teams that changed.
+    Only picks with a model_margin can be bets: the rule was tested on
+    that margin, not on one read back off a chance that has since been
+    deferred to Vegas or recalibrated."""
     def num(column):
         return pd.to_numeric(picks[column], errors="coerce") if column in picks.columns \
             else pd.Series(float("nan"), index=picks.index)
     probability = num("predicted_probability")
     home_picked = picks["predicted_winner"] == picks["home_team"]
     home_probability = probability.where(home_picked, 1 - probability).clip(0.01, 0.99)
-    margin = pd.Series(stats.norm.ppf(home_probability.to_numpy(dtype=float)), index=picks.index) * config.NFL_WIN_MARGIN_SIGMA
+    from_chance = pd.Series(stats.norm.ppf(home_probability.to_numpy(dtype=float)), index=picks.index) * config.NFL_WIN_MARGIN_SIGMA
+    model = num("model_margin")
+    margin = model.where(model.notna(), from_chance)
     line = num("market_spread").fillna(num("closing_spread"))
     actual = num("actual_margin")
     out = pd.DataFrame(index=picks.index)
@@ -323,6 +345,18 @@ def spread_sides(picks: pd.DataFrame) -> pd.DataFrame:
     result[settled & (actual != line) & ((side == picks["home_team"]) == home_covered)] = "win"
     result[settled & (actual != line) & ((side == picks["home_team"]) != home_covered)] = "loss"
     out["spread_result"] = result
+    far = side.notna() & model.notna() & ((model - line).abs() >= config.NFL_SPREAD_BET_MIN_GAP)
+    change = picks["qb_change"] if "qb_change" in picks.columns else pd.Series(pd.NA, index=picks.index, dtype=object)
+    changed = change.notna() & (change.astype(str).str.strip() != "")
+    is_bet = far & ~changed
+    out["spread_bet_skip"] = change.where(far & changed)
+    out["spread_bet"] = side.where(is_bet)
+    out["spread_bet_result"] = result.where(is_bet)
+    # A home bet got the better number when the line closed with the home
+    # team favored by more than it was when we took it; a road bet, by less.
+    closing = num("closing_spread")
+    moved = (closing - line).where(side == picks["home_team"], line - closing)
+    out["spread_bet_clv"] = moved.where(is_bet & closing.notna() & num("market_spread").notna())
     return out
 
 
@@ -347,8 +381,23 @@ def spread_side_metrics(picks: pd.DataFrame) -> dict:
     backtest numbers the track-record table shows for it and for the
     over/under leans."""
     result = picks["spread_result"] if "spread_result" in picks.columns else pd.Series(dtype=object)
+    bet = picks["spread_bet_result"] if "spread_bet_result" in picks.columns else pd.Series(dtype=object)
+    bets_won, bets_lost = int((bet == "win").sum()), int((bet == "loss").sum())
+    moved = pd.to_numeric(picks["spread_bet_clv"], errors="coerce").dropna() if "spread_bet_clv" in picks.columns \
+        else pd.Series(dtype=float)
+    tested = config.NFL_SPREAD_BET_BACKTEST
     return {"spread_sides_won": int((result == "win").sum()), "spread_sides_lost": int((result == "loss").sum()),
             "spread_sides_pushed": int((result == "push").sum()),
+            "spread_bets_won": bets_won, "spread_bets_lost": bets_lost, "spread_bets_pushed": int((bet == "push").sum()),
+            "spread_bet_units": round(bets_won * 100 / 110 - bets_lost, 2),
+            "spread_bet_clv_n": int(len(moved)), "spread_bet_clv_mean": float(moved.mean()) if len(moved) else float("nan"),
+            "spread_bet_min_gap": config.NFL_SPREAD_BET_MIN_GAP,
+            "spread_bet_backtest_games": tested["games"], "spread_bet_backtest_won_rate": tested["won_rate"],
+            "spread_bet_backtest_units": tested["units"],
+            "spread_bet_backtest_winning_seasons": tested["winning_seasons"], "spread_bet_backtest_seasons": tested["seasons"],
+            "spread_bet_backtest_first_season": tested["first_season"], "spread_bet_backtest_last_season": tested["last_season"],
+            "spread_bet_recent_won": tested["recent_won"], "spread_bet_recent_lost": tested["recent_lost"],
+            "spread_bet_recent_seasons": tested["recent_seasons"],
             "total_lean_backtest_games": config.NFL_TOTAL_LEAN_BACKTEST["games"],
             "total_lean_backtest_won_rate": config.NFL_TOTAL_LEAN_BACKTEST["won_rate"],
             "total_lean_backtest_units": config.NFL_TOTAL_LEAN_BACKTEST["units"],

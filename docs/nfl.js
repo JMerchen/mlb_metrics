@@ -668,7 +668,8 @@ return `
 ${trackRecordNote(p, confidence) ? `<div class="pickNote">${trackRecordNote(p, confidence)}</div>` : ""}
 ${pickReasonsHtml(p, "nfl")}
 ${injuryLineHtml(p, "nfl")}
-${spreadText(p, "nfl") ? `<div class="pickProb">${spreadText(p, "nfl")}</div>` : ""}
+${spreadText(p, "nfl") ? `<div class="pickProb">${spreadText(p, "nfl")} ${spreadBetBadgeHtml(p, "nfl")}</div>` : ""}
+${spreadText(p, "nfl") && (spreadBet(p, "nfl") || p.spread_bet_held || p.spread_bet_skip) ? `<div class="pickNote">${spreadNote(p, "nfl")}</div>` : ""}
 ${totalPointsText(p) ? `<div class="pickProb">${totalPointsText(p)} ${totalLeanBadgeHtml(p)}</div>` : ""}
 ${teamEpaHtml(p, "nfl")}
 ${reportNote}

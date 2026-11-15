@@ -50,6 +50,7 @@ scripts/backtest_nfl_season_carryover.py, which sweeps both alongside
 nfl_team_strength.py's own season-carryover shrinkage.
 """
 
+import numpy as np
 import pandas as pd
 
 from mlb_metrics import config, ml_models, nfl_passing, nfl_totals
@@ -641,7 +642,45 @@ def apply_ml_model(
     # string-typed result into the float column.
     ml_probability = result["game_id"].map(proba).astype(float)
     result["home_win_probability"] = ml_probability.where(real_rows, result["home_win_probability"])
+    # The rating model's own margin for the home team, in points - its Elo
+    # gap read back off the chance, at config.NFL_QB_ELO_POINTS Elo points
+    # a point. Kept beside the chance because the chance is changed after
+    # this (the deferral to Vegas, the recalibration) and the spread bet
+    # (nfl_game_evaluation.spread_sides) was tested on this margin as is.
+    if feature_columns == QB_ELO_FEATURE_COLUMNS:
+        chance = ml_probability.where(real_rows).clip(1e-6, 1 - 1e-6)
+        result["model_margin"] = 400.0 * np.log10(chance / (1 - chance)) / config.NFL_QB_ELO_POINTS
     return result
+
+
+def quarterback_changes(games: pd.DataFrame, past_schedules: pd.DataFrame) -> pd.Series:
+    """For each game in `games` (same index): the teams whose listed
+    starter (home_qb_id / away_qb_id) is not the quarterback who started
+    their last completed game in `past_schedules`, as "SEA" or "SEA, LV";
+    "" when neither changed. A team with no listed starter counts as
+    changed; one with no earlier game on file does not.
+
+    Spread bets skip these games (nfl_game_evaluation.spread_sides): the
+    rating knows a new starter least and the line knows him most, and in
+    testing those bets only broke even (config.NFL_SPREAD_BET_BACKTEST)."""
+    last = {}
+    if past_schedules is not None and not past_schedules.empty and {"home_qb_id", "away_qb_id"} <= set(past_schedules.columns):
+        done = past_schedules.dropna(subset=["home_score", "away_score"])
+        done = done.sort_values([c for c in ("season", "week", "gameday", "game_id") if c in done.columns])
+        alias = nfl_totals.NFL_TEAM_ALIASES
+        for row in done.itertuples(index=False):
+            last[alias.get(row.home_team, row.home_team)] = row.home_qb_id
+            last[alias.get(row.away_team, row.away_team)] = row.away_qb_id
+    out = []
+    for _, game in games.iterrows():
+        changed = []
+        for side in ("home", "away"):
+            team = nfl_totals.NFL_TEAM_ALIASES.get(game[f"{side}_team"], game[f"{side}_team"])
+            starter = game.get(f"{side}_qb_id")
+            if not isinstance(starter, str) or not starter or (team in last and last[team] != starter):
+                changed.append(game[f"{side}_team"])
+        out.append(", ".join(changed))
+    return pd.Series(out, index=games.index, dtype=object)
 
 
 def apply_market_tiebreak(

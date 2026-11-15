@@ -209,7 +209,7 @@ test("NFL totals: a lean's reason leaves the forecast's rain out of it", () => {
 })
 
 test("this week's bets: only tested bets, with the worst line and price worth taking, and the record", () => {
-  const { betsPanelHtml, betWorstLine, betPriceFloor } = require("./summary_render.js")
+  const { betsPanelHtml, betWorstLine, betPriceFloor, spreadBetWorstLine } = require("./summary_render.js")
   global.teamName = require("./teams.js").teamName
   const flat = html => html.replace(/<[^>]+>/g, " ").replace(/&middot;/g, "·").replace(/\s+/g, " ").trim()
   const summary = { total_lean_min_gap: "5.0", total_lean_backtest_won_rate: "0.586", total_lean_backtest_games: "174", total_lean_backtest_units: "21.9",
@@ -231,14 +231,51 @@ test("this week's bets: only tested bets, with the worst line and price worth ta
   assert.match(panel, /Under 45\.5 Texans at Browns .*leaving the rain in the forecast out of it\. Stake 1 unit\. Worth taking at 45 or higher, at -125 or better\./)
   assert.match(panel, /Waiting on the injury report: Vikings at Packers\./)
   assert.doesNotMatch(panel, /49ers at Cowboys/)                 // already played
-  assert.match(panel, /Bets like these won 58\.6% of 174 in testing \(2019–2025, at the real odds: up 21\.9 units, a winning record in 6 of 7 seasons; 52\.4% breaks even\)\. This season: 3–1, up 1\.73 units\. The line has closed 0\.3 points our way on average after we took it \(4 bets\)\./)
+  assert.match(panel, /Over\/unders\. Bets like these won 58\.6% of 174 in testing \(2019–2025, at the real odds: up 21\.9 units, a winning record in 6 of 7 seasons; 52\.4% breaks even\)\. This season: 3–1, up 1\.73 units\. The line has closed 0\.3 points our way on average after we took it \(4 bets\)\./)
   assert.match(panel, /they are picks, not bets/)
   // Nothing to bet: it says so and still shows the record.
   const empty = flat(betsPanelHtml([held, { status: "pending", home_team: "KC", away_team: "DEN" }], summary))
-  assert.match(empty, /No bets yet this week: no game's total is far enough from Vegas's\./)
+  assert.match(empty, /No bets yet this week: no game's spread or total is far enough from ours\./)
   assert.match(empty, /Bets like these won 58\.6% of 174/)
   assert.match(flat(betsPanelHtml([played], summary)), /No games left to bet this week\./)
   assert.match(flat(betsPanelHtml([], {})), /No games left to bet this week\./)
+  // Spread bets: the side the pipeline marked, why, the worst number worth taking, and their own record.
+  const sideSummary = { ...summary, spread_bet_min_gap: "3.5", spread_bet_backtest_won_rate: "0.556", spread_bet_backtest_games: "567",
+    spread_bet_backtest_units: "34.4", spread_bet_backtest_winning_seasons: "16", spread_bet_backtest_seasons: "25",
+    spread_bet_backtest_first_season: "2002", spread_bet_backtest_last_season: "2026", spread_bet_recent_won: "19", spread_bet_recent_lost: "19",
+    spread_bet_recent_seasons: "2023-26", spread_bets_won: "2", spread_bets_lost: "1", spread_bet_units: "0.82", spread_bet_clv_n: "3", spread_bet_clv_mean: "-0.5" }
+  // Vegas has the Chiefs (home) by 6.5, we have them by 1.2: the Broncos +6.5, worth taking down to +5 (1.2 + 3.5 = 4.7, up to the half point).
+  const dog = { status: "pending", home_team: "KC", away_team: "DEN", spread_line: "6.5", predicted_margin: "1.2", spread_side: "DEN", spread_bet: "DEN" }
+  // Vegas has the Bills (away) by 1, we have the Dolphins (home) by 4: the Dolphins +1, worth taking to -0.5 (4 - 3.5).
+  const homeSide = { status: "pending", home_team: "MIA", away_team: "BUF", spread_line: "-1", predicted_margin: "4", spread_side: "MIA", spread_bet: "MIA" }
+  const sideHeld = { status: "pending", home_team: "SF", away_team: "SEA", spread_line: "7", predicted_margin: "1", spread_side: "SEA", spread_bet_held: "the 49ers' quarterback is questionable" }
+  const closeOne = { status: "pending", home_team: "DAL", away_team: "NYG", spread_line: "3", predicted_margin: "2", spread_side: "NYG" }
+  assert.equal(spreadBetWorstLine(dog, 3.5), "+5")
+  assert.equal(spreadBetWorstLine(homeSide, 3.5), "−0.5")
+  assert.equal(spreadBetWorstLine(closeOne, 3.5), "")
+  const sides = flat(betsPanelHtml([dog, homeSide, sideHeld, closeOne, over], sideSummary))
+  assert.match(sides, /Broncos \+6\.5 Broncos at Chiefs Vegas has Chiefs by 6\.5; we have Chiefs by 1\. That is 5\.5 points apart\. Stake 1 unit\. Worth taking at \+5 or better, at -115 or better\./)
+  assert.match(sides, /Dolphins \+1 Bills at Dolphins Vegas has Bills by 1; we have Dolphins by 4\. That is 5 points apart\. Stake 1 unit\. Worth taking at −0\.5 or better, at -115 or better\./)
+  assert.match(sides, /Over 39\.5 Rams at Cardinals/)
+  assert.match(sides, /Waiting on the injury report: Seahawks at 49ers\./)
+  assert.doesNotMatch(sides, /Giants at Cowboys/)
+  assert.match(sides, /Spreads\. Sides 3\.5 or more points from the line, in games where neither team changed quarterbacks, won 55\.6% of 567 against the closing spread in testing \(2002–2026: up 34\.4 units, a winning record in 16 of 25 seasons\)\. The caution: 2023-26 went only 19–19, so treat it as a thinner edge than the over\/unders\. This season: 2–1, up 0\.82 units\. The line has closed 0\.5 points against us on average after we took it \(3 bets\)\./)
+})
+
+test("NFL card: a spread side far from the line is badged as a bet, a close one is context", () => {
+  const { gamePickRowHtml, spreadNote, spreadBet } = require("./summary_render.js")
+  const g = { home_team: "KC", away_team: "DEN", predicted_winner: "KC", predicted_probability: 0.6, status: "pending",
+    spread_line: 6.5, predicted_margin: 1.2, spread_side: "DEN", spread_bet: "DEN" }
+  assert.match(gamePickRowHtml(g, "nfl"), /Bet Broncos \+6\.5/)
+  assert.match(gamePickRowHtml({ ...g, spread_bet_result: "win" }, "nfl"), /Bet Broncos \+6\.5 · won/)
+  assert.match(spreadNote(g, "nfl"), /this side to be a bet/)
+  const close = { ...g, spread_bet: "" }
+  assert.equal(spreadBet(close, "nfl"), null)
+  assert.doesNotMatch(gamePickRowHtml(close, "nfl"), /Bet Broncos/)
+  assert.match(spreadNote(close, "nfl"), /context, not a bet/)
+  assert.match(spreadNote({ ...close, spread_bet_held: "the Chiefs' quarterback is questionable" }, "nfl"), /waits for the injury report: the Chiefs' quarterback is questionable\./)
+  assert.match(spreadNote({ ...close, spread_bet_skip: "DEN" }, "nfl"), /the Broncos are starting a different quarterback from last game\. We don't bet those/)
+  assert.match(spreadNote({ ...close, spread_bet_skip: "KC, DEN" }, "nfl"), /the Chiefs and the Broncos are starting/)
 })
 
 test("track record: with and against Vegas also show units at the closing odds", () => {
@@ -351,6 +388,6 @@ test("NFL card and page: the track record behind a pick", () => {
   assert.match(html, /We say 55–60%16 of 23 70%57% of 421/)
   assert.match(html, /We pick against Vegas's favorite17 of 31 55%44% of 310/)
   assert.match(html, /Over\/under leans5 of 8 63%62% of 237/)
-  assert.match(html, /Our side of the spread-50% of 1,923/)
+  assert.match(html, /Our side of the spread, every game-50% of 1,923/)
   assert.equal(trackRecordTableHtml([], {}), "")
 })

@@ -2509,7 +2509,29 @@ NFL_VEGAS_SPLIT_BACKTEST = {"with": {"bets": 1812, "units": -63.7}, "against": {
 # at every gap from 0 to 6 points, and none added anything to the spread in
 # a regression of the real margin on both (p 0.5-0.98). 52.4% breaks even.
 NFL_WIN_MARGIN_SIGMA = 13.1
-NFL_SPREAD_BACKTEST = {"games": 1923, "won_rate": 0.50}
+NFL_SPREAD_BACKTEST = {"games": 6464, "won_rate": 0.515}
+# v5 CHANGED THIS (2026-11-15, scripts/research_nfl_spread_edge.py): the
+# paragraph above was v4. v5's own margin (its rating gap in points) was
+# replayed over 2002-2026 - 17 of those seasons never seen when its
+# settings were chosen - and its bigger disagreements with the closing
+# spread won: 3.5+ points apart, 54.6% of 885 (+37.1 units at -110, 15 of
+# 25 seasons), against 51.5% over every game. The real margin regressed on
+# the closing line and ours together gives ours t 4.1 (2.0 / 3.8 / 1.6 by
+# era). It is not just the underdog (every underdog blindly: 51.0%, -164
+# units), not quarterback news (55.6% with the same starters as last
+# week), and not one setting (t 2.9-4.3 across nine neighbours, the rule
+# itself 52-55%). The caution: 2023-26 went 44-41.
+# Where the edge is: games where both teams start the quarterback who
+# started their last game - 55.6% of 567 (+34.4 units, 16 of 25 seasons; t
+# 3.8 beyond the line; 2023-26 19-19). With a quarterback change, 52.8% of
+# 318 (+2.7 units, t 1.4): break-even, and where a box-score rating knows
+# least and the line most. So a spread side NFL_SPREAD_BET_MIN_GAP or more
+# from the line, in a game with no quarterback change, is a bet; any other
+# side is still only context.
+NFL_SPREAD_BET_MIN_GAP = 3.5
+NFL_SPREAD_BET_BACKTEST = {"games": 567, "won_rate": 0.556, "units": 34.4, "winning_seasons": 16, "seasons": 25,
+                           "first_season": 2002, "last_season": 2026, "recent_won": 19, "recent_lost": 19,
+                           "recent_seasons": "2023-26"}
 # What the line still misses for the weather, beyond our total's own
 # weather terms (2026-11-06, scripts/backtest_nfl_totals_vs_market.py):
 # points added to a lean's edge per unit of nfl_weather's wx_rain (chance
