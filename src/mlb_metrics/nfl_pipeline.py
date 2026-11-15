@@ -147,7 +147,7 @@ def _build_market_probabilities(this_week_games: pd.DataFrame) -> pd.DataFrame:
     return market
 
 
-def write_nfl_game_picks_export(predictions_log_path: str, output_dir: str) -> None:
+def write_nfl_game_picks_export(predictions_log_path: str, output_dir: str, raw_dir: str | None = None) -> None:
     """Read the full NFL game-predictions log and (re)write the CSVs the
     dashboard's NFL Automated Game Picks section reads - direct mirror of
     pipeline.write_game_picks_export."""
@@ -169,7 +169,16 @@ def write_nfl_game_picks_export(predictions_log_path: str, output_dir: str) -> N
     # model's backtest.
     backtest = pd.read_csv(config.NFL_PICK_CONFIDENCE_BACKTEST_PATH) \
         if os.path.exists(config.NFL_PICK_CONFIDENCE_BACKTEST_PATH) else None
-    nfl_game_evaluation.confidence_table(picks, backtest).to_csv(
+    # Each game's closing moneylines (the persisted schedule), so the with /
+    # against Vegas rows can say what a unit on each pick made.
+    priced = picks
+    if raw_dir is not None and not picks.empty and "season" in picks.columns:
+        lines = [nfl_data.load_persisted_table(raw_dir, "schedules", int(season)) for season in picks["season"].dropna().unique()]
+        lines = [t[["game_id", "home_moneyline", "away_moneyline"]] for t in lines
+                 if t is not None and {"game_id", "home_moneyline", "away_moneyline"}.issubset(t.columns)]
+        if lines:
+            priced = picks.merge(pd.concat(lines).drop_duplicates("game_id"), on="game_id", how="left")
+    nfl_game_evaluation.confidence_table(priced, backtest).to_csv(
         os.path.join(output_dir, "nfl_pick_confidence.csv"), index=False)
 
 
@@ -574,7 +583,7 @@ def run(
                 after["injury_note"] = after["game_id"].map({g: r["note"] for g, r in repriced.items()})
                 nfl_game_predictions.append_game_predictions(after, predictions_log_path)
 
-    write_nfl_game_picks_export(predictions_log_path, output_dir)
+    write_nfl_game_picks_export(predictions_log_path, output_dir, raw_dir)
 
     # Real, honest scoreboard for the props feature itself - written every
     # run so a real hit rate (or a real "not enough resolved picks yet")

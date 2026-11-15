@@ -261,9 +261,8 @@ def total_leans(picks: pd.DataFrame) -> pd.DataFrame:
     out.loc[played & (actual < low), "total_range_result"] = "under"
     out.loc[played & (actual >= low) & (actual <= high), "total_range_result"] = "in"
     out["total_range_miss"] = (actual - high).where(actual > high, (low - actual).where(actual < low, 0.0)).where(played)
-    # The lean's edge: our total minus the line, plus what the line still
-    # misses for the forecast's rain and wind (config.NFL_TOTAL_LEAN_WEATHER;
-    # none indoors or without a forecast).
+    # The lean's edge: our total minus the line, with the forecast's rain
+    # taken back out of our total first (total_lean_weather).
     weather = total_lean_weather(picks)
     edge = predicted - market + weather
     lean = pd.Series(pd.NA, index=picks.index, dtype=object)
@@ -352,6 +351,10 @@ def spread_side_metrics(picks: pd.DataFrame) -> dict:
             "spread_sides_pushed": int((result == "push").sum()),
             "total_lean_backtest_games": config.NFL_TOTAL_LEAN_BACKTEST["games"],
             "total_lean_backtest_won_rate": config.NFL_TOTAL_LEAN_BACKTEST["won_rate"],
+            "total_lean_backtest_units": config.NFL_TOTAL_LEAN_BACKTEST["units"],
+            "total_lean_backtest_winning_seasons": config.NFL_TOTAL_LEAN_BACKTEST["winning_seasons"],
+            "total_lean_backtest_seasons": config.NFL_TOTAL_LEAN_BACKTEST["seasons"],
+            "total_lean_min_gap": config.NFL_TOTAL_LEAN_MIN_GAP,
             "spread_backtest_games": config.NFL_SPREAD_BACKTEST["games"],
             "spread_backtest_won_rate": config.NFL_SPREAD_BACKTEST["won_rate"]}
 
@@ -399,6 +402,24 @@ def confidence_table(picks: pd.DataFrame, backtest: pd.DataFrame | None = None) 
                                ((done["status"] == "win") == home_picked).astype(float),
                                done["market_home_win_probability"])
     table = season.rename(columns={"games": "season_games", "right": "season_right"})
+    # What a unit on every such pick made at the closing moneyline, for the
+    # with / against Vegas rows (the price is what makes those comparable:
+    # a pick against Vegas is an underdog and needs to win far less often).
+    table["season_units"] = float("nan")
+    table["backtest_units"] = float("nan")
+    table["backtest_bets"] = float("nan")
+    if {"home_moneyline", "away_moneyline"}.issubset(done.columns):
+        line = pd.to_numeric(done["home_moneyline"].where(home_picked, done["away_moneyline"]), errors="coerce")
+        profit = (line / 100).where(line > 0, 100 / line.abs()).where(done["status"] == "win", -1.0).where(line.notna())
+        market = pd.to_numeric(done["market_home_win_probability"], errors="coerce")
+        ours_is_favorite = (market > 0.5) == home_picked
+        for label, mask in (("with", ours_is_favorite & (market != 0.5)), ("against", ~ours_is_favorite & (market != 0.5))):
+            row = (table["group"] == "vegas") & (table["label"] == label)
+            table.loc[row, "season_units"] = round(float(profit[mask & market.notna()].sum()), 2)
+    for label, past_bets in config.NFL_VEGAS_SPLIT_BACKTEST.items():
+        row = (table["group"] == "vegas") & (table["label"] == label)
+        table.loc[row, "backtest_units"] = past_bets["units"]
+        table.loc[row, "backtest_bets"] = past_bets["bets"]
     if backtest is not None and not backtest.empty:
         past = backtest.set_index(["group", "label"])
         keys = pd.MultiIndex.from_frame(table[["group", "label"]])
@@ -411,20 +432,19 @@ def confidence_table(picks: pd.DataFrame, backtest: pd.DataFrame | None = None) 
 
 
 def total_lean_weather(picks: pd.DataFrame) -> pd.Series:
-    """Points the forecast's rain and wind add to a lean's edge (negative =
-    toward the under): config.NFL_TOTAL_LEAN_WEATHER times wx_rain (the
-    chance of rain) and wx_wind (mph over 5). 0 indoors and for a game
-    with no forecast."""
+    """Points added back to our total before it is compared with the line:
+    the part of it that came from the forecast's chance of rain. The lean
+    was tested with rain unknown (config.NFL_TOTAL_LEAN_BACKTEST's audit:
+    past games' rain is what fell, not what was forecast, and the line
+    already prices a forecast), so a lean must not rest on it. Positive for
+    an outdoor game with rain in the forecast, else 0."""
     def num(column):
         return pd.to_numeric(picks[column], errors="coerce") if column in picks.columns \
             else pd.Series(float("nan"), index=picks.index)
-    wind, rain, indoor = num("weather_wind"), num("weather_rain"), num("weather_indoor")
+    rain, indoor = num("weather_rain"), num("weather_indoor")
     outdoors = indoor.fillna(0) < 0.5
-    terms = {"wx_wind": (wind - nfl_weather.WIND_FROM_MPH).clip(lower=0), "wx_rain": rain.clip(0, 1)}
-    total = pd.Series(0.0, index=picks.index)
-    for name, x in terms.items():
-        total = total + (config.NFL_TOTAL_LEAN_WEATHER.get(name, 0.0) * x).where(outdoors & x.notna(), 0.0)
-    return total
+    per_team = config.NFL_TOTALS_COEFFICIENTS.get("wx_rain", 0.0)
+    return (-2.0 * per_team * rain.clip(0, 1)).where(outdoors & rain.notna(), 0.0)
 
 
 def total_lean_metrics(picks: pd.DataFrame) -> dict:

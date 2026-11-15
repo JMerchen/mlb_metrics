@@ -415,19 +415,48 @@ def test_tuesday_leans_are_graded_against_the_close_on_their_own():
     assert s["tuesday_total_leans_won"] == 1 and s["total_leans_won"] == 0
 
 
-def test_rain_and_wind_in_the_forecast_add_to_the_lean():
-    base = {"predicted_total": 44.0, "market_total": 47.5, "actual_total": None}
+def test_the_forecasts_rain_is_left_out_of_a_lean():
+    # Our total already has the forecast's rain in it; the lean was tested
+    # without knowing the rain, so it is taken back out before comparing.
+    per_team = config.NFL_TOTALS_COEFFICIENTS["wx_rain"]
+    base = {"predicted_total": 42.0, "market_total": 47.5, "actual_total": None}
     picks = pd.DataFrame([
-        {**base},                                                                   # no forecast: plain gap 3.5, no lean
-        {**base, "weather_indoor": 0, "weather_rain": 0.9, "weather_wind": 12.0},   # rain and wind: under
-        {**base, "weather_indoor": 1, "weather_rain": 0.9, "weather_wind": 12.0},   # indoors: weather doesn't count
+        {**base},                                                                   # no forecast: gap -5.5, under
+        {**base, "weather_indoor": 0, "weather_rain": 0.9, "weather_wind": 12.0},   # most of that gap is the rain: no lean
+        {**base, "weather_indoor": 1, "weather_rain": 0.9, "weather_wind": 12.0},   # indoors: the rain doesn't count
+        {**base, "predicted_total": 40.0, "weather_indoor": 0, "weather_rain": 0.2, "weather_wind": 25.0},   # still 5+ without it
     ])
     out = nfl_game_evaluation.total_leans(picks)
-    assert pd.isna(out.loc[0, "total_lean"]) and pd.isna(out.loc[2, "total_lean"])
-    weather = config.NFL_TOTAL_LEAN_WEATHER["wx_rain"] * 0.9 + config.NFL_TOTAL_LEAN_WEATHER["wx_wind"] * 7
-    assert out.loc[1, "total_lean"] == "under"
-    assert out.loc[1, "total_lean_weather"] == pytest.approx(round(weather, 2))
-    assert out.loc[1, "total_lean_edge"] == pytest.approx(round(-3.5 + weather, 2))
+    back = -2 * per_team * 0.9
+    assert back > 0
+    assert out["total_lean"].fillna("").tolist() == ["under", "", "under", "under"]
+    assert nfl_game_evaluation.total_lean_weather(picks).round(3).tolist() == [0, round(back, 3), 0, round(-2 * per_team * 0.2, 3)]
+    assert out.loc[3, "total_lean_edge"] == pytest.approx(round(-7.5 - 2 * per_team * 0.2, 2))
+    assert out.loc[3, "total_lean_weather"] == pytest.approx(round(-2 * per_team * 0.2, 2))
+    # Wind adds nothing to a lean any more.
+    assert config.NFL_TOTAL_LEAN_WEATHER == {}
+
+
+def test_track_record_units_for_picks_with_and_against_vegas():
+    def pick(game, winner, status, market_home, home_ml, away_ml):
+        return {"season": 2026, "game_id": game, "home_team": "KC", "away_team": "DEN", "predicted_winner": winner,
+                "predicted_probability": 0.6, "status": status, "market_home_win_probability": market_home,
+                "home_moneyline": home_ml, "away_moneyline": away_ml}
+    picks = pd.DataFrame([
+        pick("a", "KC", "win", 0.70, -250, 205),      # with Vegas, won at -250: +0.40
+        pick("b", "KC", "loss", 0.65, -200, 170),     # with Vegas, lost: -1
+        pick("c", "DEN", "win", 0.60, -160, 140),     # against Vegas, won at +140: +1.40
+        pick("d", "DEN", "loss", 0.58, -150, 130),    # against Vegas, lost: -1
+        pick("e", "KC", "pending", 0.70, -250, 205),  # not played: not counted
+    ])
+    table = nfl_game_evaluation.confidence_table(picks).set_index(["group", "label"])
+    assert table.loc[("vegas", "with"), ["season_games", "season_right", "season_units"]].tolist() == [2, 1, -0.6]
+    assert table.loc[("vegas", "against"), ["season_games", "season_right", "season_units"]].tolist() == [2, 1, 0.4]
+    assert table.loc[("vegas", "against"), ["backtest_bets", "backtest_units"]].tolist() == [260, -12.1]
+    assert table.xs("confidence", level="group")["season_units"].isna().all()
+    # Without moneylines the units are blank and nothing breaks.
+    plain = nfl_game_evaluation.confidence_table(picks.drop(columns=["home_moneyline", "away_moneyline"])).set_index(["group", "label"])
+    assert pd.isna(plain.loc[("vegas", "with"), "season_units"]) and plain.loc[("vegas", "with"), "backtest_units"] == -62.5
 
 
 def test_a_tuesday_lean_is_held_when_starters_are_in_doubt_and_uses_tuesdays_forecast():
@@ -437,9 +466,9 @@ def test_a_tuesday_lean_is_held_when_starters_are_in_doubt_and_uses_tuesdays_for
     # g1: Tuesday under 47.5 (our 40), a QB in doubt -> held, on the card too (no Saturday pick yet).
     held = row(g1).assign(injury_report="before", predicted_total=40.0, market_total=47.5,
                           lean_hold="KC QB Patrick Mahomes (questionable on the last report)")
-    # g2: Tuesday 44 vs 47.5 (gap 3.5) with an early forecast of rain -> the weather makes it a lean.
-    rainy = row(g2).assign(injury_report="before", predicted_total=44.0, market_total=47.5,
-                           weather_indoor=0, weather_rain=0.9, weather_wind=10.0)
+    # g2: Tuesday 40 vs 47.5 with an early forecast of rain -> still a lean with the rain left out of it.
+    rainy = row(g2).assign(injury_report="before", predicted_total=40.0, market_total=47.5,
+                           weather_indoor=0, weather_rain=0.4, weather_wind=10.0)
     picks, summary = nfl_game_evaluation.build_game_picks_export(pd.concat([held, rainy], ignore_index=True))
     picks = picks.set_index("game_id")
     assert pd.isna(picks.loc[g1, "total_lean"]) and "Mahomes" in picks.loc[g1, "total_lean_held"]

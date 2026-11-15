@@ -111,6 +111,7 @@ console.log("no nfl_pick_confidence.csv yet", e)
 }
 
 renderNflGamePickStats(summary)
+renderNflBets(picks, summary[0])
 renderNflTrackRecord(confidence, summary[0])
 renderNflTodaysGamePicks(picks, confidence)
 renderNflGamePickHistory(picks)
@@ -590,6 +591,12 @@ html += stat(`${Number(s.points_total_mae).toFixed(1)} pts`, "Our point totals m
 }
 el.innerHTML = html
 
+}
+
+// The recommended bets for the games still to play, with their record.
+function renderNflBets(picks, summary){
+const el = document.getElementById("nflBets")
+if(el){ el.innerHTML = betsPanelHtml(picks, summary) }
 }
 
 // How each kind of pick has done, this season and in testing.

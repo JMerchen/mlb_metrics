@@ -197,16 +197,62 @@ test("NFL totals: where the line closed against our lean", () => {
   assert.match(detail(gamePickRowHtml({ ...g, total_lean_close: 50.5, total_lean_clv: 2 }, "nfl")), /The line closed at 50\.5 - 2 points our way/)
 })
 
-test("NFL totals: a lean's reason, with the weather's part", () => {
+test("NFL totals: a lean's reason leaves the forecast's rain out of it", () => {
   const { totalLeanReason } = require("./summary_render.js")
-  const g = { predicted_total: 42.4, total_lean: "under", total_lean_line: 46.5 }
-  assert.equal(totalLeanReason(g), "We lean under Vegas's 46.5: our total is 4 points lower.")
-  assert.equal(totalLeanReason({ ...g, total_lean_weather: -3.2 }),
-    "We lean under Vegas's 46.5: our total is 4 points lower, and the forecast's rain and wind take off about 3 more.")
-  // Our total right at the line, the weather alone makes the lean.
-  assert.equal(totalLeanReason({ predicted_total: 46.5, total_lean: "under", total_lean_line: 46.5, total_lean_weather: -5.1 }),
-    "We lean under Vegas's 46.5: the forecast's rain and wind take off about 5 points.")
+  const g = { predicted_total: 40.4, total_lean: "under", total_lean_line: 46.5 }
+  assert.equal(totalLeanReason(g), "We lean under Vegas's 46.5: our total is 6 points lower.")
+  // Rain in the forecast took 1.5 off our total; the lean is measured without it.
+  assert.equal(totalLeanReason({ ...g, total_lean_weather: 1.5 }),
+    "We lean under Vegas's 46.5: our total is 5 points lower, leaving the rain in the forecast out of it.")
+  assert.equal(totalLeanReason({ predicted_total: 46.5, total_lean: "under", total_lean_line: 46.5 }), "We lean under Vegas's 46.5.")
   assert.equal(totalLeanReason({}), "")
+})
+
+test("this week's bets: only tested bets, with the worst line and price worth taking, and the record", () => {
+  const { betsPanelHtml, betWorstLine, betPriceFloor } = require("./summary_render.js")
+  global.teamName = require("./teams.js").teamName
+  const flat = html => html.replace(/<[^>]+>/g, " ").replace(/&middot;/g, "·").replace(/\s+/g, " ").trim()
+  const summary = { total_lean_min_gap: "5.0", total_lean_backtest_won_rate: "0.586", total_lean_backtest_games: "174", total_lean_backtest_units: "21.9",
+    total_lean_backtest_winning_seasons: "6", total_lean_backtest_seasons: "7", total_leans_won: "3", total_leans_lost: "1", total_lean_units: "1.73",
+    total_lean_clv_n: "4", total_lean_clv_mean: "0.25" }
+  const over = { status: "pending", home_team: "ARI", away_team: "LA", predicted_total: "47.55", total_lean: "over", total_lean_line: "39.5", total_lean_weather: "0" }
+  const under = { status: "pending", home_team: "CLE", away_team: "HOU", predicted_total: "38.2", total_lean: "under", total_lean_line: "45.5", total_lean_weather: "1.4" }
+  const held = { status: "pending", home_team: "GB", away_team: "MIN", total_lean_held: "the Packers' quarterback is questionable" }
+  const played = { status: "win", home_team: "DAL", away_team: "SF", predicted_total: "50", total_lean: "over", total_lean_line: "44.5" }
+  // Over: our 47.55 less the 5-point gap, down to the half point. Under: our 38.2 plus the 1.4 of rain left out, plus 5, up to the half point.
+  assert.equal(betWorstLine(over, 5), 42.5)
+  assert.equal(betWorstLine(under, 5), 45)
+  assert.equal(betWorstLine({}, 5), null)
+  // 58.6% in testing, shaded halfway to break-even (55.5%): worth -125 or better.
+  assert.equal(betPriceFloor(0.586), -125)
+  assert.equal(betPriceFloor(0.5), null)
+  const panel = flat(betsPanelHtml([over, under, held, played], summary))
+  assert.match(panel, /Over 39\.5 Rams at Cardinals We lean over Vegas's 39\.5: our total is 8 points higher\. Stake 1 unit\. Worth taking at 42\.5 or lower, at -125 or better\./)
+  assert.match(panel, /Under 45\.5 Texans at Browns .*leaving the rain in the forecast out of it\. Stake 1 unit\. Worth taking at 45 or higher, at -125 or better\./)
+  assert.match(panel, /Waiting on the injury report: Vikings at Packers\./)
+  assert.doesNotMatch(panel, /49ers at Cowboys/)                 // already played
+  assert.match(panel, /Bets like these won 58\.6% of 174 in testing \(2019–2025, at the real odds: up 21\.9 units, a winning record in 6 of 7 seasons; 52\.4% breaks even\)\. This season: 3–1, up 1\.73 units\. The line has closed 0\.3 points our way on average after we took it \(4 bets\)\./)
+  assert.match(panel, /they are picks, not bets/)
+  // Nothing to bet: it says so and still shows the record.
+  const empty = flat(betsPanelHtml([held, { status: "pending", home_team: "KC", away_team: "DEN" }], summary))
+  assert.match(empty, /No bets yet this week: no game's total is far enough from Vegas's\./)
+  assert.match(empty, /Bets like these won 58\.6% of 174/)
+  assert.match(flat(betsPanelHtml([played], summary)), /No games left to bet this week\./)
+  assert.match(flat(betsPanelHtml([], {})), /No games left to bet this week\./)
+})
+
+test("track record: with and against Vegas also show units at the closing odds", () => {
+  const { trackRecordTableHtml } = require("./summary_render.js")
+  const flat = html => html.replace(/<[^>]+>/g, " ").replace(/&middot;/g, "·").replace(/\s+/g, " ").trim()
+  const table = [
+    { group: "confidence", label: "75%+", season_games: "23", season_right: "20", backtest_games: "305", backtest_right: "241", season_units: "", backtest_units: "" },
+    { group: "vegas", label: "with", season_games: "106", season_right: "75", backtest_games: "1739", backtest_right: "1180", season_units: "2.77", backtest_units: "-62.5" },
+    { group: "vegas", label: "against", season_games: "31", season_right: "17", backtest_games: "260", backtest_right: "111", season_units: "9.01", backtest_units: "-12.1" },
+  ]
+  const html = flat(trackRecordTableHtml(table, {}))
+  assert.match(html, /We say 75%\+ 20 of 23 87% 79% of 305(?! ·)/)
+  assert.match(html, /We pick Vegas's favorite 75 of 106 71% · \+2\.8 units 68% of 1,739 · −62\.5 units/)
+  assert.match(html, /We pick against Vegas's favorite 17 of 31 55% · \+9\.0 units 43% of 260 · −12\.1 units/)
 })
 
 test("NFL totals: a Tuesday lean on hold for the injury report", () => {
