@@ -5199,6 +5199,39 @@ how rosters from different years would really match up. Rerun the script
 once a year when `config.CBB_SEASON` moves on (pass `--cache` a scratch
 directory: it downloads every season's files).
 
+**Against real betting lines: picks, not bets** (2026-11-15,
+`scripts/research_cbb_vs_lines.py`; a lead of my own - the college model
+had only ever been scored against results). `scripts/backfill_cbb_odds.py`
+(run through `backfill_cbb_odds.yml`; the sandbox cannot reach ESPN) asks
+ESPN's core API for every Division I game's sportsbook spread, total and
+moneylines, one request a game keyed by the schedule's own game id, into
+`data/raw/market_odds/espn_cbb_odds_<season>.parquet`; `cbb_odds.py`
+parses them. 2023-2026 are in: 22,940 games with a DraftKings closing
+line, 16,695 (2024 on) with a usable opening one. Every game was predicted
+from ratings refit that morning.
+
+| | Ours | The closing line |
+| --- | --- | --- |
+| margin off by | 9.08 | 8.87 |
+| total off by | 13.43 | 13.04 |
+
+- Our side of the closing spread: 49.2% of 8,897 at 2+ points apart, 49.1%
+  of 2,500 at 4+, 50.9% of 743 at 6+. No season, month or size of school
+  differs (both teams outside our top 150: 49.5%).
+- Our side of the opening spread: 48.5% of 1,467 at 4+, 50.3% of 384 at
+  6+. The line then moves toward our number more often than away (41% to
+  30%) but by a fifth of a point.
+- Totals: against the close our side loses (47.5% of 3,082 at 6+); against
+  the opener 51.5% of 2,982 at 5+, short of the 52.4% that breaks even.
+- **The trap:** ESPN records some opening spreads with the wrong sign
+  (opened -21.5, closed +21.5). Left in, our side of the "opening" spread
+  read 55.9% of 508 at 6+ and 61.7% of 193 at 8+ - all of it from 124
+  games whose line "moved" 4+ points. `with_lines` drops an opener that
+  far from the close. Anything that looks like an edge against these
+  openers should be checked the same way.
+
+So there is no college bet, and the Games tab says its picks are picks.
+
 **Not in it yet**: injuries, and the committee's actual selection rules
 before the bracket is out.
 
@@ -5321,6 +5354,19 @@ injury report for non-quarterbacks (snap share of players out; log loss
 0.6224 from 0.6226, t 0.1). Windy-game unders (`--wind`): 54.9% of 1,882
 outdoor games with 10+ mph at kickoff since 1999 (57.7% of 359 in
 2020-26), measured with the kickoff reading, which a bettor does not have.
+
+The same recipe does not carry over to over/unders (2026-11-15,
+exploratory): scoring ratings for each offense and defense, moved by every
+result and pulled toward what past closing totals and spreads implied each
+team would score, 6,600 games 2002-2026. Across twelve settings they
+missed the total by 10.7-11.1 points against the line's 10.56, and what
+they said beyond the closing total pointed the wrong way (t -1.6 to -2.4;
+our side at 4+ points apart 47-50%). Recent scoring is something the
+market already has, and slightly overweights. The over/under lean stays
+with the play-by-play model. This season's live check on that lean so
+far: on 58 Tuesday picks with a line and a result, the total then moved
+toward our number 28% of the time and away 36% - no confirmation yet
+either way, and too few to read.
 
 On the site: `apply_ml_model` keeps the rating's own margin
 (`model_margin`, its gap at 25 Elo points a point) beside the chance,
