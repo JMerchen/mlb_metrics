@@ -506,6 +506,63 @@ def test_spread_sides_put_our_margin_next_to_the_spread_and_grade_the_side():
     assert metrics["spread_backtest_games"] == config.NFL_SPREAD_BACKTEST["games"]
 
 
+def test_spread_bet_is_the_side_when_the_models_margin_is_far_from_the_line():
+    gap = config.NFL_SPREAD_BET_MIN_GAP
+    picks = pd.DataFrame([
+        # The model has KC by 1; Vegas by 6.5: DEN +6.5 is a bet. KC won by 3 -> won. The line closed at 5.5: a point our way.
+        {"home_team": "KC", "away_team": "DEN", "predicted_winner": "KC", "predicted_probability": 0.70,
+         "model_margin": 1.0, "market_spread": 6.5, "closing_spread": 5.5, "actual_margin": 3},
+        # The model has MIA by 2; Vegas has BUF by 3 (-3 at home): MIA +3 is a bet. MIA lost by 7 -> lost. Closed -4: a point against.
+        {"home_team": "MIA", "away_team": "BUF", "predicted_winner": "BUF", "predicted_probability": 0.55,
+         "model_margin": 2.0, "market_spread": -3.0, "closing_spread": -4.0, "actual_margin": -7},
+        # One point inside the rule: a side, not a bet.
+        {"home_team": "SF", "away_team": "LA", "predicted_winner": "SF", "predicted_probability": 0.60,
+         "model_margin": 4.0, "market_spread": 4.0 + gap - 1.0, "closing_spread": None, "actual_margin": 10},
+        # Exactly at the rule, not played yet.
+        {"home_team": "DAL", "away_team": "NYG", "predicted_winner": "DAL", "predicted_probability": 0.60,
+         "model_margin": 3.0 + gap, "market_spread": 3.0, "closing_spread": None, "actual_margin": None},
+        # A pick from before v5: no model margin, so never a bet however far the chance is from the line.
+        {"home_team": "SEA", "away_team": "ARI", "predicted_winner": "SEA", "predicted_probability": 0.90,
+         "model_margin": None, "market_spread": 1.0, "closing_spread": None, "actual_margin": 20},
+        # Far from the line, but the Jets changed quarterbacks: a side, not a bet. And a change with a close line is nothing.
+        {"home_team": "NYJ", "away_team": "NE", "predicted_winner": "NE", "predicted_probability": 0.60,
+         "model_margin": -1.0, "market_spread": -7.0, "closing_spread": None, "actual_margin": -3, "qb_change": "NYJ"},
+        {"home_team": "CHI", "away_team": "GB", "predicted_winner": "GB", "predicted_probability": 0.60,
+         "model_margin": -1.0, "market_spread": -2.0, "closing_spread": None, "actual_margin": -3, "qb_change": "GB"},
+    ])
+    out = nfl_game_evaluation.spread_sides(picks)
+    assert out["predicted_margin"].tolist()[:4] == [1.0, 2.0, 4.0, 3.0 + gap]
+    assert out["spread_bet"].tolist()[:2] == ["DEN", "MIA"] and pd.isna(out["spread_bet"][2])
+    assert out["spread_bet"][3] == "DAL" and pd.isna(out["spread_bet"][4])
+    assert pd.isna(out["spread_bet"][5]) and out["spread_bet_skip"][5] == "NYJ" and out["spread_side"][5] == "NYJ"
+    assert pd.isna(out["spread_bet"][6]) and pd.isna(out["spread_bet_skip"][6])
+    assert out["spread_bet_skip"].iloc[:5].isna().all()
+    assert out["spread_side"][4] == "SEA" and out["spread_result"][4] == "win"
+    assert out["spread_bet_result"].tolist()[:2] == ["win", "loss"]
+    assert pd.isna(out["spread_bet_result"][2]) and pd.isna(out["spread_bet_result"][3])
+    assert out["spread_bet_clv"].tolist()[:2] == [1.0, -1.0] and pd.isna(out["spread_bet_clv"][3])
+    metrics = nfl_game_evaluation.spread_side_metrics(out)
+    assert (metrics["spread_bets_won"], metrics["spread_bets_lost"]) == (1, 1)
+    assert metrics["spread_bet_units"] == pytest.approx(round(100 / 110 - 1, 2))
+    assert metrics["spread_bet_clv_n"] == 2 and metrics["spread_bet_clv_mean"] == pytest.approx(0.0)
+    assert metrics["spread_bet_backtest_games"] == config.NFL_SPREAD_BET_BACKTEST["games"]
+    assert metrics["spread_bet_min_gap"] == gap
+
+
+def test_a_spread_bet_waits_for_the_injury_report_when_a_starter_is_in_doubt():
+    predictions = _predictions()
+    predictions["model_margin"] = 0.0
+    predictions["market_spread"] = 9.0
+    predictions["lean_hold"] = pd.NA
+    predictions.loc[predictions.index[0], "lean_hold"] = "QB questionable"
+    picks, summary = nfl_game_evaluation.build_game_picks_export(predictions)
+    held = picks[picks["game_id"] == predictions["game_id"].iloc[0]].iloc[0]
+    assert pd.isna(held["spread_bet"]) and held["spread_bet_held"] == "QB questionable"
+    others = picks[picks["game_id"] != predictions["game_id"].iloc[0]]
+    assert others["spread_bet"].notna().all() and others["spread_bet_held"].isna().all()
+    assert (others["spread_bet"] == others["away_team"]).all()   # the model has it even; Vegas has the home team by 9
+
+
 def test_confidence_counts_by_how_sure_and_by_siding_with_vegas():
     #            home chance, home won, Vegas home chance
     games = [(0.52, 1, 0.60), (0.58, 0, 0.45), (0.30, 0, 0.40), (0.80, 1, None), (0.75, 0, 0.70), (0.55, 1, 0.50)]

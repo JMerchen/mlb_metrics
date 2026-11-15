@@ -5271,6 +5271,68 @@ that had won every one of its last three or more covered 47.7% of 333
 0.6232). The ratings already hold the reason one team kept beating the
 other. Exploratory run, not kept as a script.
 
+**v5 against the point spread: a bet when it disagrees by 3.5+ and no one changed quarterbacks**
+(2026-11-15, `scripts/research_nfl_spread_edge.py`; the first lead that
+was not the user's - "investigate outside of what I've told you"). v5 was
+built to pick winners, and on its own 8 seasons its bigger disagreements
+with the closing spread looked good and proved nothing (54.8% of 250, t
+1.5). But the rating needs only scores, quarterback box scores and past
+closing lines, all public since 1999, so it was replayed over 2002-2026:
+6,636 games, 17 of the seasons never seen when its settings were chosen.
+
+| Our margin vs the closing spread | Bets | Won | Units at -110 |
+| --- | --- | --- | --- |
+| every game | 6,464 | 51.5% | -110.5 |
+| 2+ points apart | 2,564 | 52.6% | +11.4 |
+| 3+ | 1,293 | 53.6% | +30.0 |
+| **3.5+ (the rule)** | **885** | **54.6%** | **+37.1** (15 of 25 seasons) |
+| 4+ | 591 | 55.2% | +31.4 |
+| 5+ | 289 | 54.3% | +10.7 |
+
+By era at 3.5+: 2002-10 51.4% of 370, 2011-18 56.7% of 275, 2019-26 57.1%
+of 240. The real margin regressed on the closing line and our margin
+together gives ours +0.315 (t 4.1; 2.0 / 3.8 / 1.6 by era; 3.8 with a
+flexible curve in the line). Controls:
+- *Only the underdog?* 90% of the bets are underdogs, but every underdog
+  blindly covered 51.0% of 6,445 (-164 units), and within underdogs our
+  gap sorts them: 49.2% when we like the favorite, 50.9%, 51.3%, then
+  55.0% of 795 at 3.5+. With our margins stretched as wide as the line's,
+  54.5% of 861.
+- *Quarterback news the line was slow on?* The reverse. With both teams
+  starting the quarterback who started their last game: **55.6% of 567,
+  +34.4 units, 16 of 25 seasons** (t 3.8 beyond the line; 51.4% / 58.5% /
+  59.1% by era). With a change: 52.8% of 318, +2.7 units (t 1.4). A new
+  starter is where a box-score rating knows least and the line most, so
+  **the rule skips those games** and the 567 is the record the site shows.
+- *One lucky setting?* The rule's record moves (52.2-55.0% across nine
+  neighbouring settings) but the regression's t stays 2.9-4.3. Read it as
+  "about 53-55%".
+- **The caution:** 2023-26 went 44-41 (19-19 without quarterback changes).
+  The market may have caught up; the site says so next to the bets and
+  grades every one.
+
+On the same bets the moneyline was worse than the points overall (-0.3% a
+bet against +6.8%), better when our side was a small underdog (priced
+33-45%: +20% a bet on 163 against +12%), and far worse on big ones (under
+20%: -34%). That matches moneylines in general, 2006-26: a unit on every
+side priced 33-45% made +1.3% a bet over 2,070; every other band lost, the
+longshots 16.7% a bet. Also tested and adding nothing to v5: this week's
+injury report for non-quarterbacks (snap share of players out; log loss
+0.6224 from 0.6226, t 0.1). Windy-game unders (`--wind`): 54.9% of 1,882
+outdoor games with 10+ mph at kickoff since 1999 (57.7% of 359 in
+2020-26), measured with the kickoff reading, which a bettor does not have.
+
+On the site: `apply_ml_model` keeps the rating's own margin
+(`model_margin`, its gap at 25 Elo points a point) beside the chance,
+because the chance is later deferred to Vegas and recalibrated;
+`nfl_game_evaluation.spread_sides` makes the side a `spread_bet` at
+`NFL_SPREAD_BET_MIN_GAP` unless `nfl_game_picks.quarterback_changes` names
+a team (`qb_change` in the log; a backup the injury report puts in counts,
+and moves the margin by the model's own quarterback swap), held for the
+injury report when a starter is in doubt; "This week's bets" lists them
+with the worst number worth taking, and the track record grades them. Picks from before v5 have no
+`model_margin` and are never bets.
+
 **How it is wired.** `assemble_team_metrics(qb_elo_weekly_df=...)` runs the
 ratings over every season on file and carries the state on the team
 table; `build_game_features_v5` gives `qb_elo_base`, `home_qb_elo_adj` and

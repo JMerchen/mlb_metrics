@@ -263,34 +263,53 @@ return -Math.round(100 * p / (1 - p) / 5) * 5
 }
 
 // The bets panel: this week's recommended bets (games not yet played with
-// a lean), any waiting on the injury report, and the record behind them.
+// a spread bet or an over/under lean), any waiting on the injury report,
+// and the record behind each kind.
 function betsPanelHtml(picks, summary){
 const s = summary || {}
 const minGap = srNum(s.total_lean_min_gap) || 5
+const sideGap = srNum(s.spread_bet_min_gap) || 3.5
 const rate = srNum(s.total_lean_backtest_won_rate), tested = srNum(s.total_lean_backtest_games) || 0
+const sideRate = srNum(s.spread_bet_backtest_won_rate), sideTested = srNum(s.spread_bet_backtest_games) || 0
 const upcoming = (picks || []).filter(g => g.status === "pending")
+const sides = upcoming.filter(g => spreadBet(g, "nfl"))
 const bets = upcoming.filter(g => totalLean(g))
-const held = upcoming.filter(g => !totalLean(g) && g.total_lean_held)
-const floor = betPriceFloor(rate)
+const held = upcoming.filter(g => (!totalLean(g) && g.total_lean_held) || (!spreadBet(g, "nfl") && g.spread_bet_held))
+const floor = betPriceFloor(rate), sideFloor = betPriceFloor(sideRate)
 const name = code => typeof teamName === "function" ? teamName(code, "nfl") : code
+const game = g => `<span class="betGame">${srEsc(name(g.away_team))} at ${srEsc(name(g.home_team))}</span>`
+const sideRows = sides.map(g => {
+const bet = spreadBet(g, "nfl"), worst = spreadBetWorstLine(g, sideGap)
+return `<div class="betRow">
+<div class="betMain"><b>${srEsc(bet.team)} ${bet.number}</b> ${game(g)}</div>
+<div class="betWhy">${srEsc(spreadBetReason(g, "nfl"))}</div>
+<div class="betTerms">Stake 1 unit.${worst ? ` Worth taking at ${worst} or better` : ""}${sideFloor ? `${worst ? "," : ""} at ${sideFloor} or better.` : "."}</div>
+</div>`
+}).join("")
 const rows = bets.map(g => {
 const lean = totalLean(g), worst = betWorstLine(g, minGap)
 return `<div class="betRow">
-<div class="betMain"><b>${lean.side === "over" ? "Over" : "Under"} ${lean.line}</b> <span class="betGame">${srEsc(name(g.away_team))} at ${srEsc(name(g.home_team))}</span></div>
+<div class="betMain"><b>${lean.side === "over" ? "Over" : "Under"} ${lean.line}</b> ${game(g)}</div>
 <div class="betWhy">${srEsc(totalLeanReason(g))}</div>
 <div class="betTerms">Stake 1 unit.${worst !== null ? ` Worth taking at ${lean.side === "over" ? `${worst} or lower` : `${worst} or higher`}` : ""}${floor ? `${worst !== null ? "," : ""} at ${floor} or better.` : "."}</div>
 </div>`
 }).join("")
 const waiting = held.length ? `<div class="betHeld">Waiting on the injury report: ${held.map(g => `${srEsc(name(g.away_team))} at ${srEsc(name(g.home_team))}`).join("; ")}.</div>` : ""
-const won = srNum(s.total_leans_won) || 0, lost = srNum(s.total_leans_lost) || 0, units = srNum(s.total_lean_units)
-const season = won + lost ? ` This season: ${won}–${lost}${units !== null ? `, ${units > 0 ? "up" : units < 0 ? "down" : "even at"} ${Math.abs(units).toFixed(2)} units` : ""}.` : ""
-const clvN = srNum(s.total_lean_clv_n) || 0
-const clv = clvN ? ` The line has closed ${Math.abs(srNum(s.total_lean_clv_mean) || 0).toFixed(1)} points ${(srNum(s.total_lean_clv_mean) || 0) >= 0 ? "our way" : "against us"} on average after we took it (${clvN} bet${clvN === 1 ? "" : "s"}).` : ""
-const record = rate !== null && tested ? `<div class="betRecord">Bets like these won <b>${Math.round(1000 * rate) / 10}% of ${tested}</b> in testing (2019–2025, at the real odds: ${srNum(s.total_lean_backtest_units) > 0 ? "up" : "down"} ${Math.abs(srNum(s.total_lean_backtest_units) || 0)} units, a winning record in ${s.total_lean_backtest_winning_seasons} of ${s.total_lean_backtest_seasons} seasons; 52.4% breaks even).${season}${clv}</div>` : ""
-const none = !bets.length ? `<div class="betNone">${upcoming.length ? "No bets yet this week: no game's total is far enough from Vegas's." : "No games left to bet this week."}</div>` : ""
+const seasonText = (w, l, units) => w + l ? ` This season: ${w}–${l}${units !== null ? `, ${units > 0 ? "up" : units < 0 ? "down" : "even at"} ${Math.abs(units).toFixed(2)} units` : ""}.` : ""
+const closeText = (n, mean) => n ? ` The line has closed ${Math.abs(mean || 0).toFixed(1)} points ${(mean || 0) >= 0 ? "our way" : "against us"} on average after we took it (${n} bet${n === 1 ? "" : "s"}).` : ""
+const upDown = v => `${srNum(v) > 0 ? "up" : "down"} ${Math.abs(srNum(v) || 0)} units`
+const season = seasonText(srNum(s.total_leans_won) || 0, srNum(s.total_leans_lost) || 0, srNum(s.total_lean_units))
+const clv = closeText(srNum(s.total_lean_clv_n) || 0, srNum(s.total_lean_clv_mean))
+const record = rate !== null && tested ? `<div class="betRecord"><b>Over/unders.</b> Bets like these won <b>${Math.round(1000 * rate) / 10}% of ${tested}</b> in testing (2019–2025, at the real odds: ${upDown(s.total_lean_backtest_units)}, a winning record in ${s.total_lean_backtest_winning_seasons} of ${s.total_lean_backtest_seasons} seasons; 52.4% breaks even).${season}${clv}</div>` : ""
+const recentWon = srNum(s.spread_bet_recent_won), recentLost = srNum(s.spread_bet_recent_lost)
+const recent = recentWon !== null && recentLost !== null ? ` The caution: ${s.spread_bet_recent_seasons} went only ${recentWon}–${recentLost}, so treat it as a thinner edge than the over/unders.` : ""
+const sideSeason = seasonText(srNum(s.spread_bets_won) || 0, srNum(s.spread_bets_lost) || 0, srNum(s.spread_bet_units))
+const sideClv = closeText(srNum(s.spread_bet_clv_n) || 0, srNum(s.spread_bet_clv_mean))
+const sideRecord = sideRate !== null && sideTested ? `<div class="betRecord"><b>Spreads.</b> Sides ${sideGap} or more points from the line, in games where neither team changed quarterbacks, won <b>${Math.round(1000 * sideRate) / 10}% of ${sideTested}</b> against the closing spread in testing (${s.spread_bet_backtest_first_season}–${s.spread_bet_backtest_last_season}: ${upDown(s.spread_bet_backtest_units)}, a winning record in ${s.spread_bet_backtest_winning_seasons} of ${s.spread_bet_backtest_seasons} seasons).${recent}${sideSeason}${sideClv}</div>` : ""
+const none = !bets.length && !sides.length ? `<div class="betNone">${upcoming.length ? "No bets yet this week: no game's spread or total is far enough from ours." : "No games left to bet this week."}</div>` : ""
 return `<div class="betsPanel">
-${rows}${none}${waiting}${record}
-<div class="betFine">We only recommend what has beaten the closing line in testing, and so far that is over/unders where our total sits ${minGap} or more points from Vegas's. Take them early: when our number and the opening line disagreed, the line moved toward us about four times as often as away. Our game winners and spread sides have not beaten the closing line, so they are picks, not bets.</div>
+${sideRows}${rows}${none}${waiting}${sideRecord}${record}
+<div class="betFine">We only recommend what has beaten the closing line in testing: spread sides where our margin sits ${sideGap} or more points from Vegas's, and over/unders where our total sits ${minGap} or more from theirs. Take them early: when our number and the opening line disagreed, the line moved toward us far more often than away. We skip a spread bet the week either team changes quarterbacks (those only broke even in testing). Most spread bets are underdogs; when ours is a big one, take the points, not the moneyline, which has lost 17% a bet on longshots since 2006. Our game winners alone have not beaten the closing line, so they are picks, not bets.</div>
 </div>`
 }
 
@@ -356,8 +375,57 @@ const done = {win: ", covered", loss: ", didn't cover", push: ", push"}[s.result
 return `Spread: Vegas has ${srEsc(s.vegas)}&nbsp;&middot; we have ${srEsc(s.ours)}${s.side ? ` (our side: ${srEsc(s.side)} ${s.sideLine}${done})` : ""}`
 }
 
-// Why the spread line is context and not a lean.
-const SPREAD_NOTE = "Our side of the spread has been a coin flip in testing (about half of 1,900 past games), so read it as context, not a lean."
+// A spread side that is a bet: our model's margin sits far enough from the
+// line (config.NFL_SPREAD_BET_MIN_GAP; the pipeline decides and sends
+// spread_bet). {team, number, gap, result, clv} or null.
+function spreadBet(g, sport){
+const s = spreadInfo(g, sport)
+if(!s || !(g.spread_bet === g.home_team || g.spread_bet === g.away_team)){ return null }
+return {team: srTeam(g.spread_bet, sport), home: g.spread_bet === g.home_team, number: s.sideLine,
+gap: Math.abs(s.margin - s.line), result: g.spread_bet_result || "", clv: srNum(g.spread_bet_clv)}
+}
+
+// The worst number still worth betting, as our team's line ("+3" or
+// "−2.5"): the spread that leaves our margin exactly the rule's gap from
+// it, to the safe half point.
+function spreadBetWorstLine(g, minGap){
+const bet = spreadBet(g, "nfl")
+const margin = srNum(g.predicted_margin)
+if(!bet || margin === null){ return "" }
+// Home-team terms: a home bet needs the home team favored by no more than
+// our margin less the gap; a road bet, by no less than our margin plus it.
+const homeLine = bet.home ? Math.floor((margin - minGap) * 2) / 2 : Math.ceil((margin + minGap) * 2) / 2
+const number = bet.home ? -homeLine : homeLine
+return number === 0 ? "pick'em" : `${number > 0 ? "+" : "−"}${srPoints(number)}`
+}
+
+// Why a spread side is a bet: "We have the Chiefs by 1; Vegas has them by
+// 6.5. That is 5.5 points apart."
+function spreadBetReason(g, sport){
+const s = spreadInfo(g, sport), bet = spreadBet(g, sport)
+if(!s || !bet){ return "" }
+const gap = Math.round(bet.gap * 2) / 2
+return `Vegas has ${s.vegas}; we have ${s.ours}. That is ${srPoints(gap)} points apart.`
+}
+
+// Under the spread line on a card: why this side is, or isn't, a bet.
+function spreadNote(g, sport){
+if(spreadBet(g, sport)){ return "Our margin is far enough from the line for this side to be a bet: sides like it have beaten the closing line in testing." }
+if(g.spread_bet_held){ return `Our margin is far enough from the line to bet this side, but it waits for the injury report: ${g.spread_bet_held}.` }
+if(g.spread_bet_skip){
+const teams = String(g.spread_bet_skip).split(", ").map(code => srTeam(code, sport))
+return `Our margin is far from the line here, but the ${teams.join(" and the ")} are starting a different quarterback from last game. We don't bet those: our rating knows a new starter least, and in testing those bets only broke even.`
+}
+return "Close to the line our side has been a coin flip in testing, so here it is context, not a bet."
+}
+
+// "Bet Broncos +6.5", and once played "won" / "lost" / "push".
+function spreadBetBadgeHtml(g, sport){
+const bet = spreadBet(g, sport)
+if(!bet){ return "" }
+const done = {win: " · won", loss: " · lost", push: " · push"}[bet.result] || ""
+return `<span class="leanBadge lean-side${bet.result ? ` lean-${bet.result}` : ""}">Bet ${srEsc(bet.team)} ${bet.number}${done}</span>`
+}
 
 // The players out on one side, from "Name (QB), Name (WR)".
 function srOutList(text){
@@ -477,10 +545,13 @@ tested(srNum(r.backtest_right) || 0, srNum(r.backtest_games) || 0) + units(r.bac
 const pair = (won, lost, rate, games, label) => {
 const w = srNum(won) || 0, l = srNum(lost) || 0, n = srNum(games) || 0, r = srNum(rate)
 if(!(w + l) && !n){ return }
-rows.push([label, cell(w, w + l), n && r !== null ? `${Math.round(100 * r)}% <span class="dim">of ${n.toLocaleString("en-US")}</span>` : "-"])
+rows.push([label, cell(w, w + l), n && r !== null ? `${Math.round(1000 * r) / 10}% <span class="dim">of ${n.toLocaleString("en-US")}</span>` : "-"])
 }
 pair(s.total_leans_won, s.total_leans_lost, s.total_lean_backtest_won_rate, s.total_lean_backtest_games, "Over/under leans")
-pair(s.spread_sides_won, s.spread_sides_lost, s.spread_backtest_won_rate, s.spread_backtest_games, "Our side of the spread")
+if(srNum(s.spread_bet_backtest_games)){
+pair(s.spread_bets_won, s.spread_bets_lost, s.spread_bet_backtest_won_rate, s.spread_bet_backtest_games, `Spread bets (${srNum(s.spread_bet_min_gap) || 3.5}+ points from the line, no quarterback change)`)
+}
+pair(s.spread_sides_won, s.spread_sides_lost, s.spread_backtest_won_rate, s.spread_backtest_games, "Our side of the spread, every game")
 if(!rows.length){ return "" }
 return `<table class="trackRecord">
 <thead><tr><th>When</th><th>This season</th><th>In testing</th></tr></thead>
@@ -525,6 +596,7 @@ return `<details class="game${report ? ` report-${report}` : ""}">
 <span class="prob">We say <b>${pick} ${srPct(g.predicted_probability)}</b>${vegas !== null ? `<span class="mkt">&nbsp;&middot; Vegas ${srPct(vegas)}</span>` : ""}</span>
 ${weather && !weather.indoor ? `<span class="wxIcon wxPeek" title="${srEsc(weather.label)}" aria-hidden="true">${weather.icon}</span>` : ""}
 ${bet}
+${sport === "nfl" ? spreadBetBadgeHtml(g, sport) : ""}
 ${sport === "nfl" ? totalLeanBadgeHtml(g) : ""}
 <span class="gameMore" aria-hidden="true"></span>
 </summary>
@@ -533,7 +605,7 @@ ${pickBarHtml(g, sport)}
 ${track ? `<div class="totalNote trackNote">${srEsc(track)}</div>` : ""}
 ${sport === "nfl" ? pickReasonsHtml(g, sport) : ""}
 ${sport === "nfl" ? injuryLineHtml(g, sport) : ""}
-${spread ? `<div class="total">${spread}</div><div class="totalNote">${SPREAD_NOTE}</div>` : ""}
+${spread ? `<div class="total">${spread}</div><div class="totalNote">${srEsc(spreadNote(g, sport))}</div>` : ""}
 ${weatherLine}
 ${total ? `<div class="total">${total}</div>` : ""}
 ${total && srNum(g.predicted_total_low) !== null ? `<div class="totalNote">About half of games finish inside our range.</div>` : ""}
@@ -560,6 +632,6 @@ srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, game
 srWeather, pickBarHtml, totalLean, totalLeanBadgeHtml, totalRangeNote, totalLeanCloseNote, totalLeanReason,
 betWorstLine, betPriceFloor, betsPanelHtml,
 btsSeasonOver, btsSeasonOverHtml,
-teamEpaHtml, spreadInfo, spreadText, pickReasons, pickReasonsHtml, injuryLineHtml, trackRecordNote, trackRecordTableHtml,
+teamEpaHtml, spreadInfo, spreadText, spreadBet, spreadBetWorstLine, spreadBetReason, spreadNote, spreadBetBadgeHtml, pickReasons, pickReasonsHtml, injuryLineHtml, trackRecordNote, trackRecordTableHtml,
 }
 }

@@ -600,3 +600,54 @@ def test_listed_starters_stay_without_a_roster_or_any_starts_this_season():
     weekly = pd.concat([weekly, pd.DataFrame([_qb_week("hurts", "PHI", 1, 30)])], ignore_index=True)
     games.loc[0, "week"] = 2
     assert nfl_game_picks.correct_listed_starters(games, weekly, None).equals(games)
+
+
+def test_apply_ml_model_keeps_the_rating_models_own_margin(monkeypatch, tmp_path):
+    # The v5 model's chance is an Elo curve of its gap, so the margin kept
+    # beside it is that gap in points: 100 Elo points at 25 a point = 4.
+    model_path = tmp_path / "model.joblib"
+    nfl_game_picks.ml_models.save_model(
+        {"model": nfl_game_picks.ml_models.BlendedWinModel([(nfl_game_picks.ml_models.EloGapModel(),
+                                                             nfl_game_picks.QB_ELO_FEATURE_COLUMNS)]),
+         "feature_columns": nfl_game_picks.V5_FEATURE_COLUMNS}, str(model_path))
+    monkeypatch.setattr(nfl_game_picks.config, "NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH", str(model_path))
+    features = pd.DataFrame([
+        {"game_id": "g1", "qb_elo_base": 60.0, "home_qb_elo_adj": 30.0, "away_qb_elo_adj": -10.0},
+        {"game_id": "g2", "qb_elo_base": -50.0, "home_qb_elo_adj": 0.0, "away_qb_elo_adj": None},
+    ])
+    monkeypatch.setattr(nfl_game_picks, "resolve_feature_builder", lambda columns: lambda *args: features)
+    start = pd.DataFrame([{"game_id": "g1", "home_win_probability": 0.5}, {"game_id": "g2", "home_win_probability": 0.4}])
+
+    result = nfl_game_picks.apply_ml_model(start, pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame())
+
+    assert result["model_margin"][0] == pytest.approx(100.0 / nfl_game_picks.config.NFL_QB_ELO_POINTS)
+    assert result["home_win_probability"][0] == pytest.approx(1 / (1 + 10 ** (-100 / 400)))
+    # A game the model couldn't rate keeps its chance and gets no margin.
+    assert result["home_win_probability"][1] == pytest.approx(0.4) and pd.isna(result["model_margin"][1])
+    # The later deferral to Vegas changes the chance, not the margin.
+    market = pd.DataFrame([{"home_team": "A", "away_team": "B", "market_home_win_probability": 0.2}])
+    deferred = nfl_game_picks.apply_market_tiebreak(result.assign(home_team=["A", "C"], away_team=["B", "D"]), market, 0.2)
+    assert deferred["home_win_probability"][0] == pytest.approx(0.2)
+    assert deferred["model_margin"][0] == pytest.approx(4.0)
+
+
+def test_quarterback_changes_names_teams_starting_someone_new():
+    past = pd.DataFrame([
+        {"season": 2025, "week": 18, "gameday": "2026-01-04", "game_id": "a", "home_team": "KC", "away_team": "DEN",
+         "home_score": 20, "away_score": 17, "home_qb_id": "old_kc", "away_qb_id": "nix"},
+        {"season": 2026, "week": 1, "gameday": "2026-09-10", "game_id": "b", "home_team": "KC", "away_team": "LV",
+         "home_score": 24, "away_score": 10, "home_qb_id": "mahomes", "away_qb_id": "smith"},
+        # Not played yet: doesn't count as anyone's last game.
+        {"season": 2026, "week": 2, "gameday": "2026-09-17", "game_id": "c", "home_team": "DEN", "away_team": "LV",
+         "home_score": None, "away_score": None, "home_qb_id": "someone", "away_qb_id": "else"},
+    ])
+    games = pd.DataFrame([
+        {"home_team": "KC", "away_team": "DEN", "home_qb_id": "mahomes", "away_qb_id": "nix"},      # both the same as last time
+        {"home_team": "LV", "away_team": "KC", "home_qb_id": "rookie", "away_qb_id": "mahomes"},    # the Raiders changed
+        {"home_team": "DEN", "away_team": "LV", "home_qb_id": "backup", "away_qb_id": None},        # one changed, one unlisted
+        {"home_team": "NYJ", "away_team": "KC", "home_qb_id": "fields", "away_qb_id": "mahomes"},   # no earlier Jets game on file
+    ], index=[10, 11, 12, 13])
+    changes = nfl_game_picks.quarterback_changes(games, past)
+    assert changes.tolist() == ["", "LV", "DEN, LV", ""]
+    assert list(changes.index) == [10, 11, 12, 13]
+    assert nfl_game_picks.quarterback_changes(games.iloc[:1], pd.DataFrame()).tolist() == [""]

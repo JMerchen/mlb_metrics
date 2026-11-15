@@ -508,11 +508,10 @@ def unit_pcts(team: dict, out_ids, data: dict) -> dict:
     return pcts
 
 
-def home_probability(game: dict, data: dict, out: dict | None = None, qbs: dict | None = None) -> float:
-    """The page's whatifProbability: the game's pre-report probability moved
-    by the model's change to the chosen QBs and by the absences `out`
-    ({"home": ids, "away": ids}) at their defaults."""
-    out = out or {"home": set(), "away": set()}
+def qb_log_odds_shift(game: dict, qbs: dict | None = None) -> float:
+    """How far the model's log-odds for the home team move when the listed
+    starters are swapped for `qbs` ({"home": id, "away": id}; a side left
+    out keeps its listed starter). 0 for a pairing the model didn't rate."""
     qbs = qbs or {}
 
     def listed(side):
@@ -522,7 +521,16 @@ def home_probability(game: dict, data: dict, out: dict | None = None, qbs: dict 
     pairs = game.get("pairing_log_odds", {})
     listed_key = f"{listed('home')}|{listed('away')}"
     chosen_key = f"{qbs.get('home') or listed('home')}|{qbs.get('away') or listed('away')}"
-    qb_shift = pairs[chosen_key] - pairs[listed_key] if chosen_key in pairs and listed_key in pairs else 0.0
+    return pairs[chosen_key] - pairs[listed_key] if chosen_key in pairs and listed_key in pairs else 0.0
+
+
+def home_probability(game: dict, data: dict, out: dict | None = None, qbs: dict | None = None) -> float:
+    """The page's whatifProbability: the game's pre-report probability moved
+    by the model's change to the chosen QBs and by the absences `out`
+    ({"home": ids, "away": ids}) at their defaults."""
+    out = out or {"home": set(), "away": set()}
+
+    qb_shift = qb_log_odds_shift(game, qbs)
 
     def net(side):
         team = game[side]
@@ -597,7 +605,9 @@ def apply_injury_report(data: dict, report: pd.DataFrame, rosters: pd.DataFrame 
     stored on the game as "injury_report" {"out": {side: [ids]}, "qb":
     {side: id}, "note"} with the probability that gives ("posted_probability").
     A listed QB who's out is replaced by his team's next QB option. Returns
-    {game_id: {"probability", "note"}} for the games it changed or confirmed."""
+    {game_id: {"probability", "note", "qb_log_odds_shift", "qb_teams"}} for
+    the games it changed or confirmed - the model's own move for the
+    quarterback change alone (0 without one) and the teams it changed."""
     if report is None or report.empty or not {"gsis_id", "report_status"} <= set(report.columns):
         return {}
     out_report = report[report["report_status"].isin(REPORT_OUT_STATUSES)]
@@ -634,7 +644,9 @@ def apply_injury_report(data: dict, report: pd.DataFrame, rosters: pd.DataFrame 
         entry["note"] = ", ".join(entry["note"])
         game["injury_report"] = entry
         game["posted_probability"] = round(probability, 4)
-        results[game["game_id"]] = {"probability": probability, "note": entry["note"]}
+        results[game["game_id"]] = {"probability": probability, "note": entry["note"],
+                                    "qb_log_odds_shift": qb_log_odds_shift(game, entry["qb"]),
+                                    "qb_teams": [game[side]["team"] for side in ("home", "away") if side in entry["qb"]]}
     return results
 
 
