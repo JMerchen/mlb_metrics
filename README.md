@@ -5212,6 +5212,20 @@ betting against the Cowboys was up 5.64 units through nine games (5 bets
 won, helped by Tampa Bay at +400), second only to betting against the
 winless Chargers (+8.22).
 
+**MLB too** (same day: "Can we add the same thing to the MLB schedule
+view?"): `team_schedule.team_games` takes the ESPN closing lines that
+`scripts/backfill_historical_odds.py` saves
+(`data/raw/market_odds/espn_mlb_odds_<season>.parquet`; 2026 was
+backfilled for this) and matches them to games by date and teams, a
+doubleheader in start-time order (`game_moneylines`; on 2025 it matched
+2,427 of 2,430 games, and on 2026 2,428 of 2,429). The Stats page's schedule sheet shows the same two
+bets per game, with the last 10 games beside each total
+(`MLB_BET_TREND_GAMES`; three games of baseball is noise). The shared
+arithmetic is in `mlb_render.js` (`seasonBets`, `seasonBetsHtml`), which
+the NFL sheet now uses as well. The daily update fetches the last week's
+closing lines before it builds the schedules, so next season fills in as
+it goes.
+
 ## Step In: a batting game (`docs/batting.html`, `batting_game.js`, `batting.js`)
 
 User request (2026-11-11): "something a little more interactive for the

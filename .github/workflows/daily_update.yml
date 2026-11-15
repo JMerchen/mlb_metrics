@@ -78,6 +78,15 @@ jobs:
         run: |
           python scripts/build_mlb_sim_profiles.py || echo "::warning::MLB simulation profiles not rebuilt"
 
+      # The schedule sheet's "one unit on the opponent every game" needs each
+      # game's closing moneyline. Only the last week is asked for (dates
+      # already saved are skipped), ending yesterday so every game is final.
+      - name: Fetch recent closing odds
+        run: |
+          python scripts/backfill_historical_odds.py --season "$(date -u +%Y)" \
+            --start "$(date -u -d '7 days ago' +%F)" --end "$(date -u -d 'yesterday' +%F)" \
+            || echo "::warning::Closing odds not updated"
+
       - name: Build team schedules
         run: |
           python scripts/build_team_schedules.py

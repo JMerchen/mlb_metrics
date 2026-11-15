@@ -826,6 +826,64 @@ const rgb = result === "W" ? mix([112, 192, 132], [8, 110, 46]) : mix([232, 132,
 return `rgb(${rgb.join(",")})`
 }
 
+// ---- A unit a game: betting on a team's opponent, or on the team ----
+// Shared by the MLB schedule sheet here and the NFL one (nfl_stats.js).
+
+// What a one-unit bet wins at American odds (+140 wins 1.4, -170 wins 0.59), or null with no line.
+function betProfit(moneyline){
+const m = moneyline === "" || moneyline === null || moneyline === undefined ? NaN : Number(moneyline)
+if(!Number.isFinite(m) || m === 0){ return null }
+return m > 0 ? m / 100 : 100 / -m
+}
+
+// "+140" / "−170", or "" with no line.
+function betLineText(moneyline){
+const m = Number(moneyline)
+return betProfit(moneyline) === null ? "" : `${m > 0 ? "+" : "−"}${Math.abs(Math.round(m))}`
+}
+
+// One unit every game on this team's opponent to win, and one on the team
+// itself, at each game's moneyline: {against: {units, bets, won, recent:
+// {units, bets, won}}, on: {...}}. `games` are the team's played games in
+// order, each with result (W/L/T), moneyline and opponent_moneyline.
+// `recent` is the same bet over only the last `trend` games, so a season
+// total built early doesn't hide that it has turned. Games without a line
+// are skipped; a tie returns the stake.
+function seasonBets(games, trend){
+const total = list => list.reduce((sum, g) => ({units: sum.units + g.units, bets: sum.bets + 1, won: sum.won + (g.won ? 1 : 0)}), {units: 0, bets: 0, won: 0})
+const side = (line, wins) => {
+const list = []
+;(games || []).forEach(g => {
+const profit = betProfit(g[line])
+if(profit === null || !["W", "L", "T"].includes(g.result)){ return }
+list.push({won: g.result === wins, units: g.result === wins ? profit : g.result === "T" ? 0 : -1})
+})
+return {...total(list), recent: total(list.slice(-trend))}
+}
+return {against: side("opponent_moneyline", "L"), on: side("moneyline", "W")}
+}
+
+// "up 5.64 units", "down 2.34 units", "even".
+function betUnitsText(units){
+const shown = Math.abs(units).toFixed(2)
+return shown === "0.00" ? "even" : `${units > 0 ? "up" : "down"} ${shown} unit${shown === "1.00" ? "" : "s"}`
+}
+
+// The two lines on a schedule sheet: the season total of each bet and,
+// once there are more games than the trend looks back, the last few on
+// their own. `each` is "week" or "game". "" when no game has a line.
+function seasonBetsHtml(bets, team, each){
+if(!bets.against.bets){ return "" }
+const tone = units => units > 0.004 ? "betUp" : units < -0.004 ? "betDown" : ""
+const lately = b => b.bets > b.recent.bets ? `; last ${b.recent.bets === 3 ? "three" : b.recent.bets} games: <b class="${tone(b.recent.units)}">${betUnitsText(b.recent.units)}</b>` : ""
+return `<div class="paperBets"><div>One unit on their opponent to win every ${each}: <b class="${tone(bets.against.units)}">${betUnitsText(bets.against.units)}</b> (${bets.against.won} of ${bets.against.bets} bets won)${lately(bets.against)}.</div>
+<div>One unit on the ${mlbEsc(team)} every ${each}: <b class="${tone(bets.on.units)}">${betUnitsText(bets.on.units)}</b>${lately(bets.on)}. <span class="paperBetsNote">At each game's closing odds.</span></div></div>`
+}
+
+// How many games back the MLB schedule sheet's "lately" figure looks (the
+// NFL's looks back three; ten games is about a week and a half of baseball).
+const MLB_BET_TREND_GAMES = 10
+
 // Each team's games grouped into its series, in order.
 function scheduleSeries(games, team){
 const series = []
@@ -848,7 +906,9 @@ const win = g.result === "W"
 const ink = scheduleInk(g.result, g.run_diff)
 const where = String(g.home) === "1" ? "vs." : "at"
 const score = `${win ? "W" : "L"} ${g.runs_for}-${g.runs_against}`
-const tip = `${mlbShortDate(g.date)} ${where} ${mlbTeam(g.opponent)}: ${score}`
+const odds = betLineText(g.moneyline) && betLineText(g.opponent_moneyline)
+? ` (${mlbTeam(g.team)} ${betLineText(g.moneyline)}, ${mlbTeam(g.opponent)} ${betLineText(g.opponent_moneyline)} to win)` : ""
+const tip = `${mlbShortDate(g.date)} ${where} ${mlbTeam(g.opponent)}: ${score}${odds}`
 const mark = win
 ? `<ellipse cx="20" cy="20" rx="16.5" ry="15.5" transform="rotate(-12 20 20)" />`
 : `<path d="M7 8 L33 32 M33 7 L8 33" />`
@@ -881,7 +941,7 @@ return `<div class="paperHead">
 <div class="paperTeam">${mlbLogo(team, "lg", true)}<div><b>${mlbEsc(mlbTeam(team))}</b><small>${wins}-${all.length - wins} · run differential ${diff > 0 ? "+" : diff < 0 ? "−" : ""}${Math.abs(diff)} · won ${won} of ${series.length} series${lost + won < series.length ? `, split ${series.length - won - lost}` : ""}</small></div></div>
 <div class="paperKey"><span>Won by</span>${[1, 5, 9].map(m => `<svg viewBox="0 0 40 40" class="schedMark schedWin" style="stroke:${scheduleInk("W", m)}"><ellipse cx="20" cy="20" rx="16.5" ry="15.5" transform="rotate(-12 20 20)"/></svg><small>${m === 9 ? "9+" : m}</small>`).join("")}
 <span>Lost by</span>${[1, 5, 9].map(m => `<svg viewBox="0 0 40 40" class="schedMark schedLoss" style="stroke:${scheduleInk("L", -m)}"><path d="M7 8 L33 32 M33 7 L8 33"/></svg><small>${m === 9 ? "9+" : m}</small>`).join("")}</div>
-</div>
+${seasonBetsHtml(seasonBets(all, MLB_BET_TREND_GAMES), mlbTeam(team), "game")}</div>
 <div class="paperPanels">${columns.map(panel).join("")}</div>`
 }
 
@@ -948,5 +1008,6 @@ TEAM_PROFILE_GROUPS, teamRank, teamRecord, teamStatText, powerRankingsHtml, team
 playerCardHtml, playerSuggestionsHtml, hitterSplitsHtml, pitcherLeadersHtml, stuffLeadersHtml, stuffByPitchHtml,
 hitChanceFromWave, hitterStatRows, sortHitterStatRows, hitterStatsTableHtml, adjustmentNote,
 scheduleInk, scheduleSeries, scheduleSheetHtml, scheduleTeamPickerHtml,
+betProfit, betLineText, seasonBets, betUnitsText, seasonBetsHtml, MLB_BET_TREND_GAMES,
 }
 }
