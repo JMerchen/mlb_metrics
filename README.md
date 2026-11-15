@@ -5232,6 +5232,13 @@ from ratings refit that morning.
 
 So there is no college bet, and the Games tab says its picks are picks.
 
+Nor do past lines improve the ratings the way they did the NFL model
+(exploratory, 2025-2026, 11,500 games): each past game's score blended
+with what its closing spread and total implied before the ratings were
+fit. At 40% line the margin miss went from 9.13 to 9.10 and the log loss
+from 0.5269 to 0.5262 (the line itself: 8.87 and 0.5134); at 70% and 100%
+it got worse. Not worth a daily odds fetch; the ratings are unchanged.
+
 **Not in it yet**: injuries, and the committee's actual selection rules
 before the bracket is out.
 
