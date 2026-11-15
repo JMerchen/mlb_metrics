@@ -343,7 +343,21 @@ enough, sized by fractional Kelly in units.</p>
 
 <div class="methodCard">
 <h3>NFL game picks</h3>
-<p>The average of two models. The first is a logistic regression on each team's Pythagorean strength,
+<p>Two halves, averaged. One half is a quarterback-adjusted Elo: a team
+rating that moves with every result (more for a big win, a third of the way
+back to average each offseason), where each game's expectation also counts
+who is starting at quarterback. Every quarterback has a running rating from
+his box scores (yards, touchdowns and completions for; interceptions and
+sacks against; his rushing too), measured against the defenses he faced, and
+so does every team for whoever has been playing the position. A starter
+above his team's usual level lifts its chance and a backup lowers it, so the
+team rating means "this team with its normal quarterback play". This is the
+design the best public models use, and adding it was the biggest gain our
+picks have had: in a replay of 1,999 games since 2019, with only what was
+known before each one, it picked 22 more winners and was more accurate in
+every one of the eight seasons. Vegas is still more accurate than we
+are.</p>
+<p>The other half is itself the average of two models. The first is a logistic regression on each team's Pythagorean strength,
 schedule-adjusted confidence, EPA per play on offense and allowed on defense
 (per play, so a defense isn't judged by how many snaps it faced), turnover
 margin and points per drive, plus each starting QB's QB+. The second predicts

@@ -761,6 +761,7 @@ def assemble_team_metrics(
     schedules_df: pd.DataFrame, team_stats_df: pd.DataFrame, pbp_df: pd.DataFrame, current_season: int = None,
     carryover_regression: float = None, carryover_prior_strength: float = None, season_aware: bool = False,
     opponent_adjustment_weight: float = None, elo_schedules_df: pd.DataFrame = None,
+    qb_elo_weekly_df: pd.DataFrame = None,
 ) -> pd.DataFrame:
     """Build the final NFL team output table - direct structural port of
     teams.assemble_team_metrics. See module docstring for the full
@@ -789,7 +790,9 @@ def assemble_team_metrics(
     "config default, explicit override" pattern (None ->
     config.NFL_OPPONENT_ADJUSTMENT_WEIGHT) letting
     scripts/backtest_nfl_opponent_adjustment.py sweep candidates the same
-    way. `elo_schedules_df` is every completed game to rate teams' Elo
+    way. `qb_elo_weekly_df` (player weekly stats for as many of those
+    seasons as there are) adds the quarterback-adjusted Elo's columns and
+    state. `elo_schedules_df` is every completed game to rate teams' Elo
     from (`compute_elo_ratings` - as many seasons back as there are, where
     `schedules_df` is only last season and this one); without it Elo
     starts from `schedules_df`. The table also carries `elo` and
@@ -879,4 +882,18 @@ def assemble_team_metrics(
         "games_played", "win_rate", "win_rate_CI_Low", "win_rate_CI_High",
         "elo", *PASS_RUSH_COLUMNS,
     ]
-    return master[output_columns]
+    # The quarterback-adjusted Elo (nfl_qb_elo.py): each team's rating with
+    # its usual quarterback play and that usual level, plus the whole
+    # state on the table's attrs so a game's features can look up its two
+    # listed starters (nfl_game_picks.build_game_features_v5).
+    state = None
+    if qb_elo_weekly_df is not None:
+        from mlb_metrics import nfl_qb_elo
+        state = nfl_qb_elo.rate(schedules_df if elo_schedules_df is None else elo_schedules_df, qb_elo_weekly_df, current_season)
+        master["qb_elo"] = today.map(state.elo).fillna(config.NFL_ELO_START).to_numpy()
+        master["qb_team_value"] = today.map(state.team_value).fillna(config.NFL_QB_ELO_LEAGUE_VALUE).to_numpy()
+        output_columns += ["qb_elo", "qb_team_value"]
+    out = master[output_columns].copy()
+    if state is not None:
+        out.attrs["qb_elo_state"] = state
+    return out

@@ -199,6 +199,20 @@ def _elo_schedules(raw_dir: str, fresh_schedules: pd.DataFrame, season: int, wee
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
+def _qb_elo_weekly(raw_dir: str, fresh_weekly: pd.DataFrame, season: int, week: int) -> pd.DataFrame:
+    """Player weekly stats for the quarterback-adjusted Elo (nfl_qb_elo.py):
+    each earlier season on file since ELO_FIRST_SEASON, plus this season's
+    weeks before `week` - the same games _elo_schedules covers."""
+    frames = []
+    for earlier in range(ELO_FIRST_SEASON, season):
+        table = nfl_data.load_persisted_table(raw_dir, "weekly", earlier)
+        if table is not None and not table.empty:
+            frames.append(table)
+    if fresh_weekly is not None and not fresh_weekly.empty and "week" in fresh_weekly.columns:
+        frames.append(fresh_weekly[(fresh_weekly["season"] == season) & (fresh_weekly["week"] < week)])
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
 def _history_before(fresh: dict, prior_season: dict, week: int, rosters_through: int | None = None) -> dict:
     """Last season's tables plus this season's strictly before `week` -
     no lookahead for the week-scoped tables (schedules/team_stats/weekly/
@@ -249,6 +263,7 @@ def _write_last_week_whatif(fresh: dict, prior_season: dict, season: int, week: 
     master = nfl_team_strength.assemble_team_metrics(
         history["schedules"], history["team_stats"], history["pbp"], current_season=season,
         elo_schedules_df=_elo_schedules(raw_dir, schedules, season, last),
+        qb_elo_weekly_df=_qb_elo_weekly(raw_dir, fresh["weekly"], season, last),
     )
     qb_continuity = nfl_team_strength.compute_qb_continuity_adjustment(
         history["snap_counts"], history["weekly"], history["rosters_weekly"]
@@ -375,6 +390,7 @@ def run(
             master = nfl_team_strength.assemble_team_metrics(
                 history["schedules"], history["team_stats"], history["pbp"], current_season=season,
                 elo_schedules_df=_elo_schedules(raw_dir, schedules, season, week),
+                qb_elo_weekly_df=_qb_elo_weekly(raw_dir, fresh["weekly"], season, week),
             )
             qb_continuity = nfl_team_strength.compute_qb_continuity_adjustment(
                 history["snap_counts"], history["weekly"], history["rosters_weekly"]

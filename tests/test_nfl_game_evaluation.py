@@ -452,11 +452,12 @@ def test_track_record_units_for_picks_with_and_against_vegas():
     table = nfl_game_evaluation.confidence_table(picks).set_index(["group", "label"])
     assert table.loc[("vegas", "with"), ["season_games", "season_right", "season_units"]].tolist() == [2, 1, -0.6]
     assert table.loc[("vegas", "against"), ["season_games", "season_right", "season_units"]].tolist() == [2, 1, 0.4]
-    assert table.loc[("vegas", "against"), ["backtest_bets", "backtest_units"]].tolist() == [260, -12.1]
+    against = config.NFL_VEGAS_SPLIT_BACKTEST["against"]
+    assert table.loc[("vegas", "against"), ["backtest_bets", "backtest_units"]].tolist() == [against["bets"], against["units"]]
     assert table.xs("confidence", level="group")["season_units"].isna().all()
     # Without moneylines the units are blank and nothing breaks.
     plain = nfl_game_evaluation.confidence_table(picks.drop(columns=["home_moneyline", "away_moneyline"])).set_index(["group", "label"])
-    assert pd.isna(plain.loc[("vegas", "with"), "season_units"]) and plain.loc[("vegas", "with"), "backtest_units"] == -62.5
+    assert pd.isna(plain.loc[("vegas", "with"), "season_units"]) and plain.loc[("vegas", "with"), "backtest_units"] == config.NFL_VEGAS_SPLIT_BACKTEST["with"]["units"]
 
 
 def test_a_tuesday_lean_is_held_when_starters_are_in_doubt_and_uses_tuesdays_forecast():

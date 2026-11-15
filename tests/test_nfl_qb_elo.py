@@ -1,0 +1,95 @@
+import numpy as np
+import pandas as pd
+import pytest
+
+from mlb_metrics import config, ml_models, nfl_game_picks, nfl_qb_elo
+
+
+def _line(season, week, team, player, attempts=30, completions=20, yards=250, tds=2, ints=0, sacks=2, carries=3, rush=10, rush_tds=0):
+    return {"season": season, "week": week, "season_type": "REG", "team": team, "player_id": player, "attempts": attempts,
+            "completions": completions, "passing_yards": yards, "passing_tds": tds, "passing_interceptions": ints,
+            "sacks_suffered": sacks, "carries": carries, "rushing_yards": rush, "rushing_tds": rush_tds}
+
+
+def _game(season, week, home, away, home_score, away_score, home_qb="H", away_qb="A", game_id=None):
+    return {"season": season, "week": week, "game_type": "REG", "game_id": game_id or f"{season}_{week:02d}_{away}_{home}",
+            "home_team": home, "away_team": away, "home_score": home_score, "away_score": away_score,
+            "home_qb_id": home_qb, "away_qb_id": away_qb, "location": "Home"}
+
+
+def test_qb_game_value_is_fivethirtyeights_formula():
+    weekly = pd.DataFrame([_line(2026, 1, "KC", "QB1"), _line(2026, 1, "KC", "RB1", attempts=0), _line(2026, 1, "SD", "QB2", ints=2)])
+    values = nfl_qb_elo.qb_game_values(weekly).set_index("player_id")
+    expected = -2.2 * 30 + 3.7 * 20 + 250 / 5 + 11.3 * 2 - 8 * 2 - 1.1 * 3 + 0.6 * 10
+    assert values.loc["QB1", "value"] == pytest.approx(expected)
+    assert values.loc["QB2", "value"] == pytest.approx(expected - 14.1 * 2)
+    assert values.loc["QB2", "team"] == "LAC"                    # an old team code maps to today's
+    assert "RB1" not in values.index                              # no pass attempts: not a quarterback game
+    assert nfl_qb_elo.qb_game_values(pd.DataFrame()).empty
+
+
+def test_ratings_move_only_on_games_already_played_and_record_the_pregame_gap():
+    schedules = pd.DataFrame([
+        _game(2025, 1, "KC", "DEN", 31, 10, "MAHOMES", "NIX"),
+        _game(2025, 2, "DEN", "KC", 17, 20, "NIX", "MAHOMES"),
+        _game(2025, 3, "KC", "DEN", None, None, "MAHOMES", "NIX"),      # not played: ignored
+    ])
+    weekly = pd.DataFrame([
+        _line(2025, 1, "KC", "MAHOMES", yards=350, tds=4), _line(2025, 1, "DEN", "NIX", yards=150, tds=0, ints=2),
+        _line(2025, 2, "KC", "MAHOMES", yards=300, tds=2), _line(2025, 2, "DEN", "NIX", yards=200, tds=1),
+    ])
+    state, gaps = nfl_qb_elo.rate(schedules, weekly, record=True)
+    assert len(gaps) == 2
+    # Before anything was played both teams are average and both QBs are new: only home field separates them.
+    assert gaps.iloc[0]["qb_elo_gap"] == pytest.approx(config.NFL_QB_ELO_HOME_EDGE)
+    assert state.elo["KC"] > config.NFL_ELO_START > state.elo["DEN"]
+    assert state.elo["KC"] + state.elo["DEN"] == pytest.approx(2 * config.NFL_ELO_START)   # what one gains the other loses
+    assert state.qb_value["MAHOMES"] > state.new_qb_value() and state.qb_value["MAHOMES"] > state.qb_value["NIX"]
+    # A backup the ratings have never seen costs Kansas City; its own starter is worth what he's been above the team's level.
+    assert state.qb_adjustment("KC", "BACKUP") < state.qb_adjustment("KC", "MAHOMES")
+    assert state.qb_adjustment("KC", None) == 0.0
+    assert state.gap("KC", "DEN", "BACKUP", "NIX") < state.gap("KC", "DEN", "MAHOMES", "NIX")
+    assert state.gap("KC", "DEN", neutral=True) == pytest.approx(state.gap("KC", "DEN") - config.NFL_QB_ELO_HOME_EDGE)
+    table = state.team_table().set_index("team")
+    assert table.loc["KC", "qb_elo"] == pytest.approx(state.elo["KC"]) and table.loc["KC", "qb_team_value"] > table.loc["DEN", "qb_team_value"]
+
+
+def test_a_new_season_pulls_ratings_back_toward_average():
+    schedules = pd.DataFrame([_game(2025, 1, "KC", "DEN", 40, 3)])
+    during = nfl_qb_elo.rate(schedules, pd.DataFrame())
+    after = nfl_qb_elo.rate(schedules, pd.DataFrame(), current_season=2026)
+    gap_during = during.elo["KC"] - config.NFL_ELO_START
+    assert after.elo["KC"] - config.NFL_ELO_START == pytest.approx(gap_during * config.NFL_ELO_SEASON_KEEP)
+    assert nfl_qb_elo.rate(pd.DataFrame(), pd.DataFrame()).elo == {}
+    # Without weekly stats the Elo still runs; nobody gets a quarterback adjustment.
+    assert during.qb_value == {} and during.qb_adjustment("KC", None) == 0.0
+
+
+def test_gap_to_probability_is_the_elo_curve_and_the_model_member_adds_its_columns():
+    assert nfl_qb_elo.gap_to_probability(0) == pytest.approx(0.5)
+    assert nfl_qb_elo.gap_to_probability(400) == pytest.approx(10 / 11)
+    X = pd.DataFrame({"qb_elo_base": [100.0, 0.0], "home_qb_elo_adj": [20.0, 0.0], "away_qb_elo_adj": [-30.0, 50.0]})
+    p = ml_models.EloGapModel().predict_proba(X)[:, 1]
+    assert p[0] == pytest.approx(nfl_qb_elo.gap_to_probability(150.0))      # 100 + 20 - (-30)
+    assert p[1] == pytest.approx(nfl_qb_elo.gap_to_probability(-50.0))
+    assert ml_models.EloGapModel().predict_proba(X).sum(axis=1) == pytest.approx([1.0, 1.0])
+
+
+def test_v5_columns_are_v4s_plus_the_elo_and_resolve_to_their_builder():
+    assert nfl_game_picks.V5_FEATURE_COLUMNS == nfl_game_picks.BLEND_FEATURE_COLUMNS + nfl_game_picks.QB_ELO_FEATURE_COLUMNS
+    assert nfl_game_picks.resolve_feature_builder(nfl_game_picks.V5_FEATURE_COLUMNS) is nfl_game_picks.build_game_features_v5
+    assert nfl_game_picks.qb_elo_state(pd.DataFrame({"team": ["KC"]})) is None
+
+
+def test_the_saved_model_is_v5_and_its_walk_forward_file_shows_the_gain():
+    artifact = ml_models.load_model(config.NFL_GAME_PICK_WIN_PROBABILITY_MODEL_PATH)
+    assert artifact["feature_columns"] == nfl_game_picks.V5_FEATURE_COLUMNS
+    members = artifact["model"].members
+    assert len(members) == 2 and isinstance(members[1][0], ml_models.EloGapModel)
+    assert members[0][1] == nfl_game_picks.BLEND_FEATURE_COLUMNS and members[1][1] == nfl_game_picks.QB_ELO_FEATURE_COLUMNS
+    assert config.NFL_GAME_PICK_MODEL_VERSION == "v5"
+    scored = pd.read_csv("data/backtest/nfl_win_model_v4_walk_forward.csv").dropna(subset=["v5", "market"])
+    scored = scored[scored["home_won"].isin([0, 1])]
+    loss = lambda column: float(-(scored["home_won"] * np.log(scored[column]) + (1 - scored["home_won"]) * np.log(1 - scored[column])).mean())
+    assert loss("v5") < loss("new") - 0.004          # the recorded result: 0.6242 against 0.6307
+    assert loss("market") < loss("v5")               # and Vegas is still ahead

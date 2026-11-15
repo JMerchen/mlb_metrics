@@ -2330,7 +2330,11 @@ NFL_PICK_CONFIDENCE_BACKTEST_PATH = "data/backtest/nfl_pick_confidence_backtest.
 # real picks made under this new logic - same "never silently rewrite
 # already-logged history" discipline as MLB's own model_version bumps.
 # v2 -> v3 (2026-11-01): offensive/defensive edges per play, model retrained.
-NFL_GAME_PICK_MODEL_VERSION = "v4"
+NFL_GAME_PICK_MODEL_VERSION = "v5"
+# v5 (2026-11-15): v4 averaged with a quarterback-adjusted Elo
+# (nfl_qb_elo.py). Walk-forward 2019-2026 (1,999 games): log loss 0.6307 ->
+# 0.6242 (t 3.7, better in all 8 seasons), 1,284 -> 1,306 winners; Vegas
+# 0.6094 and 1,332. scripts/train_nfl_qb_elo_blend.py.
 # v4 (2026-11-10, "which [NFL models] can you improve"): the win chance is
 # the plain average of two models (ml_models.BlendedWinModel) - v3's logistic
 # regression, and a ridge regression of the final MARGIN (home minus away
@@ -2354,6 +2358,14 @@ NFL_ELO_START = 1505.0
 NFL_ELO_K = 20.0
 NFL_ELO_HOME_EDGE = 48.0
 NFL_ELO_SEASON_KEEP = 2 / 3
+# The quarterback-adjusted Elo (nfl_qb_elo.py, 2026-11-15): FiveThirtyEight's
+# settings except the home edge and a new quarterback's starting value.
+NFL_QB_ELO_HOME_EDGE = 40.0        # Elo points; home field has shrunk from the classic 48
+NFL_QB_ELO_QB_WEIGHT = 3.3         # Elo points per point of quarterback value
+NFL_QB_ELO_QB_GAMES = 10.0         # a quarterback's rating moves a tenth of the way to each new game
+NFL_QB_ELO_TEAM_GAMES = 20.0       # a team's and a defense's, a twentieth
+NFL_QB_ELO_LEAGUE_VALUE = 50.0     # an average team's quarterback value in a game (50.6 over 2016-2026)
+NFL_QB_ELO_NEW_QB_SHARE = 0.4      # a quarterback not seen before starts at this share of it
 # Pass and rush EPA per play: each team's last 17, 8 and 4 games (weights
 # as NFL_TOTALS_WINDOWS), each window pulled toward the league rate by this
 # many plays.
@@ -2475,7 +2487,9 @@ NFL_TOTAL_LEAN_BACKTEST = {"games": 174, "won_rate": 0.586, "units": 21.9, "winn
 # to Vegas (NFL_GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD). Both lose about
 # the bookmaker's cut; neither is a bet on its own. (The model's raw picks,
 # without that deferral: 1,691 bets -53.2 and 308 bets -10.7.)
-NFL_VEGAS_SPLIT_BACKTEST = {"with": {"bets": 1739, "units": -62.5}, "against": {"bets": 260, "units": -12.1}}
+# v5 (2026-11-15): with Vegas 1,780 bets -55.9 units; against 219 bets,
+# 45.2% right, -3.0 units. (v4 had been 1,739 at -62.5 and 260 at -12.1.)
+NFL_VEGAS_SPLIT_BACKTEST = {"with": {"bets": 1780, "units": -55.9}, "against": {"bets": 219, "units": -3.0}}
 # Our margin next to Vegas's point spread (nfl_game_evaluation.spread_sides):
 # the win chance read back off a normal curve this many points wide (the
 # margin model's own miss, scripts/train_nfl_elo_margin_model.py). Shown as

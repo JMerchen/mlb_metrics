@@ -399,6 +399,14 @@ def pairing_log_odds(master, qb_continuity, weekly, games: pd.DataFrame, options
     if artifact is not None and {"home_qb_plus", "away_qb_plus"} <= set(artifact["feature_columns"]):
         columns = artifact["feature_columns"]
         features = nfl_game_picks.resolve_feature_builder(columns)(master, qb_continuity, weekly, games)
+        # The quarterback-adjusted Elo's part of each option: his own
+        # adjustment, or a league-average quarterback's for "Average starter".
+        state = nfl_game_picks.qb_elo_state(master)
+
+        def elo_adjustment(team, qb_id):
+            team = nfl_totals._canonical(pd.Series([team])).iloc[0]
+            return state.average_qb_adjustment(team) if qb_id == AVERAGE_QB_ID else state.qb_adjustment(team, qb_id)
+
         rows, keys = [], []
         for _, f in features.iterrows():
             if f[columns].drop(["home_qb_plus", "away_qb_plus"]).isna().any():
@@ -407,7 +415,11 @@ def pairing_log_odds(master, qb_continuity, weekly, games: pd.DataFrame, options
                 for a in options.get(f["away_team"], []):
                     if h["qb_plus"] is None or a["qb_plus"] is None:
                         continue
-                    rows.append({**f.to_dict(), "home_qb_plus": h["qb_plus"], "away_qb_plus": a["qb_plus"]})
+                    row = {**f.to_dict(), "home_qb_plus": h["qb_plus"], "away_qb_plus": a["qb_plus"]}
+                    if state is not None and "home_qb_elo_adj" in columns:
+                        row["home_qb_elo_adj"] = elo_adjustment(f["home_team"], h["id"])
+                        row["away_qb_elo_adj"] = elo_adjustment(f["away_team"], a["id"])
+                    rows.append(row)
                     keys.append((f["game_id"], f"{h['id']}|{a['id']}"))
         if not rows:
             return {}

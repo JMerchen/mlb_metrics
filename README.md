@@ -5202,6 +5202,65 @@ directory: it downloads every season's files).
 **Not in it yet**: injuries, and the committee's actual selection rules
 before the bracket is out.
 
+## NFL win model v5: a quarterback-adjusted Elo (`nfl_qb_elo.py`, `scripts/train_nfl_qb_elo_blend.py`)
+
+User feedback (2026-11-15), after the bets research changed nothing in the
+model: "all you did to the model was correct a number." So the model was
+measured against the best public one we could find and the difference
+taken apart.
+
+**What was found.** On the 1,766 games both rated, the public nfelo model
+scored a log loss of 0.6197 against our v4's 0.6305 (Vegas 0.6081).
+Splitting nfelo into its parts: its team ratings alone scored 0.6300 - no
+better than ours - and adding its quarterback adjustment took it to
+0.6197. The whole gap was the quarterback adjustment FiveThirtyEight
+designed, which rates the listed starter against what his team has been
+getting at the position. Our QB+ term rates the starter on his own.
+
+**What was tried first and did not help** (all walk-forward against the
+closing line): thirteen groups of richer play-by-play inputs for the
+totals model (success rate, explosive plays, drive results, pass and rush
+splits, pass rate over expected, pace, sacks and turnovers, third downs,
+early downs, rest, penalties, red zone, depth of target - none beat the
+live model's 58.6% of 174 on 5-point gaps, and all of them together were
+worse); 25 years of market-bias angles for totals and sides (home
+underdogs, primetime, weather, fading hot teams: 52% on totals, nothing
+dependable on sides); ratings built from past closing lines (0.6485
+alone, nothing added to ours). These were exploratory runs and are
+not kept as scripts; the comparison with nfelo that led to v5 can be
+rerun from `scripts/research_nfl_bets.py`'s cached file.
+
+**What was built.** `nfl_qb_elo.py` is that design from our own data: a
+standard Elo whose every expectation includes each listed starter's
+adjustment (3.3 Elo points per point of quarterback value above or below
+his team's running level), with quarterback values from the weekly box
+scores, adjusted for the defense faced. FiveThirtyEight's settings, except
+home field at 40 Elo points and a new quarterback starting at 0.4 of the
+league's value; fifteen variations all landed within 0.002.
+
+**Result** (walk-forward by construction, 1,999 games 2019-2026):
+
+| | log loss | winners |
+|---|---|---|
+| v4 | 0.6307 | 1,284 |
+| QB-adjusted Elo alone | 0.6242 | 1,299 |
+| **v5: the two averaged** | **0.6242** | **1,306** |
+| Vegas | 0.6094 | 1,332 |
+
+v5 beats v4 by 0.0065 (t 3.7) and in all 8 seasons - about a third of the
+distance v4 was from Vegas, and more than twice v3 -> v4's gain. Its picks
+against Vegas come out near break-even at the closing moneyline (219 bets,
+-3.0 units; v4's were -12.1 on 260). It is still not a bet on winners.
+
+**How it is wired.** `assemble_team_metrics(qb_elo_weekly_df=...)` runs the
+ratings over every season on file and carries the state on the team
+table; `build_game_features_v5` adds `qb_elo_base`, `home_qb_elo_adj` and
+`away_qb_elo_adj`; the saved model is `BlendedWinModel` of the v4 model and
+`ml_models.EloGapModel` (nothing fit); What if? swaps a quarterback's
+adjustment along with his QB+ (`nfl_whatif.pairing_log_odds`).
+`NFL_GAME_PICK_MODEL_VERSION` is v5, so picks logged from here are tracked
+separately from v4's.
+
 ## NFL bets: what holds up (`scripts/research_nfl_bets.py`, the Picks tab's "This week's bets")
 
 User request (2026-11-14): "The point of the site is to act as a quant

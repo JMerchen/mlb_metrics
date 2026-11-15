@@ -365,6 +365,43 @@ def build_game_features_blend(
     return games[["game_id", "season", "week", "home_team", "away_team"] + BLEND_FEATURE_COLUMNS]
 
 
+# The live v5 model (2026-11-15) averages v4 with the quarterback-adjusted
+# Elo (nfl_qb_elo.py, read by ml_models.EloGapModel): the Elo gap with home
+# field, and each listed starter's adjustment kept one column a side so
+# the What if? panel can swap a quarterback.
+QB_ELO_FEATURE_COLUMNS = ["qb_elo_base", "home_qb_elo_adj", "away_qb_elo_adj"]
+V5_FEATURE_COLUMNS = BLEND_FEATURE_COLUMNS + QB_ELO_FEATURE_COLUMNS
+
+
+def qb_elo_state(master: pd.DataFrame):
+    """The nfl_qb_elo.QbEloState carried on `master`
+    (nfl_team_strength.assemble_team_metrics), or None."""
+    return getattr(master, "attrs", {}).get("qb_elo_state")
+
+
+def build_game_features_v5(
+    master: pd.DataFrame, qb_continuity: pd.DataFrame, weekly_df: pd.DataFrame, schedule_games_df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Returns [game_id, season, week, home_team, away_team] + V5_FEATURE_COLUMNS:
+    build_game_features_blend's columns plus the quarterback-adjusted Elo's
+    gap (home minus away, home field included) and each listed starter's
+    adjustment. Blank - so the game keeps its heuristic chance - when
+    `master` carries no quarterback-adjusted Elo."""
+    from mlb_metrics import nfl_totals
+    games = build_game_features_blend(master, qb_continuity, weekly_df, schedule_games_df)
+    state = qb_elo_state(master)
+    if state is None:
+        for column in QB_ELO_FEATURE_COLUMNS:
+            games[column] = float("nan")
+    else:
+        starters = schedule_games_df.set_index("game_id")[["home_qb_id", "away_qb_id"]].reindex(games["game_id"])
+        home, away = nfl_totals._canonical(games["home_team"]), nfl_totals._canonical(games["away_team"])
+        games["qb_elo_base"] = [state.gap(h, a) for h, a in zip(home, away)]
+        games["home_qb_elo_adj"] = [state.qb_adjustment(h, q) for h, q in zip(home, starters["home_qb_id"])]
+        games["away_qb_elo_adj"] = [state.qb_adjustment(a, q) for a, q in zip(away, starters["away_qb_id"])]
+    return games[["game_id", "season", "week", "home_team", "away_team"] + V5_FEATURE_COLUMNS]
+
+
 # Real follow-up (2026-09-11 - "it's a comparison... if the difference
 # between team A offense and team B defense is 15 and the difference
 # between team B offense and team A defense is 4, we're saying it'll be
@@ -527,6 +564,7 @@ _FEATURE_COLUMN_BUILDERS = [
     (QB_PLUS_FEATURE_COLUMNS, build_game_features_qb_plus),
     (ELO_FEATURE_COLUMNS, build_game_features_elo),
     (BLEND_FEATURE_COLUMNS, build_game_features_blend),
+    (V5_FEATURE_COLUMNS, build_game_features_v5),
 ]
 
 
