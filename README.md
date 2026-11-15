@@ -3399,6 +3399,17 @@ every player's averages, touchdown chance and 100-yard chance - about
 > The NFL page tracks how often it does, next to Vegas's, and marks every
 > game that finished outside it (and by how much).
 >
+> **Corrected 2026-11-15 - read this first.** The two paragraphs below
+> (62% of 237; the weather add-on's 60.1% of 333) knew whether it rained:
+> past games' rain is read from the play-by-play, a bettor has only a
+> forecast, and rain games carried the record. With rain unknown for the
+> game being predicted the 5-point lean won **58.6% of 174** (+21.9 units
+> at the real odds, a winning record in 6 of 7 seasons, p 0.058) and the
+> weather add-on made it worse, so it is retired: the lean is the plain
+> gap with the forecast's rain taken back out of our total
+> (`nfl_game_evaluation.total_lean_weather`). See "NFL bets: what holds
+> up" below and `scripts/research_nfl_bets.py`.
+>
 > **Over/under leans (2026-11-06).** When our total is 5+ points from
 > Vegas's (`config.NFL_TOTAL_LEAN_MIN_GAP`), the card shows "Lean OVER" or
 > "Lean UNDER" at Vegas's number, and the NFL page keeps the record (won,
@@ -5190,6 +5201,50 @@ directory: it downloads every season's files).
 
 **Not in it yet**: injuries, and the committee's actual selection rules
 before the bracket is out.
+
+## NFL bets: what holds up (`scripts/research_nfl_bets.py`, the Picks tab's "This week's bets")
+
+User request (2026-11-14): "The point of the site is to act as a quant
+level site to make educated bets ... The accuracy of our bets is more
+important than the accuracy of our model ... If there are better models
+out there for this goal, leverage what they have." Every bet type we
+could price was tested walk-forward against real lines, using two outside
+files for what we lacked: nfelo's game file (opening and closing spreads,
+opening totals, and that public model's ratings) and nflverse's games.csv
+(closing lines, wind and roof since 1999). The script's docstring has
+every number; in short:
+
+| Bet | Result | Verdict |
+|---|---|---|
+| Our side vs the closing spread | 49.3% of 533 at 3+ points | no bet |
+| Our winner at the closing moneyline | -53.2 units with Vegas (1,691), -10.7 against (308); as published, with the 20-point deferral to Vegas: -62.5 (1,739) and -12.1 (260) | no bet |
+| Our side vs the opening spread | 54.2% of 483, line then moves our way | not bettable: many openers predate last week's games; gone at the halfway line (48.7%) |
+| nfelo's ratings vs the open / close | 61.7% of 418 / 52.9% of 873 | same artifact; nothing at the close |
+| Over/under, gap 5+, rain unknown | **58.6% of 174, +21.9 units, 6 of 7 seasons** | **the recommended bet** |
+| Unders with 10+ mph wind | 54.7% of 1,782 since 1999 | real but thin; already in our total |
+| Teasers through 3 and 7 | 75.3% of 643 legs (needs 73.9-75.2%) | break-even |
+| Player props | graded against the player's own average, no line history | can't be judged yet |
+
+What changed on the site:
+- **This week's bets** (`summary_render.js` `betsPanelHtml`): only the
+  over/under lean is recommended. Each bet shows the stake (1 unit), the
+  worst line still worth taking (our total less or plus the 5-point rule,
+  `betWorstLine`) and the worst price (`betPriceFloor`: the tested win
+  rate shaded halfway to break-even, so 58.6% -> -125), the tested record
+  and this season's, and the advice to bet early (against opening totals
+  the line moved our way 63% of the time and against 17%).
+- **The lean itself** is the plain gap with the forecast's rain taken out
+  of our total; `NFL_TOTAL_LEAN_WEATHER` is retired. Recomputing this
+  season's leans under the corrected rule changed one game (Jaguars at
+  Ravens became an over, which won).
+- **Track record**: picks with and against Vegas show units at the closing
+  moneyline, not just wins (`confidence_table`, closing lines from the
+  persisted schedule): an underdog pick needs far fewer wins to pay.
+- Winners and spread sides are called picks, not bets.
+
+Still open: logging real prop lines so props can be graded as bets; a
+wind-under flag near kickoff; opening-line capture of our own, so
+early-week value can be measured on lines we know were available.
 
 ## NFL schedule sheet: a unit a week (`nfl_season_views.team_schedule`, `nfl_stats.js`)
 

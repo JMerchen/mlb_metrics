@@ -2448,8 +2448,34 @@ NFL_TOTAL_BAND_HALF_WIDTH = 9
 # The design choices (weather terms, shrink fade) were tried on these same
 # seasons, so expect live results somewhat below the backtest's.
 NFL_TOTAL_LEAN_MIN_GAP = 5.0
-# The 5+ point backtest above, for the site's track-record table.
-NFL_TOTAL_LEAN_BACKTEST = {"games": 237, "won_rate": 0.62}
+# AUDIT (2026-11-15, scripts/research_nfl_bets.py): the 62% above knew
+# whether it rained. Past games' rain comes from the play-by-play's weather
+# text - what happened - while a bettor has only a forecast, and the rain
+# games carried the record (23 leans, 83% right). With rain unknown when
+# the bet is made (the model's rain term set to 0 for the game being
+# predicted), walk-forward 2019-2025 at the real over/under odds:
+#   5+ points: 174 bets, 58.6% right (51.3-65.9%), +21.9 units, a winning
+#              record in 6 of 7 seasons, p 0.058 against 52.4%
+#   4+ points: 349 bets, 54.2%, +14.7;  3+: 591, 52.8%, +10.3
+#   overs 59.2% of 125, unders 57.1% of 49
+# Still the one bet type here that has beaten the closing line, but by
+# less than was claimed. Against opening totals (2024-25, the only seasons
+# with them) the line then moved toward our side in 63% of 3+ point gaps
+# and away in 17%, so these are best taken early in the week.
+# The weather add-on (NFL_TOTAL_LEAN_WEATHER) did not survive: without the
+# rain hindsight, gap + wind at 5 points won 54.6% of 207 against the plain
+# gap's 59.2% of 152 on the same seasons. So the lean is now the plain gap,
+# with the forecast's rain taken back out of our total before comparing
+# (nfl_game_evaluation.total_lean_weather) - what was actually tested.
+NFL_TOTAL_LEAN_BACKTEST = {"games": 174, "won_rate": 0.586, "units": 21.9, "winning_seasons": 6, "seasons": 7}
+# Betting our published winner at the closing moneyline, walk-forward
+# 2019-2026 (1,999 games): when it is Vegas's favorite, and when it isn't
+# (42.7% right, needing 45.0%). The same games and picks as the track
+# record's backtest counts - a pick 20+ points from Vegas's chance defers
+# to Vegas (NFL_GAME_PICK_MARKET_DISAGREEMENT_THRESHOLD). Both lose about
+# the bookmaker's cut; neither is a bet on its own. (The model's raw picks,
+# without that deferral: 1,691 bets -53.2 and 308 bets -10.7.)
+NFL_VEGAS_SPLIT_BACKTEST = {"with": {"bets": 1739, "units": -62.5}, "against": {"bets": 260, "units": -12.1}}
 # Our margin next to Vegas's point spread (nfl_game_evaluation.spread_sides):
 # the win chance read back off a normal curve this many points wide (the
 # margin model's own miss, scripts/train_nfl_elo_margin_model.py). Shown as
@@ -2469,7 +2495,10 @@ NFL_SPREAD_BACKTEST = {"games": 1923, "won_rate": 0.50}
 # leans, 56.7% vs 55.2% on the top 30%, better in 5 of 7 seasons; at the
 # 5-point rule 60.1% of 333 leans (+53.6 units) vs 62.5% of 184 (+37.2).
 # Fit on every scored season: rain -4.16 (p 0.005), wind -0.20 (p 0.014).
-NFL_TOTAL_LEAN_WEATHER = {"wx_rain": -4.156, "wx_wind": -0.204}
+# RETIRED 2026-11-15 (see the audit above NFL_TOTAL_LEAN_BACKTEST): these
+# were fit against rain that had already fallen. Kept empty so nothing adds
+# them to a lean.
+NFL_TOTAL_LEAN_WEATHER = {}
 # The average outdoor game's weather terms (nfl_weather.weather_features),
 # for an outdoor game with no reading or forecast yet.
 NFL_WEATHER_OUTDOOR_MEANS = {"wx_wind": 3.754, "wx_cold": 1.322, "wx_rain": 0.07}

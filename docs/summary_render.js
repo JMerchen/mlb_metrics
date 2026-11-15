@@ -221,23 +221,77 @@ return {side, line, gap: ours === null ? null : Math.abs(ours - line), result: g
 close: srNum(g.total_lean_close), clv: srNum(g.total_lean_clv), weather: srNum(g.total_lean_weather) || 0}
 }
 
-// Why we lean: "We lean under Vegas's 46.5: our total is 4 points lower,
-// and the forecast's rain and wind take off about 3 more." (The weather
-// part is what the line still misses for it - config.NFL_TOTAL_LEAN_WEATHER.)
+// Why we lean: "We lean under Vegas's 46.5: our total is 6 points lower."
+// When rain is in the forecast its part is left out of our total first
+// (total_lean_weather: the line already prices a forecast, and the lean was
+// tested without knowing the rain), and the sentence says so.
 function totalLeanReason(g){
 const lean = totalLean(g)
 if(!lean){ return "" }
 const ours = srNum(g.predicted_total)
-const diff = ours === null ? null : ours - lean.line
-const parts = [`We lean ${lean.side} Vegas's ${lean.line}`]
-if(diff !== null && Math.round(Math.abs(diff)) > 0){
-parts.push(`our total is ${Math.round(Math.abs(diff))} point${Math.round(Math.abs(diff)) === 1 ? "" : "s"} ${diff > 0 ? "higher" : "lower"}`)
+const rain = lean.weather > 0 ? lean.weather : 0
+const diff = ours === null ? null : ours + rain - lean.line
+const lead = `We lean ${lean.side} Vegas's ${lean.line}`
+if(diff === null || Math.round(Math.abs(diff)) === 0){ return `${lead}.` }
+const gap = Math.round(Math.abs(diff))
+return `${lead}: our total is ${gap} point${gap === 1 ? "" : "s"} ${diff > 0 ? "higher" : "lower"}${rain >= 0.5 ? ", leaving the rain in the forecast out of it" : ""}.`
 }
-const wx = Math.round(Math.abs(lean.weather))
-if(parts.length > 1){
-return wx >= 1 ? `${parts[0]}: ${parts[1]}, and the forecast's rain and wind take off about ${wx} more.` : `${parts[0]}: ${parts[1]}.`
+
+// ---- This week's bets ----
+// Only what has beaten the closing line in testing gets recommended: for
+// the NFL that is the over/under lean (see config.NFL_TOTAL_LEAN_BACKTEST's
+// audit and scripts/research_nfl_bets.py for everything that didn't).
+
+// The worst number still worth betting: our total (rain left out) less the
+// rule's gap for an over, plus it for an under, to the half point.
+function betWorstLine(g, minGap){
+const lean = totalLean(g)
+const ours = srNum(g.predicted_total)
+if(!lean || ours === null){ return null }
+const total = ours + (lean.weather > 0 ? lean.weather : 0)
+const raw = lean.side === "over" ? total - minGap : total + minGap
+return lean.side === "over" ? Math.floor(raw * 2) / 2 : Math.ceil(raw * 2) / 2
 }
-return wx >= 1 ? `${parts[0]}: the forecast's rain and wind take off about ${wx} point${wx === 1 ? "" : "s"}.` : `${parts[0]}.`
+
+// The price a bet stops being worth taking at, from how often bets like it
+// have won in testing, shaded toward break-even (half the tested edge over
+// 52.4%): -110 odds need 52.4%, -120 need 54.5%, -130 need 56.5%.
+function betPriceFloor(wonRate){
+const p = 0.524 + (Number(wonRate) - 0.524) / 2
+if(!Number.isFinite(p) || p <= 0.524){ return null }
+return -Math.round(100 * p / (1 - p) / 5) * 5
+}
+
+// The bets panel: this week's recommended bets (games not yet played with
+// a lean), any waiting on the injury report, and the record behind them.
+function betsPanelHtml(picks, summary){
+const s = summary || {}
+const minGap = srNum(s.total_lean_min_gap) || 5
+const rate = srNum(s.total_lean_backtest_won_rate), tested = srNum(s.total_lean_backtest_games) || 0
+const upcoming = (picks || []).filter(g => g.status === "pending")
+const bets = upcoming.filter(g => totalLean(g))
+const held = upcoming.filter(g => !totalLean(g) && g.total_lean_held)
+const floor = betPriceFloor(rate)
+const name = code => typeof teamName === "function" ? teamName(code, "nfl") : code
+const rows = bets.map(g => {
+const lean = totalLean(g), worst = betWorstLine(g, minGap)
+return `<div class="betRow">
+<div class="betMain"><b>${lean.side === "over" ? "Over" : "Under"} ${lean.line}</b> <span class="betGame">${srEsc(name(g.away_team))} at ${srEsc(name(g.home_team))}</span></div>
+<div class="betWhy">${srEsc(totalLeanReason(g))}</div>
+<div class="betTerms">Stake 1 unit.${worst !== null ? ` Worth taking at ${lean.side === "over" ? `${worst} or lower` : `${worst} or higher`}` : ""}${floor ? `${worst !== null ? "," : ""} at ${floor} or better.` : "."}</div>
+</div>`
+}).join("")
+const waiting = held.length ? `<div class="betHeld">Waiting on the injury report: ${held.map(g => `${srEsc(name(g.away_team))} at ${srEsc(name(g.home_team))}`).join("; ")}.</div>` : ""
+const won = srNum(s.total_leans_won) || 0, lost = srNum(s.total_leans_lost) || 0, units = srNum(s.total_lean_units)
+const season = won + lost ? ` This season: ${won}–${lost}${units !== null ? `, ${units > 0 ? "up" : units < 0 ? "down" : "even at"} ${Math.abs(units).toFixed(2)} units` : ""}.` : ""
+const clvN = srNum(s.total_lean_clv_n) || 0
+const clv = clvN ? ` The line has closed ${Math.abs(srNum(s.total_lean_clv_mean) || 0).toFixed(1)} points ${(srNum(s.total_lean_clv_mean) || 0) >= 0 ? "our way" : "against us"} on average after we took it (${clvN} bet${clvN === 1 ? "" : "s"}).` : ""
+const record = rate !== null && tested ? `<div class="betRecord">Bets like these won <b>${Math.round(1000 * rate) / 10}% of ${tested}</b> in testing (2019–2025, at the real odds: ${srNum(s.total_lean_backtest_units) > 0 ? "up" : "down"} ${Math.abs(srNum(s.total_lean_backtest_units) || 0)} units, a winning record in ${s.total_lean_backtest_winning_seasons} of ${s.total_lean_backtest_seasons} seasons; 52.4% breaks even).${season}${clv}</div>` : ""
+const none = !bets.length ? `<div class="betNone">${upcoming.length ? "No bets yet this week: no game's total is far enough from Vegas's." : "No games left to bet this week."}</div>` : ""
+return `<div class="betsPanel">
+${rows}${none}${waiting}${record}
+<div class="betFine">We only recommend what has beaten the closing line in testing, and so far that is over/unders where our total sits ${minGap} or more points from Vegas's. Take them early: when our number and the opening line disagreed, the line moved toward us about four times as often as away. Our game winners and spread sides have not beaten the closing line, so they are picks, not bets.</div>
+</div>`
 }
 
 // "Lean OVER 37.5", and once played "won" / "lost" / "push". A Tuesday
@@ -416,7 +470,9 @@ const tested = (right, games) => games ? `${Math.round(100 * right / games)}% <s
 const rows = (table || []).map(r => {
 const label = r.group === "confidence" ? `We say ${r.label}`
 : r.label === "with" ? "We pick Vegas's favorite" : "We pick against Vegas's favorite"
-return [label, cell(srNum(r.season_right) || 0, srNum(r.season_games) || 0), tested(srNum(r.backtest_right) || 0, srNum(r.backtest_games) || 0)]
+const units = v => { const u = srNum(v); return u === null ? "" : ` <span class="dim">&middot; ${u > 0 ? "+" : u < 0 ? "−" : ""}${Math.abs(u).toFixed(1)} units</span>` }
+return [label, cell(srNum(r.season_right) || 0, srNum(r.season_games) || 0) + (srNum(r.season_games) ? units(r.season_units) : ""),
+tested(srNum(r.backtest_right) || 0, srNum(r.backtest_games) || 0) + units(r.backtest_units)]
 })
 const pair = (won, lost, rate, games, label) => {
 const w = srNum(won) || 0, l = srNum(lost) || 0, n = srNum(games) || 0, r = srNum(rate)
@@ -502,6 +558,7 @@ if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, gamePicksListHtml, totalPointsText,
 srWeather, pickBarHtml, totalLean, totalLeanBadgeHtml, totalRangeNote, totalLeanCloseNote, totalLeanReason,
+betWorstLine, betPriceFloor, betsPanelHtml,
 btsSeasonOver, btsSeasonOverHtml,
 teamEpaHtml, spreadInfo, spreadText, pickReasons, pickReasonsHtml, injuryLineHtml, trackRecordNote, trackRecordTableHtml,
 }
