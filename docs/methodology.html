@@ -343,29 +343,37 @@ enough, sized by fractional Kelly in units.</p>
 
 <div class="methodCard">
 <h3>NFL game picks</h3>
-<p>The average of two models. The first is a logistic regression on each team's Pythagorean strength,
-schedule-adjusted confidence, EPA per play on offense and allowed on defense
-(per play, so a defense isn't judged by how many snaps it faced), turnover
-margin and points per drive, plus each starting QB's QB+. The second predicts
-the final margin, not just who wins (a 30-point win says more than a 1-point
-win): it uses an Elo rating that carries over from every past season, EPA per
-play split into passing and rushing on each side of the ball, and the same
-QB+, and reads the win chance off how far games usually land from the
-predicted margin (about 13 points). Averaged, they beat either alone in
-testing. The starter comes
+<p>A team rating that knows who is playing quarterback and listens to the
+betting line. Each team's rating moves with every result (more for a big
+win, a third of the way back to average each offseason). Every quarterback
+has his own running rating from his box scores (yards, touchdowns and
+completions for; interceptions and sacks against; his rushing too),
+measured against the defenses he faced, and every team has one for
+whoever has been playing the position. A starter above his team's usual
+level lifts its chance and a backup lowers it, so the team rating means
+"this team with its normal quarterback play". After each game the two
+teams' ratings also move part of the way toward what that game's closing
+point spread said about them, because a past line knows things a final
+score doesn't, such as who was hurt. The line for the game being picked is
+never used.</p>
+<p>These are the inputs of the best public model we could find, rebuilt
+from our own data, and they replaced our earlier model outright: in a
+replay of 1,999 games since 2019, with only what was known before each one,
+the new model was more accurate in every one of the eight seasons, closed
+about half of our gap to Vegas, and did better than that public model on
+its own games. Vegas is still more accurate than we are. The starter comes
 from the schedule, checked against the latest roster: one on injured reserve
 or otherwise inactive (who won't be on the injury report) is replaced by
-whoever has been starting. Trained on every
-game since 2016 with each week predicted only from earlier games, the
-feature set chosen by walk-forward validation and checked on a season it
-never saw. When we disagree sharply with Vegas we defer to it (it's
+whoever has been starting. The ratings run over every
+game since 2016, and each game is picked only from what came before it.
+When we disagree sharply with Vegas we defer to it (it's
 proven right more often there), then calibrate.</p>
 <p>Each game's card adds what a number can't: the case for the pick and what
 cuts against it (a gap of six or more places in offense, defense or
 quarterback rank counts as an edge), who the final injury report took out,
 and how picks like it have done. That record is on the NFL page: in testing
 on 2019&ndash;2026 our picks were right 68% of the time when they sided with
-Vegas's favorite and 43% when they went against it, and picks we call
+Vegas's favorite and 44% when they went against it, and picks we call
 50&ndash;55% are coin flips. The card also sets Vegas's point spread next to
 our margin, as context only: taking our side of the spread won half of about
 1,900 past games, short of the 52.4% that breaks even.</p>

@@ -5202,6 +5202,85 @@ directory: it downloads every season's files).
 **Not in it yet**: injuries, and the committee's actual selection rules
 before the bracket is out.
 
+## NFL win model v5: the best public model's inputs, rebuilt (`nfl_qb_elo.py`, `scripts/train_nfl_qb_elo.py`)
+
+User feedback (2026-11-15), after the bets research changed nothing in the
+model: "all you did to the model was correct a number." And then: "For the
+models that we found to be better than ours, could we recreate their
+inputs instead of just tailing or combining?" So the model was measured
+against the best public one we could find, the difference taken apart, and
+the parts that mattered rebuilt from our own data. v5 reads nothing from
+that model, and it replaces v4 rather than being averaged with it.
+
+**What was found.** On the 1,766 games both rated, the public nfelo model
+scored a log loss of 0.6197 against our v4's 0.6305 (Vegas 0.6081).
+Splitting nfelo into its parts: its team ratings alone scored 0.6300 - no
+better than ours. What it had that we didn't:
+1. A quarterback adjustment (FiveThirtyEight's design) that rates the
+   listed starter against what his team has been getting at the position.
+   Our QB+ term rates the starter on his own.
+2. The market's lines as an input to the ratings.
+
+**What was built** (`nfl_qb_elo.py`):
+- An Elo whose every expectation includes each listed starter's adjustment
+  (3.3 Elo points per point of quarterback value above or below his team's
+  running level), with quarterback values from the weekly box scores,
+  adjusted for the defense faced.
+- After each game, the two teams' gap moves a quarter of the way to what
+  that game's closing spread said it was. Past lines are public before the
+  next game and know what a score doesn't (injuries, rested starters). The
+  line of the game being predicted is never used.
+
+**Result** (walk-forward by construction, 1,999 games 2019-2026):
+
+| | log loss | winners |
+|---|---|---|
+| v4 | 0.6307 | 1,284 |
+| QB adjustment only | 0.6242 | 1,299 |
+| **v5: QB adjustment + past lines** | **0.6197** | **1,303** |
+| v5 and v4 averaged | 0.6221 | 1,310 |
+| Vegas | 0.6094 | 1,332 |
+
+v5 beats v4 by 0.0111 (t 3.2) and in all 8 seasons: about half the
+distance v4 was from Vegas, four times v3 -> v4's gain. On nfelo's own
+1,766 games it scores 0.6177 to nfelo's 0.6197. Averaging v4 back in was
+worse at every weight (0.6199 at 20%, 0.6221 at 50%), so v4 is retired.
+It is still not a bet on winners: at the closing moneyline its picks with
+Vegas lost 63.7 units on 1,812 and against Vegas 8.7 on 187.
+
+**Tried and left out.** From nfelo: an EPA-based margin in place of the
+score (0.6251 at half weight, worse) and a bonus after a bye (within
+noise). Settings: nine neighbours all within 0.001, chosen where the two
+halves of the history agreed. Before this, for the totals model: thirteen
+groups of richer play-by-play inputs (success rate, explosive plays, drive
+results, pass and rush splits, pass rate over expected, pace, sacks and
+turnovers, third downs, early downs, rest, penalties, red zone, depth of
+target) - none beat the live model's 58.6% of 174 on 5-point gaps; and 25
+years of market-bias angles for totals and sides - nothing dependable.
+Those were exploratory runs and are not kept as scripts.
+
+**Head-to-head history: tested, not used** (2026-11-15; the user's "the
+Cowboys are abysmal against the 49ers"). Regular-season games 2003-2026
+where the two teams had met at least twice in the previous four seasons:
+each point of past head-to-head margin was worth +0.004 points beyond the
+closing spread (t 0.19, 3,889 games); backing the team that had won the
+last four or more meetings by 10+ a game covered 46.6% of 506, and one
+that had won every one of its last three or more covered 47.7% of 333
+(52.4% breaks even); added to v5 it took a weight of -0.035 per 10 points
+(p 0.44) and made the walk-forward log loss slightly worse (0.6234 from
+0.6232). The ratings already hold the reason one team kept beating the
+other. Exploratory run, not kept as a script.
+
+**How it is wired.** `assemble_team_metrics(qb_elo_weekly_df=...)` runs the
+ratings over every season on file and carries the state on the team
+table; `build_game_features_v5` gives `qb_elo_base`, `home_qb_elo_adj` and
+`away_qb_elo_adj`; the saved model is `ml_models.EloGapModel` (nothing
+fit). What if? rebuilds those for every quarterback pairing, an average
+starter included. `NFL_GAME_PICK_MODEL_VERSION` is v5, so picks logged
+from here are tracked separately from v4's. v4's own inputs are no longer
+used for the win chance; the cards' reasons, the units and the totals
+model are unchanged.
+
 ## NFL bets: what holds up (`scripts/research_nfl_bets.py`, the Picks tab's "This week's bets")
 
 User request (2026-11-14): "The point of the site is to act as a quant

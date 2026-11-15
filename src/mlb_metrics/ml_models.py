@@ -280,6 +280,23 @@ class BlendedWinModel:
         return {}
 
 
+class EloGapModel:
+    """A win chance read straight off an Elo gap: its columns are added up
+    (opponent-side columns, named away_*, subtracted) and turned into a
+    chance with the standard Elo curve. Nothing is fit. Used for the
+    quarterback-adjusted Elo member of the NFL win model
+    (nfl_qb_elo.py): [qb_elo_base, home_qb_elo_adj, away_qb_elo_adj]."""
+
+    def predict_proba(self, X) -> np.ndarray:
+        frame = pd.DataFrame(X)
+        gap = sum((-1.0 if str(column).startswith("away_") else 1.0) * frame[column].astype(float) for column in frame.columns)
+        p = 1.0 / (1.0 + 10.0 ** (-gap.to_numpy() / 400.0))
+        return np.column_stack([1 - p, p])
+
+    def get_params(self, deep: bool = False) -> dict:
+        return {}
+
+
 def save_model(model, path: str) -> None:
     """joblib.dump, creating parent directories as needed - matches this
     project's existing pattern of committing binary data artifacts to git

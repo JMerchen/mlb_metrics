@@ -417,11 +417,14 @@ def pairing_log_odds(master, qb_continuity, weekly, games: pd.DataFrame, options
             out.setdefault(game_id, {})[key] = round(_log_odds(p), 4)
         return out
 
+    # The quarterback-adjusted Elo (the live model) can rate an average
+    # starter itself; a model that can't skips that option.
+    rates_average = artifact is not None and artifact["feature_columns"] == nfl_game_picks.QB_ELO_FEATURE_COLUMNS
     rows = []
     for _, g in games.iterrows():
         for h in options.get(g["home_team"], []):
             for a in options.get(g["away_team"], []):
-                if AVERAGE_QB_ID in (h["id"], a["id"]):
+                if AVERAGE_QB_ID in (h["id"], a["id"]) and not rates_average:
                     continue
                 rows.append({**g.to_dict(), "game_id": f"{g['game_id']}|{h['id']}|{a['id']}",
                              "home_qb_id": h["id"], "away_qb_id": a["id"]})
