@@ -1,9 +1,9 @@
 group,label,low,high,season_games,season_right,season_units,backtest_units,backtest_bets,backtest_games,backtest_right
-confidence,50–55%,0.5,0.55,42,26,,,,374,196
-confidence,55–60%,0.55,0.6,25,17,,,,358,201
-confidence,60–65%,0.6,0.65,17,10,,,,321,194
-confidence,65–70%,0.65,0.7,17,12,,,,297,209
-confidence,70–75%,0.7,0.75,13,7,,,,255,185
-confidence,75%+,0.75,1.0,23,20,,,,394,323
-vegas,with,,,106,75,2.77,-63.7,1812.0,1812,1225
-vegas,against,,,31,17,9.01,-8.7,187.0,187,83
+confidence,50–55%,0.5,0.55,46,29,,,,360,180
+confidence,55–60%,0.55,0.6,29,20,,,,363,205
+confidence,60–65%,0.6,0.65,18,11,,,,339,208
+confidence,65–70%,0.65,0.7,17,12,,,,269,184
+confidence,70–75%,0.7,0.75,14,8,,,,256,187
+confidence,75%+,0.75,1.0,25,22,,,,412,339
+vegas,with,,,117,84,4.28,-69.3,1823.0,1823,1228
+vegas,against,,,32,18,9.92,-17.0,176.0,176,75
