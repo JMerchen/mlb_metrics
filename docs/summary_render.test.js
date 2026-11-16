@@ -302,9 +302,51 @@ test("track record: with and against Vegas also show units at the closing odds",
     { group: "vegas", label: "against", season_games: "31", season_right: "17", backtest_games: "260", backtest_right: "111", season_units: "9.01", backtest_units: "-12.1" },
   ]
   const html = flat(trackRecordTableHtml(table, {}))
-  assert.match(html, /We say 75%\+ 20 of 23 87% 79% of 305(?! ·)/)
-  assert.match(html, /We pick Vegas's favorite 75 of 106 71% · \+2\.8 units 68% of 1,739 · −62\.5 units/)
-  assert.match(html, /We pick against Vegas's favorite 17 of 31 55% · \+9\.0 units 43% of 260 · −12\.1 units/)
+  // This season only: the tested numbers stay off the page, and the confidence rows are the cross tab's job.
+  assert.doesNotMatch(html, /We say 75%|In testing|1,739|of 260/)
+  assert.match(html, /Kind of pick This season/)
+  assert.match(html, /We pick Vegas's favorite 75 of 106 71% · \+2\.8 units(?! \d)/)
+  assert.match(html, /We pick against Vegas's favorite 17 of 31 55% · \+9\.0 units$/)
+})
+
+test("track record cross tab: how sure we were against Vegas's chance for the same team, our record in each cell", () => {
+  const { pickCrossTab, pickCrossTabHtml } = require("./summary_render.js")
+  const pick = (ours, vegas, status, season = 2026) => ({ season, status, predicted_probability: ours, market_predicted_winner_probability: vegas })
+  const picks = [
+    pick(0.52, 0.53, "win"), pick(0.54, 0.51, "loss"),            // both 50-55%: the shaded cell
+    pick(0.53, 0.45, "win"), pick(0.58, 0.40, "loss"),            // Vegas had the other team
+    pick(0.58, 0.72, "win"),                                      // we were less sure than Vegas
+    pick(0.80, 0.90, "win"), pick(0.76, 0.76, "win"), pick(0.78, 0.66, "loss"),
+    pick(0.62, "", "win"),                                        // no Vegas number: its row's total only
+    pick(0.70, 0.70, "pending"), pick(0.70, 0.70, "not_played"),  // not finished: left out
+    pick(0.55, 0.55, "win", 2025),                                // an earlier season: left out
+  ]
+  const tab = pickCrossTab(picks)
+  assert.equal(tab.season, 2026)
+  assert.deepEqual(tab.rows, ["50–55%", "55–60%", "60–65%", "65–70%", "70–75%", "75%+"])
+  assert.deepEqual(tab.columns, ["Under 50%", "50–55%", "55–60%", "60–65%", "65–70%", "70–75%", "75%+"])
+  assert.deepEqual(tab.cells[0][1], { won: 1, lost: 1 })
+  assert.deepEqual(tab.cells[0][0], { won: 1, lost: 0 })
+  assert.deepEqual(tab.cells[1][0], { won: 0, lost: 1 })
+  assert.deepEqual(tab.cells[1][5], { won: 1, lost: 0 })
+  assert.deepEqual(tab.cells[5][6], { won: 2, lost: 0 })
+  assert.deepEqual(tab.cells[5][4], { won: 0, lost: 1 })
+  assert.deepEqual(tab.rowTotals[2], { won: 1, lost: 0 })          // the pick with no Vegas number
+  assert.deepEqual(tab.columnTotals[0], { won: 1, lost: 1 })
+  assert.deepEqual(tab.total, { won: 6, lost: 3 })
+  // Every finished pick with a Vegas number sits in exactly one cell.
+  const inCells = tab.cells.flat().reduce((n, c) => n + c.won + c.lost, 0)
+  assert.equal(inCells, 8)
+  const html = pickCrossTabHtml(picks)
+  assert.match(html, /Vegas's chance for the team we picked/)
+  assert.match(html, /<th class="corner">We say<\/th><th scope="col">Under 50%<\/th>/)
+  assert.match(html, /<th scope="row">50–55%<\/th><td title="right 100% of 1">1–0<\/td><td class="same" title="right 50% of 2">1–1<\/td>/)
+  assert.match(html, /<th scope="row">75%\+<\/th>(<td><\/td>){4}<td title="right 0% of 1">0–1<\/td><td><\/td><td class="same" title="right 100% of 2">2–0<\/td><td class="all" title="right 67% of 3">2–1<\/td>/)
+  assert.match(html, /<tr class="all"><th scope="row">All<\/th><td title="right 50% of 2">1–1<\/td>/)
+  assert.match(html, /<td title="right 67% of 9">6–3<\/td><\/tr>/)
+  assert.equal(pickCrossTabHtml([pick(0.6, 0.6, "pending")]), "")
+  assert.equal(pickCrossTabHtml([]), "")
+  assert.equal(pickCrossTab(null), null)
 })
 
 test("NFL totals: a Tuesday lean on hold for the injury report", () => {
@@ -400,9 +442,11 @@ test("NFL card and page: the track record behind a pick", () => {
   assert.match(detail(gamePickRowHtml(g, "nfl", { confidence: table })), /Picks this sure \(55–60%\)/)
   const html = text(trackRecordTableHtml(table, { total_leans_won: 5, total_leans_lost: 3, total_lean_backtest_games: 237,
     total_lean_backtest_won_rate: 0.62, spread_sides_won: 0, spread_sides_lost: 0, spread_backtest_games: 1923, spread_backtest_won_rate: 0.5 }))
-  assert.match(html, /We say 55–60%16 of 23 70%57% of 421/)
-  assert.match(html, /We pick against Vegas's favorite17 of 31 55%44% of 310/)
-  assert.match(html, /Over\/under leans5 of 8 63%62% of 237/)
-  assert.match(html, /Our side of the spread, every game-50% of 1,923/)
+  assert.doesNotMatch(html, /We say 55–60%|of 421|of 310|of 237|1,923/)
+  assert.match(html, /We pick against Vegas's favorite17 of 31 55%/)
+  assert.match(html, /Over\/under leans5 of 8 63%/)
+  assert.doesNotMatch(html, /Our side of the spread|Spread bets/)            // nothing graded yet: no row
+  assert.match(text(trackRecordTableHtml(table, { spread_bets_won: 2, spread_bets_lost: 1, spread_bet_min_gap: 3.5, spread_sides_won: 70, spread_sides_lost: 66 })),
+    /Spread bets \(3\.5\+ points from the line\)2 of 3 67%Our side of the spread, every game70 of 136 51%/)
   assert.equal(trackRecordTableHtml([], {}), "")
 })
