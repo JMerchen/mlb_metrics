@@ -5400,7 +5400,30 @@ On the same bets the moneyline made +9.1% a bet against the points'
 a bet on 165 against +19.2%), and losing 20.3% a bet on big ones (under
 20%). That matches moneylines in general, 2006-26: a unit on every side
 priced 33-45% made +1.3% a bet over 2,070; every other band lost, the
-longshots 16.7% a bet. Also tested and adding nothing: this week's injury
+longshots 16.7% a bet.
+
+**Moneyline or points: a note on each spread bet** (2026-11-16; the
+user's "is there some separator ... which would be better to take the
+moneyline and which to take the spread", then "add it as a note"). The
+separator is how many points the underdog gets. Every underdog 2006-26:
+getting 1-2 the points lose 5-9% a bet and the moneyline about breaks
+even; getting 2.5-3 the points break even and the moneyline makes 2-4%;
+from 7 up the moneyline loses 12-35% a bet. On our own spread bets: an
+underdog getting 6.5 or fewer, the moneyline won 50.8% of 309 and made
+28.4% a bet against the points' 63.4% and 21.1%; getting more, the
+moneyline lost 11.4% a bet on 254 (the points covered 52.8%). The lead on
+the small underdogs is not proven (t 1.1), so "This week's bets" shows
+the moneyline as a second line on those bets
+(`config.NFL_SPREAD_BET_MONEYLINE`, `spreadBetMoneylineNote`), warns off
+it on the big ones, and still grades the spread. The question that
+started it - a game we call under 55% where Vegas has the same favorite,
+take the underdog - is not a bet either way: 819 games 2002-26, the
+underdog covered 49.7% and its moneyline lost 1.8% a bet. Within them
+only the distance between Vegas and us separated anything (the favorite
+by 4+: the underdog covered 59.6% of 104, the same thing as a spread
+bet); home or road, the total, division games and the week did not.
+
+Also tested and adding nothing: this week's injury
 report for non-quarterbacks (snap share of players out; log loss 0.6224
 from 0.6226, t 0.1). Windy-game unders (`--wind`): 54.9% of 1,882 outdoor
 games with 10+ mph at kickoff since 1999 (57.7% of 359 in 2020-26),

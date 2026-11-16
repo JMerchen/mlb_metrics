@@ -209,7 +209,7 @@ test("NFL totals: a lean's reason leaves the forecast's rain out of it", () => {
 })
 
 test("this week's bets: only tested bets, with the worst line and price worth taking, and the record", () => {
-  const { betsPanelHtml, betWorstLine, betPriceFloor, spreadBetWorstLine } = require("./summary_render.js")
+  const { betsPanelHtml, betWorstLine, betPriceFloor, spreadBetWorstLine, spreadBetMoneylineNote } = require("./summary_render.js")
   global.teamName = require("./teams.js").teamName
   const flat = html => html.replace(/<[^>]+>/g, " ").replace(/&middot;/g, "·").replace(/\s+/g, " ").trim()
   const summary = { total_lean_min_gap: "5.0", total_lean_backtest_won_rate: "0.586", total_lean_backtest_games: "174", total_lean_backtest_units: "21.9",
@@ -253,6 +253,23 @@ test("this week's bets: only tested bets, with the worst line and price worth ta
   assert.equal(spreadBetWorstLine(dog, 3.5), "+5")
   assert.equal(spreadBetWorstLine(homeSide, 3.5), "−0.5")
   assert.equal(spreadBetWorstLine(closeOne, 3.5), "")
+  // The moneyline note: an alternative on an underdog getting a few points, a warning on one getting more, nothing on a favorite.
+  const lineSummary = { ...sideSummary, spread_bet_moneyline_max_points: "6.5", spread_bet_moneyline_bets: "309", spread_bet_moneyline_return: "0.284",
+    spread_bet_moneyline_won: "0.508", spread_bet_moneyline_points_return: "0.211", spread_bet_moneyline_points_covered: "0.634",
+    spread_bet_moneyline_big_bets: "254", spread_bet_moneyline_big_return: "-0.114" }
+  assert.equal(spreadBetMoneylineNote(dog, lineSummary),
+    "Or the moneyline: on underdogs getting 6.5 points or fewer it has returned 28% a bet against 21% with the points (309 bets like this since 2006). It wins less often, 51% of the time against 63%, and the gap between the two isn't proven, so we grade the spread.")
+  const bigDog = { status: "pending", home_team: "KC", away_team: "DEN", spread_line: "10.5", predicted_margin: "6", spread_side: "DEN", spread_bet: "DEN" }
+  assert.equal(spreadBetMoneylineNote(bigDog, lineSummary),
+    "Take the points, not the moneyline: on underdogs getting more than 6.5, the moneyline has lost 11% a bet on bets like this (254 since 2006).")
+  const favorite = { status: "pending", home_team: "KC", away_team: "DEN", spread_line: "3", predicted_margin: "7", spread_side: "KC", spread_bet: "KC" }
+  assert.equal(spreadBetMoneylineNote(favorite, lineSummary), "")
+  assert.equal(spreadBetMoneylineNote(dog, sideSummary), "")           // a summary without the numbers: no note
+  assert.equal(spreadBetMoneylineNote(closeOne, lineSummary), "")      // not a bet: no note
+  const noted = flat(betsPanelHtml([dog, bigDog, favorite], lineSummary))
+  assert.match(noted, /Broncos \+6\.5 .*at -120 or better\. Or the moneyline: on underdogs getting 6\.5 points or fewer/)
+  assert.match(noted, /Broncos \+10\.5 .*Take the points, not the moneyline/)
+  assert.doesNotMatch(noted, /Chiefs −3 [^.]*\.[^.]*\.[^.]*\. Stake 1 unit\.[^.]*\.[^.]*\. (Or the moneyline|Take the points)/)
   const sides = flat(betsPanelHtml([dog, homeSide, sideHeld, closeOne, over], sideSummary))
   assert.match(sides, /Broncos \+6\.5 Broncos at Chiefs Vegas has Chiefs by 6\.5; we have Chiefs by 1\. That is 5\.5 points apart\. Stake 1 unit\. Worth taking at \+5 or better, at -120 or better\./)
   assert.match(sides, /Dolphins \+1 Bills at Dolphins Vegas has Bills by 1; we have Dolphins by 4\. That is 5 points apart\. Stake 1 unit\. Worth taking at −0\.5 or better, at -120 or better\./)

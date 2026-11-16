@@ -279,11 +279,12 @@ const floor = betPriceFloor(rate), sideFloor = betPriceFloor(sideRate)
 const name = code => typeof teamName === "function" ? teamName(code, "nfl") : code
 const game = g => `<span class="betGame">${srEsc(name(g.away_team))} at ${srEsc(name(g.home_team))}</span>`
 const sideRows = sides.map(g => {
-const bet = spreadBet(g, "nfl"), worst = spreadBetWorstLine(g, sideGap)
+const bet = spreadBet(g, "nfl"), worst = spreadBetWorstLine(g, sideGap), alt = spreadBetMoneylineNote(g, s)
 return `<div class="betRow">
 <div class="betMain"><b>${srEsc(bet.team)} ${bet.number}</b> ${game(g)}</div>
 <div class="betWhy">${srEsc(spreadBetReason(g, "nfl"))}</div>
 <div class="betTerms">Stake 1 unit.${worst ? ` Worth taking at ${worst} or better` : ""}${sideFloor ? `${worst ? "," : ""} at ${sideFloor} or better.` : "."}</div>
+${alt ? `<div class="betTerms betAlt">${srEsc(alt)}</div>` : ""}
 </div>`
 }).join("")
 const rows = bets.map(g => {
@@ -309,7 +310,7 @@ const sideRecord = sideRate !== null && sideTested ? `<div class="betRecord"><b>
 const none = !bets.length && !sides.length ? `<div class="betNone">${upcoming.length ? "No bets yet this week: no game's spread or total is far enough from ours." : "No games left to bet this week."}</div>` : ""
 return `<div class="betsPanel">
 ${sideRows}${rows}${none}${waiting}${sideRecord}${record}
-<div class="betFine">We only recommend what has beaten the closing line in testing: spread sides where our margin sits ${sideGap} or more points from Vegas's, and over/unders where our total sits ${minGap} or more from theirs. Take them early: when our number and the opening line disagreed, the line moved toward us far more often than away. Most spread bets are underdogs; when ours is a big one, take the points, not the moneyline, which has lost 17% a bet on longshots since 2006. Our game winners alone have not beaten the closing line, so they are picks, not bets.</div>
+<div class="betFine">We only recommend what has beaten the closing line in testing: spread sides where our margin sits ${sideGap} or more points from Vegas's, and over/unders where our total sits ${minGap} or more from theirs. Take them early: when our number and the opening line disagreed, the line moved toward us far more often than away. Our game winners alone have not beaten the closing line, so they are picks, not bets.</div>
 </div>`
 }
 
@@ -381,8 +382,28 @@ return `Spread: Vegas has ${srEsc(s.vegas)}&nbsp;&middot; we have ${srEsc(s.ours
 function spreadBet(g, sport){
 const s = spreadInfo(g, sport)
 if(!s || !(g.spread_bet === g.home_team || g.spread_bet === g.away_team)){ return null }
-return {team: srTeam(g.spread_bet, sport), home: g.spread_bet === g.home_team, number: s.sideLine,
+const home = g.spread_bet === g.home_team
+// `points`: what the team is getting (positive = it is the underdog).
+return {team: srTeam(g.spread_bet, sport), home, number: s.sideLine, points: home ? -s.line : s.line,
 gap: Math.abs(s.margin - s.line), result: g.spread_bet_result || "", clv: srNum(g.spread_bet_clv)}
+}
+
+// The moneyline as another way to play a spread bet
+// (config.NFL_SPREAD_BET_MONEYLINE, sent in the summary): on an underdog
+// getting a few points it has returned more than the points while winning
+// less often; on one getting more it has lost money. "" for a favorite or
+// when the summary has no numbers.
+function spreadBetMoneylineNote(g, summary){
+const bet = spreadBet(g, "nfl"), s = summary || {}
+const cut = srNum(s.spread_bet_moneyline_max_points), n = srNum(s.spread_bet_moneyline_bets)
+if(!bet || cut === null || !n || !(bet.points > 0)){ return "" }
+const pct = v => `${Math.round(Math.abs(100 * (srNum(v) || 0)))}%`
+if(bet.points > cut){
+const big = srNum(s.spread_bet_moneyline_big_bets), lost = srNum(s.spread_bet_moneyline_big_return)
+return big && lost !== null && lost < 0
+? `Take the points, not the moneyline: on underdogs getting more than ${cut}, the moneyline has lost ${pct(lost)} a bet on bets like this (${big} since 2006).` : ""
+}
+return `Or the moneyline: on underdogs getting ${cut} points or fewer it has returned ${pct(s.spread_bet_moneyline_return)} a bet against ${pct(s.spread_bet_moneyline_points_return)} with the points (${n} bets like this since 2006). It wins less often, ${pct(s.spread_bet_moneyline_won)} of the time against ${pct(s.spread_bet_moneyline_points_covered)}, and the gap between the two isn't proven, so we grade the spread.`
 }
 
 // The worst number still worth betting, as our team's line ("+3" or
@@ -628,6 +649,6 @@ srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, game
 srWeather, pickBarHtml, totalLean, totalLeanBadgeHtml, totalRangeNote, totalLeanCloseNote, totalLeanReason,
 betWorstLine, betPriceFloor, betsPanelHtml,
 btsSeasonOver, btsSeasonOverHtml,
-teamEpaHtml, spreadInfo, spreadText, spreadBet, spreadBetWorstLine, spreadBetReason, spreadNote, spreadBetBadgeHtml, pickReasons, pickReasonsHtml, injuryLineHtml, trackRecordNote, trackRecordTableHtml,
+teamEpaHtml, spreadInfo, spreadText, spreadBet, spreadBetWorstLine, spreadBetReason, spreadBetMoneylineNote, spreadNote, spreadBetBadgeHtml, pickReasons, pickReasonsHtml, injuryLineHtml, trackRecordNote, trackRecordTableHtml,
 }
 }

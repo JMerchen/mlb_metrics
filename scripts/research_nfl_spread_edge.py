@@ -56,6 +56,13 @@ scripts/research_nfl_model_gaps.py):
   our side was a small underdog (priced 33-45% to win, about +120 to +200:
   +24.2% a bet on 165 against +19.2%), and losing 20.3% a bet when it was
   a big one (under 20%).
+  Without a price, by the points our side gets (the note on each spread
+  bet, config.NFL_SPREAD_BET_MONEYLINE): an underdog getting 6.5 or fewer,
+  the moneyline won 50.8% of 309 and made +28.4% a bet against the points'
+  63.4% and +21.1%; getting more, the moneyline won 18.5% of 254 and lost
+  11.4% a bet while the points covered 52.8% (+0.7%); a favorite (86), the
+  points +6.6% against the moneyline's +0.3%. The moneyline's lead on the
+  small underdogs is not proven (t 1.1 on the difference).
   That fits how moneylines are priced in general (5,202 games 2006-26, a
   unit on every side): underdogs priced 33-45% +1.3% a bet over 2,070
   bets, every other band loses, and the longest shots (under 20%) lose
@@ -243,6 +250,17 @@ def main():
     for low, high, label in ((0, 0.2, "under 20%"), (0.2, 0.33, "20-33%"), (0.33, 0.45, "33-45%"), (0.45, 1, "45%+")):
         use = (implied >= low) & (implied < high)
         print(f"  our side priced {label:10s} {use.sum():4d} bets: the points {points[use].mean():+.3f}, the moneyline {straight[use].mean():+.3f}")
+    # By what a bettor can see without a price: is our side the underdog,
+    # and how many points is it getting (the site's note on each spread bet).
+    underdog = ((priced["gap"] > 0) == (priced["spread_line"] < 0)).to_numpy()
+    getting = priced["spread_line"].abs().to_numpy()
+    won = ((priced["gap"] > 0) == (priced["margin"] > 0)).to_numpy()
+    covered = ((priced["gap"] > 0) == (priced["cover"] > 0)).to_numpy()
+    cut = config.NFL_SPREAD_BET_MONEYLINE["max_points"]
+    for label, use in ((f"an underdog getting {cut} or fewer", underdog & (getting <= cut)),
+                       (f"an underdog getting more than {cut}", underdog & (getting > cut)), ("a favorite", ~underdog)):
+        print(f"  our side {label:34s} {use.sum():4d} bets: the moneyline won {won[use].mean():.1%}, {straight[use].mean():+.3f} a bet; "
+              f"the points covered {covered[use].mean():.1%}, {points[use].mean():+.3f} a bet")
     sides = pd.concat([
         pd.DataFrame({"line": games[f"{side}_moneyline"], "won": games["home_score"] * sign > games["away_score"] * sign,
                       "tie": games["home_score"] == games["away_score"]})
