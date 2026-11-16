@@ -391,6 +391,8 @@ def spread_side_metrics(picks: pd.DataFrame) -> dict:
             "spread_bet_backtest_first_season": tested["first_season"], "spread_bet_backtest_last_season": tested["last_season"],
             "spread_bet_recent_won": tested["recent_won"], "spread_bet_recent_lost": tested["recent_lost"],
             "spread_bet_recent_seasons": tested["recent_seasons"],
+            # The moneyline note on a spread bet (config.NFL_SPREAD_BET_MONEYLINE).
+            **{f"spread_bet_moneyline_{name}": value for name, value in config.NFL_SPREAD_BET_MONEYLINE.items()},
             "total_lean_backtest_games": config.NFL_TOTAL_LEAN_BACKTEST["games"],
             "total_lean_backtest_won_rate": config.NFL_TOTAL_LEAN_BACKTEST["won_rate"],
             "total_lean_backtest_units": config.NFL_TOTAL_LEAN_BACKTEST["units"],

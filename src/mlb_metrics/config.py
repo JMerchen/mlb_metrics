@@ -2561,6 +2561,26 @@ NFL_SPREAD_BACKTEST = {"games": 6464, "won_rate": 0.515}
 # so for a few hours the rule skipped them. With the backups fixed at the
 # source those bets win like the rest, 59.5% of 279, and the skip is gone.)
 NFL_SPREAD_BET_MIN_GAP = 3.5
+# The moneyline as another way to play a spread bet (2026-11-16, the
+# user's "is there some separator ... which would be better to take the
+# moneyline and which to take the spread", then "add it as a note"). What
+# separates them is how many points the underdog gets: up to max_points
+# they rarely decide the game, yet the points cost the bookmaker's full
+# cut. On our own spread bets with a closing moneyline (2006-2026), an
+# underdog getting max_points or fewer returned 28.4% a bet on the
+# moneyline (won 50.8% of 309) against 21.1% with the points (covered
+# 63.4%); getting more, the moneyline lost 11.4% a bet on 254 while the
+# points covered 52.8% (scripts/research_nfl_spread_edge.py prints
+# these). The gap between the two is not proven (t 1.1), so the
+# site shows the moneyline as a note on the bet and still grades the
+# spread. Every underdog since 2006, not just our bets, says the same:
+# getting 1-3, the moneyline beat the points by 2-9 points of return a
+# bet; from 7 up it lost 12-35% a bet.
+# (return / won: the moneyline's; points_*: the same bets with the points;
+# big_*: underdogs getting more than max_points. The page reads these as
+# spread_bet_moneyline_<name> from the picks summary.)
+NFL_SPREAD_BET_MONEYLINE = {"max_points": 6.5, "bets": 309, "return": 0.284, "won": 0.508,
+                            "points_return": 0.211, "points_covered": 0.634, "big_bets": 254, "big_return": -0.114}
 NFL_SPREAD_BET_BACKTEST = {"games": 848, "won_rate": 0.573, "units": 79.8, "winning_seasons": 19, "seasons": 25,
                            "first_season": 2002, "last_season": 2026, "recent_won": 35, "recent_lost": 36,
                            "recent_seasons": "2023-26"}

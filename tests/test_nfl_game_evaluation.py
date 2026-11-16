@@ -539,6 +539,11 @@ def test_spread_bet_is_the_side_when_the_models_margin_is_far_from_the_line():
     assert metrics["spread_bet_clv_n"] == 2 and metrics["spread_bet_clv_mean"] == pytest.approx(0.0)
     assert metrics["spread_bet_backtest_games"] == config.NFL_SPREAD_BET_BACKTEST["games"]
     assert metrics["spread_bet_min_gap"] == gap
+    assert metrics["spread_bet_moneyline_max_points"] == config.NFL_SPREAD_BET_MONEYLINE["max_points"]
+    assert metrics["spread_bet_moneyline_bets"] == config.NFL_SPREAD_BET_MONEYLINE["bets"]
+    # The exact names the page reads (docs/summary_render.js spreadBetMoneylineNote).
+    assert {f"spread_bet_moneyline_{name}" for name in ("max_points", "bets", "return", "won", "points_return", "points_covered",
+                                                         "big_bets", "big_return")} <= set(metrics)
 
 
 def test_a_spread_bet_waits_for_the_injury_report_when_a_starter_is_in_doubt():
