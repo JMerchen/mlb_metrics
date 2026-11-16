@@ -546,33 +546,87 @@ if(against){ lines.push(`This one goes against Vegas's favorite; those picks hav
 return lines.join(" ")
 }
 
-// The NFL page's track-record table: each kind of pick, how it has done
-// this season and in testing.
+// ---- NFL track record ----
+// How sure a pick was, in the bands the pipeline uses
+// (nfl_game_evaluation.CONFIDENCE_BANDS).
+const PICK_BANDS = [[0.50, 0.55], [0.55, 0.60], [0.60, 0.65], [0.65, 0.70], [0.70, 0.75], [0.75, 1.01]]
+const pickBandLabel = ([low, high]) => high > 1 ? `${Math.round(low * 100)}%+` : `${Math.round(low * 100)}–${Math.round(high * 100)}%`
+const pickBand = p => PICK_BANDS.findIndex(([low, high]) => p >= low && p < high)
+
+// This season's finished picks as a cross tab: how sure we were (rows)
+// against Vegas's chance for the team we picked (columns: "Under 50%" is
+// Vegas having the other team, then the same bands), each cell our record
+// {won, lost}. `rows` and `columns` are the labels; `rowTotals`,
+// `columnTotals` and `total` the margins. A pick with no Vegas number
+// counts in its row's total only. null with nothing finished.
+function pickCrossTab(picks){
+const finished = (picks || []).filter(g => g.status === "win" || g.status === "loss")
+const season = finished.reduce((latest, g) => Math.max(latest, srNum(g.season) || 0), 0)
+const done = finished.filter(g => (srNum(g.season) || 0) === season)
+if(!done.length){ return null }
+const blank = () => ({won: 0, lost: 0})
+const columns = ["Under 50%", ...PICK_BANDS.map(pickBandLabel)]
+const cells = PICK_BANDS.map(() => columns.map(blank))
+const rowTotals = PICK_BANDS.map(blank), columnTotals = columns.map(blank), total = blank()
+done.forEach(g => {
+const ours = srNum(g.predicted_probability), vegas = srNum(g.market_predicted_winner_probability)
+const row = ours === null ? -1 : pickBand(Math.max(ours, 1 - ours))
+if(row < 0){ return }
+const key = g.status === "win" ? "won" : "lost"
+rowTotals[row][key]++
+total[key]++
+if(vegas === null){ return }
+const column = vegas < 0.5 ? 0 : 1 + pickBand(vegas)
+cells[row][column][key]++
+columnTotals[column][key]++
+})
+return {season, rows: PICK_BANDS.map(pickBandLabel), columns, cells, rowTotals, columnTotals, total}
+}
+
+// The cross tab as a table: "12–5" in a cell is 12 right and 5 wrong; an
+// empty cell had no such picks. The shaded cells are where we and Vegas
+// were about equally sure.
+function pickCrossTabHtml(picks){
+const tab = pickCrossTab(picks)
+if(!tab){ return "" }
+const record = c => c.won + c.lost ? `${c.won}–${c.lost}` : ""
+const rate = c => c.won + c.lost ? ` title="right ${Math.round(100 * c.won / (c.won + c.lost))}% of ${c.won + c.lost}"` : ""
+const body = tab.rows.map((label, r) => `<tr><th scope="row">${label}</th>${
+tab.cells[r].map((c, i) => `<td${i === r + 1 ? ' class="same"' : ""}${rate(c)}>${record(c)}</td>`).join("")
+}<td class="all"${rate(tab.rowTotals[r])}>${record(tab.rowTotals[r])}</td></tr>`).join("")
+return `<table class="trackRecord crossTab">
+<thead>
+<tr><th></th><th colspan="${tab.columns.length}" class="over">Vegas's chance for the team we picked</th><th></th></tr>
+<tr><th class="corner">We say</th>${tab.columns.map(c => `<th scope="col">${c}</th>`).join("")}<th scope="col">All</th></tr>
+</thead>
+<tbody>${body}
+<tr class="all"><th scope="row">All</th>${tab.columnTotals.map(c => `<td${rate(c)}>${record(c)}</td>`).join("")}<td${rate(tab.total)}>${record(tab.total)}</td></tr>
+</tbody>
+</table>`
+}
+
+// Under the cross tab: the kinds of pick it doesn't show, this season -
+// with and against Vegas's favorite (and what a unit on each made at the
+// closing odds), over/under leans, spread bets and our side of every
+// spread. `table` is nfl_pick_confidence.csv, `summary` the picks summary.
 function trackRecordTableHtml(table, summary){
 const s = summary || {}
 const cell = (right, games) => games ? `${right} of ${games} <span class="dim">${Math.round(100 * right / games)}%</span>` : "-"
-const tested = (right, games) => games ? `${Math.round(100 * right / games)}% <span class="dim">of ${Number(games).toLocaleString("en-US")}</span>` : "-"
-const rows = (table || []).map(r => {
-const label = r.group === "confidence" ? `We say ${r.label}`
-: r.label === "with" ? "We pick Vegas's favorite" : "We pick against Vegas's favorite"
 const units = v => { const u = srNum(v); return u === null ? "" : ` <span class="dim">&middot; ${u > 0 ? "+" : u < 0 ? "−" : ""}${Math.abs(u).toFixed(1)} units</span>` }
-return [label, cell(srNum(r.season_right) || 0, srNum(r.season_games) || 0) + (srNum(r.season_games) ? units(r.season_units) : ""),
-tested(srNum(r.backtest_right) || 0, srNum(r.backtest_games) || 0) + units(r.backtest_units)]
-})
-const pair = (won, lost, rate, games, label) => {
-const w = srNum(won) || 0, l = srNum(lost) || 0, n = srNum(games) || 0, r = srNum(rate)
-if(!(w + l) && !n){ return }
-rows.push([label, cell(w, w + l), n && r !== null ? `${Math.round(1000 * r) / 10}% <span class="dim">of ${n.toLocaleString("en-US")}</span>` : "-"])
+const rows = (table || []).filter(r => r.group === "vegas" && srNum(r.season_games)).map(r =>
+[r.label === "with" ? "We pick Vegas's favorite" : "We pick against Vegas's favorite",
+cell(srNum(r.season_right) || 0, srNum(r.season_games) || 0) + units(r.season_units)])
+const pair = (won, lost, label) => {
+const w = srNum(won) || 0, l = srNum(lost) || 0
+if(w + l){ rows.push([label, cell(w, w + l)]) }
 }
-pair(s.total_leans_won, s.total_leans_lost, s.total_lean_backtest_won_rate, s.total_lean_backtest_games, "Over/under leans")
-if(srNum(s.spread_bet_backtest_games)){
-pair(s.spread_bets_won, s.spread_bets_lost, s.spread_bet_backtest_won_rate, s.spread_bet_backtest_games, `Spread bets (${srNum(s.spread_bet_min_gap) || 3.5}+ points from the line)`)
-}
-pair(s.spread_sides_won, s.spread_sides_lost, s.spread_backtest_won_rate, s.spread_backtest_games, "Our side of the spread, every game")
+pair(s.total_leans_won, s.total_leans_lost, "Over/under leans")
+pair(s.spread_bets_won, s.spread_bets_lost, `Spread bets (${srNum(s.spread_bet_min_gap) || 3.5}+ points from the line)`)
+pair(s.spread_sides_won, s.spread_sides_lost, "Our side of the spread, every game")
 if(!rows.length){ return "" }
 return `<table class="trackRecord">
-<thead><tr><th>When</th><th>This season</th><th>In testing</th></tr></thead>
-<tbody>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td></tr>`).join("")}</tbody>
+<thead><tr><th>Kind of pick</th><th>This season</th></tr></thead>
+<tbody>${rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join("")}</tbody>
 </table>`
 }
 
@@ -649,6 +703,6 @@ srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, game
 srWeather, pickBarHtml, totalLean, totalLeanBadgeHtml, totalRangeNote, totalLeanCloseNote, totalLeanReason,
 betWorstLine, betPriceFloor, betsPanelHtml,
 btsSeasonOver, btsSeasonOverHtml,
-teamEpaHtml, spreadInfo, spreadText, spreadBet, spreadBetWorstLine, spreadBetReason, spreadBetMoneylineNote, spreadNote, spreadBetBadgeHtml, pickReasons, pickReasonsHtml, injuryLineHtml, trackRecordNote, trackRecordTableHtml,
+teamEpaHtml, spreadInfo, spreadText, spreadBet, spreadBetWorstLine, spreadBetReason, spreadBetMoneylineNote, spreadNote, spreadBetBadgeHtml, pickReasons, pickReasonsHtml, injuryLineHtml, trackRecordNote, trackRecordTableHtml, pickCrossTab, pickCrossTabHtml,
 }
 }

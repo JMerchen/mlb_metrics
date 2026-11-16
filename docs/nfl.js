@@ -112,7 +112,7 @@ console.log("no nfl_pick_confidence.csv yet", e)
 
 renderNflGamePickStats(summary)
 renderNflBets(picks, summary[0])
-renderNflTrackRecord(confidence, summary[0])
+renderNflTrackRecord(confidence, summary[0], picks)
 renderNflTodaysGamePicks(picks, confidence)
 renderNflGamePickHistory(picks)
 loadNflWhatIf(picks)
@@ -599,11 +599,12 @@ const el = document.getElementById("nflBets")
 if(el){ el.innerHTML = betsPanelHtml(picks, summary) }
 }
 
-// How each kind of pick has done, this season and in testing.
-function renderNflTrackRecord(confidence, summary){
+// How our picks have done this season: our confidence against Vegas's as
+// a cross tab, then the other kinds of pick.
+function renderNflTrackRecord(confidence, summary, picks){
 const el = document.getElementById("nflTrackRecord")
 if(!el){ return }
-const html = trackRecordTableHtml(confidence, summary)
+const html = pickCrossTabHtml(picks) + trackRecordTableHtml(confidence, summary)
 el.innerHTML = html
 document.getElementById("nflTrackRecordSection").style.display = html ? "" : "none"
 }
