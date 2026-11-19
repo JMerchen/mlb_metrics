@@ -5576,6 +5576,30 @@ one chosen game.
   ten pages in both modes: no text under 3.8:1 contrast). Change the values
   there to restyle; a new card class needs adding to its list.
 
+## Explanations behind a "?" (`docs/help.js`)
+
+Why (2026-11-19, user request): the paragraph under each section heading
+saying what the section is took up the page for readers who already know.
+Now a small "?" bubble sits at the end of the heading; a click shows the
+paragraph in a box beside it, and the box goes away on a scroll, a click
+anywhere else, or Escape.
+
+- It applies to every `p.sectionIntro` on every page except How it works
+  (which is the explanation), and to any paragraph given `class="helpText"`
+  (the NFL simulator's intro has it).
+- The paragraphs stay in the page as written and are only hidden
+  (`html.helpOn` in `style.css`, a class the script sets from the `<head>`
+  so nothing flashes). Scripts that fill them in keep working, the box
+  shows their current text, and without the script they show as before.
+- A paragraph with no heading before it gets the bubble on its own line,
+  labeled by `data-help-label` ("What is this?" without one). Paragraphs in
+  a row share one bubble. A heading a script rewrites gets its bubble back
+  on the next frame (a `MutationObserver`). In a fold's heading the bubble
+  does not open or shut the fold.
+- The box uses the cards' green and is placed by `helpPopPosition`
+  (under the bubble, kept inside the window, above when there is no room
+  below), tested in `help.test.js`.
+
 ## NFL schedule sheet: a unit a week (`nfl_season_views.team_schedule`, `nfl_stats.js`)
 
 User request (2026-11-14): "on the schedule view, put how many units

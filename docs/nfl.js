@@ -375,7 +375,7 @@ el.innerHTML = `<h4>Simulate the game</h4>
 return
 }
 el.innerHTML = `<h4>Simulate ${whatifEsc(whatifGameLabel(game))}</h4>
-<p class="simIntro">Play this game out snap by snap, with its QBs and the players the injury report has out<span class="deep-only"> (or as you set them in What if? above)</span>. It takes about five minutes: a drive chart builds as it goes, and the final score comes with each team's box score and every player's stat line. Speed it up or skip to the end anytime. Or play it 1,000 times at once for how often each team wins, the likely scores and what each player averages.</p>
+<p class="simIntro helpText">Play this game out snap by snap, with its QBs and the players the injury report has out<span class="deep-only"> (or as you set them in What if? above)</span>. It takes about five minutes: a drive chart builds as it goes, and the final score comes with each team's box score and every player's stat line. Speed it up or skip to the end anytime. Or play it 1,000 times at once for how often each team wins, the likely scores and what each player averages.</p>
 ${nflSimWeatherHtml()}
 <div class="simControls"><button class="whatIfAction" data-sim-action="start">Simulate this game</button>
 <button class="whatIfAction" data-sim-action="summary">Simulate it 1,000 times</button></div>`
