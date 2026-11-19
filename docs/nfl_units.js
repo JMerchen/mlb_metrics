@@ -146,17 +146,41 @@ const biggest = g=>Math.max(...g.teams.flatMap(t=>[t.passing, t.rushing]).filter
 return games.sort((a, b)=>biggest(b) - biggest(a))
 }
 
-function matchupCardsHtml(rows){
-const games = matchupGames(rows)
-if(!games.length){ return "" }
-return games.map(g=>`<div class="pickCard matchupCard">
+// One game's card: each offense's passing and rushing differential.
+function matchupCardHtml(g){
+return `<div class="pickCard matchupCard">
 <div class="pickName">${g.title}</div>
 <table class="epaTable"><thead><tr><th></th><th>Passing differential</th><th>Rushing differential</th></tr></thead>
 <tbody>${g.teams.map(t=>`<tr><td>${unitTeamName(t.team)}</td>`
 + `<td class="${differentialCellClass(t.passing)}">${formatDifferential(t.passing)}</td>`
 + `<td class="${differentialCellClass(t.rushing)}">${formatDifferential(t.rushing)}</td></tr>`).join("")}</tbody>
 </table>
-</div>`).join("")
+</div>`
+}
+
+function matchupCardsHtml(rows){
+const games = matchupGames(rows)
+if(!games.length){ return "" }
+return games.map(matchupCardHtml).join("")
+}
+
+// The Picks page's matchup view: one game's units side by side. Its
+// differentials card, then both teams' unit ratings (road team first).
+// "" when the units file doesn't have this game (a week not rated yet).
+function unitsMatchupHtml(rows, home, away){
+const game = matchupGames(rows).find(g=>g.teams.some(t=>t.team === home) && g.teams.some(t=>t.team === away))
+if(!game){ return "" }
+const byTeam = unitsByTeam(rows)
+const header = [["team", "Team"], ["qb_name", "QB"], ...UNIT_COLUMNS].map(([, label])=>`<th>${label}</th>`).join("")
+const body = [away, home].map(code=>{
+const r = byTeam[code]
+const cells = UNIT_COLUMNS.map(([key])=>{
+const n = unitNum(r[key])
+return `<td class="${unitCellClass(n)}">${n === null ? "-" : Math.round(n)}</td>`
+}).join("")
+return `<tr><td>${unitTeamName(code)}</td><td>${r.qb_name || "-"}</td>${cells}</tr>`
+}).join("")
+return `${matchupCardHtml(game)}<div class="pickCard matchupCard matchupUnits"><div class="tableScroll"><table class="unitsTable"><tr>${header}</tr>${body}</table></div></div>`
 }
 
 // Teams without a game this week.
@@ -197,7 +221,7 @@ return byTeam
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 UNIT_COLUMNS, unitsTableHtml, sortUnitRows, unitCellClass, propUnitContext, unitsByTeam,
-matchupDifferentials, matchupGames, matchupCardsHtml, byeTableHtml, differentialCellClass, formatDifferential,
+matchupDifferentials, matchupGames, matchupCardHtml, matchupCardsHtml, unitsMatchupHtml, byeTableHtml, differentialCellClass, formatDifferential,
 unitsViewKey, unitsView,
 }
 }

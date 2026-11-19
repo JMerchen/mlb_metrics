@@ -110,3 +110,19 @@ test("units views: the toggles pick which numbers fill the unit columns", () => 
   assert.equal(unitsView(rows, "season_sos")[0].rushing_plus, "141")   // no view column: unchanged
   assert.equal(rows[0].qb_plus, "127")                                  // input left alone
 })
+
+test("one game's units for the Picks page: its differentials card, then both teams' units, road team first", () => {
+  const { unitsMatchupHtml } = require("./nfl_units.js")
+  const rows = ROWS.map(r => ({ ...r, home: r.team === "KC" ? "1" : r.team === "DEN" ? "0" : "" }))
+  const html = unitsMatchupHtml(rows, "KC", "DEN")
+  const flat = text(html)
+  assert.match(flat, /Broncos at Chiefs Passing differential Rushing differential/)
+  // Broncos passing: (95 + 93) / 2 - 108 = -14; Chiefs: (112 + 104) / 2 - 121 = -13.
+  // Rushing: Broncos 102 - 88 = +14; Chiefs 96 - 105 = -9.
+  assert.match(flat, /Broncos −14 \+14 Chiefs −13 −9/)
+  assert.match(flat, /Team QB QB\+ Receiving\+ Rushing\+ Pass D\+ Run D\+ Broncos Bo Nix 95 93 102 121 105 Chiefs Patrick Mahomes 112 104 96 108 88/)
+  assert.doesNotMatch(flat, /Bills/)
+  // A game the units file doesn't have (a bye team, or a week not rated yet): nothing.
+  assert.equal(unitsMatchupHtml(rows, "KC", "BUF"), "")
+  assert.equal(unitsMatchupHtml([], "KC", "DEN"), "")
+})

@@ -293,6 +293,67 @@ test("NFL card: a spread side far from the line is badged as a bet, a close one 
   assert.match(spreadNote({ ...close, spread_bet_held: "the Chiefs' quarterback is questionable" }, "nfl"), /waits for the injury report: the Chiefs' quarterback is questionable\./)
 })
 
+test("matchup view: this week's games in playing order, the first still to play selected, bets marked", () => {
+  const { matchupOptions, weekBetsHtml, betsPanelHtml } = require("./summary_render.js")
+  global.teamName = require("./teams.js").teamName
+  const flat = html => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+  const g = (id, date, away, home, extra = {}) => ({ season: "2026", week: "11", game_id: id, date, away_team: away, home_team: home, status: "pending", ...extra })
+  const picks = [
+    g("mon", "2026-11-23", "CIN", "WAS"),
+    g("sun2", "2026-11-22", "LV", "DEN", { spread_line: "10", predicted_margin: "13.9", spread_side: "DEN", spread_bet: "DEN", predicted_total: "46", total_lean: "over", total_lean_line: "40.5" }),
+    g("sun1", "2026-11-22", "ARI", "KC", { total_lean_held: "the Chiefs' quarterback is questionable" }),
+    g("thu", "2026-11-19", "IND", "HOU", { status: "win", spread_line: "12.5", predicted_margin: "8", spread_side: "IND", spread_bet: "IND" }),
+    { ...g("old", "2026-11-15", "BUF", "NYJ"), week: "10", spread_bet: "BUF", spread_line: "-7", predicted_margin: "-11", spread_side: "BUF" },
+  ]
+  const options = matchupOptions(picks)
+  assert.deepEqual(options.games.map(o => o.id), ["thu", "sun1", "sun2", "mon"])                  // last week's game is not listed
+  assert.equal(options.games[0].label, "Colts at Texans · Thu Nov 19 · final")                    // played: no bet marker
+  assert.equal(options.games[2].label, "Raiders at Broncos · Sun Nov 22 · bet")
+  assert.equal(options.games[3].label, "Bengals at Commanders · Mon Nov 23")
+  assert.equal(options.selected, "sun1")                                                          // the first still to play
+  assert.equal(matchupOptions(picks.map(p => ({ ...p, status: "win" }))).selected, "mon")         // all played: the last
+  assert.deepEqual(matchupOptions([]), { games: [], selected: null })
+  // The buttons under the dropdown: each bet opens its game; a held one is listed apart.
+  const chips = weekBetsHtml(picks)
+  assert.equal(flat(chips), "Bets this week Broncos −10 Over 40.5 Raiders at Broncos Waiting on the injury report Cardinals at Chiefs")
+  assert.equal((chips.match(/data-matchup="sun2"/g) || []).length, 2)
+  assert.match(chips, /class="betChip held" data-matchup="sun1"/)
+  assert.doesNotMatch(chips, /Colts|Bills/)                                                       // played, or another week
+  assert.equal(flat(weekBetsHtml([g("a", "2026-11-22", "ARI", "KC")])), "No bets this week yet.")
+  assert.equal(weekBetsHtml([{ ...g("a", "2026-11-22", "ARI", "KC"), status: "loss" }]), "")
+  // One game's bets: its rows, or a line about that game rather than the week.
+  const one = flat(betsPanelHtml([picks[1]], {}, { single: true }))
+  assert.match(one, /Broncos −10 Raiders at Broncos .* Over 40\.5 Raiders at Broncos/)
+  assert.match(flat(betsPanelHtml([picks[0]], {}, { single: true })), /No bet on this game: neither its spread nor its total is far enough from ours\./)
+  assert.match(flat(betsPanelHtml([picks[2]], {}, { single: true })), /A bet here is waiting on the injury report: the Chiefs' quarterback is questionable\./)
+  assert.doesNotMatch(flat(betsPanelHtml([picks[2]], {}, { single: true })), /No bet on this game/)
+  assert.match(flat(betsPanelHtml([{ ...picks[0], status: "win" }], {}, { single: true })), /This game has been played\./)
+})
+
+test("matchup view: the last meetings at the same home, with Vegas's numbers and how it came out", () => {
+  const { meetingInfo, pastMeetingsHtml } = require("./summary_render.js")
+  global.teamName = require("./teams.js").teamName
+  const flat = html => html.replace(/<[^>]+>/g, " ").replace(/&middot;/g, "·").replace(/\s+/g, " ").trim()
+  const m = { game_id: "g", date: "2026-01-04", home_team: "HOU", away_team: "IND", home_score: "38", away_score: "30",
+    spread_line: "9.5", total_line: "37.5", home_moneyline: "-535.0", away_moneyline: "400.0" }
+  assert.deepEqual(meetingInfo(m, "nfl"), { date: "Jan 4, 2026", score: "Texans 38, Colts 30",
+    vegas: "Texans −9.5 (Texans −535, Colts +400), total 37.5", result: "Colts covered, over" })
+  // The road team favored and winning; a push on both numbers; a tie; no moneylines before 2006; no line at all.
+  assert.deepEqual(meetingInfo({ ...m, home_score: "20", away_score: "31", spread_line: "-1", total_line: "40" }, "nfl"),
+    { date: "Jan 4, 2026", score: "Colts 31, Texans 20", vegas: "Colts −1 (Texans −535, Colts +400), total 40", result: "Colts covered, over" })
+  assert.equal(meetingInfo({ ...m, home_score: "24", away_score: "21", spread_line: "3", total_line: "45" }, "nfl").result, "a push on the spread, a push on the total")
+  assert.equal(meetingInfo({ ...m, home_score: "20", away_score: "20", spread_line: "-7", total_line: "46" }, "nfl").score, "Texans 20, Colts 20 (tie)")
+  assert.equal(meetingInfo({ ...m, home_moneyline: "", away_moneyline: "", spread_line: "0" }, "nfl").vegas, "a pick'em, total 37.5")
+  assert.deepEqual(meetingInfo({ ...m, spread_line: "", total_line: "", home_moneyline: "", away_moneyline: "" }, "nfl"),
+    { date: "Jan 4, 2026", score: "Texans 38, Colts 30", vegas: "", result: "" })
+  const game = { game_id: "g", home_team: "HOU", away_team: "IND" }
+  const html = flat(pastMeetingsHtml([m, { ...m, date: "2024-10-27", home_score: "23", away_score: "20", spread_line: "5", total_line: "45" },
+    { ...m, game_id: "other" }], game, "nfl"))
+  assert.equal(html, "Jan 4, 2026 Texans 38, Colts 30 Vegas: Texans −9.5 (Texans −535, Colts +400), total 37.5 · Colts covered, over "
+    + "Oct 27, 2024 Texans 23, Colts 20 Vegas: Texans −5 (Texans −535, Colts +400), total 45 · Colts covered, under")
+  assert.equal(flat(pastMeetingsHtml([], game, "nfl")), "The Colts haven't played at the Texans since at least 1999.")
+})
+
 test("track record: with and against Vegas also show units at the closing odds", () => {
   const { trackRecordTableHtml } = require("./summary_render.js")
   const flat = html => html.replace(/<[^>]+>/g, " ").replace(/&middot;/g, "·").replace(/\s+/g, " ").trim()

@@ -45,7 +45,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 
 from mlb_metrics import (
-    config, market_odds, nfl_data, nfl_game_evaluation, nfl_game_picks, nfl_game_predictions,
+    config, market_odds, nfl_data, nfl_game_evaluation, nfl_game_picks, nfl_game_predictions, nfl_meetings,
     nfl_player_props, nfl_position_floors, nfl_prop_predictions, nfl_team_strength, nfl_totals, nfl_units,
     nfl_weather, nfl_whatif,
 )
@@ -415,6 +415,10 @@ def run(
             this_week_games = nfl_game_picks.correct_listed_starters(
                 this_week_games, history["weekly"], history["rosters_weekly"]
             )
+            # Each game's last meetings with the same home team, with the
+            # closing lines and the score (the Picks page's matchup view).
+            nfl_meetings.write_matchup_history(
+                this_week_games, _elo_schedules(raw_dir, schedules, season, week), output_dir, raw_dir)
 
             # Real, direct user request (2026-09-16): matchup-based
             # player prop rankings - reuses this SAME real no-lookahead

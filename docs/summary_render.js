@@ -265,8 +265,11 @@ return -Math.round(100 * p / (1 - p) / 5) * 5
 // The bets panel: this week's recommended bets (games not yet played with
 // a spread bet or an over/under lean), any waiting on the injury report,
 // and the record behind each kind.
-function betsPanelHtml(picks, summary){
+function betsPanelHtml(picks, summary, options){
 const s = summary || {}
+// options.single: the panel is for one game (the Picks page's matchup
+// view), so "nothing to bet" is about that game, not the week.
+const single = !!(options && options.single)
 const minGap = srNum(s.total_lean_min_gap) || 5
 const sideGap = srNum(s.spread_bet_min_gap) || 3.5
 const rate = srNum(s.total_lean_backtest_won_rate), tested = srNum(s.total_lean_backtest_games) || 0
@@ -295,7 +298,9 @@ return `<div class="betRow">
 <div class="betTerms">Stake 1 unit.${worst !== null ? ` Worth taking at ${lean.side === "over" ? `${worst} or lower` : `${worst} or higher`}` : ""}${floor ? `${worst !== null ? "," : ""} at ${floor} or better.` : "."}</div>
 </div>`
 }).join("")
-const waiting = held.length ? `<div class="betHeld">Waiting on the injury report: ${held.map(g => `${srEsc(name(g.away_team))} at ${srEsc(name(g.home_team))}`).join("; ")}.</div>` : ""
+const waiting = !held.length ? ""
+: single ? `<div class="betHeld">A bet here is waiting on the injury report: ${srEsc(held[0].spread_bet_held || held[0].total_lean_held)}.</div>`
+: `<div class="betHeld">Waiting on the injury report: ${held.map(g => `${srEsc(name(g.away_team))} at ${srEsc(name(g.home_team))}`).join("; ")}.</div>`
 const seasonText = (w, l, units) => w + l ? ` This season: ${w}–${l}${units !== null ? `, ${units > 0 ? "up" : units < 0 ? "down" : "even at"} ${Math.abs(units).toFixed(2)} units` : ""}.` : ""
 const closeText = (n, mean) => n ? ` The line has closed ${Math.abs(mean || 0).toFixed(1)} points ${(mean || 0) >= 0 ? "our way" : "against us"} on average after we took it (${n} bet${n === 1 ? "" : "s"}).` : ""
 const upDown = v => `${srNum(v) > 0 ? "up" : "down"} ${Math.abs(srNum(v) || 0)} units`
@@ -307,11 +312,113 @@ const recent = recentWon !== null && recentLost !== null ? ` The caution: ${s.sp
 const sideSeason = seasonText(srNum(s.spread_bets_won) || 0, srNum(s.spread_bets_lost) || 0, srNum(s.spread_bet_units))
 const sideClv = closeText(srNum(s.spread_bet_clv_n) || 0, srNum(s.spread_bet_clv_mean))
 const sideRecord = sideRate !== null && sideTested ? `<div class="betRecord"><b>Spreads.</b> Sides ${sideGap} or more points from the line won <b>${Math.round(1000 * sideRate) / 10}% of ${sideTested}</b> against the closing spread in testing (${s.spread_bet_backtest_first_season}–${s.spread_bet_backtest_last_season}: ${upDown(s.spread_bet_backtest_units)}, a winning record in ${s.spread_bet_backtest_winning_seasons} of ${s.spread_bet_backtest_seasons} seasons).${recent}${sideSeason}${sideClv}</div>` : ""
-const none = !bets.length && !sides.length ? `<div class="betNone">${upcoming.length ? "No bets yet this week: no game's spread or total is far enough from ours." : "No games left to bet this week."}</div>` : ""
+const none = bets.length || sides.length ? ""
+: single ? `<div class="betNone">${held.length ? "" : upcoming.length ? "No bet on this game: neither its spread nor its total is far enough from ours." : "This game has been played."}</div>`
+: `<div class="betNone">${upcoming.length ? "No bets yet this week: no game's spread or total is far enough from ours." : "No games left to bet this week."}</div>`
 return `<div class="betsPanel">
 ${sideRows}${rows}${none}${waiting}${sideRecord}${record}
 <div class="betFine">We only recommend what has beaten the closing line in testing: spread sides where our margin sits ${sideGap} or more points from Vegas's, and over/unders where our total sits ${minGap} or more from theirs. Take them early: when our number and the opening line disagreed, the line moved toward us far more often than away. Our game winners alone have not beaten the closing line, so they are picks, not bets.</div>
 </div>`
+}
+
+// ---- The Picks page's matchup view ----
+// This week's games for the matchup dropdown (the latest week in the
+// picks), in the order they are played: {games: [{id, label, pending,
+// bet}], selected}. A label reads "Colts at Texans · Thu Nov 19", with
+// "· final" once played and "· bet" when the game has one. `selected` is
+// the first game still to play (the last game when none is).
+function matchupOptions(picks){
+const all = picks || []
+const key = p => `${p.season}_${String(p.week).padStart(2, "0")}`
+const latest = all.map(key).sort().slice(-1)[0]
+const week = all.filter(p => key(p) === latest)
+.sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.game_id).localeCompare(String(b.game_id)))
+const day = p => {
+const d = new Date(`${String(p.date).slice(0, 10)}T12:00:00`)
+return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric"}).replace(",", "")
+}
+const games = week.map(p => {
+const pending = p.status === "pending"
+const bet = pending && !!(spreadBet(p, "nfl") || totalLean(p))
+return {id: p.game_id, pending, bet,
+label: `${srTeam(p.away_team, "nfl")} at ${srTeam(p.home_team, "nfl")}${day(p) ? ` · ${day(p)}` : ""}${pending ? "" : " · final"}${bet ? " · bet" : ""}`}
+})
+const first = games.find(g => g.pending) || games[games.length - 1]
+return {games, selected: first ? first.id : null}
+}
+
+// Under the dropdown: this week's bets as buttons that open their game
+// ("Colts +12.5", "Over 39.5 Rams at Cardinals"), and the games whose bet
+// is waiting on the injury report. data-matchup carries the game.
+function weekBetsHtml(picks){
+// In the order the games are played, like the dropdown.
+const byId = new Map((picks || []).map(g => [g.game_id, g]))
+const upcoming = matchupOptions(picks).games.filter(g => g.pending).map(g => byId.get(g.id))
+const game = g => `${srTeam(g.away_team, "nfl")} at ${srTeam(g.home_team, "nfl")}`
+const chip = (g, text, held) => `<button type="button" class="betChip${held ? " held" : ""}" data-matchup="${srEsc(g.game_id)}">${srEsc(text)}</button>`
+const chips = []
+upcoming.forEach(g => {
+const side = spreadBet(g, "nfl"), lean = totalLean(g)
+if(side){ chips.push(chip(g, `${side.team} ${side.number}`)) }
+if(lean){ chips.push(chip(g, `${lean.side === "over" ? "Over" : "Under"} ${lean.line} ${game(g)}`)) }
+})
+const held = upcoming.filter(g => (!totalLean(g) && g.total_lean_held) || (!spreadBet(g, "nfl") && g.spread_bet_held))
+.map(g => chip(g, game(g), true))
+if(!chips.length && !held.length){
+return upcoming.length ? `<span class="weekBetsLabel">No bets this week yet.</span>` : ""
+}
+return `${chips.length ? `<span class="weekBetsLabel">Bets this week</span>${chips.join("")}` : `<span class="weekBetsLabel">No bets this week yet.</span>`}${
+held.length ? `<span class="weekBetsLabel">Waiting on the injury report</span>${held.join("")}` : ""}`
+}
+
+// "Texans −9.5" for the points Vegas had the home team winning by.
+function meetingSpreadText(m, sport){
+const line = srNum(m.spread_line)
+if(line === null){ return "" }
+if(line === 0){ return "a pick'em" }
+return `${srTeam(line > 0 ? m.home_team : m.away_team, sport)} −${srPoints(line)}`
+}
+
+// One past meeting in words: {date, score, vegas, result}. "Jan 4, 2026",
+// "Texans 38, Colts 30", "Texans −9.5 (Texans −535, Colts +400), total
+// 37.5", "Colts covered, over".
+function meetingInfo(m, sport){
+const home = srTeam(m.home_team, sport), away = srTeam(m.away_team, sport)
+const hs = srNum(m.home_score), as = srNum(m.away_score)
+const d = new Date(`${String(m.date).slice(0, 10)}T12:00:00`)
+const date = Number.isNaN(d.getTime()) ? String(m.date || "") : d.toLocaleDateString("en-US", {year: "numeric", month: "short", day: "numeric"})
+const score = hs === as ? `${home} ${hs}, ${away} ${as} (tie)` : hs > as ? `${home} ${hs}, ${away} ${as}` : `${away} ${as}, ${home} ${hs}`
+const money = v => { const n = srNum(v); return n === null ? null : `${n > 0 ? "+" : "−"}${Math.abs(Math.round(n))}` }
+const hm = money(m.home_moneyline), am = money(m.away_moneyline)
+const spread = meetingSpreadText(m, sport), total = srNum(m.total_line)
+const vegas = [spread + (spread && hm && am ? ` (${home} ${hm}, ${away} ${am})` : ""), total === null ? "" : `total ${total}`].filter(Boolean).join(", ")
+const line = srNum(m.spread_line), result = []
+if(line !== null && hs !== null && as !== null){
+const margin = hs - as - line
+result.push(margin === 0 ? "a push on the spread" : `${margin > 0 ? home : away} covered`)
+}
+if(total !== null && hs !== null && as !== null){
+result.push(hs + as === total ? "a push on the total" : hs + as > total ? "over" : "under")
+}
+return {date, score, vegas, result: result.join(", ")}
+}
+
+// The last meetings with the same home team (nfl_matchup_history.csv rows
+// for one game, latest first): the date and final score, what Vegas had,
+// and how it came out against those numbers.
+function pastMeetingsHtml(meetings, game, sport){
+const rows = (meetings || []).filter(m => m.game_id === game.game_id)
+const home = srTeam(game.home_team, sport), away = srTeam(game.away_team, sport)
+if(!rows.length){
+return `<div class="pickCard meetings"><div class="meetingNone">The ${srEsc(away)} haven't played at the ${srEsc(home)} since at least 1999.</div></div>`
+}
+return `<div class="pickCard meetings">${rows.map(m => {
+const info = meetingInfo(m, sport)
+return `<div class="meeting">
+<div class="meetingScore"><span class="meetingDate">${srEsc(info.date)}</span> <b>${srEsc(info.score)}</b></div>
+<div class="meetingVegas">${info.vegas ? `Vegas: ${srEsc(info.vegas)}` : "No Vegas line on file"}${info.result ? ` <span class="meetingResult">&middot; ${srEsc(info.result)}</span>` : ""}</div>
+</div>`
+}).join("")}</div>`
 }
 
 // "Lean OVER 37.5", and once played "won" / "lost" / "push". A Tuesday
@@ -701,7 +808,7 @@ if (typeof module !== "undefined" && module.exports) {
 module.exports = {
 srPct, streakTilesHtml, btsPicksHtml, gamePicksRecordHtml, gamePickRowHtml, gamePicksListHtml, totalPointsText,
 srWeather, pickBarHtml, totalLean, totalLeanBadgeHtml, totalRangeNote, totalLeanCloseNote, totalLeanReason,
-betWorstLine, betPriceFloor, betsPanelHtml,
+betWorstLine, betPriceFloor, betsPanelHtml, matchupOptions, weekBetsHtml, meetingInfo, pastMeetingsHtml,
 btsSeasonOver, btsSeasonOverHtml,
 teamEpaHtml, spreadInfo, spreadText, spreadBet, spreadBetWorstLine, spreadBetReason, spreadBetMoneylineNote, spreadNote, spreadBetBadgeHtml, pickReasons, pickReasonsHtml, injuryLineHtml, trackRecordNote, trackRecordTableHtml, pickCrossTab, pickCrossTabHtml,
 }

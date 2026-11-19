@@ -89,13 +89,7 @@ this block isn't in the shared stylesheet. */
 <button class="tabButton deep-only" data-nfl-tab="payroll" onclick="selectNflTab('payroll')">Payroll</button>
 </div>
 
-<div id="gamePicksSection" style="display:none">
-
-<h3>
-This week's bets
-</h3>
-
-<div id="nflBets"></div>
+<div id="gamePicksSection" class="invertCards" style="display:none">
 
 <h3>
 Game picks
@@ -111,36 +105,52 @@ Loading...
 
 </div>
 
-<div id="nflTrackRecordSection" style="display:none">
 <h3>
-Track record
+This week, one game at a time
 </h3>
 
-<p class="sectionIntro">This season's finished picks. Each row is how sure we were, each column is the chance Vegas gave the same team, and each cell is our record there: 12&ndash;5 means 12 right and 5 wrong. "Under 50%" is where Vegas had the other team. The shaded cells are where we and Vegas were about equally sure; to their left we were more sure than Vegas, to their right less. Below it, a pick against Vegas's favorite is an underdog, so it can win less than half the time and still pay: the units are what one unit on every such pick made at the closing odds. Over/under leans and spread bets need about 52% to break even at standard odds.</p>
-
-<div id="nflTrackRecord" class="tableScroll"></div>
+<div class="matchupPicker">
+<label for="nflMatchup">Matchup</label>
+<select id="nflMatchup" aria-label="Pick a game"></select>
+<div class="weekBets" id="nflWeekBets"></div>
 </div>
 
-<h3>
-This week
-</h3>
-
-<p class="sectionIntro">EPA per play is how many points a team adds, on average, each snap. On offense higher is better; on defense it is what opponents gain, so lower is better. Ranks are out of 32 (1st is best), from each team's recent games with the latest weighted most.</p>
+<div id="nflMatchupView">
 
 <div class="reportKey"><span class="before">Picked before the final injury report (Tuesday)</span><span class="after">Repriced after it (the morning of, or the day before, the game)</span></div>
 
 <div
-class="todaysPicks"
-id="nflTodaysGamePicks">
+class="todaysPicks matchupBlock"
+id="nflMatchupPick">
 
 Loading...
 
 </div>
 
-<div class="deep-only">
-<h3>
-What if?
-</h3>
+<p class="sectionIntro">EPA per play is how many points a team adds, on average, each snap. On offense higher is better; on defense it is what opponents gain, so lower is better. Ranks are out of 32 (1st is best), from each team's recent games with the latest weighted most.</p>
+
+<h4 class="matchupHeading">Units matchup</h4>
+
+<p class="sectionIntro">Each offense's edge against the defense it faces. Passing differential: the average of the team's QB+ and Receiving+, minus the opponent's Pass D+. Rushing differential: its Rushing+ minus the opponent's Run D+. +30 or more (green) is a gap of a standard deviation in that offense's favor, &minus;30 or less (red) the same the other way. Below it, each team's units, where 100 is league average and higher is stronger. Every team's are on the Stats tab.</p>
+
+<div
+class="todaysPicks matchupBlock"
+id="nflMatchupUnits">
+
+</div>
+
+<h4 class="matchupHeading" id="nflMatchupMeetingsTitle">The last meetings</h4>
+
+<p class="sectionIntro">Up to five, latest first, with what Vegas had before kickoff and how it finished. Background, not a signal: we tested whether one team "owning" another predicts anything beyond the ratings, and it doesn't.</p>
+
+<div
+class="matchupBlock"
+id="nflMatchupMeetings">
+
+</div>
+
+<details class="foldSection matchupFold deep-only" id="nflWhatIfFold">
+<summary>What if? Change who plays in this game</summary>
 
 <p class="sectionIntro">Swap a starting QB, mark players out, and set how well each unit plays. Each team's run game, pass game, run defense and pass defense are rated in percent of their normal yards per play (a defense at 90% allows 10% more). A player out lowers the units his position touches by a default - what an absence at that position has cost teams in results, scaled by how much he plays - and you can type over it for any player ("run game at 50% without him") or set a whole unit outright. The yards become points and the points become win chance, the same way Vegas turns point spreads into odds. A QB swap reruns our model with that QB's rating; "Average starter" and "an average regular" cover anyone not listed. Players follow their current roster. Last week's view replays the games with only what we knew before kickoff, so you can test your settings against how they finished.</p>
 
@@ -151,6 +161,7 @@ id="nflWhatIf">
 Loading...
 
 </div>
+</details>
 
 <div
 class="whatIf simPanel"
@@ -158,11 +169,25 @@ id="nflSim"
 hidden>
 
 </div>
+
+<h4 class="matchupHeading">Bets on this game</h4>
+
+<div id="nflBets"></div>
+
 </div>
 
+<div id="nflTrackRecordSection" style="display:none">
 <h3>
-Recent results
+Track record
 </h3>
+
+<p class="sectionIntro">This season's finished picks. Each row is how sure we were, each column is the chance Vegas gave the same team, and each cell is our record there: 12&ndash;5 means 12 right and 5 wrong. "Under 50%" is where Vegas had the other team. The shaded cells are where we and Vegas were about equally sure; to their left we were more sure than Vegas, to their right less. Below it, a pick against Vegas's favorite is an underdog, so it can win less than half the time and still pay: the units are what one unit on every such pick made at the closing odds. Over/under leans and spread bets need about 52% to break even at standard odds.</p>
+
+<div id="nflTrackRecord" class="tableScroll"></div>
+</div>
+
+<details class="foldSection" id="nflRecentResults">
+<summary>Recent results</summary>
 
 <div
 class="scrollbox"
@@ -171,6 +196,7 @@ id="nflGamePickHistoryTable">
 Loading...
 
 </div>
+</details>
 
 </div>
 
@@ -260,20 +286,6 @@ Team units
 <div
 class="scrollbox"
 id="nflTeamUnitsTable">
-
-Loading...
-
-</div>
-
-<h3>
-This week's matchups
-</h3>
-
-<p class="sectionIntro">Each game, with each offense's edge against the defense it faces. Passing differential: the average of the team's QB+ and Receiving+, minus the opponent's Pass D+. Rushing differential: its Rushing+ minus the opponent's Run D+. Higher is a friendlier matchup for that offense; +30 or more (green) is a gap of a standard deviation, −30 or less (red) the same the other way. Most lopsided games first.</p>
-
-<div
-class="todaysPicks"
-id="nflUnitMatchups">
 
 Loading...
 
