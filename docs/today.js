@@ -83,7 +83,7 @@ return {asOf, todaysPicks, summary, topApproach: qualified[0] || null}
 // Mirrors build_bts_assistant_page.py's _game_picks_section - groupByWeek
 // (NFL only) groups "upcoming" by the whole (season, week) slate instead
 // of a single date, since real NFL weeks span Thu/Sun/Mon (see
-// docs/nfl.js's own renderNflTodaysGamePicks, which groups the same way).
+// how docs/summary_render.js matchupOptions picks the week for the NFL page).
 async function loadGamePicksSection(prefix, {groupByWeek = false} = {}){
 
 const [picks, summaryRows, byVersion, confidence] = await Promise.all([

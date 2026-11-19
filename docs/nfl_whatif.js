@@ -290,8 +290,14 @@ const modes = options.modes && options.modes.length > 1
 : ""
 const games = (data && data.games) || []
 if(!games.length){ return `${modes}No upcoming games to try yet` }
+// options.follow: the page picks the game (the Picks page's matchup
+// dropdown), so there is no picker here - and a game that isn't in the
+// data (already played) gets a note, not some other game's panel.
+if(options.follow && !games.some(g => g.game_id === gameId)){
+return `${modes}<p class="whatIfNote">This game has been played, so there is nothing left to change. Pick a game still to come${options.modes && options.modes.length > 1 ? ", or open last week's games to replay one" : ""}.</p>`
+}
 const game = games.find(g => g.game_id === gameId) || games[0]
-const picker = `<label class="whatIfField">Game
+const picker = options.follow ? "" : `<label class="whatIfField">Game
 <select data-whatif="game">${games.map(g => `<option value="${whatifEsc(g.game_id)}"${g.game_id === game.game_id ? " selected" : ""}>${whatifEsc(whatifGameLabel(g))}</option>`).join("")}</select></label>`
 const result = whatifProbability(game, data, state)
 const replay = game.final

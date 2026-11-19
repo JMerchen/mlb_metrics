@@ -206,3 +206,15 @@ test("the settings a simulation ran with read in words, and any change shows", (
   b.out.home.add("lt"); b.out.home.add("rb1")
   assert.equal(whatifStateKey(a), whatifStateKey(b))
 })
+
+test("panel that follows the page's game: no picker, and a played game gets a note instead of another game's panel", () => {
+  const followed = whatifPanelHtml(DATA, GAME.game_id, whatifEmptyState(), { follow: true })
+  assert.doesNotMatch(followed, /data-whatif="game"/)
+  assert.match(followed, /whatIfTeams/)
+  assert.match(whatifPanelHtml(DATA, GAME.game_id, whatifEmptyState()), /data-whatif="game"/)     // its own picker otherwise
+  const played = whatifPanelHtml(DATA, "2026_01_XX_YY", whatifEmptyState(), { follow: true })
+  assert.match(played, /This game has been played/)
+  assert.doesNotMatch(played, /whatIfTeams/)
+  const modes = [{ key: "this", label: "This week", active: true }, { key: "last", label: "Last week (with results)" }]
+  assert.match(whatifPanelHtml(DATA, "2026_01_XX_YY", whatifEmptyState(), { follow: true, modes }), /open last week's games to replay one/)
+})

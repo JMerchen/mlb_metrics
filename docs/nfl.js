@@ -110,13 +110,92 @@ confidence = await loadCSV("./data/nfl_pick_confidence.csv")
 console.log("no nfl_pick_confidence.csv yet", e)
 }
 
+let meetings = []
+try{
+meetings = await loadCSV("./data/nfl_matchup_history.csv")
+}catch(e){
+console.log("no nfl_matchup_history.csv yet", e)
+}
+
 renderNflGamePickStats(summary)
-renderNflBets(picks, summary[0])
 renderNflTrackRecord(confidence, summary[0], picks)
-renderNflTodaysGamePicks(picks, confidence)
 renderNflGamePickHistory(picks)
+Object.assign(nflMatchup, {picks, confidence, meetings, summary: summary[0]})
+startNflMatchupPicker()
 loadNflWhatIf(picks)
 
+}
+
+// The Picks tab's matchup view: one game at a time, chosen from the
+// dropdown (or a bet's button under it) - its pick card, units matchup,
+// last meetings at the same home, What if? and the simulation, and any
+// bets. `selected` is the game's id.
+const nflMatchup = {picks: [], confidence: [], meetings: [], summary: null, selected: null}
+
+function nflMatchupGame(){
+return nflMatchup.picks.find(p => p.game_id === nflMatchup.selected) || null
+}
+
+function startNflMatchupPicker(){
+const select = document.getElementById("nflMatchup")
+const view = document.getElementById("nflMatchupView")
+if(!select || !view){ return }
+const options = matchupOptions(nflMatchup.picks)
+if(!options.games.length){
+select.hidden = true
+view.innerHTML = "No game picks yet"
+return
+}
+select.innerHTML = options.games.map(g => `<option value="${g.id}">${g.label}</option>`).join("")
+const bets = document.getElementById("nflWeekBets")
+if(bets){
+bets.innerHTML = weekBetsHtml(nflMatchup.picks)
+bets.onclick = event => {
+const chip = event.target.closest("button[data-matchup]")
+if(chip){ selectNflMatchup(chip.dataset.matchup) }
+}
+}
+select.onchange = () => selectNflMatchup(select.value)
+selectNflMatchup(options.selected)
+}
+
+// Open one game: every part of the view follows it, and What if? and the
+// simulation go back to that game as posted.
+function selectNflMatchup(gameId){
+nflMatchup.selected = gameId
+const select = document.getElementById("nflMatchup")
+if(select && select.value !== gameId){ select.value = gameId }
+renderNflMatchup()
+if(nflWhatIf.data.this){
+nflWhatIf.mode = "this"
+nflWhatIf.game.this = gameId
+const game = nflWhatIfGameData("this")
+if(game){ nflWhatIf.state.this = whatifPostedState(game) }
+renderNflWhatIf()
+}
+if(nflSim.profiles){ renderNflSimIdle() }
+}
+
+function renderNflMatchup(){
+const p = nflMatchupGame()
+const set = (id, html) => { const el = document.getElementById(id); if(el){ el.innerHTML = html } }
+if(!p){ return }
+set("nflMatchupPick", nflPickCardHtml(p, nflMatchup.confidence))
+set("nflMatchupMeetings", pastMeetingsHtml(nflMatchup.meetings, p, "nfl"))
+set("nflMatchupMeetingsTitle", `The last meetings at the ${teamName(p.home_team, "nfl")}`)
+set("nflBets", betsPanelHtml([p], nflMatchup.summary, {single: true}))
+renderNflMatchupUnits()
+}
+
+// The units for the open game (docs/nfl_units.js), in the default view:
+// recent games weighted more, adjusted for schedule.
+function renderNflMatchupUnits(){
+const el = document.getElementById("nflMatchupUnits")
+const p = nflMatchupGame()
+if(!el || !p){ return }
+const rows = unitsView(nflTeamUnits, unitsViewKey(true, true))
+el.innerHTML = unitsMatchupHtml(rows, p.home_team, p.away_team)
+|| `<div class="pickCard matchupCard">Unit ratings for this game aren't in yet${p.status === "pending" ? "" : " (it has been played)"}.</div>`
 }
 
 // "What if?" panel (docs/nfl_whatif.js): this week's games, or last week's
@@ -142,7 +221,8 @@ loadNflSim(picks)
 for(const m of NFL_WHATIF_MODES){
 try{
 nflWhatIf.data[m.key] = await loadNflWhatIfFile(m.file)
-nflWhatIf.state[m.key] = whatifPostedState((nflWhatIf.data[m.key].games || [])[0])
+if(m.key === "this" && nflMatchup.selected){ nflWhatIf.game.this = nflMatchup.selected }
+nflWhatIf.state[m.key] = whatifPostedState(nflWhatIfGameData(m.key) || (nflWhatIf.data[m.key].games || [])[0])
 }catch(e){
 console.log(`no ${m.file}.json yet`, e)
 }
@@ -154,6 +234,7 @@ return
 if(!nflWhatIf.data.this){ nflWhatIf.mode = "last" }
 
 renderNflWhatIf()
+if(nflSim.profiles && !nflSim.run){ renderNflSimIdle() }
 el.addEventListener("change", onNflWhatIfChange)
 el.addEventListener("click", onNflWhatIfClick)
 
@@ -164,7 +245,9 @@ function renderNflWhatIf(focusSelector){
 const el = document.getElementById("nflWhatIf")
 const mode = nflWhatIf.mode
 const modes = NFL_WHATIF_MODES.filter(m => nflWhatIf.data[m.key]).map(m => ({...m, active: m.key === mode}))
-el.innerHTML = whatifPanelHtml(nflWhatIf.data[mode], nflWhatIf.game[mode], nflWhatIf.state[mode], {modes})
+// This week's game is the page's (the matchup dropdown); last week's
+// replays have their own picker.
+el.innerHTML = whatifPanelHtml(nflWhatIf.data[mode], nflWhatIf.game[mode], nflWhatIf.state[mode], {modes, follow: mode === "this"})
 // Re-rendering replaces the control that changed; keep keyboard focus on it.
 const again = focusSelector ? el.querySelector(focusSelector) : null
 if(again){ again.focus() }
@@ -181,6 +264,7 @@ let focus = null
 if(t.dataset.whatif === "game"){
 nflWhatIf.game[mode] = t.value
 nflWhatIf.state[mode] = whatifPostedState(nflWhatIfGameData(mode))
+if(nflSim.profiles && !nflSim.run){ renderNflSimIdle() }
 focus = '[data-whatif="game"]'
 }else if(t.dataset.whatifQb){
 state[t.dataset.whatifQb === "home" ? "homeQb" : "awayQb"] = t.value
@@ -208,10 +292,13 @@ renderNflWhatIf(focus)
 
 }
 
-// The game the view has open (its first until one is picked).
+// The game the view has open. This week's is the matchup dropdown's (none
+// when that game has been played); last week's is its own picker's, the
+// first until one is picked.
 function nflWhatIfGameData(mode){
 const games = (nflWhatIf.data[mode] || {}).games || []
-return games.find(g => g.game_id === nflWhatIf.game[mode]) || games[0]
+const found = games.find(g => g.game_id === nflWhatIf.game[mode])
+return found || (mode === "this" && nflWhatIf.game[mode] ? null : games[0])
 }
 
 function onNflWhatIfClick(event){
@@ -221,6 +308,7 @@ if(!t){ return }
 if(t.dataset.whatifMode){
 nflWhatIf.mode = t.dataset.whatifMode
 renderNflWhatIf(`[data-whatif-mode="${t.dataset.whatifMode}"]`)
+if(nflSim.profiles && !nflSim.run){ renderNflSimIdle() }
 }else if(t.dataset.whatifAction === "missed"){
 const mode = nflWhatIf.mode
 nflWhatIf.state[mode] = whatifMissedState(nflWhatIfGameData(mode))
@@ -275,8 +363,19 @@ function renderNflSimIdle(){
 
 stopNflSim()
 nflSim.run = null
-document.getElementById("nflSim").innerHTML = `<h4>Simulate the game</h4>
-<p class="simIntro">Play the game picked above out snap by snap, with its QBs, players out and unit settings as they're set now. It takes about five minutes: a drive chart builds as it goes, and the final score comes with each team's box score and every player's stat line. Speed it up or skip to the end anytime - then mark someone else out above and run it again. Or play it 1,000 times at once for how often each team wins, the likely scores and what each player averages.</p>
+const game = nflWhatIfGameData(nflWhatIf.mode)
+const el = document.getElementById("nflSim")
+if(!nflWhatIf.data[nflWhatIf.mode]){
+el.innerHTML = ""       // the games aren't loaded yet
+return
+}
+if(!game){
+el.innerHTML = `<h4>Simulate the game</h4>
+<p class="simIntro">This game has been played, so there is nothing to simulate. Pick a game still to come.</p>`
+return
+}
+el.innerHTML = `<h4>Simulate ${whatifEsc(whatifGameLabel(game))}</h4>
+<p class="simIntro">Play this game out snap by snap, with its QBs and the players the injury report has out<span class="deep-only"> (or as you set them in What if? above)</span>. It takes about five minutes: a drive chart builds as it goes, and the final score comes with each team's box score and every player's stat line. Speed it up or skip to the end anytime. Or play it 1,000 times at once for how often each team wins, the likely scores and what each player averages.</p>
 ${nflSimWeatherHtml()}
 <div class="simControls"><button class="whatIfAction" data-sim-action="start">Simulate this game</button>
 <button class="whatIfAction" data-sim-action="summary">Simulate it 1,000 times</button></div>`
@@ -593,12 +692,6 @@ el.innerHTML = html
 
 }
 
-// The recommended bets for the games still to play, with their record.
-function renderNflBets(picks, summary){
-const el = document.getElementById("nflBets")
-if(el){ el.innerHTML = betsPanelHtml(picks, summary) }
-}
-
 // How our picks have done this season: our confidence against Vegas's as
 // a cross tab, then the other kinds of pick.
 function renderNflTrackRecord(confidence, summary, picks){
@@ -609,28 +702,9 @@ el.innerHTML = html
 document.getElementById("nflTrackRecordSection").style.display = html ? "" : "none"
 }
 
-function renderNflTodaysGamePicks(picks, confidence){
-
-const el = document.getElementById("nflTodaysGamePicks")
-
-if(!picks.length){
-el.innerHTML = "No game picks yet"
-return
-}
-
-const latestWeek = picks
-.map(p=>`${p.season}_${String(p.week).padStart(2,"0")}`)
-.sort()
-.slice(-1)[0]
-
-const thisWeek = picks
-.filter(p=>`${p.season}_${String(p.week).padStart(2,"0")}` === latestWeek)
-.sort((a,b)=>Number(b.predicted_probability) - Number(a.predicted_probability))
-
-if(!thisWeek.length){
-el.innerHTML = "No games this week"
-return
-}
+// One game's pick card: who we say and Vegas says, the case for and
+// against, who's out, the spread and total next to ours, each team's EPA.
+function nflPickCardHtml(p, confidence){
 
 const statusLabels = {
 win: "We were right",
@@ -639,9 +713,6 @@ not_played: "Postponed",
 pending: "Not played yet",
 }
 const pct0 = v=>v !== undefined && v !== null && v !== "" && !Number.isNaN(Number(v)) ? Math.round(Number(v) * 100) + "%" : ""
-
-el.innerHTML = thisWeek
-.map(p=>{
 
 const away = teamName(p.away_team, "nfl")
 const home = teamName(p.home_team, "nfl")
@@ -678,9 +749,6 @@ ${reportNote}
 ${betLine}
 </div>
 `
-
-})
-.join("")
 
 }
 
@@ -774,8 +842,6 @@ function renderNflTeamUnits(){
 const recency = document.getElementById("nflUnitsRecency")
 const sos = document.getElementById("nflUnitsSos")
 const rows = unitsView(nflTeamUnits, unitsViewKey(recency && recency.checked, sos && sos.checked))
-document.getElementById("nflUnitMatchups").innerHTML =
-matchupCardsHtml(rows) || "Matchups appear after the next weekly update."
 document.getElementById("nflUnitByes").innerHTML =
 rows.length ? byeTableHtml(rows) : ""
 const el = document.getElementById("nflTeamUnitsTable")
@@ -801,6 +867,7 @@ const week = nflTeamUnits.length ? nflTeamUnits[0].week : ""
 const asOf = document.getElementById("nflTeamUnitsWeek")
 if(asOf){ asOf.textContent = week ? `Going into week ${week}.` : "" }
 renderNflTeamUnits()
+renderNflMatchupUnits()
 }
 
 // Cards (the default) or the sortable table, same rows either way.

@@ -5462,7 +5462,7 @@ from here are tracked separately from v4's. v4's own inputs are no longer
 used for the win chance; the cards' reasons, the units and the totals
 model are unchanged.
 
-## NFL bets: what holds up (`scripts/research_nfl_bets.py`, the Picks tab's "This week's bets")
+## NFL bets: what holds up (`scripts/research_nfl_bets.py`, the Picks tab's bets)
 
 User request (2026-11-14): "The point of the site is to act as a quant
 level site to make educated bets ... The accuracy of our bets is more
@@ -5505,6 +5505,41 @@ What changed on the site:
 Still open: logging real prop lines so props can be graded as bets; a
 wind-under flag near kickoff; opening-line capture of our own, so
 early-week value can be measured on lines we know were available.
+
+## NFL Picks page: one game at a time (`docs/nfl.html`, `nfl.js`, `nfl_meetings.py`)
+
+Why (2026-11-19): researching a game meant going between the Picks and
+Stats tabs and finding the same game again in each tool (the cards, the
+units matchups, What if?, the simulator). The Picks tab is now built around
+one chosen game.
+
+- **Order of the tab**: the model's summary tiles; a matchup dropdown
+  (`summary_render.matchupOptions`: the latest week in game order, the first
+  unplayed game chosen, games with a bet and finished games marked) with
+  buttons for the week's bets under it (`weekBetsHtml`, a tap opens that
+  game); then, for the chosen game, the pick card, the units matchup
+  (`nfl_units.unitsMatchupHtml`: the differentials plus both teams' unit
+  ratings), the last five meetings, What if? (Deep dive, folded, following
+  the chosen game; last week's replays keep their own picker), the
+  simulator (now in Basic too) and the bets on that game
+  (`betsPanelHtml(..., {single: true})`); then the track record; then recent
+  results in a closed `<details>`.
+- **The Stats tab** lost only its "This week's matchups" block; the units
+  table and byes are unchanged.
+- **Past meetings** (`nfl_meetings.py` -> `docs/data/nfl_matchup_history.csv`,
+  written by the weekly run): the five latest games between the two
+  franchises with the same one at home, neutral-field games excluded, each
+  with the closing spread, over/under, moneylines and final score. The
+  schedule files the pipeline already loads cover recent seasons;
+  `data/raw/nfl/past_games_1999_2015.csv` (cut once from nflverse's
+  games.csv) carries the older ones. Moneylines start in 2006. Relocated
+  teams are matched by franchise (`nfl_totals.NFL_TEAM_ALIASES`).
+- **Color trial**: on this tab only, cards take the other mode's colors
+  (dark cards on Basic's light page, light cards on Deep dive's dark page);
+  page backgrounds are unchanged. It is the `.invertCards` block at the end
+  of `style.css`, which redefines the theme's color variables inside the
+  card classes. Add the class to another section to extend the trial;
+  delete the block to end it.
 
 ## NFL schedule sheet: a unit a week (`nfl_season_views.team_schedule`, `nfl_stats.js`)
 
