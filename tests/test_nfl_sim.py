@@ -7,6 +7,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from mlb_metrics import nfl_sim
 
@@ -262,3 +263,59 @@ def test_field_zones_compare_each_zone_with_the_middle_of_the_field():
     # 34 of 100 passes completed inside the 10 against 133 of 200 between the 20s.
     assert goal["pass"] == 0.5 and abs(goal["comp"] - 0.34 / 0.665) < 0.002
     assert goal["real"]["run_yards"] == 2.0 and goal["real"]["td"] == 0.335  # 134 of 400
+
+
+def test_a_back_returning_from_missed_games_keeps_the_share_he_had_when_active():
+    """Why (2026-11-19): shares were the team's last four games, so a back
+    inactive for those four (active again this week) got no carries in the
+    simulation. Shares are over the games each player was active for."""
+    rows, roster = [], []
+    for week in range(1, 9):
+        gid = f"2026_{week:02d}_HOU"
+        # Weeks 1-4 the veteran leads (6 carries to the rookie's 4); he is
+        # inactive weeks 5-8, when the rookie takes 8 and a third back 2.
+        split = [("vet", "D.Vet", 6), ("rook", "W.Rook", 4)] if week <= 4 else [("rook", "W.Rook", 8), ("third", "E.Third", 2)]
+        for gsis, name, n in split:
+            for _ in range(n):
+                rows.append(_play(game_id=gid, week=week, posteam="HOU", play_type="run",
+                                  rusher_player_id=gsis, rusher_player_name=name, yards_gained=4.0))
+        rows.append(_play(game_id=gid, week=week, posteam="HOU", play_type="pass", pass_attempt=1,
+                          passer_player_id="q1", passer_player_name="C.QB", receiver_player_id="rook",
+                          receiver_player_name="W.Rook", complete_pass=1, yards_gained=5.0))
+    # Week 9 is the game being simulated: the veteran is active again. A
+    # fourth back was active all along and never got the ball.
+    for week in range(1, 10):
+        for gsis, name in [("vet", "Dee Vet"), ("rook", "Will Rook"), ("third", "Em Third"), ("bench", "Ben Bench"), ("q1", "Cee Qb")]:
+            status = "INA" if gsis == "vet" and 5 <= week <= 8 else "ACT"
+            roster.append({"season": 2026, "week": week, "team": "HOU", "position": "QB" if gsis == "q1" else "RB",
+                           "full_name": name, "gsis_id": gsis, "pfr_id": gsis.title(), "status": status})
+    current, rosters = pd.DataFrame(rows), pd.DataFrame(roster)
+    out = nfl_sim.team_players(current, "HOU", nfl_sim._active_roster(rosters, 2026), rosters)
+    by_name = {p["name"]: p for p in out["players"]}
+    assert "Ben Bench" not in by_name
+    # The veteran had 60% of the carries in every game he was active for.
+    # The rookie had 80% lately and 60% on the season; the third back, active
+    # all year, 20% lately and 10% on the season.
+    raw = {"Dee Vet": 0.6, "Em Third": 0.7 * 0.2 + 0.3 * 0.1, "Will Rook": 0.7 * 0.8 + 0.3 * 0.6}
+    total = sum(raw.values())
+    for name, share in raw.items():
+        assert by_name[name]["carries"] == pytest.approx(share / total, abs=1e-4)
+    # Without the weekly rosters a player's games are the ones he touched
+    # the ball in, so the veteran still counts.
+    bare = {p["name"]: p for p in nfl_sim.team_players(current, "HOU", nfl_sim._active_roster(rosters, 2026))["players"]}
+    assert bare["Dee Vet"]["carries"] > 0.3
+
+
+def test_a_defense_that_is_run_on_and_gashed_pulls_opponents_toward_the_run():
+    def plays(n_pass, n_run, ypc):
+        rows = [_play(play_type="pass", pass_attempt=1, complete_pass=1, yards_gained=6.0) for _ in range(n_pass)]
+        rows += [_play(play_type="run", yards_gained=ypc) for _ in range(n_run)]
+        return nfl_sim._offense_rates(pd.DataFrame(rows))
+
+    league = plays(500, 500, 4.0)
+    assert nfl_sim._defense_pass_shift(plays(250, 250, 4.0), league) == pytest.approx(0.0, abs=1e-9)
+    soft = nfl_sim._defense_pass_shift(plays(200, 300, 5.5), league)
+    assert -0.06 < soft < -0.02
+    assert nfl_sim._defense_pass_shift(plays(300, 200, 3.0), league) > 0.02
+    profiles = nfl_sim.build_profiles(_pbp(), 2026)
+    assert all("opponent_pass_shift" in team for team in profiles["teams"].values())

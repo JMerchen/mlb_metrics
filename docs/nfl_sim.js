@@ -231,7 +231,19 @@ return total > 0 ? list.filter(p => p[shareKey] > 0).map(p => ({...p, share: p[s
 const targets = normalize(playing.filter(p => p.role !== "QB"), "targets")
 const meanCatch = targets.reduce((sum, p) => sum + p.share * p.catch, 0) || 1
 const meanYpr = targets.reduce((sum, p) => sum + p.share * p.catch * p.ypr, 0) / meanCatch || 1
-const carries = normalize(playing, "carries")
+// A missing back's carries go to the backs who play (his position's
+// share stays the position's), not to the QB's scrambles or the
+// receivers' end-arounds; with no one left at his position, to everyone.
+const lostCarries = {}
+for(const p of team.players || []){
+if(p.role !== "QB" && !playing.includes(p) && p.carries > 0){ lostCarries[p.pos] = (lostCarries[p.pos] || 0) + p.carries }
+}
+const samePos = pos => playing.filter(p => p.role !== "QB" && p.pos === pos).reduce((sum, p) => sum + (p.carries || 0), 0)
+const carries = normalize(playing.map(p => {
+const lost = p.role === "QB" ? 0 : lostCarries[p.pos] || 0
+const kept = lost ? samePos(p.pos) : 0
+return kept > 0 ? {...p, carries: p.carries * (kept + lost) / kept} : p
+}), "carries")
 const meanYpc = carries.reduce((sum, p) => sum + p.share * p.ypc, 0) || 1
 return {
 qb: qbEntry,
@@ -750,7 +762,11 @@ continue
 // 77% runs in real games); ahead late, a team runs the clock - in the last
 // four minutes real teams throw on 6% of first downs, 21% of seconds and
 // 42% of thirds - and an incompletion would stop it.
-let passRate = wx ? simShiftOdds(p.neutral_pass_rate, wx.pass_rate) : p.neutral_pass_rate
+// Offenses lean a little toward what the defense gives up: its
+// opponent_pass_shift (nfl_sim.py, from the pass rate, yards a carry and
+// yards a dropback it has allowed) is added to the offense's own rate.
+const ownRate = Math.min(0.75, Math.max(0.25, p.neutral_pass_rate + (Number(prof[def].opponent_pass_shift) || 0)))
+let passRate = wx ? simShiftOdds(ownRate, wx.pass_rate) : ownRate
 if(down === 3 || down === 4){ passRate = togo <= 1 ? 0.25 : togo <= 2 ? 0.4 : togo <= 4 ? 0.65 : 0.85 }
 else if(down === 2 && togo >= 8){ passRate += 0.1 }
 else if(down === 2 && togo <= 3){ passRate -= 0.1 }

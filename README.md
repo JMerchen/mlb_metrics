@@ -3341,7 +3341,7 @@ incompletions 6.
 
 Each team's profile also lists its players (`nfl_sim.team_players`): its
 starting QB and kicker, and each active skill player's share of targets
-and carries over its last 4 games, with his catch rate, yards per catch
+and carries in the games he was active for (below), with his catch rate, yards per catch
 and yards per carry over the team's (shrunk with 25 targets, 12 catches
 and 30 carries). Players carry gsis and pfr ids, so `simLineup` drops
 anyone marked out in What if? and spreads his share over the rest; the
@@ -3353,6 +3353,38 @@ screen shows each player's line; "Simulate it 1,000 times"
 percentile margin and total, a margin chart, the commonest finals and
 every player's averages, touchdown chance and 100-yard chance - about
 0.2 s in the browser.
+
+**Who gets the ball** (2026-11-19). Shares used to be the team's last four
+games, full stop. A back who missed those four had nothing: Houston's
+David Montgomery (inactive weeks 6-10, active for week 11) got no carries
+in the simulation even with the starter marked out, and the QB's runs
+swelled to fill the gap (C.J. Stroud averaged 9 a game). Three changes:
+
+- A player's share is over the games he was **active** for (the weekly
+  roster's status, or any game he touched the ball in): `RECENT_WEIGHT` on
+  his last four such games (0.7 for carries, 0.5 for targets), the rest on
+  all of them this season. Tested on 2016-2026, predicting each active
+  player's share of the next game from week 5 on (miss = half the summed
+  absolute error): carries 0.245 -> 0.228, and 0.270 -> 0.238 in games with
+  a player back from missed time; targets 0.282 -> 0.266. The blend beat any
+  single window.
+- A back marked out hands his carries to the backs who play (`simLineup`),
+  not to the QB or the receivers in proportion.
+- An offense leans toward what the defense gives up
+  (`opponent_pass_shift`, `OPPONENT_PASS_SHIFT`): the opponent's neutral
+  pass rate moves with the pass rate, yards per carry and yards per
+  dropback the defense has allowed. All three held on 3,768 team-games
+  alongside the offense's own tendency (t = 4.4, -3.6, 3.3). It is small:
+  the worst fifth of run defenses see about 1.7 more runs a game than the
+  best, and the shift's spread across teams is about one point of pass rate.
+  It uses the whole season, so a defense that has only been poor lately
+  (Houston's run defense: 10th in yards per carry on the season, but 4.9 a
+  carry over its last three games) barely moves it.
+
+For that game, Montgomery went from 0 to about 15 carries a game with
+Marks out; Jonathan Taylor stays near 12.5, because he has had about half
+of the Colts' carries over the last four games (55 of 108) and the Colts,
+a 12.5-point underdog, run about 22 times in the simulation.
 
 ## NFL Automated Game Picks (`docs/nfl.html`'s Picks tab)
 
