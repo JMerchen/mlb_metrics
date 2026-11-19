@@ -5534,12 +5534,15 @@ one chosen game.
   `data/raw/nfl/past_games_1999_2015.csv` (cut once from nflverse's
   games.csv) carries the older ones. Moneylines start in 2006. Relocated
   teams are matched by franchise (`nfl_totals.NFL_TEAM_ALIASES`).
-- **Color trial**: on this tab only, cards take the other mode's colors
-  (dark cards on Basic's light page, light cards on Deep dive's dark page);
-  page backgrounds are unchanged. It is the `.invertCards` block at the end
-  of `style.css`, which redefines the theme's color variables inside the
-  card classes. Add the class to another section to extend the trial;
-  delete the block to end it.
+- **Card color** (site-wide, not only this tab): every card is one soft
+  green, the pale green of a school answer sheet, in both Basic and Deep
+  dive; the page behind keeps its mode's own color. A first trial on this
+  tab swapped the two modes' card colors, and light cards on the dark page
+  were hard on the eyes. It is the last block of `style.css`: the card
+  classes redefine the theme's color variables for themselves, with text
+  and the win/loss/chart colors darkened to read on green (checked on all
+  ten pages in both modes: no text under 3.8:1 contrast). Change the values
+  there to restyle; a new card class needs adding to its list.
 
 ## NFL schedule sheet: a unit a week (`nfl_season_views.team_schedule`, `nfl_stats.js`)
 

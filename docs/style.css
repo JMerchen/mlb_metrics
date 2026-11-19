@@ -2313,28 +2313,24 @@ td.form-down b{color:var(--danger);}
 .foldSection>summary::after{content:"Show";margin-left:auto;font-size:12px;font-weight:500;}
 .foldSection[open]>summary::after{content:"Hide";}
 
-/* ---- Color trial (2026-11-19, user request): inside .invertCards, cards
-   take the other mode's colors while the page keeps its own - dark cards
-   on Basic's light page, light cards on Deep dive's dark one. A card
-   redefines the theme's variables for itself, so everything in it (text,
-   borders, badges, tables, form controls) follows without its own rule.
-   On the NFL Picks tab for now; add the class to any container to try it
-   there, or remove this block to end the trial. */
-:root[data-theme="light"] .invertCards :is(.pickCard,.streakStat,.betsPanel,.whatIf){
---bg:#1c2027;--bg-raised:#15181d;--bg-card:#15181d;--bg-hover:#272c35;
---border:#2f353f;--border-strong:#424a58;--text:#d8dce2;--text-dim:#9399a4;
---accent:#e3a24a;--accent-strong:#f0b86a;--on-accent:#1a1206;
---success:#3ecf8e;--danger:#f0554f;--info:#5c7cfa;
---report-before:#b48ead;--report-after:#4fb3d9;
---prop-mid:#383835;--prop-other:#5b6270;--mlb-mid:#5b6270;
+/* ---- Card color (2026-11-19, user request): every card on the site is
+   one soft green - the pale green of a school answer sheet - in both
+   Basic and Deep dive, while the page behind keeps its mode's own color.
+   (A first trial swapped the modes' card colors; light cards on the dark
+   page were hard on the eyes.) A card redefines the theme's variables for
+   itself, so everything in it (text, borders, badges, tables, form
+   controls) follows without its own rule: text and the status colors are
+   darkened to read on green. To restyle, change the values here; to go
+   back to each mode's own cards, remove this block. A new card class
+   needs adding to the list. */
+:is(.pickCard,.streakStat,.betsPanel,.whatIf,.stat,.panel,.game,.pitcherCard,.gameCard,.gameCard2,.infoCard,.leanChart,.propCard,.vizCard,.playerPick,.duelCard,.payTile,.installTip,.cbbRegion,.cbbGame,.cbbMatchup,.batScout,.batSummary,.methodCard){
+--bg:#deeede;--bg-raised:#cfe5cf;--bg-card:#cfe5cf;--bg-hover:#bfd9c0;
+--border:#a7c7a9;--border-strong:#83a986;--text:#14231a;--text-dim:#41584a;
+--accent:#8f4d00;--accent-strong:#753f00;--on-accent:#ffffff;
+--success:#0b6b3a;--danger:#b0201a;--info:#2743b5;
+--report-before:#7a4a84;--report-after:#14688c;
+--prop-over:#1f6fd0;--prop-under:#c2440f;--mlb-better:#1f6fd0;--mlb-worse:#c2440f;
+--prop-mid:#a9bfab;--prop-other:#6f8574;--mlb-mid:#7f9584;
 color:var(--text);
 }
-:root[data-theme="dark"] .invertCards :is(.pickCard,.streakStat,.betsPanel,.whatIf){
---bg:#ffffff;--bg-raised:#f5f6f8;--bg-card:#f5f6f8;--bg-hover:#e9ecf1;
---border:#e1e4ea;--border-strong:#c6ccd5;--text:#1a1e24;--text-dim:#5d6672;
---accent:#d4801a;--accent-strong:#b56a0c;--on-accent:#ffffff;
---success:#1c9a60;--danger:#d03a34;--info:#3b5bdb;
---report-before:#9a6fa0;--report-after:#2b93bd;
---prop-mid:#d3d6dc;--prop-other:#9aa1ac;--mlb-mid:#a3a9b3;
-color:var(--text);
-}
+.infoCard{background:var(--bg-card);}
