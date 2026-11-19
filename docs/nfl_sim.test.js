@@ -220,6 +220,14 @@ test("a lineup splits targets and carries among who plays, keeping the team's av
   assert.equal(qbRuns.name, "Malik Willis")
   assert.ok(Math.abs(qbRuns.share - 0.75) < 1e-9)
   assert.equal(out.qb.short, "M. Willis")
+  // With a second back on the team, Jacobs's carries go to him: the QB's
+  // and the tight end's shares stay what they were.
+  const two = { ...PROFILES, teams: { GB: { ...PROFILES.teams.GB, players: [...GB_PLAYERS.players.map(p => p.name === "Josh Jacobs" ? { ...p, carries: 0.4 } : p), player("r2", "WilsEm00", "Emanuel Wilson", "RB", 0, 0.2)] } } }
+  const backup = simLineup(two, "GB", new Set(["JacoJo01"]))
+  const share = name => backup.rushers.find(r => r.name === name || r.pos === name).share
+  assert.ok(Math.abs(share("Emanuel Wilson") - 0.6) < 1e-9)
+  assert.ok(Math.abs(share("QB") - 0.3) < 1e-9)
+  assert.ok(Math.abs(share("Tucker Kraft") - 0.1) < 1e-9)
   // A team without player profiles still plays, credited to the team.
   const bare = simLineup(PROFILES, "CAR")
   assert.equal(bare.receivers.length, 0)
@@ -622,4 +630,19 @@ test("1,000-game summary: each team's scoring odds instead of exact finals", () 
   assert.match(html, /Points scored 10 or fewer Under 20 20\+ 30\+/)
   assert.match(html, /Tuned to the points model: Panthers 20\.5, Packers 23\.5 on average/)
   assert.doesNotMatch(html, /Commonest finals/)
+})
+
+test("an offense throws more against a defense that pulls opponents toward the pass", () => {
+  // Why (2026-11-19): every opponent's plays were called the same way, so a
+  // weak run defense drew no more runs than a strong one.
+  const versus = shift => ({ ...PROFILES, teams: { ...PROFILES.teams, CAR: { ...PROFILES.teams.CAR, opponent_pass_shift: shift } } })
+  const dropbacks = profiles => {
+    let n = 0
+    for (let seed = 1; seed <= 60; seed++) {
+      const b = simulateGame(profiles, "CAR", "GB", { seed }).box.away
+      n += b.pass_att + b.sacks
+    }
+    return n / 60
+  }
+  assert.ok(dropbacks(versus(0.08)) > dropbacks(versus(-0.08)) + 2)
 })

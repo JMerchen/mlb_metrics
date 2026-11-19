@@ -13,9 +13,10 @@ A team's rates and shapes are its current-season plays pulled toward the
 league's with SHRINK_PLAYS pseudo-plays, so a few weeks don't swing them.
 
 Each team also lists its players for the simulated box score: who gets the
-targets and carries (shares over its last PLAYER_GAMES games, among players
-still active on its roster), how each catches and gains next to the team
-(shrunk toward the team), its starting QB and its kicker. Players carry
+targets and carries (each player's share of the team's in the games he was
+active for - see RECENT_WEIGHT - among players active on its roster now),
+how each catches and gains next to the team (shrunk toward the team), its
+starting QB and its kicker. Players carry
 both ids - gsis for the play-by-play, pfr for the What if? panel's
 regulars - so a player marked out there sits out the simulation too.
 """
@@ -32,6 +33,20 @@ import pandas as pd
 QUANTILES = np.r_[0.003, np.linspace(0.025, 0.975, 39), 0.997]
 SHRINK_PLAYS = 150
 PLAYER_GAMES = 4
+# A player's share of his team's targets / carries is taken over the games
+# he was ACTIVE for, not the team's last few: this weight on his last
+# PLAYER_GAMES such games, the rest on all of them this season.
+#
+# Why (2026-11-19): shares were the team's last four games, full stop. A
+# back who missed those four (Houston's David Montgomery, inactive weeks
+# 6-10, active again for week 11) had no carries at all in the simulation
+# even with the starter marked out. Tested on 2016-2026, predicting each
+# active player's share of the next game from week 5 on (miss = half the
+# summed absolute error, 0 = perfect): carries 0.245 -> 0.228, and 0.270 ->
+# 0.238 in games with a player back from missed time; targets 0.282 ->
+# 0.266. The blend with the season beat any single window (carries: last
+# four alone 0.229, season alone 0.235; targets: 0.270 and 0.268).
+RECENT_WEIGHT = {"targets": 0.5, "carries": 0.7}
 # Pseudo-targets / -carries / -catches toward the team's rate for a player.
 SHRINK_TARGETS = 25
 SHRINK_CARRIES = 30
@@ -336,12 +351,82 @@ def _ratio(num, den, prior_rate, k) -> float:
     return float((num + k * prior_rate) / (den + k))
 
 
-def team_players(current: pd.DataFrame, team: str, roster: pd.DataFrame | None) -> dict:
-    """{qb, kicker, players: [...]} for one team from this season's plays
-    (shares from its last PLAYER_GAMES games). A player: {gsis, pfr, name,
-    pos, targets, carries (shares), catch (catch rate / the team's), ypr
-    and ypc (yards per catch / carry, over the team's)}. The QB's own runs
-    are one entry with role "QB", so they follow whoever starts."""
+# How far a defense moves its opponent's neutral pass rate, from what it has
+# allowed this season (each pulled toward the league with SHRINK_PLAYS
+# plays): per point of pass rate opponents have had against it, per yard a
+# carry it allows over the league's, and per yard a dropback.
+#
+# Why (2026-11-19): the simulation called every opponent's plays the same
+# way, so a team facing a poor run defense ran no more than usual. Real
+# offenses do lean toward what a defense gives up, a little: on 3,768
+# team-games from 2016-2026 (week 5 on, using only earlier games) all three
+# terms held alongside the offense's own tendency (t = 4.4, -3.6, 3.3). The
+# worst fifth of run defenses see about 1.7 more runs a game than the best.
+OPPONENT_PASS_SHIFT = {"pass_rate": 0.315, "yards_per_carry": -0.022, "yards_per_dropback": 0.012}
+
+
+def _defense_pass_shift(faced: dict, league: dict) -> float:
+    """The shift in an opponent's neutral pass rate against one defense.
+    faced / league: _offense_rates of the plays run against it / by
+    everyone this season."""
+    def per(r, total, n):
+        return (total / n) if n else 0.0
+
+    def stats(r):
+        return (per(r, r["neutral_pass"], r["neutral"]),
+                per(r, float(np.sum(r["rush_yards"])), r["runs"]),
+                per(r, float(np.sum(r["completion_yards"]) + np.sum(r["sack_yards"])), r["dropbacks"]))
+
+    lg_rate, lg_ypc, lg_ypd = stats(league)
+    rate = _shrunk_rate(faced["neutral_pass"], faced["neutral"], lg_rate)
+    ypc = _ratio(float(np.sum(faced["rush_yards"])), faced["runs"], lg_ypc, SHRINK_PLAYS)
+    ypd = _ratio(float(np.sum(faced["completion_yards"]) + np.sum(faced["sack_yards"])), faced["dropbacks"], lg_ypd, SHRINK_PLAYS)
+    k = OPPONENT_PASS_SHIFT
+    return k["pass_rate"] * (rate - lg_rate) + k["yards_per_carry"] * (ypc - lg_ypc) + k["yards_per_dropback"] * (ypd - lg_ypd)
+
+
+def _weekly_active(rosters: pd.DataFrame | None, season: int, team: str) -> dict:
+    """{week: set of gsis ids on the team's active list that week}, from
+    the weekly rosters. A week missing here has no roster to go by."""
+    if rosters is None or rosters.empty or not set(ROSTER_COLUMNS) <= set(rosters.columns):
+        return {}
+    r = rosters[(rosters["season"] == season) & (rosters["team"] == team) & rosters["gsis_id"].notna()]
+    return {int(week): set(rows.loc[rows["status"] == "ACT", "gsis_id"]) for week, rows in r.groupby("week")}
+
+
+def _usage_shares(touches: pd.DataFrame, ids: list, played: dict, active: dict, weight: float) -> dict:
+    """{player id: share of the team's touches in the games he was active
+    for}. touches: one row per play with `week` and `player`; played:
+    {week: ids who touched the ball at all that week}. A player was active
+    in a week if the roster lists him so or he touched the ball; with no
+    roster for a week, only the second. The share is `weight` on his last
+    PLAYER_GAMES active games and the rest on all of them."""
+    weeks = sorted(played)
+    totals = touches.groupby("week").size()
+    mine = touches.groupby(["player", "week"]).size()
+    shares = {}
+    for gsis in ids:
+        games = [w for w in weeks if gsis in played[w] or gsis in active.get(w, ())]
+        if not games:
+            shares[gsis] = 0.0
+            continue
+
+        def share(over):
+            team_total = sum(totals.get(w, 0) for w in over)
+            return sum(mine.get((gsis, w), 0) for w in over) / team_total if team_total else 0.0
+
+        shares[gsis] = weight * share(games[-PLAYER_GAMES:]) + (1 - weight) * share(games)
+    return shares
+
+
+def team_players(current: pd.DataFrame, team: str, roster: pd.DataFrame | None, rosters: pd.DataFrame | None = None) -> dict:
+    """{qb, kicker, players: [...]} for one team from this season's plays.
+    A player: {gsis, pfr, name, pos, targets, carries (shares, see
+    _usage_shares, scaled to sum to 1 over the players listed), catch
+    (catch rate / the team's), ypr and ypc (yards per catch / carry, over
+    the team's)}. The QB's own runs are one entry with role "QB", so they
+    follow whoever starts. roster: each player's latest row (who is listed
+    at all); rosters: the weekly file, for who was active each week."""
     plays = _scrimmage(current[current["posteam"] == team])
     if plays.empty:
         return {"qb": None, "kicker": None, "players": []}
@@ -371,14 +456,22 @@ def team_players(current: pd.DataFrame, team: str, roster: pd.DataFrame | None) 
             return {"name": row["full_name"] or fallback, "pos": row["position"], "pfr": pfr}
         return {"name": fallback, "pos": None, "pfr": None}
 
-    recent_passes = recent[(recent["play_type"] == "pass") & (recent["sack"] != 1) & recent["receiver_player_id"].notna()]
-    recent_runs = recent[(recent["play_type"] == "run") & recent["rusher_player_id"].notna()]
-    is_qb = recent_runs["rusher_player_id"].isin(qb_ids)
-    targets = recent_passes["receiver_player_id"].value_counts()
-    carries = recent_runs.loc[~is_qb, "rusher_player_id"].value_counts()
-    ids = [g for g in dict.fromkeys(list(targets.index) + list(carries.index)) if known(g)]
-    total_targets = sum(targets.get(g, 0) for g in ids)
-    total_carries = sum(carries.get(g, 0) for g in ids) + int(is_qb.sum())
+    # The team's whole season: a player back from missed time has no plays
+    # in its last few games.
+    is_qb = runs["rusher_player_id"].isin(qb_ids)
+    target_plays = passes.rename(columns={"receiver_player_id": "player"})
+    carry_plays = runs.assign(player=runs["rusher_player_id"].where(~is_qb, "QB"))
+    ids = [g for g in dict.fromkeys(list(passes["receiver_player_id"]) + list(runs.loc[~is_qb, "rusher_player_id"])) if known(g)]
+    weeks = sorted(int(w) for w in plays["week"].dropna().unique())
+    played = {w: set() for w in weeks}
+    for frame in (target_plays, carry_plays):
+        for week, rows in frame.groupby("week"):
+            played[int(week)] |= set(rows["player"])
+    active = _weekly_active(rosters, int(current["season"].iloc[0]), team) if "season" in current.columns else {}
+    targets = _usage_shares(target_plays, ids, played, active, RECENT_WEIGHT["targets"])
+    carries = _usage_shares(carry_plays, ids + ["QB"], played, active, RECENT_WEIGHT["carries"])
+    total_targets = sum(targets[g] for g in ids) or 1.0
+    total_carries = sum(carries.values()) or 1.0
 
     players = []
     for gsis in ids:
@@ -388,8 +481,8 @@ def team_players(current: pd.DataFrame, team: str, roster: pd.DataFrame | None) 
         name = (mine_t["receiver_player_name"].dropna().tolist() + mine_r["rusher_player_name"].dropna().tolist() + [gsis])[0]
         players.append({
             "gsis": gsis, **info(gsis, name),
-            "targets": round(targets.get(gsis, 0) / max(1, total_targets), 4),
-            "carries": round(carries.get(gsis, 0) / max(1, total_carries), 4),
+            "targets": round(targets[gsis] / total_targets, 4),
+            "carries": round(carries[gsis] / total_carries, 4),
             "catch": round(_ratio(mine_t["complete_pass"].sum(), len(mine_t), team_catch, SHRINK_TARGETS) / team_catch, 3),
             "ypr": round(_ratio(mine_c["yards_gained"].sum(), len(mine_c), team_ypr, SHRINK_CATCHES) / team_ypr, 3),
             "ypc": round(_ratio(mine_r["yards_gained"].sum(), len(mine_r), team_ypc, SHRINK_CARRIES) / team_ypc, 3),
@@ -397,7 +490,7 @@ def team_players(current: pd.DataFrame, team: str, roster: pd.DataFrame | None) 
     qb_runs = runs[runs["rusher_player_id"].isin(qb_ids)]
     players.append({
         "role": "QB", "gsis": None, "pfr": None, "name": "QB", "pos": "QB", "targets": 0.0,
-        "carries": round(int(is_qb.sum()) / max(1, total_carries), 4), "catch": 1.0, "ypr": 1.0,
+        "carries": round(carries["QB"] / total_carries, 4), "catch": 1.0, "ypr": 1.0,
         "ypc": round(_ratio(qb_runs["yards_gained"].sum(), len(qb_runs), team_ypc, SHRINK_CARRIES) / team_ypc, 3),
     })
     kicks = current[(current["posteam"] == team) & current["play_type"].isin(["field_goal", "extra_point"])
@@ -476,11 +569,15 @@ def build_profiles(pbp: pd.DataFrame, season: int, rosters: pd.DataFrame | None 
     off_flags = cur_flags[cur_flags["side"] == "O"]["posteam"].value_counts()
     def_flags = cur_flags[cur_flags["side"] == "D"]["defteam"].value_counts()
     scrimmage = _scrimmage(current)
+    this_season = _offense_rates(scrimmage)
+    faced = {team: _offense_rates(plays) for team, plays in scrimmage.groupby("defteam")}
     for team, plays in scrimmage.groupby("posteam"):
         r = _offense_rates(plays)
         teams[team] = {
             "plays": r["plays"],
             "neutral_pass_rate": round(_shrunk_rate(r["neutral_pass"], r["neutral"], lg["neutral_pass_rate"]), 4),
+            # Added to an opponent's pass rate against this defense.
+            "opponent_pass_shift": round(_defense_pass_shift(faced[team], this_season), 4) if team in faced else 0.0,
             "sack_rate": round(_shrunk_rate(r["sacks"], r["dropbacks"], lg["sack_rate"]), 4),
             "comp_rate": round(_shrunk_rate(r["completions"], r["attempts"], lg["comp_rate"]), 4),
             "int_rate": round(_shrunk_rate(r["ints"], r["attempts"], lg["int_rate"]), 4),
@@ -490,7 +587,7 @@ def build_profiles(pbp: pd.DataFrame, season: int, rosters: pd.DataFrame | None 
             "completion_yards": _shrunk_shape(r["completion_yards"], lg["completion_yards"]),
             "offense_penalty_rate": round(_shrunk_rate(off_flags.get(team, 0), off_snaps.get(team, 0), pen["offense_rate"], SHRINK_PENALTY_SNAPS), 4),
             "defense_penalty_rate": round(_shrunk_rate(def_flags.get(team, 0), def_snaps.get(team, 0), pen["defense_rate"], SHRINK_PENALTY_SNAPS), 4),
-            **(team_players(current, team, roster) if "receiver_player_id" in current.columns else {}),
+            **(team_players(current, team, roster, rosters) if "receiver_player_id" in current.columns else {}),
         }
     weeks = current["week"].dropna()
     return {"season": int(season), "through_week": int(weeks.max()) if len(weeks) else 0, "league": lg, "teams": teams}
