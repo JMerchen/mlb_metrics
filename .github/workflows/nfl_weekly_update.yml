@@ -94,6 +94,9 @@ jobs:
             python scripts/build_nfl_sim_profiles.py
           fi
 
+      - name: Build the evidence behind each bet (anytime-valid tests)
+        run: python scripts/build_bet_evidence.py
+
       - name: Build NFL Payroll tab data (OverTheCap contracts, records)
         run: |
           python scripts/build_nfl_payroll_value.py || echo "::warning::NFL Payroll tab not rebuilt"

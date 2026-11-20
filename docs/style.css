@@ -2354,3 +2354,17 @@ html.helpOn p.sectionIntro,html.helpOn p.helpText{display:none;}
 .helpPop p:last-child{margin-bottom:0;}
 .helpPop a{color:var(--accent-strong);}
 .helpBubble:focus{box-shadow:none;}
+
+/* ---- How strong is the evidence? (evidence_render.js, 2026-11-20) */
+.evidenceTable{min-width:min(100%,760px);}
+.evidenceTable td{vertical-align:top;}
+.evidenceTable td:first-child{min-width:190px;max-width:300px;white-space:normal;}
+.evidenceTable small{color:var(--text-dim);font-size:11px;white-space:nowrap;}
+.evidenceTable td small:not(.evNote){display:block;}
+.evidenceTable .evNote{display:block;white-space:normal;font-weight:400;line-height:1.35;margin-top:2px;}
+.evidenceTable tr.ev-live td:first-child b::after{content:"live";margin-left:6px;padding:1px 6px;border:1px solid var(--border-strong);border-radius:999px;font-size:10px;font-weight:600;color:var(--text-dim);vertical-align:middle;}
+.evFoot{font-size:12px;color:var(--text-dim);margin:-10px 0 16px;}
+.evChart .evLine{fill:none;stroke:var(--mlb-better);stroke-width:2;stroke-linejoin:round;stroke-linecap:round;}
+.evChart .evDot{fill:var(--mlb-better);stroke:var(--bg-card);stroke-width:2;}
+.evChart .evBar{stroke:var(--text-dim);stroke-width:1.5;stroke-dasharray:6 4;}
+.evChart .evLabel{fill:var(--text);font-weight:600;}

@@ -119,6 +119,7 @@ console.log("no nfl_matchup_history.csv yet", e)
 
 renderNflGamePickStats(summary)
 renderNflTrackRecord(confidence, summary[0], picks)
+loadNflEvidence()
 renderNflGamePickHistory(picks)
 Object.assign(nflMatchup, {picks, confidence, meetings, summary: summary[0]})
 startNflMatchupPicker()
@@ -690,6 +691,24 @@ html += stat(`${Number(s.points_total_mae).toFixed(1)} pts`, "Our point totals m
 }
 el.innerHTML = html
 
+}
+
+// How strong the evidence is behind each kind of bet (bet_evidence.json):
+// its own section under the track record, left out if the file is missing.
+async function loadNflEvidence(){
+const el = document.getElementById("nflEvidence")
+const section = document.getElementById("nflEvidenceSection")
+if(!el || !section){ return }
+try{
+const data = await loadNflWhatIfFile("bet_evidence")
+const rows = (data.series || []).filter(s => s.key.startsWith("nfl_"))
+const html = evidenceHtml({...data, series: rows}, "nfl_spread_replay", Math.min(720, Math.max(300, el.clientWidth || 720)))
+el.innerHTML = html
+section.style.display = html ? "" : "none"
+if(typeof installVizTips === "function"){ installVizTips() }
+}catch(e){
+section.style.display = "none"
+}
 }
 
 // How our picks have done this season: our confidence against Vegas's as
