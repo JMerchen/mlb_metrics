@@ -5600,6 +5600,50 @@ anywhere else, or Escape.
   (under the bubble, kept inside the window, above when there is no room
   below), tested in `help.test.js`.
 
+## Newer methods, 1: evidence you can check every week (`anytime_valid.py`, `scripts/build_bet_evidence.py`)
+
+Why (2026-11-20, user request to try statistics that have barely reached
+sports): every bet claim here is a win rate over a few dozen to a few
+hundred bets that we look at again every week, which an ordinary
+significance test does not allow. Anytime-valid inference (testing by
+betting, e-values, confidence sequences, e-detectors) does.
+
+- `anytime_valid.wealth_path`: a doubter's bankroll, 1 unit staked a slice
+  at a time (an even split over fractions 1%-30%) against "no edge". With
+  no edge the chance it ever reaches 20 is at most 1 in 20, at any moment.
+  `confidence_sequence`: the win rates not ruled out, valid at every bet at
+  once. `fade_detector`: an alarm for the rate dropping under a level from
+  any starting point (trips at 1,000, which takes 1,000+ bets on average
+  when nothing has changed).
+- `scripts/build_bet_evidence.py` writes `docs/data/bet_evidence.json`
+  from the bets logged on the site (the weekly update runs it) and from
+  three replay files in `data/backtest/` (`--replay --cache DIR` rebuilds
+  them: every spread bet since 2002, every over/under lean 2019-2025 at
+  its real price, our winner in every game at the closing moneyline since
+  2006). The NFL Picks tab shows it under the track record
+  (`evidence_render.js`), with the spread rule's bankroll by season as a
+  chart in Deep dive.
+- What it found (2026-11-20):
+
+  | Bets | Made | Record | Bankroll | Win rates not ruled out |
+  |---|---|---|---|---|
+  | Spread bets, replay 2002-2026 | 868 | 487-362 (57.4%) | 20.6 (peak 64.8, Nov 2021) | 52.4%-61.8% |
+  | Over/under leans, replay 2019-2025 | 175 | 102-72 (58.6%) | 2.75 | 47.1%-69.2% |
+  | Our winner every game, closing moneyline | 5,445 | 66.0% | 0.016 | (prices vary) |
+  | Over/under leans posted live | 7 | 5-2 | 1.36 | 19.4%-98.2% |
+  | Moneyline bets posted live | 13 | 5-8, +4.2 units | 1.26 | (prices vary) |
+  | MLB moneyline bets (stopped) | 124 | -42.3 units | 0.09 | (prices vary) |
+
+  The spread rule is at the bar and no further: its bankroll was below 1
+  until 2014 and has halved since 2022. Its range of possible win rates
+  starts at break-even (52.4%). The leans' 58.6% is thinner than it
+  sounds. And these are replays of rules chosen with the results in view,
+  so they are upper bounds; the live rows are the clean test and have
+  barely started.
+- Checked: at exactly break-even, 2,000 simulated runs of 850 bets reached
+  the bar 3.9% of the time (the promise is 5% or less); a one-sided z test
+  checked after every bet cried wolf in over 20% (`tests/test_anytime_valid.py`).
+
 ## NFL schedule sheet: a unit a week (`nfl_season_views.team_schedule`, `nfl_stats.js`)
 
 User request (2026-11-14): "on the schedule view, put how many units

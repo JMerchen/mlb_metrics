@@ -272,7 +272,9 @@ underdog getting more, the note says to stay with the points. Our game winners o
 their own have not beaten the closing line, so they are shown as picks, not
 bets.</p>
 <p>Below the game: the <b>track record</b> (our confidence against Vegas's,
-with the record in each cell) and <b>recent results</b>, folded closed
+with the record in each cell); <b>How strong is the evidence?</b>, which
+tests each kind of bet in a way that stays honest when checked every week
+(<a href="#anytime-valid">how</a>); and <b>recent results</b>, folded closed
 until you open it.</p>
 </div>
 
@@ -900,6 +902,7 @@ see it in use at the same time.</p>
 <li><a href="#methods-forecasts">Judging forecasts</a></li>
 <li><a href="#methods-simulation">Simulation</a></li>
 <li><a href="#methods-decisions">Making decisions</a></li>
+<li><a href="#methods-frontier">Newer methods</a></li>
 </ul>
 
 <section class="methodCategory" id="methods-describing">
@@ -1287,6 +1290,38 @@ pick isn't good enough to risk it, and sitting out keeps the streak alive.</p>
 <p><span class="lbl">On this site</span> Each day's play-or-sit call compares the pick's chance with a threshold
 that depends on the current streak and the days left - the "Sat out" days in the Picks log.</p>
 <p class="where"><a href="https://en.wikipedia.org/wiki/Optimal_stopping" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+</dl>
+</section>
+
+<section class="methodCategory" id="methods-frontier">
+<h2>9. Newer methods</h2>
+<p class="methodCategoryNote">Statistics from the last several years that have barely reached sports. Each one
+here was tried on our own data, and what it found is reported whether or not it flattered us.</p>
+<dl class="terms">
+<dt id="anytime-valid">Evidence you can check every week (anytime-valid testing)</dt>
+<dd><p><span class="lbl">The idea</span> An ordinary significance test is only honest if you look once, at a
+sample size fixed in advance. Look every week and stop when it looks good, and a coin flip passes sooner or
+later. The fix, worked out over the last few years, measures evidence as money: a doubter starts with 1 unit
+and stakes a slice of it on every bet in the series, in order, betting that the claim of "no edge" is wrong.
+If there truly is no edge, that bankroll shrinks, and the chance it <i>ever</i> reaches 20 is at most 1 in 20
+- at any moment, with no sample size named in advance. So the bankroll is the evidence, and it can be read as
+often as you like.</p>
+<p><span class="lbl">In sports</span> A tout who is 60% over his last 100 picks may just be showing you the
+100 that looked best. The bankroll cannot be gamed that way: every bet since the start counts, and a hot
+stretch that fades takes the bankroll back down with it.</p>
+<p><span class="lbl">On this site</span> Every kind of bet we post has a row under <b>How strong is the
+evidence?</b> on the NFL Picks tab. What it found: our spread bets, replayed over every season since 2002,
+turn 1 unit into about 20 - right at the bar, not far past it - after peaking near 65 in late 2021, and the
+bankroll sat <i>below</i> 1 until 2014. The over/under leans (58.6% of 174) reach only about 3: fewer than 200
+bets cannot carry more, however good the percentage looks. Our winner in every game at the closing moneyline
+shrinks the bankroll to almost nothing, which is why winners are shown as picks, not bets. Next to each
+bankroll is the range of win rates the results have not ruled out - also safe to read every week, so it is
+wider than a usual margin of error (spread bets: 52.4% to 61.8%, and break-even is 52.4%) - and a
+<b>fade alarm</b> that watches for the win rate dropping under break-even starting at any point. One limit no
+method removes: a rule chosen by looking at past results is flattered by those results, so the replay rows are
+the most the evidence could be. The bets posted here before the games are the clean test, and they have only
+just begun.</p>
+<p class="where">On the site: <a href="./nfl.html">NFL Picks</a>, under the track record. <a href="https://en.wikipedia.org/wiki/E-values" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
 </dl>
 </section>
 
