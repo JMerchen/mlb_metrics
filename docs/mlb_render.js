@@ -726,8 +726,8 @@ ${mlbMeter((grade - 100) / 60, true)}<span class="rankValue">${Math.round(grade)
 }
 
 // ---- Stats page: hitter table ----
-// WAVE, CAVE and WOPS are views of a hitter's season, each blended across
-// recent windows (hitter_views.py); "vs. pitchers faced" swaps in the
+// WAVE, CAVE and WOPS are views of a hitter's season - WAVE the season
+// alone, CAVE and WOPS blended across recent windows (hitter_views.py); "vs. pitchers faced" swaps in the
 // versions that credit hits off tough pitchers more.
 
 // Chance of at least one hit in 3.5 at-bats at a WAVE (an at-bat hit
@@ -771,7 +771,7 @@ const HITTER_STAT_COLUMNS = [
 ]
 
 const HITTER_STAT_TIPS = {
-WAVE: "WAVE: at-bat hit rate, recent games counting more",
+WAVE: "WAVE: at-bat hit rate this season",
 CAVE: "CAVE (Carried Average): share of games with a hit, recent games counting more",
 WOPS: "WOPS: OPS, recent games counting more",
 decision: "Decision+: his swing-or-take choices against the league's in the same spot (100 = average, 10 = one standard deviation)",

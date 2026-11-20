@@ -67,13 +67,38 @@ STATCAST_FETCH_ATTEMPTS = 3
 STATCAST_FETCH_RETRY_SECONDS = 5
 STATCAST_FETCH_FALLBACK_CHUNK_DAYS = 7
 
-# WAVE (hitter batting-average-based hit probability): full/81d/30d/10d.
+# The recency windows (full season / 81 / 30 / 10 days) and their weights.
+# WAVE itself no longer uses them - see WAVE_RATE_WINDOWS below - but CAVE,
+# WOPS, Approach and the other windowed hitter numbers still do.
 WAVE_WINDOWS = [
     (None, 0.150),
     (81, 0.250),
     (30, 0.275),
     (10, 0.325),
 ]
+# WAVE's own windows (hitters.compute_wave): the season, and nothing else.
+#
+# Why (2026-11-20): WAVE used WAVE_WINDOWS, 60% of its weight on a hitter's
+# last 30 days. A changepoint detector found no real changes in hitters'
+# levels at all (scripts/research_changepoint_hot_cold.py): hot and cold
+# streaks are noise. Chasing them, WAVE predicted at-bats worse than giving
+# every hitter the league average, and a hitter it had at .318 hit .248.
+# The full pick replay (scripts/backtest_wave_windows.py, the hit model
+# refit monthly, every number the average of 10 fits) on two seasons, the
+# season-only WAVE with WAVE_SHRINKAGE_STRENGTH = 200 against the old one:
+#                      hit model log loss        model's top pick hit   both of top two
+#   2026 (86 days)     0.6722 v 0.6723           73.7% v 71.9%          53.8% v 53.3%
+#   2025 (85 days)     0.6708 v 0.6712 (95% of   74.2% v 68.2% (t 2.6)  53.3% v 49.5%
+#                      the gain below zero)
+# and the live rule's top pick 72.6% v 66.7% and 70.4% v 69.8%; only the
+# live rule's top two in 2025 went the other way (49.4% v 51.2%, t -0.5).
+# Small, the same direction nearly everywhere, and the number the site
+# shows as a hitter's WAVE is now the better predictor by a wide margin.
+# (One fit of the hit model differs from the next by 4-6 points of "top
+# pick hit" over 86 days, which is why single-run comparisons of this kind
+# - including the ones behind WAVE_AT_BATS_ONLY and
+# HITTER_WINDOW_CARRY_FORWARD - should be read with care.)
+WAVE_RATE_WINDOWS = [(None, 1.0)]
 # Trials-per-game used to convert an at-bat hit rate into a game hit
 # probability: probability = 1 - (1 - rate) ** WAVE_TRIALS_PER_GAME.
 WAVE_TRIALS_PER_GAME = 3.5
@@ -99,7 +124,13 @@ WAVE_AT_BATS_ONLY = True
 # shrinkage for small-sample hitters" section for the full numbers,
 # including the full (unfiltered) population where the unshrunk log_loss
 # blows up to 0.9468 on the small-sample rows this constant targets.
-WAVE_SHRINKAGE_STRENGTH = 50.0
+# 2026-11-20: 200, with WAVE's move to the season alone (WAVE_RATE_WINDOWS
+# has the replay). 50 was chosen for windows as short as 10 days; over a
+# season the replay preferred 200 to 50 and found 400 no better.
+WAVE_SHRINKAGE_STRENGTH = 200.0
+# WOPS (hitter_views.compute_wops) still blends the recency windows and
+# keeps the strength it had when it shared WAVE's.
+WOPS_SHRINKAGE_STRENGTH = 50.0
 
 # WAVE and CAVE (Game_Hit_Probability): a window a hitter has no at-bats in
 # (hurt, benched, no lefties lately) takes his next-longer window's rate

@@ -1106,6 +1106,9 @@ Quant-analytics item #3 ("uncertainty quantification"), slice 3 of 3 -
 the last piece, after shrinkage and calibration above. Every probability
 this site produces was a bare point estimate with no interval anywhere.
 
+(Since 2026-11-20 WAVE is the season alone - `config.WAVE_RATE_WINDOWS` -
+so for WAVE the interval below is now for the number itself.)
+
 The real complication: `WAVE`/`probability` and `Game_Hit_Probability`
 are each a blend of 4 **overlapping, nested** recency windows
 (`config.WAVE_WINDOWS`/`GAME_HIT_PROB_WINDOWS` - the 10-day window's
@@ -5783,8 +5786,42 @@ later ones. Three different answers:
   WAVE had at .318 with a .251 season hit .248; as a daily pick on its
   own, WAVE's favorite got a hit 58.2% of days against 64.1% for the
   season average's (58.3% of all hitter-games had one). WAVE is one input
-  to the hit model, not the pick itself; reworking it through the full
-  replay (`scripts/backtest_wave_at_bats.py`) is a suggested follow-up.
+  to the hit model, not the pick itself, so the rework went through the
+  full pick replay - next section.
+
+### Follow-up: WAVE is the season alone (`config.WAVE_RATE_WINDOWS`, `scripts/backtest_wave_windows.py`)
+
+Why (2026-11-20): the finding above. `hitters.compute_wave` (and
+`hitter_views`' "vs. pitchers faced" WAVE) now read
+`config.WAVE_RATE_WINDOWS = [(None, 1.0)]` - the season, no recency
+windows - with `WAVE_SHRINKAGE_STRENGTH` raised from 50 to 200 at-bats
+(50 was chosen for windows as short as 10 days). `config.WAVE_WINDOWS`
+is unchanged and still drives CAVE, WOPS, Approach and the other windowed
+numbers; WOPS keeps its old strength as `WOPS_SHRINKAGE_STRENGTH`.
+
+The replay rebuilds every date's features from games strictly before it,
+refits the hit model month by month and scores the next month. The hit
+model's fit is random (early stopping on a random split): on the same
+log, one fit's "top pick got a hit" differs from the next by 4-6 points
+over 86 days, more than the gaps being measured. So every number is the
+average of 10 fits. Season-only with 200 at-bats against the old WAVE:
+
+| | hit model log loss | model's top pick hit | both of its top two | live rule's top pick | both of its top two |
+|---|---|---|---|---|---|
+| 2026 (86 days) | 0.6722 v 0.6723 (diff -0.00022, 95% -0.00071 to +0.00028) | 73.7% v 71.9% | 53.8% v 53.3% | 72.6% v 66.7% (t 1.7) | 50.8% v 48.8% |
+| 2025 (85 days) | 0.6708 v 0.6712 (diff -0.00078, 95% -0.00153 to -0.00004) | 74.2% v 68.2% (t 2.6) | 53.3% v 49.5% | 70.4% v 69.8% | 49.4% v 51.2% (t -0.5) |
+
+Small, and the same direction in nine of ten cells. Also tried: strength
+50 (no better than the old WAVE on log loss), 400 (best in 2026, did not
+repeat in 2025), 60% season + 40% last 81 days (between the two), and
+making every windowed number season-only (no better than WAVE alone).
+The full tables are in the script's docstring.
+
+Caveat for older results: the single-fit comparisons behind
+`WAVE_AT_BATS_ONLY` and `HITTER_WINDOW_CARRY_FORWARD` were made before the
+fit-to-fit spread was measured and should be read with that in mind.
+The shipped hit model is refit every Sunday (`ml_training_update.yml`),
+which rebuilds its training features with the new WAVE.
 
 ## Newer methods, 5: reading an at-bat like a sentence (`pitch_sequences.py`, `scripts/research_pitch_sequences.py`)
 

@@ -133,8 +133,9 @@ def blend_windows(
 
 def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None, carry_forward: bool | None = None,
                  at_bats_only: bool | None = None) -> pd.DataFrame:
-    """Recency-weighted at-bat hit rate vs L/R pitching, converted to a
-    per-game hit probability. Returns key_mlbam, WAVE, WAVE_L, WAVE_R,
+    """At-bat hit rate vs L/R pitching over config.WAVE_RATE_WINDOWS (the
+    season, since 2026-11-20; it was recency-weighted before), converted to
+    a per-game hit probability. Returns key_mlbam, WAVE, WAVE_L, WAVE_R,
     l_at_bat, r_at_bat, probability, probability_L, probability_R,
     WAVE_CI_Low, WAVE_CI_High, probability_CI_Low, probability_CI_High.
 
@@ -170,8 +171,9 @@ def compute_wave(dt: pd.DataFrame, shrinkage_strength: float | None = None, carr
     stat_fns = {"hit": lambda df: helpers.is_hit(df["events"])}
     rate_fns = {"rate": lambda agg: helpers.shrink_rate(agg["hit"], agg["n"], league_rate, strength)}
 
-    r_blended, r_full = blend_windows(dt, config.WAVE_WINDOWS, "R", stat_fns, rate_fns, carry_forward=carry_forward)
-    l_blended, l_full = blend_windows(dt, config.WAVE_WINDOWS, "L", stat_fns, rate_fns, carry_forward=carry_forward)
+    # WAVE's own windows: the season alone (config.WAVE_RATE_WINDOWS has why).
+    r_blended, r_full = blend_windows(dt, config.WAVE_RATE_WINDOWS, "R", stat_fns, rate_fns, carry_forward=carry_forward)
+    l_blended, l_full = blend_windows(dt, config.WAVE_RATE_WINDOWS, "L", stat_fns, rate_fns, carry_forward=carry_forward)
 
     # Renamed per-side up front (not just "n") - both r_full/l_full now
     # also carry a raw "hit" column (widened blend_windows return), so

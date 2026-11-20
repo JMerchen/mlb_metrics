@@ -45,7 +45,7 @@ def test_wops_blends_obp_and_slg_and_carries_a_missed_window():
     # Hitter 3 hit a double every game but stopped after day 5: his 10- and
     # 30-day windows are empty, so they carry his longer windows, not zeros.
     league = hitter_views.league_rates(pas)
-    k = config.WAVE_SHRINKAGE_STRENGTH
+    k = config.WOPS_SHRINKAGE_STRENGTH
     season_slg = (10 + league["tb"] * k) / (5 + k)
     assert wops.loc[3, "WOPS_SLG"] == pytest.approx(season_slg)
     assert wops.loc[1, "WOPS"] == pytest.approx(wops.loc[1, "WOPS_OBP"] + wops.loc[1, "WOPS_SLG"])
@@ -77,10 +77,17 @@ def test_carry_forward_is_opt_in_and_only_fills_missed_windows():
     dt = data.completed_events(_season().query("game_type == 'R'"), ["game_date", "batter", "p_throws", "events"])
     plain = hitters.compute_wave(dt).set_index("key_mlbam")
     carried = hitters.compute_wave(dt, carry_forward=True).set_index("key_mlbam")
-    # The pick models' WAVE is unchanged for a hitter who played every window ...
+    # WAVE is the season alone (config.WAVE_RATE_WINDOWS), so there is no
+    # shorter window to miss: carrying changes nothing for anyone.
     assert carried.loc[1, "WAVE"] == pytest.approx(plain.loc[1, "WAVE"])
-    # ... while one who sat out the recent windows no longer reads them as zero.
-    assert carried.loc[3, "WAVE"] > plain.loc[3, "WAVE"]
+    assert carried.loc[3, "WAVE"] == pytest.approx(plain.loc[3, "WAVE"])
+    # CAVE still blends recency windows: a hitter who played every window is
+    # unchanged, one who sat out the recent ones no longer reads them as zero.
+    games = data.assign_game_ids(_season().query("game_type == 'R'"))
+    plain_cave = hitters.compute_game_hit_probability(games).set_index("key_mlbam")["Game_Hit_Probability"]
+    carried_cave = hitters.compute_game_hit_probability(games, carry_forward=True).set_index("key_mlbam")["Game_Hit_Probability"]
+    assert carried_cave.loc[1] == pytest.approx(plain_cave.loc[1])
+    assert carried_cave.loc[3] > plain_cave.loc[3]
 
 
 def test_wave_is_on_the_batting_average_scale_walks_left_out():
