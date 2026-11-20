@@ -677,7 +677,9 @@ an example, and where you'll find it.</p>
 <dt id="wave">WAVE</dt>
 <dd><p>A hitter's batting average - hits per at-bat - blended over the full season and his last 81, 30
 and 10 days, so recent games count more, and pulled toward the league average when he has few at-bats
-(see <a href="#shrinkage">shrinkage</a>). Walks don't count as at-bats, so they neither help nor hurt it.</p>
+(see <a href="#shrinkage">shrinkage</a>). Walks don't count as at-bats, so they neither help nor hurt it. A
+later test found the recent windows chase streaks that are not real
+(<a href="#changepoint">what it found</a>); a season-based version is being tested.</p>
 <p class="where">On the site: <a href="./stats.html">MLB Stats</a>, and underneath every Beat the Streak pick.</p></dd>
 
 <dt id="hit-chance">Hit chance</dt>
@@ -1380,6 +1382,31 @@ margin from our points model, whose margins run much closer together than games 
 88% simulated at 72%. It now aims at the pick's own margin; across this week's games the simulated win rate
 is within 4 points of the pick in every one.</p>
 <p class="where">On the site: <a href="./nfl.html">NFL Picks</a>, Simulate this game. <a href="https://en.wikipedia.org/wiki/Approximate_Bayesian_computation" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="changepoint">Spotting a real change (online changepoint detection)</dt>
+<dd><p><span class="lbl">The idea</span> Every "recent form" number blends fixed windows: the last four games, the
+last 30 days. A fixed window is wrong both ways. When nothing has changed it throws away good data to chase
+noise; when something really changes it takes the window's whole length to catch up. Changepoint detection has
+no window. After every game it keeps a probability for each answer to "how many games ago did his current level
+begin?" - and its estimate uses all of his history when nothing has changed, only the games since the break
+when one is clear, and an honest mix while it is unsure.</p>
+<p><span class="lbl">In sports</span> A back who loses the starting job, a pitcher whose fastball drops two miles
+an hour, a hitter on a tear: three stories that sound alike. The method can tell which of them are real.</p>
+<p><span class="lbl">On this site</span> We tried it on all three, choosing its settings on earlier seasons
+and scoring on later ones, and got three different answers.
+<b>A pitcher's fastball</b>: real changes, and the method wins. Predicting his next game's speed it beat his
+season average and every fixed window, most in the one game in eight where it flagged a change (a miss of 0.56
+mph against 0.58 for his last five games and 0.64 for his season).
+<b>Who gets the ball in football</b>: roles do change, but the simple blend the simulator already uses (mostly
+a player's last four active games) predicts the next game's carries and targets just as well: the blend put 21.6% of
+a game's carries with the wrong player and the new method 21.8%, and they tied on targets. We kept the blend.
+<b>A hitter's hot and cold streaks</b>: nothing. The method saw a likely change before none of 39,443
+hitter-games, and its estimate was simply his season average. That exposed a weakness in <a href="#wave">WAVE</a>,
+which leans on a hitter's last 10 and 30 days: when WAVE had a hitter 67 points above his season, he went on to
+hit 3 points under it, and WAVE predicted at-bats worse than giving every hitter the league average. WAVE is
+one input among many in our hit model, so the picks are not that far off - but it is the wrong input, and
+reworking it is next.</p>
+<p class="where"><a href="https://en.wikipedia.org/wiki/Change_detection" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
 </dl>
 </section>
 
