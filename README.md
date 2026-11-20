@@ -5840,11 +5840,17 @@ between them are the worth of the sequence and nothing else.
   rates, the pitcher's rate on that pitch type and the hitter's against
   that kind of pitch.
 - Log loss per pitch: boosted trees on the pitch alone 0.9617, with
-  hand-made previous-pitch features 0.9608; network shown nothing 0.9554,
-  shown the pitches 0.9493, shown pitches and results 0.9461. The whole
-  sequence is worth 0.0093 (95% 0.0087-0.0098 by resampling games), 1.6% of
-  what the pitch itself tells. Zero on the first pitch, 0.0195 from the
+  hand-made previous-pitch features 0.9608; network shown nothing 0.9533,
+  shown the pitches 0.9483, shown pitches and results 0.9453. The whole
+  sequence is worth 0.0080 (95% 0.0074-0.0086 by resampling games), 1.4% of
+  what the pitch itself tells. Zero on the first pitch, 0.0192 from the
   sixth on.
+- Rerun to convergence (same day): the first run averaged two trainings
+  of each network, capped at 14 passes, and gave 0.0093 (1.6%). Now
+  three trainings each, run until the June pitches stop improving for
+  three passes (13-40 passes). The network shown no history gained the
+  most from the longer training, so the sequence's worth came down a
+  little; the whiff table below did not move.
 - Whiffs per swing against what the pitch alone predicts: fastball after
   fastball +1.2 points; off-speed or breaking after another +0.8; off-speed
   or breaking right after a fastball -2.0; 8+ mph slower than the last
@@ -5857,7 +5863,8 @@ between them are the worth of the sequence and nothing else.
   rate is expected whiffs over expected swings, not the average of each
   swing's own ratio.
 - Needs `tensorflow-cpu`, which is not a dependency of the site; the data
-  code and its tests need only pandas. About 40 minutes on four cores.
+  code and its tests need only pandas. About two and a half hours on four
+  cores.
   Nothing on the site uses it yet.
 
 ## NFL Play-calling map (`nfl_play_sequencing.py`, `scripts/build_nfl_play_calling.py`, `docs/nfl_play_calling.js`)

@@ -1454,16 +1454,17 @@ it and grades each pitch on its own.</p>
 <p><span class="lbl">On this site</span> We trained the models on 970,546 pitches (2025 through May 2026) and
 scored them on 337,891 pitches from July to October 2026 that they had never seen. Every pitch ends one of five
 ways - ball, called strike, whiff, foul, in play - and each model gives the chance of each. The sequence is real
-and small: reading the at-bat improved the predictions by 1.6% of what the pitch itself tells you (its type,
+and small: reading the at-bat improved the predictions by 1.4% of what the pitch itself tells you (its type,
 speed, movement, location, the count and who is involved). It is nothing on the first pitch and grows with
-every pitch after. Two thirds of it comes from what was thrown before, one third from how the hitter handled
-it. The patterns run against the old advice to change speeds: a hitter swings and misses <i>more</i> than the
+every pitch after. About 60% of it comes from what was thrown before, 40% from how the hitter handled
+it. (A first, shorter training run said 1.6%; we retrained every model three times, each until it stopped
+improving, and these are those numbers.) The patterns run against the old advice to change speeds: a hitter swings and misses <i>more</i> than the
 pitch alone predicts when a pitcher repeats a kind of pitch (a fastball after a fastball, 20.3% of swings
 against 19.1% expected; a breaking ball after another, 32.9% against 32.1%) and <i>less</i> when he switches (a
 breaking ball or changeup right after a fastball, 29.4% against 31.4%). After a swing and miss the next swing
 misses more; after a foul, less. Read that with care: pitchers choose, and they go back to a pitch when the
 hitter has looked bad on it, so this describes what happens, not what to call. It is not in our picks or the
-simulator yet. At 1.6% it would move little, and the first thing it would improve is the simulator's pitch by
+simulator yet. At 1.4% it would move little, and the first thing it would improve is the simulator's pitch by
 pitch outcomes deep in an at-bat.</p>
 <p class="where"><a href="https://en.wikipedia.org/wiki/Recurrent_neural_network" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
 </dl>
