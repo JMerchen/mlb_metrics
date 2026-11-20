@@ -518,8 +518,10 @@ season to the next. Kickoffs, punts, field goals by
 distance and extra points use the league's last two seasons. The profiles
 carry style, not strength: each team's gains are scaled to the league's
 average, and the game is then tuned, from 300 seeded simulations, so the
-average simulated game lands on the What if? panel's win chance (as a
-point margin, 0.137 log-odds a point) and our predicted total. Unit
+average simulated game lands on our pick's margin (moved by any What if?
+changes, at 0.137 log-odds a point) and our predicted total. Each team
+also has a good or bad day, and the two share part of it, in amounts
+fitted to real games (<a href="#sbi">how</a>). Unit
 settings move the yards where they belong - a pass defense at 80% gives up
 more through the air. Play calls follow how teams call them: short
 yardage mostly runs, and to the lead back (late in a close game too); a
@@ -1353,6 +1355,31 @@ player-games: when it said 27% it happened 27% of the time; 64%, 64%; 80%, 79%. 
 line already knows the matchup and the injury report, and we have no past prop lines to test against, so
 against a real line be less sure than the number says.</p>
 <p class="where">On the site: <a href="./nfl.html">NFL Picks</a> (each game's card) and Player Props. <a href="https://en.wikipedia.org/wiki/Conformal_prediction" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="sbi">Fitting a simulator to reality (simulation-based inference)</dt>
+<dd><p><span class="lbl">The idea</span> A simulator has settings that no formula connects to the data: there
+is no equation for "how spread out are final scores" in terms of "how much does a team's day vary". The newer
+answer is to stop looking for the formula. Draw hundreds of candidate settings, run the simulator at each, and
+keep the ones whose simulated games look like the real ones, each weighted by how close it came. What comes out
+is not a single best guess but the whole range of settings the data cannot tell apart. The idea is taking off
+in physics and biology, where simulators are common and formulas are not.</p>
+<p><span class="lbl">In sports</span> Almost nobody has a play-by-play simulator to fit. We do, and it had a
+measurable flaw: built from plays alone, its games were too alike. Final margins landed 12.3 points either
+side of the target and totals 12.2, where real games land 12.8 and 13.1 around the closing lines. Teams have
+good days and bad days that plays drawn one at a time do not capture.</p>
+<p><span class="lbl">On this site</span> We gave the football simulator two new settings - how much each
+offense's day varies, and how much of a day both teams share (weather, officials, pace) - and fitted them to
+2,127 real games. Each of 400 candidate settings played 12,000 simulated games; the data settled on a team's
+day varying by about 8% (somewhere from 5% to 10%) and a shared day of about 4% (1% to 7%). With those, a fresh
+run matches real games on the spread of margins (12.7 against 12.8) and totals (13.2 against 13.1), and on
+numbers the fit never saw: totals within 9 points of the line 52.2% against a real 52.8% (it was 55.4%), and
+games of 58 points or more 19.9% against 19.8% (it was 17.8%). It also showed what the simulator still gets
+wrong, which no setting of these could fix: real games finish within a field goal 24.7% of the time and
+simulated ones 19%. The same check found the cause of a mismatch on the page: the simulation was aiming at a
+margin from our points model, whose margins run much closer together than games do, so a game our pick had at
+88% simulated at 72%. It now aims at the pick's own margin; across this week's games the simulated win rate
+is within 4 points of the pick in every one.</p>
+<p class="where">On the site: <a href="./nfl.html">NFL Picks</a>, Simulate this game. <a href="https://en.wikipedia.org/wiki/Approximate_Bayesian_computation" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
 </dl>
 </section>
 
@@ -1534,6 +1561,10 @@ the shape of the game), per team per game, against 2025-26.</p>
 <tr><td>Onside kicks</td><td>0.15</td><td>0.19</td></tr>
 </tbody>
 </table>
+<p class="methodCategoryNote">Once tuned, how far final scores land from their targets matches real games
+around the closing lines: margins 12.7 points either side against 12.8, totals 13.2 against 13.1
+(<a href="#sbi">fitted</a>, 2,127 games). One gap is open: 19% of simulated games finish within a field goal,
+against 24.7% of real ones.</p>
 <p class="methodCategoryNote">Untuned, a team scores about 20 points against the league's 22; the tuning step
 closes that game by game, landing within 0.2 points of the target margin on average. Late-game passing runs a
 little high (28% of plays when protecting a lead, against 23%). As in baseball, each gap we found had a cause:
