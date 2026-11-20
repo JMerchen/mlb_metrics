@@ -65,6 +65,18 @@ jobs:
       - name: Run batting_game.js unit tests
         run: node --test docs/batting_game.test.js
 
+      - name: Run help.js unit tests
+        run: node --test docs/help.test.js
+
+      - name: Run evidence_render.js unit tests
+        run: node --test docs/evidence_render.test.js
+
+      - name: Run ranges.js unit tests
+        run: node --test docs/ranges.test.js
+
+      - name: Run the simulator fit's unit tests
+        run: node --test docs/nfl_sim_fit.test.js
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip

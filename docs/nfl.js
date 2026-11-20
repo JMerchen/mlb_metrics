@@ -334,7 +334,7 @@ renderNflWhatIf('[data-whatif-action="clear"]')
 const NFL_SIM_SECONDS = 300
 const NFL_SIM_SUMMARY_GAMES = 1000
 const NFL_SIM_SPEEDS = [1, 4, 16]
-const nflSim = {profiles: null, totals: {}, points: {}, weather: {}, choice: {}, run: null}
+const nflSim = {profiles: null, totals: {}, margins: {}, weather: {}, choice: {}, run: null}
 
 async function loadNflSim(picks){
 
@@ -349,8 +349,9 @@ return
 for(const p of picks || []){
 const total = Number(p.predicted_total) || Number(p.market_total)
 if(total > 0){ nflSim.totals[p.game_id] = total }
-const home = Number(p.predicted_home_points), away = Number(p.predicted_away_points)
-if(home > 0 && away > 0){ nflSim.points[p.game_id] = {home, away} }
+if(p.predicted_margin !== "" && p.predicted_margin !== null && p.predicted_margin !== undefined && !Number.isNaN(Number(p.predicted_margin))){
+nflSim.margins[p.game_id] = Number(p.predicted_margin)
+}
 const weather = srWeather(p)
 if(weather){ nflSim.weather[p.game_id] = weather }
 }
@@ -424,17 +425,23 @@ const p = Math.min(0.995, Math.max(0.005, whatifProbability(game, data, state).p
 const forecast = nflSim.weather[game.game_id] || null
 const chosen = forecast ? null : simWeatherChoice(nflSim.choice[game.game_id])
 const weather = forecast || chosen
-// Each team's points come from the points model (it sees each offense
-// against the other's defense - a historically bad defense included);
-// What if? changes move the margin by as much as they move the panel's
-// win chance from its posted one. Without points-model numbers, the
-// margin is the panel's win chance in points, as before.
+// The margin is the win model's (the pick's own, in points) and the total
+// the points model's; What if? changes move the margin by as much as they
+// move the panel's win chance from its posted one. Without a logged
+// margin, it is the panel's win chance turned into points.
+//
+// Why (2026-11-20): the margin used to be the points model's two team
+// scores apart, which run much closer together than games do (this
+// season's real margins were 1.7 times as wide as it said, against 1.2
+// for the win model, and it missed by more: 12.8 points to 12.1). So a
+// game the pick had at 88% was simulated around a 6-point favorite and
+// came out 67%.
 const perPoint = Number(data.logodds_per_point) || 0.137
 const asPoints = q => { const c = Math.min(0.995, Math.max(0.005, q)); return Math.log(c / (1 - c)) / perPoint }
-const points = nflSim.points[game.game_id]
-const posted = points ? whatifProbability(game, data, whatifPostedState(game)).probability : null
+const logged = nflSim.margins[game.game_id]
+const posted = logged !== undefined ? whatifProbability(game, data, whatifPostedState(game)).probability : null
 const target = {
-margin: points ? (points.home - points.away) + asPoints(p) - asPoints(posted) : asPoints(p),
+margin: logged !== undefined ? logged + asPoints(p) - asPoints(posted) : asPoints(p),
 total: (nflSim.totals[game.game_id] || 45) + simWeatherTotalShift(chosen),
 probability: p,
 }

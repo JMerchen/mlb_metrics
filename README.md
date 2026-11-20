@@ -5677,6 +5677,52 @@ and a guaranteed hit rate as long as the next game is like the past ones.
     64% -> 64%; 80% -> 79% (20,855 player-games). Not tested against real
     prop lines (we have none), which already know the matchup.
 
+## Newer methods, 3: fitting the simulator to real games (`scripts/fit_nfl_sim_form.js`, `SIM_FORM`)
+
+Why (2026-11-20): a simulator's settings have no formula tying them to the
+data. Simulation-based inference draws candidate settings, simulates at
+each, and weights each by how close its games come to the real ones
+(here a synthetic likelihood on six summary numbers), giving the range of
+settings the data cannot tell apart.
+
+- The flaw it was pointed at: built from plays alone, simulated games were
+  too alike - margins 12.3 points either side of the target and totals
+  12.2, against 12.8 and 13.1 for real games around the closing lines.
+- Two new settings in `docs/nfl_sim.js`, `SIM_FORM = {team, game}`: the
+  spread (in log terms) of a multiplier on every gain, one per offense for
+  its own day and one shared by both sides. Drawn from a random stream of
+  their own, so a seed's plays are drawn the same with or without form.
+- The fit: 2,127 games from 2018 on (`data/backtest/nfl_game_misses_replay.csv`);
+  40 matchups spanning the real spreads and totals, each calibrated to its
+  lines and played 300 times per candidate. Round 1 (240 candidates over
+  0-0.30 each) left 4.6 candidates' worth of weight; round 2 (160 over the
+  part left standing) gives team 0.079 (90% 0.051-0.097), game 0.040
+  (0.010-0.066). Set to 0.08 and 0.04. About 10 minutes on four cores a
+  round.
+- Checked on a fresh run (60 matchups x 500 games), real / before / after:
+  margin sd 12.77 / 12.27 / 12.72; total sd 13.13 / 12.21 / 13.15; and not
+  used in the fit: total within 9 of the line 52.8% / 55.4% / 52.2%; 58+
+  points 19.8% / 17.8% / 19.9%; 33 or fewer 18.9% / 18.1% / 19.5%.
+- What it did not fix (and form cannot): games decided by 3 or fewer,
+  24.7% real against 19.0% simulated; favorites of 7+ win 80.3% real
+  against 77.8%. That is about how close games end, not about spread.
+- **The 67% against 88% mismatch** (found the day before on Raiders at
+  Broncos) was a different fault, found by the same measuring: the page
+  aimed the simulation at the points model's margin (the two team scores
+  apart), and that model's margins run much closer together than games do
+  (this season real margins were 1.7 times as wide as it said, 1.2 for the
+  win model; it missed by 12.8 points to the win model's 12.1). The
+  simulation now aims at the pick's own margin (`predicted_margin`) and
+  the points model's total. This week's games, simulated win rate against
+  the pick: Raiders at Broncos 72% -> 88% (pick 88%), Dolphins at Bills
+  76% -> 90% (90%), Vikings at 49ers 69% -> 54% (53%); every game within 4
+  points.
+- Also fixed in passing: a timeout called on the play that ended the game
+  was counted in the box score but missing from the play-by-play (about 1
+  game in 1,500); and three page test files added since 2026-11-19 were
+  not in `ci.yml`, which names each one - now they are, with a test that
+  fails if one is ever left out.
+
 ## NFL schedule sheet: a unit a week (`nfl_season_views.team_schedule`, `nfl_stats.js`)
 
 User request (2026-11-14): "on the schedule view, put how many units

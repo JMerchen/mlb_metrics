@@ -30,6 +30,15 @@ const SIM_SHORT_YARDAGE_STUFF = 0.12
 const SIM_FLAG_SECONDS = 12
 const SIM_FLAG_HURRY_SECONDS = 6
 const SIM_SIDES = ["home", "away"]
+// Game-day form: how far a team's offense, and the game as a whole, run
+// above or below their usual on a given day (the spread, in log terms, of
+// a multiplier on every gain). Without it the plays alone left scores too
+// bunched: margins 12.0 points either side of the target and totals 11.9,
+// where real games are 12.7 and 13.1 around the closing lines. Fitted to
+// real games by simulation-based inference (scripts/fit_nfl_sim_form.js,
+// which has the numbers): `team` is each offense's own day, `game` a day
+// shared by both (weather, officials, pace).
+const SIM_FORM = {team: 0.08, game: 0.04}
 // Field zones: inside the opponent's 10 ("goal"), its 11-20 ("red") and the
 // offense's own 10 ("backed"). The league's ratios to the middle of the
 // field (profiles.league.field_zones) scale the pass rate, sacks and
@@ -329,9 +338,21 @@ const pcts = opts.unitPcts || {}
 const code = {home: homeCode, away: awayCode}
 const other = side => side === "home" ? "away" : "home"
 const prof = {home: simTeamProfile(profiles, homeCode), away: simTeamProfile(profiles, awayCode)}
+// Each side's day (see SIM_FORM), from a stream of its own so a seed's
+// plays are drawn the same with or without it. The average multiplier is 1.
+const form = opts.form || SIM_FORM
+const day = {home: 1, away: 1}
+if(form.team > 0 || form.game > 0){
+const formRng = simRng((((opts.seed ?? 1) >>> 0) ^ 0x9E3779B9) >>> 0)
+const normal = () => Math.sqrt(-2 * Math.log(1 - formRng())) * Math.cos(2 * Math.PI * formRng())
+const shared = form.game * normal()
+const centre = (form.team * form.team + form.game * form.game) / 2
+day.home = Math.exp(shared + form.team * normal() - centre)
+day.away = Math.exp(shared + form.team * normal() - centre)
+}
 const factors = {
-home: simFactors(scale * (1 + edge), pcts.home, pcts.away),
-away: simFactors(scale * (1 - edge), pcts.away, pcts.home),
+home: simFactors(scale * (1 + edge) * day.home, pcts.home, pcts.away),
+away: simFactors(scale * (1 - edge) * day.away, pcts.away, pcts.home),
 }
 const fg = lg.field_goal || {a: 6, b: -0.1}
 const wx = simWeather(opts.weather)
@@ -441,7 +462,7 @@ return
 timeouts[caller] -= 1
 box[caller].timeouts += 1
 tick(playTime)
-notes.push({kind: "timeout", text: `Timeout ${code[caller]} (${timeouts[caller]} left)`})
+notes.push({kind: "timeout", caller, text: `Timeout ${code[caller]} (${timeouts[caller]} left)`})
 }
 // An onside kick only from a team behind (by 24 or less) in the 4th
 // quarter: in the last two minutes or so, or with four left when it needs
@@ -966,6 +987,12 @@ play.change = true
 turnover(poss, 100 - ball, "Downs")
 }
 }
+// A timeout called as the play that ended the game finished never
+// happened: it has no place in the play-by-play, so it is not counted.
+for(const note of notes){
+if(note.kind === "timeout"){ box[note.caller].timeouts -= 1 }
+}
+
 for(const side of SIM_SIDES){ box[side].points = score[side] }
 return {
 home: homeCode, away: awayCode, plays, drives, box,
@@ -996,7 +1023,7 @@ return {margin, total, homeWins}
 function simCalibrate(profiles, homeCode, awayCode, targetMargin, targetTotal, opts = {}){
 const n = opts.games || SIM_CALIBRATION_GAMES
 const at = (edge, scale) => {
-const r = simAverage(profiles, homeCode, awayCode, {edge, scale, unitPcts: opts.unitPcts, lineups: opts.lineups, weather: opts.weather}, n)
+const r = simAverage(profiles, homeCode, awayCode, {edge, scale, unitPcts: opts.unitPcts, lineups: opts.lineups, weather: opts.weather, form: opts.form}, n)
 return {...r, edge, scale, off: [r.margin - targetMargin, r.total - targetTotal]}
 }
 const miss = r => Math.abs(r.off[0]) / 0.25 + Math.abs(r.off[1]) / 0.5
@@ -1187,7 +1214,7 @@ const s = summary.scoring[side]
 return `<tr><td>${name(side)}</td><td>${simPct(s.le10)}</td><td>${simPct(s.under20)}</td><td>${simPct(s.plus20)}</td><td>${simPct(s.plus30)}</td></tr>`
 }).join("")}</tbody></table>`
 const note = target
-? `<p class="simIntro">Tuned to the points model: ${name("away")} ${simFixed((target.total - target.margin) / 2)}, ${name("home")} ${simFixed((target.total + target.margin) / 2)} on average; the What if? panel gives ${name("home")} ${simPct(target.probability)} to win.</p>`
+? `<p class="simIntro">Tuned to our pick's margin and our point total: ${name("away")} ${simFixed((target.total - target.margin) / 2)}, ${name("home")} ${simFixed((target.total + target.margin) / 2)} on average; the pick gives ${name("home")} ${simPct(target.probability)} to win.</p>`
 : ""
 const teams = SIM_SIDES.slice().reverse().map(side => `<h4>${name(side)}</h4>${simPlayerAveragesHtml(summary.players[side])}`).join("")
 return `<div class="simSummary"><div class="whatIfHeadline">${headline}</div>${note}${stats}
@@ -1542,7 +1569,7 @@ return `<div class="simFinal"><div class="whatIfHeadline">Final: ${headline}</di
 
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
-simRng, simDraw, simFactors, simWeather, simShiftOdds, SIM_WEATHER, SIM_WEATHER_CHOICES, simWeatherChoice, simWeatherTotalShift, simZone, simPunt, simPick, simSharpen, simShortName, simLineup, simulateGame, simAverage, simCalibrate, simSpot, simClock,
+simRng, simDraw, simFactors, SIM_FORM, simWeather, simShiftOdds, SIM_WEATHER, SIM_WEATHER_CHOICES, simWeatherChoice, simWeatherTotalShift, simZone, simPunt, simPick, simSharpen, simShortName, simLineup, simulateGame, simAverage, simCalibrate, simSpot, simClock,
 simSummary, simMarginBins, simMarginChartHtml, simSummaryHtml, simPlayerStatsHtml,
 simFieldSvg, simFieldPoint, simBallPath, simWeatherScene, simScoreboardHtml, simDriveChartHtml, simTickerHtml, simBoxScoreHtml, simCalibrationNote, simFinalHtml,
 }

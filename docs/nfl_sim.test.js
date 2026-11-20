@@ -3,7 +3,7 @@ const test = require("node:test")
 const assert = require("node:assert/strict")
 global.teamName = require("./teams.js").teamName
 const {
-  simRng, simDraw, simFactors, simZone, simulateGame, simAverage, simCalibrate, simSpot, simClock,
+  simRng, simDraw, simFactors, SIM_FORM, simZone, simulateGame, simAverage, simCalibrate, simSpot, simClock,
   simScoreboardHtml, simDriveChartHtml, simBoxScoreHtml, simTickerHtml, simFieldSvg, simFinalHtml,
   simPick, simShortName, simLineup, simSummary, simMarginBins, simSummaryHtml, simPlayerStatsHtml,
   simWeather, simShiftOdds,
@@ -628,7 +628,7 @@ test("1,000-game summary: each team's scoring odds instead of exact finals", () 
   }
   const html = text(simSummaryHtml(summary, { margin: 3, total: 44, probability: 0.6 }))
   assert.match(html, /Points scored 10 or fewer Under 20 20\+ 30\+/)
-  assert.match(html, /Tuned to the points model: Panthers 20\.5, Packers 23\.5 on average/)
+  assert.match(html, /Tuned to our pick's margin and our point total: Panthers 20\.5, Packers 23\.5 on average; the pick gives Packers 60% to win/)
   assert.doesNotMatch(html, /Commonest finals/)
 })
 
@@ -645,4 +645,44 @@ test("an offense throws more against a defense that pulls opponents toward the p
     return n / 60
   }
   assert.ok(dropbacks(versus(0.08)) > dropbacks(versus(-0.08)) + 2)
+})
+
+test("game-day form widens the spread of scores without moving the average or the plays' own draws", () => {
+  // Why (2026-11-20): plays alone left margins and totals too bunched next
+  // to real games; SIM_FORM was fitted to close that (scripts/fit_nfl_sim_form.js).
+  assert.deepEqual(SIM_FORM, { team: 0.08, game: 0.04 })
+  const run = form => {
+    const margins = [], totals = []
+    for (let seed = 1; seed <= 500; seed++) {
+      const f = simulateGame(PROFILES, "GB", "CAR", { seed, form }).final
+      margins.push(f.home - f.away)
+      totals.push(f.home + f.away)
+    }
+    const mean = a => a.reduce((x, y) => x + y, 0) / a.length
+    const sd = a => { const m = mean(a); return Math.sqrt(mean(a.map(v => (v - m) ** 2))) }
+    return { margin: mean(margins), total: mean(totals), marginSd: sd(margins), totalSd: sd(totals) }
+  }
+  const none = run({ team: 0, game: 0 })
+  // Each offense having its own day spreads the margin and the total.
+  const own = run({ team: 0.3, game: 0 })
+  assert.ok(own.marginSd > none.marginSd * 1.1 && own.totalSd > none.totalSd * 1.05)
+  // A day both sides share moves the total far more than the margin.
+  const shared = run({ team: 0, game: 0.3 })
+  assert.ok(shared.totalSd > none.totalSd * 1.2)
+  assert.ok(shared.marginSd / none.marginSd < shared.totalSd / none.totalSd)
+  assert.ok(Math.abs(own.total - none.total) < 4)
+  // With no form asked for, a seed is the same game as it always was, and
+  // the default is the fitted setting.
+  assert.deepEqual(simulateGame(PROFILES, "GB", "CAR", { seed: 9, form: { team: 0, game: 0 } }).final,
+    simulateGame(PROFILES, "GB", "CAR", { seed: 9, form: { team: 0, game: 0 } }).final)
+  assert.deepEqual(simulateGame(PROFILES, "GB", "CAR", { seed: 9 }).final, simulateGame(PROFILES, "GB", "CAR", { seed: 9, form: SIM_FORM }).final)
+})
+
+test("a timeout called on the play that ends the game is not counted", () => {
+  // It was counted in the box score but never appeared in the play-by-play
+  // (about 1 game in 1,500, in overtime).
+  for (let seed = 1; seed <= 1500; seed++) {
+    const g = simulateGame(PROFILES, "GB", "CAR", { seed })
+    assert.equal(g.box.home.timeouts + g.box.away.timeouts, g.plays.filter(p => p.kind === "timeout").length)
+  }
 })

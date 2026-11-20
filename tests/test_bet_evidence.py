@@ -59,3 +59,11 @@ def test_build_reads_the_logged_bets_and_any_replay_files(tmp_path):
     money = by_key["nfl_moneyline_live"]
     assert money["units"] == 1.0 and "rate_low" not in money
     assert out["bar"] == 20.0 and round(out["break_even"], 4) == 0.5238
+
+
+def test_every_page_test_file_is_run_by_the_checks():
+    """The checks name each page test file; one added without a line there
+    never runs (three were missed, 2026-11-19/20)."""
+    ci = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    missing = [f.name for f in sorted((REPO_ROOT / "docs").glob("*.test.js")) if f"node --test docs/{f.name}" not in ci]
+    assert missing == []
