@@ -349,8 +349,8 @@ averages and year-by-year grids, with a workbook download.</p>
 
 <div class="methodCard">
 <h3>Beat the Streak</h3>
-<p>Each hitter's hit rates are blended over the season and his last 81, 30
-and 10 days (recent games count more), pulled toward the league for small
+<p>Each hitter's season batting average and his share of games with a hit
+(which leans on recent games) are pulled toward the league for small
 samples, and combined with today's matchup - the opposing starter's and
 bullpen's PAVE and the park - in a model trained on past seasons and
 calibrated so its percentages mean what they say. A hitter qualifies only
@@ -678,11 +678,14 @@ an example, and where you'll find it.</p>
 <h2>Hitting</h2>
 <dl class="terms">
 <dt id="wave">WAVE</dt>
-<dd><p>A hitter's batting average - hits per at-bat - blended over the full season and his last 81, 30
-and 10 days, so recent games count more, and pulled toward the league average when he has few at-bats
-(see <a href="#shrinkage">shrinkage</a>). Walks don't count as at-bats, so they neither help nor hurt it. A
-later test found the recent windows chase streaks that are not real
-(<a href="#changepoint">what it found</a>); a season-based version is being tested.</p>
+<dd><p>A hitter's batting average this season - hits per at-bat - pulled toward the league average
+until he has a few hundred at-bats (see <a href="#shrinkage">shrinkage</a>). Walks don't count as at-bats, so
+they neither help nor hurt it.</p>
+<p>Until November 2026 WAVE leaned on his last 81, 30 and 10 days, with 60% of its weight on the last 30. A
+test found those hot and cold stretches are not real changes in a hitter
+(<a href="#changepoint">what it found</a>), so WAVE dropped them. Replaying two seasons of picks both ways,
+the season version made our hit chances slightly more accurate in both, and the top pick got a hit a little
+more often: 74% of days against 72% in 2026, and 74% against 68% in 2025.</p>
 <p class="where">On the site: <a href="./stats.html">MLB Stats</a>, and underneath every Beat the Streak pick.</p></dd>
 
 <dt id="hit-chance">Hit chance</dt>
@@ -953,8 +956,9 @@ the 2026 season, the Beat the Streak picks hit more often using at-bats than eve
 <dd><p><span class="lbl">The idea</span> An average where some numbers count more than others.</p>
 <p><span class="lbl">In sports</span> Is a hitter's last week or his whole season the better guide? Some of
 both: recent games say more about his form now, the season says more about who he is.</p>
-<p><span class="lbl">On this site</span> WAVE, CAVE and WOPS weight the full season and the last 81, 30 and 10
-days, so a hot or cold stretch moves them without taking over.</p>
+<p><span class="lbl">On this site</span> CAVE and WOPS weight the full season and the last 81, 30 and 10
+days, so a hot or cold stretch moves them without taking over. <a href="#wave">WAVE</a> used to as well, until
+a test showed a hitter's last few weeks say nothing about his next at-bat that his season doesn't.</p>
 <p class="where"><a href="https://en.wikipedia.org/wiki/Weighted_arithmetic_mean" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
 
 <dt id="standard-deviation">Standard deviation</dt>
@@ -1427,9 +1431,16 @@ a game's carries with the wrong player and the new method 21.8%, and they tied o
 <b>A hitter's hot and cold streaks</b>: nothing. The method saw a likely change before none of 39,443
 hitter-games, and its estimate was simply his season average. That exposed a weakness in <a href="#wave">WAVE</a>,
 which leans on a hitter's last 10 and 30 days: when WAVE had a hitter 67 points above his season, he went on to
-hit 3 points under it, and WAVE predicted at-bats worse than giving every hitter the league average. WAVE is
-one input among many in our hit model, so the picks are not that far off - but it is the wrong input, and
-reworking it is next.</p>
+hit 3 points under it, and WAVE predicted at-bats worse than giving every hitter the league average.</p>
+<p><span class="lbl">What we changed</span> WAVE is now a hitter's season average and nothing else. WAVE is
+one input among many in our hit model, so before switching we replayed two full seasons of picks both ways,
+refitting the model ten times each because one fit differs from the next by more than the gap we were
+measuring. The season version gave slightly more accurate hit chances in both seasons (clearly so in 2025).
+The model's top pick got a hit on 73.7% of days against 71.9% in 2026 and 74.2% against 68.2% in 2025, and
+both of its top two did on 53.8% against 53.3% and 53.3% against 49.5%. Seven of the eight pick measures we
+track moved the right way; the one that didn't (both of the live rule's top two, 2025) fell from 51.2% to
+49.4%, well inside the noise. A small gain, not a breakthrough - but the number shown as a hitter's WAVE
+is now the better predictor, and it no longer chases streaks that aren't there.</p>
 <p class="where"><a href="https://en.wikipedia.org/wiki/Change_detection" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
 
 <dt id="sequence-model">Reading an at-bat like a sentence (sequence models)</dt>

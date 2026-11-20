@@ -180,10 +180,10 @@ def test_compute_plate_discipline_absent_batter_not_in_output():
     assert 2 not in set(result["key_mlbam"])
 
 
-def test_compute_wave_blends_windows_and_converts_to_probability():
-    # Batter 1 faces only RHP. Counts land in each of the four WAVE windows
-    # (full/81d/30d/10d relative to 2026-06-20) with hand-computable rates:
-    # full=4/6, 81d=4/5, 30d=3/3, 10d=1/1 -> WAVE_R = 0.9 exactly.
+def test_compute_wave_is_the_season_rate_and_converts_to_probability():
+    # Batter 1 faces only RHP: 4 hits in 6 at-bats on the season. WAVE is
+    # that season rate (config.WAVE_RATE_WINDOWS, 2026-11-20) - not a blend
+    # that would count his last ten days (1 for 1) a third of the whole.
     rows = _at_bats(1, "R", [
         ("2026-03-12", "field_out"),   # only in the full-season window
         ("2026-05-01", "single"),      # in 81d, not 30d
@@ -218,14 +218,14 @@ def test_compute_wave_blends_windows_and_converts_to_probability():
     # config.WAVE_SHRINKAGE_STRENGTH's live default happens to be.
     wave = hitters.compute_wave(dt, shrinkage_strength=0.0).set_index("key_mlbam")
 
-    assert wave.loc[1, "WAVE_R"] == pytest.approx(0.9)
+    assert wave.loc[1, "WAVE_R"] == pytest.approx(4 / 6)
     assert wave.loc[1, "WAVE_L"] == 0
-    assert wave.loc[1, "WAVE"] == pytest.approx(0.9)
+    assert wave.loc[1, "WAVE"] == pytest.approx(4 / 6)
     assert wave.loc[1, "r_at_bat"] == 6
     assert wave.loc[1, "l_at_bat"] == 0
-    assert wave.loc[1, "probability"] == pytest.approx(1 - 0.1**3.5)
+    assert wave.loc[1, "probability"] == pytest.approx(1 - (1 / 3) ** 3.5)
 
-    assert wave.loc[2, "WAVE_L"] == pytest.approx(0.9)
+    assert wave.loc[2, "WAVE_L"] == pytest.approx(4 / 6)
     assert wave.loc[2, "WAVE_R"] == 0
 
     # batter 3: WAVE_R = 1.0 (all hits, all windows), WAVE_L = 0.0 (all outs),

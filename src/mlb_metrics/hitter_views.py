@@ -1,15 +1,14 @@
 """Different views of a hitter's season, for the Stats page's hitter table.
 
-WAVE (hitters.compute_wave) is his at-bat hit rate and CAVE ("Carried
-Average" - hitters.compute_game_hit_probability's Game_Hit_Probability)
-the share of his games with a hit, both blended across recency windows;
-here both carry a hitter's longer window into a shorter one he has no
-at-bats in (see season_wave_cave). This module adds:
+WAVE (hitters.compute_wave) is his at-bat hit rate over the season and
+CAVE ("Carried Average" - hitters.compute_game_hit_probability's
+Game_Hit_Probability) the share of his games with a hit, blended across
+recency windows; here CAVE carries a hitter's longer window into a shorter
+one he has no at-bats in (see season_wave_cave). This module adds:
 
   WOPS  the same window blend for OPS (OBP per plate appearance plus SLG
         per at-bat), over config.WAVE_WINDOWS with each window's rates
-        shrunk toward the league by config.WAVE_SHRINKAGE_STRENGTH, as
-        WAVE is.
+        shrunk toward the league by config.WOPS_SHRINKAGE_STRENGTH.
 
   "vs. pitchers faced" versions of WAVE, CAVE and WOPS, which credit hits
   off tough pitchers more and soft ones less. For each window, every at-bat
@@ -112,7 +111,7 @@ def compute_wops(pas: pd.DataFrame, league: dict | None = None) -> pd.DataFrame:
     config.WAVE_WINDOWS (each window shrunk toward the league, a window he
     has no plate appearances in carrying his longer one), summed."""
     league = league or league_rates(pas)
-    strength = config.WAVE_SHRINKAGE_STRENGTH
+    strength = config.WOPS_SHRINKAGE_STRENGTH
     latest = pas["game_date"].max()
     windows = _longest_first(config.WAVE_WINDOWS)
     obp, slg = [], []
@@ -152,8 +151,12 @@ def pitchers_faced_factors(pas: pd.DataFrame, league: dict | None = None) -> pd.
         g = _window(games, latest, days_back).groupby("batter")[["baseline", "expected"]].sum()
         cave_f.append(g["baseline"] / g["expected"])
 
+    # WAVE's factor over WAVE's own windows (the season), which are among
+    # the recency windows the loop above already covered.
+    rate_windows = _longest_first(config.WAVE_RATE_WINDOWS)
+    by_window = {days_back: factor for (days_back, _), factor in zip(wave_windows, wave_f)}
     out = pd.DataFrame({
-        "wave_factor": _blend_carried(wave_f, wave_windows),
+        "wave_factor": _blend_carried([by_window[days_back] for days_back, _ in rate_windows], rate_windows),
         "obp_factor": _blend_carried(ob_f, wave_windows),
         "slg_factor": _blend_carried(tb_f, wave_windows),
         "cave_factor": _blend_carried(cave_f, cave_windows),
