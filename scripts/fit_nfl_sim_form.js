@@ -46,19 +46,55 @@
 //     58 points or more *            19.8%    17.8%    19.9%
 //     (* not used in the fit)
 //
-// So SIM_FORM = {team: 0.08, game: 0.04}: each offense's day varies by
+// So SIM_FORM was {team: 0.08, game: 0.04}: each offense's day varies by
 // about 8%, with a smaller day both sides share. The spread of margins
-// and totals now matches real games, including the numbers the fit never
-// saw about the total. What it does NOT fix, and no amount of form could:
-// real games finish within a field goal a quarter of the time (24.7%) and
-// simulated ones 19%, with or without form. That is about how close games
-// end (a late field goal to tie or win, overtime), not about spread.
+// and totals matched real games, including the numbers the fit never saw
+// about the total. What it did NOT fix, and no amount of form could: real
+// games finish within a field goal a quarter of the time (24.7%) and
+// simulated ones 19%, with or without form.
+//
+// ROUND 3 (2026-11-20, after the late-game changes in docs/nfl_sim.js -
+// playing for the kick, taking the points, the two-minute drive when
+// level, SIM_LEAD_DRAG). Those changes closed the field-goal gap (see
+// below) but a leader that slows down also narrows margins, so the form
+// was refitted (--draws 72 --team 0.07,0.16 --game 0,0.06):
+//
+//   2127 real games (2018 on); 72 candidate settings (team 0.07-0.16, game 0-0.06), 12,000 simulated games each
+//   posterior: team 0.101 (90% 0.079-0.120), game 0.024 (90% 0.001-0.053); 18.5 candidates' worth of weight
+//   closest candidates: team 0.104 game 0.024 (11%); team 0.109 game 0.001 (9%); team 0.088 game 0.040 (7%); team 0.108 game 0.019 (7%); team 0.096 game 0.030 (7%)
+//
+//   checked on a fresh run (60 matchups x 500 games), fitted setting team 0.1, game 0.02:
+//                                  real    no form   fitted
+//     margin sd                      12.77    11.73    12.49
+//     total sd                       13.13    12.11    13.10
+//     margin within 4                29.7%    29.8%    28.0%
+//     margin beyond 20               11.9%     8.8%    10.7%
+//     total within 4                 25.9%    27.4%    25.5%
+//     total beyond 20                11.7%     9.4%    12.1%
+//     decided by 3 or fewer *        24.7%    24.7%    23.7%
+//     decided by 8 or fewer *        53.3%    50.9%    49.2%
+//     decided by 17 or more *        25.6%    23.1%    25.3%
+//     favorite by 3+ wins *          70.3%    70.4%    69.2%
+//     favorite by 7+ wins *          80.3%    80.9%    79.2%
+//     total within 9 of the line *   52.8%    55.8%    52.3%
+//     33 points or fewer *           18.9%    18.1%    19.3%
+//     58 points or more *            19.8%    17.7%    19.9%
+//     (* not used in the fit)
+//
+// SIM_FORM = {team: 0.10, game: 0.02}. Games decided by 3 or fewer: 23.7%
+// against a real 24.7% (it was 19.0%); by exactly 3, 14.7% against 14.4%
+// (it was 9.4%); ties 0.3% against 0.4% (1.5%); overtime 4.2% against
+// 5.5% (7.8%). Fourth-quarter drives by the team ahead: 1.52 points when
+// up 1-8 and 1.72 when up 9+, against a real 1.57 and 1.70 (1.81, 1.83).
+// Still open: decided by 8 or fewer 49.2% against 53.3%, and the margin's
+// spread 12.5 against 12.8.
 //
 // Usage (the simulation part splits across processes):
 //   for i in 0 1 2 3; do node scripts/fit_nfl_sim_form.js --simulate --shard $i/4 --out DIR & done; wait
 //   node scripts/fit_nfl_sim_form.js --combine --out DIR
 // Add --team LOW,HIGH --game LOW,HIGH --draws N (to both steps) to search
-// another range; round 1 was --team 0,0.30 --game 0,0.30 --draws 240.
+// another range; round 1 was --team 0,0.30 --game 0,0.30 --draws 240,
+// round 2 --team 0.04,0.13 --game 0,0.08 --draws 160.
 
 const fs = require("fs")
 const path = require("path")
@@ -67,13 +103,14 @@ const sim = require("../docs/nfl_sim.js")
 const ROOT = path.join(__dirname, "..")
 const PROFILES = JSON.parse(fs.readFileSync(path.join(ROOT, "docs", "data", "nfl_sim_profiles.json"), "utf8"))
 const MATCHUPS = 40, CALIBRATION_GAMES = 200, GAMES = 300
-// Round 1 searched team 0-0.30 and game 0-0.30 with 240 candidates; round
-// 2 (the defaults here) searches the part of that the data left standing.
+// Round 1 searched team 0-0.30 and game 0-0.30 with 240 candidates, round
+// 2 team 0.04-0.13 and game 0-0.08 with 160; round 3 (the defaults here)
+// followed the late-game changes.
 const args = process.argv.slice(2)
 const value = name => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : null }
 const span = (name, fallback) => (value(name) || fallback).split(",").map(Number)
-const DRAWS = Number(value("--draws")) || 160
-const PRIOR = {team: span("--team", "0.04,0.13"), game: span("--game", "0,0.08")}
+const DRAWS = Number(value("--draws")) || 72
+const PRIOR = {team: span("--team", "0.07,0.16"), game: span("--game", "0,0.06")}
 const SUMMARIES = ["margin sd", "total sd", "margin within 4", "margin beyond 20", "total within 4", "total beyond 20"]
 
 function realGames(){

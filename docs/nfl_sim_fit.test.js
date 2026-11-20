@@ -14,7 +14,7 @@ test("the six numbers describe how far scores land from the lines", () => {
 test("candidate settings are drawn inside the search range, the same every run", () => {
   for (let i = 0; i < 50; i++) {
     const d = priorDraw(i)
-    assert.ok(d.team >= 0.04 && d.team <= 0.13 && d.game >= 0 && d.game <= 0.08)
+    assert.ok(d.team >= 0.07 && d.team <= 0.16 && d.game >= 0 && d.game <= 0.06)
   }
   assert.deepEqual(priorDraw(3), priorDraw(3))
   assert.notDeepEqual(priorDraw(3), priorDraw(4))

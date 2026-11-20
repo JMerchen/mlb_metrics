@@ -3,7 +3,7 @@ const test = require("node:test")
 const assert = require("node:assert/strict")
 global.teamName = require("./teams.js").teamName
 const {
-  simRng, simDraw, simFactors, SIM_FORM, simZone, simulateGame, simAverage, simCalibrate, simSpot, simClock,
+  simRng, simDraw, simFactors, SIM_FORM, SIM_LEAD_DRAG, SIM_KICK_RANGE, simZone, simulateGame, simAverage, simCalibrate, simSpot, simClock,
   simScoreboardHtml, simDriveChartHtml, simBoxScoreHtml, simTickerHtml, simFieldSvg, simFinalHtml,
   simPick, simShortName, simLineup, simSummary, simMarginBins, simSummaryHtml, simPlayerStatsHtml,
   simWeather, simShiftOdds,
@@ -650,7 +650,7 @@ test("an offense throws more against a defense that pulls opponents toward the p
 test("game-day form widens the spread of scores without moving the average or the plays' own draws", () => {
   // Why (2026-11-20): plays alone left margins and totals too bunched next
   // to real games; SIM_FORM was fitted to close that (scripts/fit_nfl_sim_form.js).
-  assert.deepEqual(SIM_FORM, { team: 0.08, game: 0.04 })
+  assert.deepEqual(SIM_FORM, { team: 0.10, game: 0.02 })
   const run = form => {
     const margins = [], totals = []
     for (let seed = 1; seed <= 500; seed++) {
@@ -685,4 +685,51 @@ test("a timeout called on the play that ends the game is not counted", () => {
     const g = simulateGame(PROFILES, "GB", "CAR", { seed })
     assert.equal(g.box.home.timeouts + g.box.away.timeouts, g.plays.filter(p => p.kind === "timeout").length)
   }
+})
+
+test("level or a field goal behind late and in range, a team plays for the kick instead of running another play", () => {
+  // Why (2026-11-20): simulated games ended within a field goal 19% of the
+  // time against a real 24.7%. Level in the 4th quarter, real teams kick on
+  // 24% of drives and score a touchdown on 14%; simulated ones had it the
+  // other way round.
+  const SCRIMMAGE_KINDS = new Set(["run", "pass", "incomplete", "sack", "interception"])
+  let lateKicks = 0
+  for (let seed = 1; seed <= 1200; seed++) {
+    const g = simulateGame(PROFILES, "GB", "CAR", { seed })
+    for (let i = 1; i < g.plays.length; i++) {
+      const p = g.plays[i], before = g.plays[i - 1]
+      if (p.qtr !== 4 || before.qtr !== 4) { continue }
+      const margin = p.poss === "home" ? before.home - before.away : before.away - before.home
+      const inRange = 117 - p.ball <= SIM_KICK_RANGE
+      if (margin <= 0 && margin >= -3 && inRange && before.clock <= 45 && before.poss === p.poss) {
+        assert.ok(!SCRIMMAGE_KINDS.has(p.kind), `seed ${seed}: ${p.text} with ${before.clock}s left`)
+        if (p.kind === "field_goal") {
+          lateKicks += 1
+          assert.ok(p.clock <= 6)               // the clock was run down first
+        }
+      }
+    }
+  }
+  assert.ok(lateKicks >= 20)
+})
+
+test("sitting on a lead in the 4th quarter costs a share of every gain", () => {
+  assert.equal(SIM_LEAD_DRAG, 0.09)
+  const leaderPoints = leadDrag => {
+    let points = 0, games = 0
+    for (let seed = 1; seed <= 500; seed++) {
+      const g = simulateGame(PROFILES, "GB", "CAR", { seed, leadDrag })
+      const start = g.plays.find(p => p.qtr === 4)
+      if (!start || start.home === start.away) { continue }
+      const leader = start.home > start.away ? "home" : "away"
+      points += g.final[leader] - start[leader]
+      games += 1
+    }
+    return points / games
+  }
+  assert.ok(leaderPoints(0.5) < leaderPoints(0) - 0.8)
+  // The first three quarters are untouched, and the default is the fitted value.
+  const through3 = leadDrag => simulateGame(PROFILES, "GB", "CAR", { seed: 4, leadDrag }).plays.filter(p => p.qtr <= 3).map(p => p.text)
+  assert.deepEqual(through3(0.5), through3(0))
+  assert.deepEqual(simulateGame(PROFILES, "GB", "CAR", { seed: 4 }).final, simulateGame(PROFILES, "GB", "CAR", { seed: 4, leadDrag: SIM_LEAD_DRAG }).final)
 })
