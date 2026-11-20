@@ -5760,6 +5760,43 @@ later ones. Three different answers:
   to the hit model, not the pick itself; reworking it through the full
   replay (`scripts/backtest_wave_at_bats.py`) is a suggested follow-up.
 
+## Newer methods, 5: reading an at-bat like a sentence (`pitch_sequences.py`, `scripts/research_pitch_sequences.py`)
+
+Why (2026-11-20): Stuff+, the simulator and PAVE grade each pitch on its
+own, given the count. A sequence model (a recurrent network, the family
+behind language models) reads the at-bat in order instead. Three copies
+of one network differ only in the history they are shown - none, the
+earlier pitches, the earlier pitches and how each ended - so the gaps
+between them are the worth of the sequence and nothing else.
+
+- Data: every regular-season pitch of 2025-2026 (Statcast), each ending
+  one of five ways. Trained on 970,546 (through May 2026), tuned on June
+  2026, scored on 337,891 from July-October 2026. Left-handers are
+  mirrored; the models know the count, the handedness matchup, pitch
+  count, times through the order, both players' swing / whiff / in-play
+  rates, the pitcher's rate on that pitch type and the hitter's against
+  that kind of pitch.
+- Log loss per pitch: boosted trees on the pitch alone 0.9617, with
+  hand-made previous-pitch features 0.9608; network shown nothing 0.9554,
+  shown the pitches 0.9493, shown pitches and results 0.9461. The whole
+  sequence is worth 0.0093 (95% 0.0087-0.0098 by resampling games), 1.6% of
+  what the pitch itself tells. Zero on the first pitch, 0.0195 from the
+  sixth on.
+- Whiffs per swing against what the pitch alone predicts: fastball after
+  fastball +1.2 points; off-speed or breaking after another +0.8; off-speed
+  or breaking right after a fastball -2.0; 8+ mph slower than the last
+  pitch -1.0; after a whiff +1.4; after a foul -1.4. Repeating beats
+  switching, the reverse of "change speeds" - with the caution that
+  pitchers choose when to repeat.
+- Two mistakes caught on the way and kept as code and tests: player rates
+  for a training pitch must come from other games
+  (`pitch_sequences.add_training_rates`), and a group's expected whiff
+  rate is expected whiffs over expected swings, not the average of each
+  swing's own ratio.
+- Needs `tensorflow-cpu`, which is not a dependency of the site; the data
+  code and its tests need only pandas. About 40 minutes on four cores.
+  Nothing on the site uses it yet.
+
 ## NFL schedule sheet: a unit a week (`nfl_season_views.team_schedule`, `nfl_stats.js`)
 
 User request (2026-11-14): "on the schedule view, put how many units
