@@ -120,6 +120,7 @@ console.log("no nfl_matchup_history.csv yet", e)
 renderNflGamePickStats(summary)
 renderNflTrackRecord(confidence, summary[0], picks)
 loadNflEvidence()
+loadNflRanges().then(ranges => { if(ranges){ renderNflMatchup() } })
 renderNflGamePickHistory(picks)
 Object.assign(nflMatchup, {picks, confidence, meetings, summary: summary[0]})
 startNflMatchupPicker()
@@ -693,6 +694,29 @@ el.innerHTML = html
 
 }
 
+// Ranges with a stated hit rate (nfl_ranges.json, ranges.js): the total and
+// margin lines on a pick card, and each player prop's range and line
+// checker. Loaded once; what is already drawn is redrawn when it arrives.
+let nflRanges = null
+let nflRangesLoading = null
+
+function loadNflRanges(){
+if(!nflRangesLoading){
+nflRangesLoading = loadNflWhatIfFile("nfl_ranges").then(data => { nflRanges = data; return data }).catch(() => null)
+}
+return nflRangesLoading
+}
+
+// The line a reader types on a prop card: the chance over and under it.
+document.addEventListener("input", event => {
+const input = event.target
+const box = input && input.closest ? input.closest(".propRange") : null
+if(!box || !nflRanges || input.tagName !== "INPUT"){ return }
+const cal = (nflRanges.props || {})[box.dataset.propCategory]
+const out = box.querySelector("output")
+if(cal && out){ out.innerHTML = propLineText(cal, Number(box.dataset.propProjection), input.value) }
+})
+
 // How strong the evidence is behind each kind of bet (bet_evidence.json):
 // its own section under the track record, left out if the file is missing.
 async function loadNflEvidence(){
@@ -736,6 +760,7 @@ const pct0 = v=>v !== undefined && v !== null && v !== "" && !Number.isNaN(Numbe
 const away = teamName(p.away_team, "nfl")
 const home = teamName(p.home_team, "nfl")
 const pick = teamName(p.predicted_winner, "nfl")
+const rangeLines = gameRangeLines(nflRanges, p, home, away)
 const matchup = p.predicted_winner === p.home_team ? `${away} at <b>${home}</b>` : `<b>${away}</b> at ${home}`
 const vegas = pct0(p.market_predicted_winner_probability)
 
@@ -761,7 +786,9 @@ ${pickReasonsHtml(p, "nfl")}
 ${injuryLineHtml(p, "nfl")}
 ${spreadText(p, "nfl") ? `<div class="pickProb">${spreadText(p, "nfl")} ${spreadBetBadgeHtml(p, "nfl")}</div>` : ""}
 ${spreadText(p, "nfl") && (spreadBet(p, "nfl") || p.spread_bet_held) ? `<div class="pickNote">${spreadNote(p, "nfl")}</div>` : ""}
+${rangeLines.filter(line => line.startsWith("Margin")).map(line => `<div class="pickNote">${line}</div>`).join("")}
 ${totalPointsText(p) ? `<div class="pickProb">${totalPointsText(p)} ${totalLeanBadgeHtml(p)}</div>` : ""}
+${totalPointsText(p) ? rangeLines.filter(line => !line.startsWith("Margin")).map(line => `<div class="pickNote">Half the time it lands in that range; ${line.charAt(0).toLowerCase() + line.slice(1)}.</div>`).join("") : ""}
 ${teamEpaHtml(p, "nfl")}
 ${reportNote}
 <div class="pickStatus">${statusLabels[p.status] || p.status}</div>
@@ -904,9 +931,10 @@ await loadNflTeamUnits()
 try{
 const props = await loadCSV("./data/nfl_player_props.csv")
 const units = unitsByTeam(nflTeamUnits)
+const ranges = await loadNflRanges()
 buildPlayerPropsSection(props, "nflPlayerPropsGame", "nflPlayerPropsTable", units, rows=>{
 document.getElementById("nflPropLean").innerHTML = leanChartHtml(rows)
-document.getElementById("nflPropCards").innerHTML = propCardsHtml(rows, units)
+document.getElementById("nflPropCards").innerHTML = propCardsHtml(rows, units, ranges)
 })
 }catch(e){
 console.log("no nfl_player_props.csv yet", e)

@@ -5644,6 +5644,39 @@ betting, e-values, confidence sequences, e-detectors) does.
   the bar 3.9% of the time (the promise is 5% or less); a one-sided z test
   checked after every bet cried wolf in over 20% (`tests/test_anytime_valid.py`).
 
+## Newer methods, 2: ranges that hit as often as they say (`conformal.py`, `scripts/build_nfl_ranges.py`)
+
+Why (2026-11-20): the site had one range - the point total "plus or minus
+9", sized by hand to catch half of games - and nothing around a player
+projection. Conformal prediction reads a range straight off the model's
+own past misses (on games it had not seen), with no bell curve assumed
+and a guaranteed hit rate as long as the next game is like the past ones.
+
+- `conformal.py`: `calibrate` (the past misses, optionally in groups by
+  the size of the prediction and scaled to it), `range_for`,
+  `chance_over_line`. `docs/ranges.js` mirrors the last two for the page
+  (checked equal to the Python to the last digit).
+- `scripts/build_nfl_ranges.py` writes `docs/data/nfl_ranges.json`: the
+  total's and margin's misses from `data/backtest/nfl_game_misses_replay.csv`
+  (`--replay --cache DIR` rebuilds it), and each player category's from a
+  replay of the latest three seasons run every week (about 30 seconds).
+- On the site: each NFL pick card's margin (half the time and 4 times in
+  5) and total (4 times in 5 added to the existing half-the-time range);
+  each Player Props card's likely range and a box for the sportsbook's
+  line giving the chance over and under with the fair price.
+- What it found (`scripts/research_conformal_ranges.py`, every range made
+  only from earlier games):
+  - Total: half-the-time range hit 50.3%, 4-in-5 hit 80.1% (1,871 games,
+    79-81% by season). The hand-set 9 was right (the misses say 8.9).
+  - Margin: 51.4% and 80.5% (5,581 games). The same widths around the
+    closing spread: 52.0% and 81.2%.
+  - Player projections: one range for all caught 79% overall but 92% of
+    small receiving-yard projections and 59% of large ones. Five groups by
+    size plus a scale: 81 / 79 / 80%. All four categories 79.6-80.1%.
+  - Chance over a line set at the player's average: said 27% -> 27%;
+    64% -> 64%; 80% -> 79% (20,855 player-games). Not tested against real
+    prop lines (we have none), which already know the matchup.
+
 ## NFL schedule sheet: a unit a week (`nfl_season_views.team_schedule`, `nfl_stats.js`)
 
 User request (2026-11-14): "on the schedule view, put how many units
