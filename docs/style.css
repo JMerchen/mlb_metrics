@@ -2368,3 +2368,11 @@ html.helpOn p.sectionIntro,html.helpOn p.helpText{display:none;}
 .evChart .evDot{fill:var(--mlb-better);stroke:var(--bg-card);stroke-width:2;}
 .evChart .evBar{stroke:var(--text-dim);stroke-width:1.5;stroke-dasharray:6 4;}
 .evChart .evLabel{fill:var(--text);font-weight:600;}
+
+/* ---- Ranges with a stated hit rate (ranges.js, 2026-11-20) */
+.propRange{margin:8px 0 10px;padding-top:8px;border-top:1px solid var(--border);font-size:13px;}
+.propRangeLine{margin:0 0 6px;color:var(--text-dim);}
+.propRangeLine b{color:var(--text);}
+.propLineCheck{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;color:var(--text-dim);}
+.propLineCheck input{width:74px;margin:0;padding:5px 8px;font-size:13px;}
+.propLineCheck output b{color:var(--text);}

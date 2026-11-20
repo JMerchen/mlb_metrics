@@ -237,7 +237,9 @@ return { text: `About ${carries.toFixed(1)} carries expected`, meter: "" }
 return null
 }
 
-function propCardHtml(row, units){
+// `ranges` (nfl_ranges.json) adds the projection's range and a line checker
+// (ranges.js) under the recent games.
+function propCardHtml(row, units, ranges){
 const over = propIsOver(row)
 const words = PROP_STAT_WORDS[row.category] || { stat: String(row.category).toLowerCase(), unit: "" }
 const cleared = propClearedCount(row)
@@ -262,13 +264,14 @@ ${propStripSvg(row)}
 ${clearedLine ? `<p class="propCleared">${clearedLine}${propNumber(row.projection) !== null
 ? ` <span class="propKey"><i class="keyProjection ${over ? "keyOver" : "keyUnder"}"></i>our projection <i class="keyAverage"></i>his average</span>`
 : ` <span class="propKey"><i class="keyAverage"></i>his average</span>`}</p>` : ""}
+${ranges && typeof propRangeHtml === "function" ? propRangeHtml(ranges, row, words.unit) : ""}
 ${reasons.length ? `<ul class="propWhy">${reasons.map(r => `<li>${r.meter}<span>${r.text}</span></li>`).join("")}</ul>` : ""}
 </article>`
 }
 
-function propCardsHtml(rows, units){
+function propCardsHtml(rows, units, ranges){
 if(!rows || !rows.length){ return "No player props yet - this board updates weekly." }
-return rows.map(r => propCardHtml(r, units)).join("")
+return rows.map(r => propCardHtml(r, units, ranges)).join("")
 }
 
 if (typeof module !== "undefined" && module.exports) {

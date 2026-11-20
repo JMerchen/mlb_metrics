@@ -247,7 +247,9 @@ the site uses it.</p>
 picker</b>: choose a game (or tap one of the week's bets under it) and
 everything below is about that game. In order: the <b>pick</b> next to
 Vegas, outlined by whether it came before the final injury report
-(Tuesday) or after it (the morning of, or the day before, the game); the
+(Tuesday) or after it (the morning of, or the day before, the game), with
+the ranges the margin and the point total land in half the time and 4
+times in 5 (<a href="#conformal">how</a>); the
 <b>units matchup</b>, each side's passing and rushing against the other's
 defense, with both teams' unit ratings; the <b>last five meetings</b> at
 this home team's field (back to 1999, neutral-field games left out) with
@@ -294,7 +296,10 @@ that has turned doesn't hide in it.</p>
 <h3>NFL · Player Props</h3>
 <p>Players with the friendliest matchups for receptions, yards and sacks
 this week, from their recent games and what their opponent allows, plus
-each position's every-game floors. Places to look, not checked against
+each position's every-game floors. Each card also has the range his
+number lands in half the time and 4 times in 5, and a box for a
+sportsbook's line that gives the chance he goes over it
+(<a href="#conformal">how</a>). Places to look, not checked against
 sportsbook lines.</p>
 </div>
 
@@ -1322,6 +1327,32 @@ method removes: a rule chosen by looking at past results is flattered by those r
 the most the evidence could be. The bets posted here before the games are the clean test, and they have only
 just begun.</p>
 <p class="where">On the site: <a href="./nfl.html">NFL Picks</a>, under the track record. <a href="https://en.wikipedia.org/wiki/E-values" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
+
+<dt id="conformal">Ranges that hit as often as they say (conformal prediction)</dt>
+<dd><p><span class="lbl">The idea</span> A range is only useful if "4 times in 5" means 4 times in 5. The usual
+way to make one assumes the misses follow a bell curve. Conformal prediction assumes no shape at all: it takes
+the model's own past misses - on games it had not seen when it predicted them - and reads the range straight
+off them. If 80% of past misses fell between 19 under and 31 over, the next range is the prediction minus 19
+to plus 31. As long as the next game is like the past ones, the stated hit rate is guaranteed for any model,
+good or bad; a worse model just gets wider ranges.</p>
+<p><span class="lbl">In sports</span> A receiver's yards are nothing like a bell curve: most games land near
+his usual, a few go far over, none go below zero. A range built on a bell curve is too generous underneath and
+too stingy on top. And one width for everyone fails too - a 90-yard projection misses by far more than a
+15-yard one.</p>
+<p><span class="lbl">On this site</span> Three places. The <b>point total</b> on each NFL pick card keeps its
+half-the-time range and adds a 4-times-in-5 one; the <b>margin</b> gets both. Tested season by season on
+games after the ones the ranges were built from, the 4-in-5 total range caught 80.1% of 1,871 games and the
+margin's 80.5% of 5,581. (The check also confirmed the old hand-set "plus or minus 9" for the total: the
+misses say 8.9.) And every <b>player projection</b> on the Player Props tab now has a likely range, built week
+by week from earlier weeks only. Here the plain version failed in an instructive way: one range for all
+players caught 79% overall but 92% of the smallest third of receiving-yard projections and 59% of the largest.
+Keeping the misses of small and large projections apart, and sizing them to the projection, brought every
+third to 79-81%. The same past misses also give the chance a player clears any number, so each card has a box
+for the sportsbook's line. Against lines set at a player's own average, that chance was honest across 20,855
+player-games: when it said 27% it happened 27% of the time; 64%, 64%; 80%, 79%. One caution: a sportsbook's
+line already knows the matchup and the injury report, and we have no past prop lines to test against, so
+against a real line be less sure than the number says.</p>
+<p class="where">On the site: <a href="./nfl.html">NFL Picks</a> (each game's card) and Player Props. <a href="https://en.wikipedia.org/wiki/Conformal_prediction" target="_blank" rel="noopener">Learn more &rarr;</a></p></dd>
 </dl>
 </section>
 

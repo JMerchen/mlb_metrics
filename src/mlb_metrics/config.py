@@ -2488,6 +2488,11 @@ NFL_TOTALS_COEFFICIENTS = {
 # same story"). 2018-25 backtest (scripts/backtest_nfl_totals.py): the real
 # total landed within 9 of ours in 51.8% of 2,127 games (within 9 of
 # Vegas's total: 52.8%) - "about half the time".
+# Checked 2026-11-20 against ranges read off the model's own past misses
+# (conformal prediction, scripts/research_conformal_ranges.py): the
+# half-the-time range comes out 17.8 points wide and hit 50.3%, so 9 either
+# side stands. The 4-times-in-5 range on the pick card comes from those
+# misses directly (docs/data/nfl_ranges.json).
 NFL_TOTAL_BAND_HALF_WIDTH = 9
 # An over/under lean when our total is this many points or more from
 # Vegas's (user request 2026-11-06: totals "accurate enough to use for
