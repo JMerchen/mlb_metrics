@@ -5723,6 +5723,43 @@ settings the data cannot tell apart.
   not in `ci.yml`, which names each one - now they are, with a test that
   fails if one is ever left out.
 
+## Newer methods, 4: spotting a real change (`changepoint.py`)
+
+Why (2026-11-20): every "recent form" number here blends fixed windows.
+Bayesian online changepoint detection (Adams and MacKay 2007) has no
+window: after each game it keeps a probability for every "his current
+level began g games ago", so its estimate uses all his history when
+nothing changed and only the games since a break when one is clear.
+`rate_runs` handles k-of-n series (carries of the team's, hits of at-bats;
+the counts can be tempered, since a team's carries are not independent
+flips) and `level_runs` a measured series (fastball speed).
+
+Tried on three series, settings chosen on earlier seasons and scored on
+later ones. Three different answers:
+
+- **Pitcher fastball speed** (`scripts/research_changepoint_velocity.py`;
+  7,390 pitcher-games in 2026): it wins. Average miss 0.554 mph against
+  0.564 for his last five games, 0.570 last three, 0.607 season (t 4.6
+  over the best window). Where it flagged a change (12% of games): 0.561
+  against 0.584 and 0.640. Not on the site yet (the season is over).
+- **NFL carries and targets** (`scripts/research_changepoint_usage.py`;
+  2021-2026, about 2,240 team-games each): no better than the simulator's
+  blend (`nfl_sim.RECENT_WEIGHT`). Carries 0.2181 against 0.2155 (t -1.9),
+  targets 0.2565 against 0.2564. It had looked better on the seasons its
+  settings were chosen on (0.2321 against 0.2399), which is why they are
+  scored on later ones. The blend stays.
+- **Hitters' hot and cold streaks** (`scripts/research_changepoint_hot_cold.py`;
+  39,443 hitter-games in 2026): there are none to find. A likely change
+  before 0.00% of hitter-games; its predictions equal a shrunk season
+  average (log loss 0.55341 against 0.55340). This exposed WAVE
+  (`config.WAVE_WINDOWS`, 60% of its weight on the last 30 days): log loss
+  0.55972, worse than the league rate for everyone (0.55368); a hitter
+  WAVE had at .318 with a .251 season hit .248; as a daily pick on its
+  own, WAVE's favorite got a hit 58.2% of days against 64.1% for the
+  season average's (58.3% of all hitter-games had one). WAVE is one input
+  to the hit model, not the pick itself; reworking it through the full
+  replay (`scripts/backtest_wave_at_bats.py`) is a suggested follow-up.
+
 ## NFL schedule sheet: a unit a week (`nfl_season_views.team_schedule`, `nfl_stats.js`)
 
 User request (2026-11-14): "on the schedule view, put how many units
