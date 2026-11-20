@@ -38,7 +38,25 @@ const SIM_SIDES = ["home", "away"]
 // real games by simulation-based inference (scripts/fit_nfl_sim_form.js,
 // which has the numbers): `team` is each offense's own day, `game` a day
 // shared by both (weather, officials, pace).
-const SIM_FORM = {team: 0.08, game: 0.04}
+const SIM_FORM = {team: 0.10, game: 0.02}
+// How a close game ends (2026-11-20). Simulated games finished within a
+// field goal 19% of the time against a real 24.7%, and the fourth quarter
+// was where they came apart: entering it 52% were within one score, as in
+// real games, but by the two-minute warning 44% against a real 51%. Drive
+// by drive (2021-25, scripts/fit_nfl_sim_form.js prints the check):
+//   - level in the 4th, real teams score a touchdown on 14% of drives and
+//     kick a field goal on 24%; simulated ones had it the other way round
+//     (24% and 16%). In range, late, a real team plays for the kick.
+//   - a field goal behind, real teams kick on 14% of drives, simulated
+//     ones 10%: they went for fourth downs a kick would have answered.
+//   - ahead, real teams score 1.57-1.70 points a drive in the 4th,
+//     simulated ones 1.82: a defense that knows the run is coming stops
+//     it more, and a team sitting on a lead takes fewer chances.
+// SIM_KICK_RANGE: a field goal this long or shorter is "in range" for
+// playing for it. SIM_LEAD_DRAG: the share of every gain a team loses
+// while it leads in the 4th quarter.
+const SIM_KICK_RANGE = 45
+const SIM_LEAD_DRAG = 0.09
 // Field zones: inside the opponent's 10 ("goal"), its 11-20 ("red") and the
 // offense's own 10 ("backed"). The league's ratios to the middle of the
 // field (profiles.league.field_zones) scale the pass rate, sacks and
@@ -446,7 +464,7 @@ const margin = lead(poss)
 let caller = null
 if(after > 0 && !(qtr === 4 && clock > 120 && after < 120)){
 if(timeouts[defense] > 0 && qtr >= 4 && margin > 0 && margin <= 16 && after <= 180){ caller = defense }
-else if(timeouts[poss] > 0 && qtr >= 4 && margin < 0 && after <= 120 && rng() < 0.7){ caller = poss }
+else if(timeouts[poss] > 0 && qtr >= 4 && (margin < 0 || (margin === 0 && 117 - ball > SIM_KICK_RANGE)) && after <= 120 && rng() < 0.7){ caller = poss }
 else if(timeouts[poss] > 0 && qtr === 5 && margin <= 0 && after <= 120){ caller = poss }
 else if(timeouts[poss] > 0 && qtr === 2 && after <= 60 && ball >= 35){ caller = poss }
 else if(timeouts[defense] > 0 && qtr === 2 && after <= 110 && ball < 40){ caller = defense }
@@ -629,8 +647,11 @@ const def = other(poss)
 const b = box[poss]
 const margin = lead(poss)
 const late = qtr >= 4 && clock <= 300
-const hurry = (qtr === 2 && clock <= 120) || (late && margin < 0) || (qtr === 5 && margin < 0)
 const fgDistance = 117 - ball
+// Level with the ball in the last two minutes and not yet in range, a team
+// runs its two-minute offense for the winning kick, as when it is behind.
+const levelLate = margin === 0 && fgDistance > SIM_KICK_RANGE && ((qtr === 4 && clock <= 120) || (qtr === 5 && clock <= 150))
+const hurry = (qtr === 2 && clock <= 120) || (late && margin < 0) || (qtr === 5 && margin < 0) || levelLate
 const fgChance = 1 / (1 + Math.exp(-(fg.a + fg.b * fgDistance)))
 
 // Kneel out a won game - only when kneeling on every down left runs the
@@ -660,8 +681,18 @@ turnover(poss, ball, "Downs")
 continue
 }
 
+// Playing for the kick: level or a field goal behind in the 4th quarter
+// or overtime, inside the last two and a half minutes and already in
+// range. The offense keeps the ball on the ground and the clock moving,
+// then lets it run down and kicks. In overtime with the next score
+// winning, it kicks as soon as it is in range.
+const kickAnswers = (qtr === 4 || qtr === 5) && margin <= 0 && margin >= -3
+const playingForKick = kickAnswers && clock <= 150 && fgDistance <= SIM_KICK_RANGE
+const nextScoreWins = qtr === 5 && margin === 0 && ot.possessions >= 1
+const settleKick = (playingForKick && clock <= 45) || (nextScoreWins && fgDistance <= SIM_KICK_RANGE - 3)
+if(settleKick && qtr === 4 && clock > 6){ tick(clock - 4) }
 // Field goal as time runs out, or on 4th down.
-const lastKick = clock <= 12 && fgDistance <= 58 && (qtr === 2 || ((qtr === 4 || qtr === 5) && margin <= 0 && margin >= -3))
+const lastKick = settleKick || (clock <= 12 && fgDistance <= 58 && (qtr === 2 || kickAnswers))
 let fourth = null
 // Fourth down, as teams decide now: 4th and 1 between the 40s goes 86%
 // of the time, 4th and 2 about half; behind by a score or less in the 4th
@@ -671,7 +702,12 @@ const needTd = late && margin < -3
 const desperate = qtr >= 4 && clock <= 150 && margin < 0
 const behindLate = qtr >= 4 && margin < 0 && margin >= -8 && clock <= 480
 const fgTiesOrWins = margin >= -3 && fgDistance <= 50
+// A kick that ties or leads is taken in the last five minutes; with more
+// than five left, a team down by more than a field goal takes the points
+// too instead of going for it.
+const takeThePoints = qtr >= 4 && fgChance >= 0.5 && ((kickAnswers && clock <= 300 && togo > 1) || (margin < -3 && margin >= -8 && clock > 300 && togo > 1))
 if(desperate && !(margin >= -3 && fgDistance <= 55)){ fourth = "go" }
+else if(takeThePoints){ fourth = "fg" }
 else if(needTd && ball >= 40){ fourth = "go" }
 else if(behindLate && !(fgTiesOrWins && clock <= 120) && ((togo <= 2 && ball >= 25) || (togo <= 4 && ball >= 40))){ fourth = "go" }
 else if(togo <= 1 && ball >= 30){ fourth = "go" }
@@ -792,6 +828,9 @@ if(down === 3 || down === 4){ passRate = togo <= 1 ? 0.25 : togo <= 2 ? 0.4 : to
 else if(down === 2 && togo >= 8){ passRate += 0.1 }
 else if(down === 2 && togo <= 3){ passRate -= 0.1 }
 if(hurry){ passRate += 0.3 }
+if(playingForKick){ passRate = 0.15 }
+// Sitting on a lead in the 4th quarter costs a share of every gain.
+const leadDrag = qtr === 4 && margin > 0 ? 1 - (opts.leadDrag ?? SIM_LEAD_DRAG) : 1
 const protecting = qtr >= 4 && margin > 0 && clock <= 240
 if(protecting){ passRate = down === 1 ? 0.06 : down === 2 ? 0.2 : togo <= 3 ? 0.25 : 0.55 }
 else if(qtr >= 4 && margin >= 9){ passRate -= 0.25 }
@@ -851,7 +890,7 @@ clockUsed = 8
 }else if(rng() < Math.min(0.95, (wx ? simShiftOdds(p.comp_rate, wx.comp) : p.comp_rate) * (zoneRates.comp || 1) * (target ? target.catch : 1))){
 kind = "pass"
 const raw = simDraw(p.completion_yards, probs, rng())
-yards = Math.min(100 - ball, Math.round(zoneYards(raw > 0 ? raw * factors[poss].pass * (target ? target.ypr : 1) * (wx ? wx.pass_yds : 1) : raw)))
+yards = Math.min(100 - ball, Math.round(zoneYards(raw > 0 ? raw * factors[poss].pass * leadDrag * (target ? target.ypr : 1) * (wx ? wx.pass_yds : 1) : raw)))
 b.pass_comp += 1
 b.pass_yards += yards
 if(qb){
@@ -883,7 +922,7 @@ kind = "run"
 const leverage = togo <= 2 || ball >= 95 || (qtr >= 4 && Math.abs(margin) <= 8 && clock <= 300)
 carrier = simPick(leverage ? simSharpen(lineup.rushers) : lineup.rushers, rng())
 const raw = simDraw(p.rush_yards, probs, rng())
-yards = Math.min(100 - ball, Math.round(zoneYards(raw > 0 ? raw * factors[poss].run * (carrier ? carrier.ypc : 1) : raw)))
+yards = Math.min(100 - ball, Math.round(zoneYards(raw > 0 ? raw * factors[poss].run * leadDrag * (carrier ? carrier.ypc : 1) : raw)))
 // Against a stacked box on 3rd or 4th and short a run is stuffed more
 // often: real ones convert 73% of the time.
 if((down === 3 || down === 4) && togo <= 2 && rng() < SIM_SHORT_YARDAGE_STUFF){ yards = Math.min(yards, 0) }
@@ -1023,7 +1062,7 @@ return {margin, total, homeWins}
 function simCalibrate(profiles, homeCode, awayCode, targetMargin, targetTotal, opts = {}){
 const n = opts.games || SIM_CALIBRATION_GAMES
 const at = (edge, scale) => {
-const r = simAverage(profiles, homeCode, awayCode, {edge, scale, unitPcts: opts.unitPcts, lineups: opts.lineups, weather: opts.weather, form: opts.form}, n)
+const r = simAverage(profiles, homeCode, awayCode, {edge, scale, unitPcts: opts.unitPcts, lineups: opts.lineups, weather: opts.weather, form: opts.form, leadDrag: opts.leadDrag}, n)
 return {...r, edge, scale, off: [r.margin - targetMargin, r.total - targetTotal]}
 }
 const miss = r => Math.abs(r.off[0]) / 0.25 + Math.abs(r.off[1]) / 0.5
@@ -1569,7 +1608,7 @@ return `<div class="simFinal"><div class="whatIfHeadline">Final: ${headline}</di
 
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
-simRng, simDraw, simFactors, SIM_FORM, simWeather, simShiftOdds, SIM_WEATHER, SIM_WEATHER_CHOICES, simWeatherChoice, simWeatherTotalShift, simZone, simPunt, simPick, simSharpen, simShortName, simLineup, simulateGame, simAverage, simCalibrate, simSpot, simClock,
+simRng, simDraw, simFactors, SIM_FORM, SIM_LEAD_DRAG, SIM_KICK_RANGE, simWeather, simShiftOdds, SIM_WEATHER, SIM_WEATHER_CHOICES, simWeatherChoice, simWeatherTotalShift, simZone, simPunt, simPick, simSharpen, simShortName, simLineup, simulateGame, simAverage, simCalibrate, simSpot, simClock,
 simSummary, simMarginBins, simMarginChartHtml, simSummaryHtml, simPlayerStatsHtml,
 simFieldSvg, simFieldPoint, simBallPath, simWeatherScene, simScoreboardHtml, simDriveChartHtml, simTickerHtml, simBoxScoreHtml, simCalibrationNote, simFinalHtml,
 }

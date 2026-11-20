@@ -1395,11 +1395,13 @@ good days and bad days that plays drawn one at a time do not capture.</p>
 offense's day varies, and how much of a day both teams share (weather, officials, pace) - and fitted them to
 2,127 real games. Each of 400 candidate settings played 12,000 simulated games; the data settled on a team's
 day varying by about 8% (somewhere from 5% to 10%) and a shared day of about 4% (1% to 7%). With those, a fresh
-run matches real games on the spread of margins (12.7 against 12.8) and totals (13.2 against 13.1), and on
+run matched real games on the spread of margins (12.7 against 12.8) and totals (13.2 against 13.1), and on
 numbers the fit never saw: totals within 9 points of the line 52.2% against a real 52.8% (it was 55.4%), and
-games of 58 points or more 19.9% against 19.8% (it was 17.8%). It also showed what the simulator still gets
-wrong, which no setting of these could fix: real games finish within a field goal 24.7% of the time and
-simulated ones 19%. The same check found the cause of a mismatch on the page: the simulation was aiming at a
+games of 58 points or more 19.9% against 19.8% (it was 17.8%). It also showed what no setting of these could fix: real games finished within a field goal 24.7% of the time
+and simulated ones 19%. That turned out to be about how close games end, and comparing fourth-quarter drives
+one score situation at a time found it (teams level late play for the kick; teams ahead slow down). With those
+in, 23.7% of simulated games finish within a field goal, and the two settings were fitted again: a team's day
+now varies by about 10% and the shared day by 2%. The same check found the cause of a mismatch on the page: the simulation was aiming at a
 margin from our points model, whose margins run much closer together than games do, so a game our pick had at
 88% simulated at 72%. It now aims at the pick's own margin; across this week's games the simulated win rate
 is within 4 points of the pick in every one.</p>
@@ -1635,9 +1637,15 @@ the shape of the game), per team per game, against 2025-26.</p>
 </tbody>
 </table>
 <p class="methodCategoryNote">Once tuned, how far final scores land from their targets matches real games
-around the closing lines: margins 12.7 points either side against 12.8, totals 13.2 against 13.1
-(<a href="#sbi">fitted</a>, 2,127 games). One gap is open: 19% of simulated games finish within a field goal,
-against 24.7% of real ones.</p>
+around the closing lines: margins 12.5 points either side against 12.8, totals 13.1 against 13.1
+(<a href="#sbi">fitted</a>, 2,127 games). Close games now end as real ones do: 23.7% finish within a field goal
+against a real 24.7%, 14.7% by exactly three against 14.4%, and 4.2% go to overtime against 5.5%. They did not
+at first (19% within a field goal), and the fourth quarter was why. Level late, a real team in range plays for
+the kick - it kicks a field goal on 24% of its drives and scores a touchdown on 14% - where simulated teams
+did the reverse; a team a field goal behind went for fourth downs a kick would have answered; and a team ahead
+kept scoring as freely as before, where real ones slow down (1.6 points a drive in the fourth quarter against
+1.8). All three are in the simulation now. Still a little short: 49% of games finish within one score against
+a real 53%.</p>
 <p class="methodCategoryNote">Untuned, a team scores about 20 points against the league's 22; the tuning step
 closes that game by game, landing within 0.2 points of the target margin on average. Late-game passing runs a
 little high (28% of plays when protecting a lead, against 23%). As in baseball, each gap we found had a cause:

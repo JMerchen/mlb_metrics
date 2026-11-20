@@ -5697,8 +5697,8 @@ settings the data cannot tell apart.
   lines and played 300 times per candidate. Round 1 (240 candidates over
   0-0.30 each) left 4.6 candidates' worth of weight; round 2 (160 over the
   part left standing) gives team 0.079 (90% 0.051-0.097), game 0.040
-  (0.010-0.066). Set to 0.08 and 0.04. About 10 minutes on four cores a
-  round.
+  (0.010-0.066). Set to 0.08 and 0.04 (since refitted, below). About 10
+  minutes on four cores a round.
 - Checked on a fresh run (60 matchups x 500 games), real / before / after:
   margin sd 12.77 / 12.27 / 12.72; total sd 13.13 / 12.21 / 13.15; and not
   used in the fit: total within 9 of the line 52.8% / 55.4% / 52.2%; 58+
@@ -5706,6 +5706,32 @@ settings the data cannot tell apart.
 - What it did not fix (and form cannot): games decided by 3 or fewer,
   24.7% real against 19.0% simulated; favorites of 7+ win 80.3% real
   against 77.8%. That is about how close games end, not about spread.
+- **Close finishes, fixed (2026-11-20).** Entering the 4th quarter 52% of
+  simulated games were within one score, as in real ones; by the
+  two-minute warning 44% against a real 51%. Fourth-quarter drives by
+  score (2021-25 against 60 matchups x 200 simulated games) showed three
+  things, each now in `simulateGame`:
+  - *Level*: real teams kick a field goal on 24% of drives and score a
+    touchdown on 14%; simulated ones 16% and 24%. Now a team level or a
+    field goal behind, in range (`SIM_KICK_RANGE` = 45 yards) inside 2:30,
+    runs the clock and kicks; level and out of range inside two minutes
+    it runs its two-minute offense; in overtime with the next score
+    winning it kicks as soon as it is in range.
+  - *A field goal behind*: real 14% of drives end in a kick, simulated
+    10%. Now a kick that ties or leads is taken on fourth down in the last
+    five minutes, and a team down 4-8 with more than five left takes the
+    points.
+  - *Ahead*: real teams score 1.57 (up 1-8) and 1.70 (up 9+) points a
+    drive, simulated ones 1.81 and 1.83. `SIM_LEAD_DRAG` = 0.09 takes 9%
+    off every gain by a team leading in the 4th: 1.52 and 1.72.
+  Result (400 games x 60 matchups): decided by exactly 3, 14.7% against a
+  real 14.4% (was 9.4%); by 3 or fewer 23.7% against 24.7% (19.0%); ties
+  0.3% against 0.4% (1.5%); overtime 4.2% against 5.5% (7.8%). A leader
+  that slows down narrows margins, so the form was fitted a third time:
+  `SIM_FORM` = {team 0.10 (90% 0.08-0.12), game 0.02 (0.00-0.05)}; margin
+  sd 12.49 against 12.77, total sd 13.10 against 13.13. Still short: by 8
+  or fewer 49.2% against 53.3%. Simulated win rates stay within 5 points
+  of the pick in every game this week.
 - **The 67% against 88% mismatch** (found the day before on Raiders at
   Broncos) was a different fault, found by the same measuring: the page
   aimed the simulation at the points model's margin (the two team scores
