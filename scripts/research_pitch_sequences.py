@@ -27,15 +27,19 @@ gaps between them are the worth of the sequence and nothing else.
 Needs tensorflow (pip install tensorflow-cpu); it is not a dependency of
 the site. About 25 minutes on four cores.
 
-RESULT (2026-11-20): the sequence is real and small. Reading the at-bat
-cuts the network's log loss by 0.0093 a pitch (95% 0.0087 to 0.0098, from
-resampling games): 1.6% of what the pitch itself tells you. About two
-thirds of that is what was thrown before, a third how each of those
-ended. It grows through the at-bat - nothing on the first pitch, 0.0195
-by the sixth - and it is knowledge both of whether he swings and of what
-happens when he does. One pitch back, hand-made, gets a tenth of it
-(0.0008): the worth is in the whole at-bat, which is the case for a
-sequence model. The network also beats the trees outright by 0.0148.
+RESULT (2026-11-20; rerun the same day with three trainings of each
+network, each run until the June pitches stopped improving - 13 to 40
+passes - where the first run capped two trainings at 14): the sequence
+is real and small. Reading the at-bat cuts the network's log loss by
+0.0080 a pitch (95% 0.0074 to 0.0086, from resampling games): 1.4% of what
+the pitch itself tells you. (The first run said 0.0093 and 1.6%; trained
+to the end, the network shown no history closed some of the gap.) About
+60% of that is what was thrown before, 40% how each of those ended. It
+grows through the at-bat - nothing on the first pitch, 0.0192 by the
+sixth - and it is knowledge both of whether he swings and of what happens
+when he does. One pitch back, hand-made, gets a tenth of it (0.0008): the
+worth is in the whole at-bat, which is the case for a sequence model. The
+network also beats the trees outright by 0.0156.
 
 What the patterns look like (whiffs per swing against what the pitch
 alone predicts): REPEATING a kind of pitch gets more whiffs than the
@@ -46,8 +50,9 @@ breaking right after a fastball -2.0, a pitch 8+ mph slower than the last
 (-1.4). That is the opposite of "change speeds to keep him off balance",
 but read it with care: pitchers choose. They go back to a pitch when the
 hitter has looked bad on it, so this describes what happens, not what to
-call. The network that read the at-bat gets every one of those rows right
-to within a point.
+call. The network that read the at-bat gets those rows right to within a
+point, all but two (off-speed to open the at-bat, and a pitch 2+ feet
+from the last).
 
 A note on method: an earlier run gave each training pitch player rates
 that included the pitch itself, and averaged each swing's own whiff ratio.
@@ -58,36 +63,36 @@ neither changed the headline, both changed the table.
   log loss per pitch (always saying the league's rates: 1.5332)
     pitch alone          0.9617
     + previous pitch     0.9608
-    network: none        0.9554
-    network: pitches     0.9493
-    network: results     0.9461
+    network: none        0.9533
+    network: pitches     0.9483
+    network: results     0.9453
     gain from the previous pitch, hand-made (trees): 0.0008 (95% 0.0003 to 0.0015), 0.1% of what pitch alone knows
-    gain from what was thrown before (network): 0.0061 (95% 0.0056 to 0.0066), 1.1% of what network: none knows
-    gain from ... and how each ended (network): 0.0032 (95% 0.0028 to 0.0035), 0.5% of what network: pitches knows
-    gain from the whole sequence (network): 0.0093 (95% 0.0087 to 0.0098), 1.6% of what network: none knows
-    gain from the best network over the best trees: 0.0148 (95% 0.0139 to 0.0156), 2.6% of what + previous pitch knows
+    gain from what was thrown before (network): 0.0050 (95% 0.0045 to 0.0055), 0.9% of what network: none knows
+    gain from ... and how each ended (network): 0.0030 (95% 0.0027 to 0.0033), 0.5% of what network: pitches knows
+    gain from the whole sequence (network): 0.0080 (95% 0.0074 to 0.0086), 1.4% of what network: none knows
+    gain from the best network over the best trees: 0.0156 (95% 0.0147 to 0.0164), 2.7% of what + previous pitch knows
   where the sequence's gain comes from (network: none against network: results)
-    will he swing?                    0.4404 -> 0.4337 (gain 0.0067)
-    if he swings: whiff, foul, in play 0.9418 -> 0.9373 (gain 0.0045 a swing)
-    by pitch of the at-bat: 1st +0.0002, 2nd +0.0065, 3rd +0.0104, 4th +0.0153, 5th +0.0194, 6th on +0.0195
+    will he swing?                    0.4390 -> 0.4329 (gain 0.0061)
+    if he swings: whiff, foul, in play 0.9402 -> 0.9367 (gain 0.0035 a swing)
+    by pitch of the at-bat: 1st -0.0009, 2nd +0.0054, 3rd +0.0087, 4th +0.0142, 5th +0.0172, 6th on +0.0192
   whiffs per swing: what happened, what the pitch alone predicts (trees), and what the network that read the at-bat predicts
-    every swing                                    162,253 swings: 0.250 against 0.249 expected (+0.1 points, +-0.2); the network 0.248
-    first pitch of the at-bat                       28,237 swings: 0.261 against 0.261 expected (+0.1 points, +-0.5); the network 0.258
-    same pitch type as the one before               45,308 swings: 0.256 against 0.247 expected (+0.9 points, +-0.4); the network 0.256
-    the same type a third time running              12,684 swings: 0.244 against 0.238 expected (+0.6 points, +-0.7); the network 0.246
-    a different type from the one before            88,708 swings: 0.243 against 0.246 expected (-0.3 points, +-0.3); the network 0.240
-    off-speed or breaking to open the at-bat        10,313 swings: 0.361 against 0.371 expected (-1.0 points, +-0.9); the network 0.370
-    off-speed or breaking right after a fastball    30,520 swings: 0.294 against 0.314 expected (-2.0 points, +-0.5); the network 0.298
-    off-speed or breaking after another one         30,096 swings: 0.329 against 0.321 expected (+0.8 points, +-0.5); the network 0.327
-    a fastball right after a fastball               42,608 swings: 0.203 against 0.191 expected (+1.2 points, +-0.4); the network 0.202
-    a fastball right after off-speed or breaking    30,792 swings: 0.181 against 0.186 expected (-0.5 points, +-0.4); the network 0.178
-    8+ mph slower than the pitch before             19,614 swings: 0.298 against 0.308 expected (-1.0 points, +-0.6); the network 0.300
+    every swing                                    162,253 swings: 0.250 against 0.249 expected (+0.1 points, +-0.2); the network 0.250
+    first pitch of the at-bat                       28,237 swings: 0.261 against 0.261 expected (+0.1 points, +-0.5); the network 0.260
+    same pitch type as the one before               45,308 swings: 0.256 against 0.247 expected (+0.9 points, +-0.4); the network 0.258
+    the same type a third time running              12,684 swings: 0.244 against 0.238 expected (+0.6 points, +-0.7); the network 0.247
+    a different type from the one before            88,708 swings: 0.243 against 0.246 expected (-0.3 points, +-0.3); the network 0.242
+    off-speed or breaking to open the at-bat        10,313 swings: 0.361 against 0.371 expected (-1.0 points, +-0.9); the network 0.376
+    off-speed or breaking right after a fastball    30,520 swings: 0.294 against 0.314 expected (-2.0 points, +-0.5); the network 0.302
+    off-speed or breaking after another one         30,096 swings: 0.329 against 0.321 expected (+0.8 points, +-0.5); the network 0.334
+    a fastball right after a fastball               42,608 swings: 0.203 against 0.191 expected (+1.2 points, +-0.4); the network 0.201
+    a fastball right after off-speed or breaking    30,792 swings: 0.181 against 0.186 expected (-0.5 points, +-0.4); the network 0.177
+    8+ mph slower than the pitch before             19,614 swings: 0.298 against 0.308 expected (-1.0 points, +-0.6); the network 0.303
     8+ mph faster than the pitch before             21,922 swings: 0.190 against 0.192 expected (-0.2 points, +-0.5); the network 0.184
-    2+ feet from where the last one crossed         26,645 swings: 0.309 against 0.307 expected (+0.2 points, +-0.6); the network 0.293
-    within half a foot of the last one              14,054 swings: 0.214 against 0.219 expected (-0.5 points, +-0.7); the network 0.221
-    after a whiff                                   13,707 swings: 0.307 against 0.293 expected (+1.4 points, +-0.8); the network 0.304
-    after a foul                                    35,723 swings: 0.229 against 0.243 expected (-1.4 points, +-0.4); the network 0.236
-    after taking a ball                             58,509 swings: 0.238 against 0.234 expected (+0.4 points, +-0.3); the network 0.234
+    2+ feet from where the last one crossed         26,645 swings: 0.309 against 0.307 expected (+0.2 points, +-0.6); the network 0.298
+    within half a foot of the last one              14,054 swings: 0.214 against 0.219 expected (-0.5 points, +-0.7); the network 0.222
+    after a whiff                                   13,707 swings: 0.307 against 0.293 expected (+1.4 points, +-0.8); the network 0.308
+    after a foul                                    35,723 swings: 0.229 against 0.243 expected (-1.4 points, +-0.4); the network 0.235
+    after taking a ball                             58,509 swings: 0.238 against 0.234 expected (+0.4 points, +-0.3); the network 0.237
 
 Usage:
   python scripts/research_pitch_sequences.py --out DIR
@@ -107,7 +112,10 @@ from mlb_metrics import pitch_sequences as ps  # noqa: E402
 
 RAW = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "raw")
 TRAIN_END, VALID_END = "2026-06-01", "2026-07-01"
-SEEDS = (1, 2)
+# Three trainings of each network, averaged. Each runs until the June
+# pitches stop improving for three passes (up to MAX_PASSES).
+SEEDS = (1, 2, 3)
+MAX_PASSES = 40
 
 
 def load() -> pd.DataFrame:
@@ -164,8 +172,8 @@ def network(history: str, d: pd.DataFrame, scale: dict, seed: int) -> np.ndarray
     x = tf.keras.layers.Dense(64, activation="relu")(x)
     model = tf.keras.Model([steps_in, static_in], tf.keras.layers.Dense(len(ps.OUTCOMES), activation="softmax")(x))
     model.compile(tf.keras.optimizers.Adam(1e-3), "sparse_categorical_crossentropy")
-    stop = tf.keras.callbacks.EarlyStopping(patience=2, restore_best_weights=True)
-    fit = model.fit(*parts["train"], validation_data=parts["valid"], batch_size=2048, epochs=14, callbacks=[stop], verbose=0)
+    stop = tf.keras.callbacks.EarlyStopping(patience=3, restore_best_weights=True)
+    fit = model.fit(*parts["train"], validation_data=parts["valid"], batch_size=2048, epochs=MAX_PASSES, callbacks=[stop], verbose=0)
     print(f"  trained network: {history} (seed {seed}), {len(fit.history['loss'])} passes, tuned loss {min(fit.history['val_loss']):.5f}", file=sys.stderr)
     return model.predict(parts["test"][0], batch_size=8192, verbose=0)
 
