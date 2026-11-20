@@ -97,6 +97,14 @@ jobs:
       - name: Build the evidence behind each bet (anytime-valid tests)
         run: python scripts/build_bet_evidence.py
 
+      - name: Build the Play-calling map (each offense's habits by situation)
+        run: |
+          if [ -n "${{ inputs.season }}" ]; then
+            python scripts/build_nfl_play_calling.py --season "${{ inputs.season }}"
+          else
+            python scripts/build_nfl_play_calling.py
+          fi
+
       - name: Build ranges with a stated hit rate (totals, margins, player props)
         run: |
           if [ -n "${{ inputs.season }}" ]; then

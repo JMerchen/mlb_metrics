@@ -121,6 +121,7 @@ renderNflGamePickStats(summary)
 renderNflTrackRecord(confidence, summary[0], picks)
 loadNflEvidence()
 loadNflRanges().then(ranges => { if(ranges){ renderNflMatchup() } })
+loadNflPlayCalling()
 renderNflGamePickHistory(picks)
 Object.assign(nflMatchup, {picks, confidence, meetings, summary: summary[0]})
 startNflMatchupPicker()
@@ -187,6 +188,7 @@ set("nflMatchupMeetings", pastMeetingsHtml(nflMatchup.meetings, p, "nfl"))
 set("nflMatchupMeetingsTitle", `The last meetings at the ${teamName(p.home_team, "nfl")}`)
 set("nflBets", betsPanelHtml([p], nflMatchup.summary, {single: true}))
 renderNflMatchupUnits()
+renderNflMatchupCalls()
 }
 
 // The units for the open game (docs/nfl_units.js), in the default view:
@@ -723,6 +725,22 @@ const cal = (nflRanges.props || {})[box.dataset.propCategory]
 const out = box.querySelector("output")
 if(cal && out){ out.innerHTML = propLineText(cal, Number(box.dataset.propProjection), input.value) }
 })
+
+// The Play-calling map for the chosen game (nfl_play_calling.json,
+// nfl_play_calling.js): each offense's habits against the other's defense.
+let nflPlayCalling = null
+
+function renderNflMatchupCalls(){
+const el = document.getElementById("nflMatchupCalls")
+const game = nflMatchupGame()
+if(!el){ return }
+el.innerHTML = nflPlayCalling && game ? playCallingMatchupHtml(nflPlayCalling, game.home_team, game.away_team, code => teamName(code, "nfl")) : ""
+if(el.innerHTML && typeof installVizTips === "function"){ installVizTips() }
+}
+
+function loadNflPlayCalling(){
+loadNflWhatIfFile("nfl_play_calling").then(data => { nflPlayCalling = data; renderNflMatchupCalls() }).catch(() => {})
+}
 
 // How strong the evidence is behind each kind of bet (bet_evidence.json):
 // its own section under the track record, left out if the file is missing.

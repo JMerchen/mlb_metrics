@@ -74,6 +74,9 @@ jobs:
       - name: Run ranges.js unit tests
         run: node --test docs/ranges.test.js
 
+      - name: Run nfl_play_calling.js unit tests
+        run: node --test docs/nfl_play_calling.test.js
+
       - name: Run the simulator fit's unit tests
         run: node --test docs/nfl_sim_fit.test.js
 
