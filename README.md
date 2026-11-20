@@ -5797,6 +5797,47 @@ between them are the worth of the sequence and nothing else.
   code and its tests need only pandas. About 40 minutes on four cores.
   Nothing on the site uses it yet.
 
+## NFL Play-calling map (`nfl_play_sequencing.py`, `scripts/build_nfl_play_calling.py`, `docs/nfl_play_calling.js`)
+
+Why (2026-11-20, user request: "map play call sequencing tendencies per
+team with a way of showing how the opposing defense does in those
+situations"): the site rated what teams do, not what they choose. A call
+depends on down and distance and on the play before it.
+
+- **Situations**: eleven by down, distance and previous play (`STATES`),
+  plus seven habits that cut across them (`HABITS`: after a 15+ gain, a
+  loss, an incompletion, a stuffed run, two runs, two passes; inside the
+  20). An offense's pass rate in each is set against a typical team's in
+  the same plays: nflfastR's `xpass` for each play plus the league's lean
+  in that situation (xpass does not know the previous play).
+- **What was checked first** (`scripts/research_nfl_play_sequencing.py`,
+  185,998 plays, 2021-2026), because it decides what can honestly be shown:
+  - The play before swings the call: on 2nd & long, 68% pass after an
+    incompletion against 72% after a stuffed run, though the situation
+    alone says the reverse (74% v 70%).
+  - Offense habits are real: a team's lean by situation correlates
+    0.25-0.57 between the odd and even weeks of a season. Leans are pulled
+    toward typical with `LEAN_PRIOR` = 55 plays (what those correlations
+    imply). A tell is 20+ plays and 5+ points from typical.
+  - Defense results by situation are noise: -0.06 to +0.17. Even overall,
+    success allowed carries over at 0.26 against the pass and 0.15 against
+    the run. So each situation's "a pass works X%" is the league's rate
+    there moved by the offense's and the defense's OVERALL effects for
+    that kind of play (`OFFENSE_PRIOR`, `DEFENSE_PRIOR`: 185-1,160 plays),
+    and the defense's raw record in the situation is in the hover text.
+  - Habits predict: weeks 1-9 -> weeks 10 on, log loss 0.5812 (situation)
+    -> 0.5672 (+ what came before) -> 0.5645 (+ team habits, pulled);
+    0.5746 with raw team rates. Pulling toward a team's own overall lean
+    first gained nothing worth the complication (0.5639 at best).
+- **On the site**: the NFL Picks game view, under the units matchup. One
+  card per offense: the biggest tells in a sentence, how readable the
+  offense is (share of calls guessed right from the situation, and with
+  its habits; rank of 32), the matchup's pass and run edge, then a box per
+  situation - a pass | run split bar with a tick at the typical team's -
+  laid out as 1st, 2nd and 3rd down columns, and the habits under them.
+  `docs/data/nfl_play_calling.json` (about 100 KB) is rebuilt by the weekly
+  update.
+
 ## NFL schedule sheet: a unit a week (`nfl_season_views.team_schedule`, `nfl_stats.js`)
 
 User request (2026-11-14): "on the schedule view, put how many units

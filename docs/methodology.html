@@ -251,7 +251,10 @@ Vegas, outlined by whether it came before the final injury report
 the ranges the margin and the point total land in half the time and 4
 times in 5 (<a href="#conformal">how</a>); the
 <b>units matchup</b>, each side's passing and rushing against the other's
-defense, with both teams' unit ratings; the <b>last five meetings</b> at
+defense, with both teams' unit ratings; the <b>play-calling map</b>, what
+each offense calls in every situation given what just happened, against
+what a typical team calls there and what this defense gives up
+(<a href="#play-calling">how</a>); the <b>last five meetings</b> at
 this home team's field (back to 1999, neutral-field games left out) with
 the Vegas line, over/under and final score; <b>What if?</b> (Deep dive):
 swap a starting QB, mark players out or set any unit's efficiency and see
@@ -811,6 +814,25 @@ he has few.</p>
 <dd><p>Team unit ratings from EPA per play, each credited for the opponents it faced. 100 is league average,
 higher is always stronger, and 30 points is one standard deviation.</p>
 <p class="where">On the site: NFL Stats (Team units).</p></dd>
+
+<dt id="play-calling">Play-calling map, tells and "a typical team"</dt>
+<dd><p>Every run and pass is put in one situation by its down and distance and, where it matters, by the play
+before it: 2nd &amp; long after an incompletion is not the same call as 2nd &amp; long after a stuffed run. League-wide
+the play before swings the call by 7 points there - teams lean toward doing the other thing after a failure. For
+each situation an offense's pass rate is set against <b>a typical team</b>'s in exactly the same plays: the
+expected pass rate for each play's down, distance, field position, score and clock, plus the league's lean for
+what came before. The offense's own rate is pulled toward typical when it has few plays there. A <b>tell</b> is a
+situation with 20 or more plays where the two are 5 points or more apart. We checked that these are habits and
+not luck: a team's lean in a situation carries over from the odd weeks of a season to the even ones (correlations
+of 0.25 to 0.57), and its habits from weeks 1-9 predict its calls from week 10 on better than the situation alone.
+The same check on defenses failed: what a defense gives up in one situation does not carry over at all (about
+0.05), and even its whole-season success allowed is mostly noise over half a season. So the map does not pretend
+to know how a defense does in each spot. "A pass works 38%" is the league's rate in that situation, moved by how
+this offense throws and how this defense defends the pass overall, both pulled hard toward average; the
+defense's actual record in the situation is in the hover text, as a record. A play <b>works</b> when it leaves
+the offense better placed to score than before the snap. <b>Easiest to read</b> ranks offenses by how often their
+call is guessed right knowing the situation and their habits.</p>
+<p class="where">On the site: <a href="./nfl.html">NFL Picks</a>, in each game's view.</p></dd>
 
 <dt id="drive-stats">Points per drive and turnover margin</dt>
 <dd><p>Points a team scores per possession, and takeaways minus giveaways. Both feed the NFL pick model.</p>
