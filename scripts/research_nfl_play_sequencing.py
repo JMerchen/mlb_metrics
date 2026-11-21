@@ -1,5 +1,6 @@
-"""Are play-calling habits real? The checks behind the Play-calling map
-(src/mlb_metrics/nfl_play_sequencing.py).
+"""Are play-calling habits real? The checks behind the play-calling tree
+(src/mlb_metrics/nfl_play_sequencing.py; they decided how its offense and
+defense sides are described).
 
 Three questions, on every regular-season run and pass of 2021-2026:
 

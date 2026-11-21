@@ -1,8 +1,7 @@
-"""The Play-calling map's data (src/mlb_metrics/nfl_play_sequencing.py)."""
+"""The play-calling tree's data and the situations behind its research (src/mlb_metrics/nfl_play_sequencing.py)."""
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from mlb_metrics import nfl_play_sequencing as seq
 
@@ -47,51 +46,22 @@ def test_each_play_gets_the_situation_its_down_distance_and_previous_play_put_it
     assert flags["after_loss"].iloc[7] and not flags["after_loss"].iloc[8]      # a new drive remembers nothing
 
 
-def _season(rng, team_pass, n=600):
-    """Plays where every situation is 2nd & long after a failed pass: a
-    first-down incompletion, then the play counted."""
-    rows = []
-    for i in range(n):
-        offense = "KC" if i % 2 else "BUF"
-        defense = "BUF" if offense == "KC" else "KC"
-        is_pass = rng.random() < team_pass[offense]
-        rows.append(_play(2 * i, "pass", 1, 10, fixed_drive=i, posteam=offense, defteam=defense, xpass=0.55))
-        rows.append(_play(2 * i + 1, "pass" if is_pass else "run", 2, 10, fixed_drive=i, posteam=offense, defteam=defense, xpass=0.7,
-                          success=int(rng.random() < (0.45 if is_pass else 0.3)), complete_pass=int(is_pass)))
-    return pd.DataFrame(rows)
+def test_a_drive_is_its_first_calls_in_order_and_whether_each_worked():
+    drives = seq.drive_sequences(seq.scrimmage(_drive()))
+    # Kansas City: incomplete, a stuffed run, a pass that converted, a run
+    # that worked - and nothing past the fourth play. Buffalo's drive is
+    # one run (the spike is not a call).
+    assert list(drives["sequence"]) == ["P-R-P+R+", "R-"]
+    assert list(drives["posteam"]) == ["KC", "BUF"] and list(drives["defteam"]) == ["BUF", "KC"]
+    assert list(seq.drive_sequences(seq.scrimmage(_drive()), depth=2)["sequence"]) == ["P-R-", "R-"]
 
 
-def test_a_teams_lean_is_measured_against_a_typical_team_in_the_same_plays_and_pulled_toward_it():
-    rng = np.random.default_rng(0)
-    data = seq.build(_season(rng, {"KC": 0.9, "BUF": 0.5}), 2026)
-    kc, buf = (data["teams"][t]["offense"]["second_long_after_pass"] for t in ("KC", "BUF"))
-    league = data["league"]["second_long_after_pass"]
-    assert kc["plays"] == 300 and league["plays"] == 600
-    # Typical is the expected pass rate (0.7) plus the league's own lean here.
-    assert kc["typical"] == pytest.approx(0.7 + league["lean"], abs=1e-3)
-    raw = kc["passes"] / kc["plays"]
-    assert kc["typical"] < kc["rate"] < raw                     # pulled toward typical, not all the way
-    assert kc["rate"] == pytest.approx((kc["passes"] + seq.LEAN_PRIOR * kc["typical"]) / (300 + seq.LEAN_PRIOR), abs=1e-3)
-    assert kc["lean"] > 0.1 > 0 > buf["lean"]
-    # Knowing the habit makes Kansas City easier to guess than the situation alone.
-    assert data["teams"]["KC"]["readable"]["habits"] >= data["teams"]["KC"]["readable"]["situation"]
-    assert {data["teams"][t]["readable"]["rank"] for t in ("KC", "BUF")} == {1, 2}
-    assert [s["key"] for s in data["states"]] == [key for key, _, _ in seq.STATES]
-
-
-def test_a_defenses_record_is_kept_raw_and_its_effect_is_pulled_hard_toward_the_league():
-    rng = np.random.default_rng(1)
-    plays = _season(rng, {"KC": 0.7, "BUF": 0.7})
-    # Buffalo's defense is perfect against the pass on the counted plays.
-    counted = (plays["down"] == 2) & (plays["defteam"] == "BUF") & (plays["play_type"] == "pass")
-    plays.loc[counted, "success"] = 0
-    data = seq.build(plays, 2026)
-    record = data["teams"]["BUF"]["defense"]["second_long_after_pass"]
-    assert record["pass_success"] == 0 and record["passes"] == int(counted.sum())
-    effect = data["teams"]["BUF"]["defense_effect"]["pass"]
-    raw_gap = 0.0 - data["overall_success"]["pass"]
-    assert raw_gap < effect < 0 and abs(effect) < 0.6 * abs(raw_gap)        # a few hundred plays move it only part way
-    expected = seq.expected_success(data, "KC", "BUF", "second_long_after_pass")
-    league = data["league"]["second_long_after_pass"]
-    assert expected["pass"] == pytest.approx(league["pass_success"] + data["teams"]["KC"]["offense_effect"]["pass"] + effect, abs=1e-3)
-    assert seq.build(plays, 2030) == {"season": 2030, "through_week": 0, "teams": {}}
+def test_the_tree_counts_each_teams_drives_and_the_drives_it_faced():
+    plays = _drive()
+    again = plays[plays["fixed_drive"] == 1].assign(game_id="g2", week=3)
+    data = seq.build(pd.concat([plays, again], ignore_index=True), 2026)
+    assert data["season"] == 2026 and data["through_week"] == 3 and data["depth"] == seq.TREE_DEPTH
+    assert data["teams"]["KC"] == {"offense": {"P-R-P+R+": 2}, "defense": {"R-": 1}}
+    assert data["teams"]["BUF"] == {"offense": {"R-": 1}, "defense": {"P-R-P+R+": 2}}
+    assert data["league"] == {"P-R-P+R+": 2, "R-": 1}
+    assert seq.build(plays, 2030) == {"season": 2030, "through_week": 0, "depth": seq.TREE_DEPTH, "league": {}, "teams": {}}

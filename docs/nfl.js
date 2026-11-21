@@ -70,6 +70,8 @@ document.getElementById("draftBoardSection").style.display = tab === "prospects"
 document.getElementById("playerPropsSection").style.display = tab === "playerprops" ? "" : "none"
 document.getElementById("teamUnitsSection").style.display = tab === "stats" ? "" : "none"
 document.getElementById("nflPayrollSection").style.display = tab === "payroll" ? "" : "none"
+// The play-calling tree is drawn to the tab's width, which it only has once shown.
+if(tab === "stats" && typeof renderNflTeamCalls === "function" && document.getElementById("nflTeamCalls") && document.getElementById("nflTeamCalls").clientWidth !== nflCallsWidth){ renderNflTeamCalls() }
 // The Payroll tab (payroll.js) loads the first time it's opened.
 if(tab === "payroll" && !nflPayrollStarted && typeof payrollView === "function"){
 nflPayrollStarted = true
@@ -121,7 +123,6 @@ renderNflGamePickStats(summary)
 renderNflTrackRecord(confidence, summary[0], picks)
 loadNflEvidence()
 loadNflRanges().then(ranges => { if(ranges){ renderNflMatchup() } })
-loadNflPlayCalling()
 renderNflGamePickHistory(picks)
 Object.assign(nflMatchup, {picks, confidence, meetings, summary: summary[0]})
 startNflMatchupPicker()
@@ -188,7 +189,6 @@ set("nflMatchupMeetings", pastMeetingsHtml(nflMatchup.meetings, p, "nfl"))
 set("nflMatchupMeetingsTitle", `The last meetings at the ${teamName(p.home_team, "nfl")}`)
 set("nflBets", betsPanelHtml([p], nflMatchup.summary, {single: true}))
 renderNflMatchupUnits()
-renderNflMatchupCalls()
 }
 
 // The units for the open game (docs/nfl_units.js), in the default view:
@@ -726,20 +726,46 @@ const out = box.querySelector("output")
 if(cal && out){ out.innerHTML = propLineText(cal, Number(box.dataset.propProjection), input.value) }
 })
 
-// The Play-calling map for the chosen game (nfl_play_calling.json,
-// nfl_play_calling.js): each offense's habits against the other's defense.
+// The play-calling tree under the chosen team's profile on the Stats tab
+// (nfl_play_calling.json, nfl_play_calling.js): one tree per chosen team,
+// drawn to the width of the page.
 let nflPlayCalling = null
+let nflCallsSide = "offense"
+let nflCallsMode = "plays"
+let nflCallsWidth = 0
 
-function renderNflMatchupCalls(){
-const el = document.getElementById("nflMatchupCalls")
-const game = nflMatchupGame()
-if(!el){ return }
-el.innerHTML = nflPlayCalling && game ? playCallingMatchupHtml(nflPlayCalling, game.home_team, game.away_team, code => teamName(code, "nfl")) : ""
-if(el.innerHTML && typeof installVizTips === "function"){ installVizTips() }
+function renderNflTeamCalls(){
+const section = document.getElementById("nflTeamCallsSection"), el = document.getElementById("nflTeamCalls")
+if(!section || !el){ return }
+const teams = nflPlayCalling && nflPlayCalling.teams ? nflSelectedTeams.filter(t => nflPlayCalling.teams[t]) : []
+section.style.display = teams.length ? "" : "none"
+if(!teams.length){ el.innerHTML = ""; return }
+document.querySelectorAll("#nflCallsSide [data-calls-side]").forEach(b => b.classList.toggle("active", b.dataset.callsSide === nflCallsSide))
+document.querySelectorAll("#nflCallsMode [data-calls-mode]").forEach(b => b.classList.toggle("active", b.dataset.callsMode === nflCallsMode))
+// The card's padding and border come off the width; a hidden tab has none yet.
+nflCallsWidth = el.clientWidth
+const width = Math.max(320, Math.min(886, (nflCallsWidth || 760) - 34))
+el.innerHTML = teams.map(t => playCallingTreeHtml(nflPlayCalling, t, {mode: nflCallsMode, side: nflCallsSide, width, names: code => teamName(code, "nfl")})).join("")
+if(typeof installVizTips === "function"){ installVizTips() }
 }
 
 function loadNflPlayCalling(){
-loadNflWhatIfFile("nfl_play_calling").then(data => { nflPlayCalling = data; renderNflMatchupCalls() }).catch(() => {})
+loadNflWhatIfFile("nfl_play_calling").then(data => { nflPlayCalling = data; renderNflTeamCalls() }).catch(() => {})
+}
+
+function wireNflTeamCalls(){
+const pick = (id, key, set) => {
+const group = document.getElementById(id)
+if(group){ group.addEventListener("click", e => { const b = e.target.closest(`[data-${key}]`); if(b){ set(b); renderNflTeamCalls() } }) }
+}
+pick("nflCallsSide", "calls-side", b => { nflCallsSide = b.dataset.callsSide })
+pick("nflCallsMode", "calls-mode", b => { nflCallsMode = b.dataset.callsMode })
+// Redraw when the page's width changes (a turned phone, a resized window).
+let timer = null
+window.addEventListener("resize", () => {
+clearTimeout(timer)
+timer = setTimeout(() => { const el = document.getElementById("nflTeamCalls"); if(el && el.clientWidth && el.clientWidth !== nflCallsWidth){ renderNflTeamCalls() } }, 150)
+})
 }
 
 // How strong the evidence is behind each kind of bet (bet_evidence.json):
@@ -1019,6 +1045,7 @@ unfold()
 function renderNflTeams(){
 document.getElementById("nflPowerRankings").innerHTML = nflPowerRankingsHtml(nflTeamRowsCache, nflSelectedTeams)
 document.getElementById("nflTeamProfile").innerHTML = nflTeamProfileHtml(nflSelectedTeams, nflTeamRowsCache)
+renderNflTeamCalls()
 }
 
 function renderNflPlayers(){
@@ -1091,6 +1118,7 @@ nflPlayers = players
 const top = nflTeamRowsCache.slice().sort((a, b) => Number(b.net_epa_play) - Number(a.net_epa_play))[0]
 if(top){ nflSelectedTeams = [top.team] }
 renderNflTeams()
+loadNflPlayCalling()
 renderNflPlayers()
 const best = players.filter(p => p.position === "QB").sort((a, b) => Number(b.epa_db) - Number(a.epa_db))[0]
 showNflPlayer(best)
@@ -1100,6 +1128,7 @@ else{ document.getElementById("nflSchedulePicker").innerHTML = "Schedules appear
 
 installVizTips()
 wireNflStats()
+wireNflTeamCalls()
 
 
 loadNflStats()
