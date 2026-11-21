@@ -1,8 +1,8 @@
-"""Writes docs/data/nfl_play_calling.json: each offense's play-calling
-habits by situation and each defense's record against them, for the
-Play-calling map on the NFL Picks tab
-(src/mlb_metrics/nfl_play_sequencing.py has the method and the why;
-scripts/research_nfl_play_sequencing.py the checks).
+"""Writes docs/data/nfl_play_calling.json: how each team's drives open -
+the first calls in order and whether each worked - on offense and
+against its defense, for the play-calling tree on the NFL Stats tab
+(src/mlb_metrics/nfl_play_sequencing.py has the why;
+docs/nfl_play_calling.js draws it).
 
 Usage:
   python scripts/build_nfl_play_calling.py [--season 2026]
@@ -31,7 +31,7 @@ def main():
     data = nfl_play_sequencing.build(plays, args.season)
     with open(os.path.join(args.data_dir, "nfl_play_calling.json"), "w") as f:
         json.dump(data, f, separators=(",", ":"))
-    print(f"Wrote play-calling habits: {len(data['teams'])} teams through week {data['through_week']}.")
+    print(f"Wrote play-calling trees: {len(data['teams'])} teams through week {data['through_week']}.")
 
 
 if __name__ == "__main__":
