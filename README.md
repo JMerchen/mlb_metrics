@@ -3086,7 +3086,8 @@ libraries come from the cache first. Bump `SW_VERSION` to clear what's
 kept. Icons are in `docs/icons/`. The logo (the SR badge in every page's
 header, the same drawing as each page's favicon, and the app icons) is
 light since 2026-11-22 (user request): the cards' green `#cfe5cf` behind a
-red S, a dark R and an orange bar, where it was white-on-black. The icon
+black S, a dark green R and an orange bar, where it was a red S and white
+R on near-black. The icon
 files are that drawing rendered full-bleed (the mark at 1.25x; 1.0x for
 the maskable one, to stay inside its safe zone); `SW_VERSION` was bumped
 so installed apps drop the cached old icon.
