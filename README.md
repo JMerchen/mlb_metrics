@@ -3083,7 +3083,14 @@ Add to Home Screen steps. `sw.js` keeps a copy of each page, script and
 data file as it's fetched (network first, so the app is never staler than
 the site) and serves it offline; icons and the version-pinned CDN
 libraries come from the cache first. Bump `SW_VERSION` to clear what's
-kept. Icons are in `docs/icons/`.
+kept. Icons are in `docs/icons/`. The logo (the SR badge in every page's
+header, the same drawing as each page's favicon, and the app icons) is
+light since 2026-11-22 (user request): the cards' green `#cfe5cf` behind a
+black S, a dark green R and an orange bar, where it was a red S and white
+R on near-black. The icon
+files are that drawing rendered full-bleed (the mark at 1.25x; 1.0x for
+the maskable one, to stay inside its safe zone); `SW_VERSION` was bumped
+so installed apps drop the cached old icon.
 
 ## Payroll value (`docs/payroll.html`, `payroll_value.py`)
 

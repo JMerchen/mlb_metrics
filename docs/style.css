@@ -110,7 +110,10 @@ gap:14px;
 
 }
 
-/* The SR badge: a red S and white R over a gold bar. */
+/* The SR badge: a black S and dark green R over an orange bar, on the
+   cards' green (since 2026-11-22, user request; it was a red S and white R
+   on near-black). The
+   same drawing is each page's favicon and the app icons in icons/. */
 .brandBadge{
 
 width:46px;
