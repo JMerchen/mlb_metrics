@@ -726,9 +726,10 @@ const out = box.querySelector("output")
 if(cal && out){ out.innerHTML = propLineText(cal, Number(box.dataset.propProjection), input.value) }
 })
 
-// The play-calling tree under the chosen team's profile on the Stats tab
-// (nfl_play_calling.json, nfl_play_calling.js): one tree per chosen team,
-// drawn to the width of the page.
+// The play-calling tree under the schedule sheet on the Stats tab
+// (nfl_play_calling.json, nfl_play_calling.js): the tree of the team whose
+// schedule is showing (user request, 2026-11-22), drawn to the width of
+// the page.
 let nflPlayCalling = null
 let nflCallsSide = "offense"
 let nflCallsMode = "plays"
@@ -737,7 +738,7 @@ let nflCallsWidth = 0
 function renderNflTeamCalls(){
 const section = document.getElementById("nflTeamCallsSection"), el = document.getElementById("nflTeamCalls")
 if(!section || !el){ return }
-const teams = nflPlayCalling && nflPlayCalling.teams ? nflSelectedTeams.filter(t => nflPlayCalling.teams[t]) : []
+const teams = nflPlayCalling && nflPlayCalling.teams && nflPlayCalling.teams[nflScheduleTeam] ? [nflScheduleTeam] : []
 section.style.display = teams.length ? "" : "none"
 if(!teams.length){ el.innerHTML = ""; return }
 document.querySelectorAll("#nflCallsSide [data-calls-side]").forEach(b => b.classList.toggle("active", b.dataset.callsSide === nflCallsSide))
@@ -1022,6 +1023,7 @@ function showNflSchedule(team){
 const sheet = document.getElementById("nflScheduleSheet")
 if(!sheet){ return }
 nflScheduleTeam = team
+renderNflTeamCalls()
 document.getElementById("nflSchedulePicker").innerHTML =
 nflSchedulePickerHtml([...new Set(nflScheduleRows.map(r => r.team))], team)
 const unfold = () => {
@@ -1045,7 +1047,6 @@ unfold()
 function renderNflTeams(){
 document.getElementById("nflPowerRankings").innerHTML = nflPowerRankingsHtml(nflTeamRowsCache, nflSelectedTeams)
 document.getElementById("nflTeamProfile").innerHTML = nflTeamProfileHtml(nflSelectedTeams, nflTeamRowsCache)
-renderNflTeamCalls()
 }
 
 function renderNflPlayers(){

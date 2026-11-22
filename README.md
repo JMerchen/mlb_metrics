@@ -5889,8 +5889,9 @@ drive or per result of the play before.
   `docs/data/nfl_play_calling.json` (about 65 KB), rebuilt by the weekly
   update.
 - **Drawing** (`docs/nfl_play_calling.js`, an SVG): NFL Stats tab, under
-  the team profile, one tree per chosen team (two when comparing), drawn
-  to the page's width. Two views: "Play by play" (four call layers, 16
+  the schedule sheet, for the team whose schedule is showing (moved there
+  from under the team profile on 2026-11-22, user request), drawn to the
+  page's width. Two views: "Play by play" (four call layers, 16
   leaves) and "By what worked" (call, worked?, call, worked?, call; 32
   leaves). "With the ball" / "On defense" switches whose drives. Every
   branch is always drawn in a fixed place (run above pass, worked above

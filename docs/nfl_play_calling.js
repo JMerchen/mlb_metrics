@@ -1,4 +1,4 @@
-// The play-calling tree (NFL Stats tab, under a team's profile): how a
+// The play-calling tree (NFL Stats tab, under a team's schedule): how a
 // team's drives open, one play branching to the next.
 //
 // Why a tree (user request, 2026-11-21): the first version, a box per
