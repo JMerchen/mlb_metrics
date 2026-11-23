@@ -200,7 +200,8 @@ our record and any bet we'd suggest.</p>
 
 <div class="methodCard">
 <h3>MLB · Stats</h3>
-<p>What feeds the picks: every hitter's WAVE, hit chance, CAVE and WOPS
+<p>Our <b>wins above replacement</b> for every player
+(<a href="#mlb-war">how</a>), and what feeds the picks: every hitter's WAVE, hit chance, CAVE and WOPS
 (as played, or adjusted for the pitchers he faced), active hit streaks, a
 player lookup, today's probable starters, team ratings and each team's
 schedule. The schedule also shows what one unit a game would have made
@@ -477,6 +478,18 @@ strikeouts - whether he makes contact is a separate skill.</p>
 </div>
 
 <div class="methodCard">
+<h3>MLB wins above replacement</h3>
+<p>What each player was worth in a season. Every plate appearance is
+valued by how much it changed the runs his team could expect in that
+exact situation. Hitters and pitchers are fit together, so each is graded
+for whom he faced and where. Fielders are graded ball by ball against how
+often a ball hit that way becomes an out, and that part is taken off the
+hitter's and the pitcher's ledgers. Each part is set against the average
+at his position, then against a call-up's, and 9.7 runs make a win.
+<a href="#mlb-war">The full method and what it cannot see</a>.</p>
+</div>
+
+<div class="methodCard">
 <h3>MLB game simulation</h3>
 <p>Every pitch is drawn from the stored Statcast pitches of the last two
 seasons. The pitcher picks a pitch as he does in that count against that
@@ -744,6 +757,43 @@ launch angle, whether or not a fielder made a great play.</p>
 <section class="methodCategory" id="metrics-pitching">
 <h2>Pitching</h2>
 <dl class="terms">
+<dt id="mlb-war">WAR (wins above replacement), MLB</dt>
+<dd><p><span class="lbl">The idea</span> One number for what a player was worth in a season: how many more games
+his team won with him than it would have with a call-up in his place. Ours is built from every pitch.</p>
+<p><span class="lbl">Situation</span> Before each pitch the batting team can expect some number of runs from
+there, given the outs, the runners and the count. After it, a different number. The change is that pitch's
+value, and a plate appearance is worth the sum of its pitches. So a single with the bases loaded counts for
+more than a single with nobody on, and a strikeout with a runner on third and one out costs more than one to
+lead off an inning.</p>
+<p><span class="lbl">Batting and pitching</span> Each plate appearance's value belongs to the hitter, and its
+opposite to the pitcher. Both are graded for difficulty: hitters and pitchers are fit together with the park
+and whether they throw and bat from the same side, so a hitter's season is measured against what an average
+hitter would have done against the same pitchers in the same parks - and a pitcher's against the same
+hitters. His own season is not pulled toward average; it is what it was.</p>
+<p><span class="lbl">Fielding, and difficulty</span> For every ball in play we ask how often a ball hit that
+hard, at that angle, to that part of the field is turned into an out (a model trained on every such ball, and
+always scored on games it was not trained on). A fielder who makes the out on a ball caught 30% of the time
+gets 70% of an out's worth; one who lets a ball caught 90% of the time fall loses 90%. When a ball falls in,
+the blame is shared by whose ball it usually is. An out is worth 0.7 to 0.9 runs more than a hit, depending on
+the kind of ball. The same number is then taken out of the plate appearance: the hitter robbed by a diving
+catch is credited with what that ball usually does, and the pitcher is not given the catch.</p>
+<p><span class="lbl">Position and replacement</span> Each part is set against the average at the player's
+position: a shortstop's bat against shortstops', a starter against starters, a reliever against relievers.
+<b>Replacement</b> is the kind of player a team reaches for when its roster runs out - its hitters past the
+thirteenth by playing time, starters past the sixth, relievers past the eighth. Over two seasons they were 23
+runs per 600 plate appearances below the average hitter, which is close to the figure the public versions
+use. <b>WAR</b> is runs above replacement divided by 9.7, the runs a win takes at today's scoring.</p>
+<p><span class="lbl">How we checked it</span> A team's players, added up, track its wins (a correlation of
+0.88 and 0.89 in the two seasons) and its run differential (0.92, with one of our runs worth one real run).
+The whole league comes to about 1,070 WAR a season against the 1,000 of the public versions. The out model is
+well calibrated: balls it gives 70 to 90% are caught 83% of the time. And unlike football's, it carries over: a
+hitter's batting runs correlate 0.54 from one season to the next, a pitcher's 0.40, a fielder's 0.39.</p>
+<p><span class="lbl">What it cannot see</span> Where the fielders were standing or how fast they ran, so range
+is judged from where the ball went, which is cruder than the tracking-camera versions. A catcher's framing
+and blocking. Baserunning: steals are not in the pitch-by-pitch number, and an extra base taken on a hit is
+credited to the hitter. It is not an input to our picks.</p>
+<p class="where">On the site: <a href="./stats.html">MLB Stats</a>, Wins above replacement.</p></dd>
+
 <dt id="pave">PAVE and PAVE+</dt>
 <dd><p>PAVE is the batting average hitters manage against a pitcher, blended over the same windows as WAVE.
 PAVE+ compares it with the league: below 1 is tougher than average.</p>

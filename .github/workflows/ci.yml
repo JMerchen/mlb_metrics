@@ -80,6 +80,9 @@ jobs:
       - name: Run nfl_player_value.js unit tests
         run: node --test docs/nfl_player_value.test.js
 
+      - name: Run mlb_war.js unit tests
+        run: node --test docs/mlb_war.test.js
+
       - name: Run the simulator fit's unit tests
         run: node --test docs/nfl_sim_fit.test.js
 

@@ -70,6 +70,10 @@ jobs:
         run: |
           python scripts/build_hitter_stats.py
 
+      - name: Build wins above replacement (every player's value this season)
+        run: |
+          python scripts/build_mlb_war.py
+
       - name: Build Stuff+ and Decision+ (Statcast pitches)
         run: |
           python scripts/build_pitch_metrics.py || echo "::warning::Stuff+ and Decision+ not rebuilt"
