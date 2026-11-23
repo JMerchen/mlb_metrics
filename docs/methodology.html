@@ -284,7 +284,9 @@ until you open it.</p>
 <h3>NFL · Stats</h3>
 <p>Every team's schedule, power rankings by net EPA per play, team
 profiles, the team units (QB+, Receiving+, Rushing+, Pass D+, Run D+; each
-game's matchup of them is on the Picks tab), and players' season views. Each
+game's matchup of them is on the Picks tab), our <b>wins above
+replacement</b> for every rated player (<a href="#nfl-war">how</a>), and
+players' season views. Each
 schedule also shows what one unit a week would have made betting on that
 team's opponent to win, and on the team itself, at each game's closing
 odds (a +140 underdog that wins pays 1.4 units; a loss costs the unit),
@@ -612,6 +614,18 @@ would handle today's game - and it is there for fun, not for picks.</p>
 </div>
 
 <div class="methodCard">
+<h3>NFL wins above replacement</h3>
+<p>What each player has been worth this season. Every play's expected
+points are split among the people behind it - quarterback, receiver,
+runner, his team and the defense - in one fit, so a receiver is measured
+after allowing for who threw to him. A player's points are compared with
+the average at his position and with a reserve's, and 35 points make a
+win. Defenders are rated on the plays they made per snap; linemen on
+offense are not rated. <a href="#nfl-war">The full method and what it
+cannot see</a>.</p>
+</div>
+
+<div class="methodCard">
 <h3>NFL team units</h3>
 <p>Each unit's EPA per play, solved for every offense and defense at once
 so each is credited for the opponents it faced, with recent games
@@ -814,6 +828,43 @@ he has few.</p>
 <dd><p>Team unit ratings from EPA per play, each credited for the opponents it faced. 100 is league average,
 higher is always stronger, and 30 points is one standard deviation.</p>
 <p class="where">On the site: NFL Stats (Team units).</p></dd>
+
+<dt id="nfl-war">WAR (wins above replacement), NFL</dt>
+<dd><p><span class="lbl">The idea</span> One number for what a player has been worth: how many more games his
+team has won with him than it would have with a reserve in his place. Baseball has had one for years. Football
+is harder because every play belongs to several people at once.</p>
+<p><span class="lbl">The credit problem</span> A completed pass has one value (its <a href="#epa">EPA</a>) and
+at least three people behind it: the quarterback, the receiver and the defense that allowed it. Counting the
+whole play for each of them makes every receiver of a great quarterback look great. So we split each dropback
+into parts that add back up to its value - what happened when nobody was thrown to (a sack, a scramble), the
+throw up to the catch, and what the receiver added after it - and fit each part with an effect for everyone
+involved at once: quarterback, receiver, his team's blocking, the defense. A designed run is fit the same way
+with the runner, his blockers and the defense. Each player's effect is what is left for him after allowing for
+the others. The approach follows a published method (nflWAR, 2019).</p>
+<p><span class="lbl">Small samples</span> A player's effect is pulled toward the level of players like him -
+same position, starter or reserve - by an amount the data itself sets. Thirty targets leave him near that
+level; a hundred and thirty earn him his own number.</p>
+<p><span class="lbl">Average and replacement</span> <b>Points above average</b> is his effect against the average
+at his position, times his plays. <b>Points above replacement</b> measures him against a reserve instead: the
+quarterback who is not his team's starter, a team's third running back, its fourth receiver, its second tight
+end. How much worse a reserve is per play comes from ten seasons pooled, because one season's answer is mostly
+noise (for wide receivers it ran from 0.03 to 0.20 points a throw; we use 0.12). <b>WAR</b> is points above
+replacement divided by 35, the points of season scoring margin that go with one more win.</p>
+<p><span class="lbl">Defenders</span> The play-by-play names a defender only when he makes a play. So a
+defender is rated on <b>playmaking</b>: the points his sacks, stops, passes broken up and takeaways cost
+offenses, per snap he played, against the average at his position and against a reserve. The value of a shared
+play is split evenly. A cornerback nobody throws at gets no credit for it - and that is a real hole, not a
+rounding error - so defenders' numbers run lower than offense's and should be read within a position.
+<b>Kickers</b> are rated on points over what each kick was expected to be worth. <b>Offensive linemen are not
+rated</b>: nothing in the data says who blocked whom.</p>
+<p><span class="lbl">How we checked it</span> Added up by team, players' points track their team's offense
+closely (a correlation of 0.91 over 320 team-seasons), and defenders' playmaking tracks their team's defense
+(0.83). The honest limit is carry-over: a season of per-play efficiency is a weak guide to the next season for
+everyone (0.2 to 0.4 for players who stay with their team), and close to no guide at all for a player who
+changes teams - our number does no better there than plain EPA per play. A defender's playmaking rate carries
+over a little better (0.4 for interior linemen, 0.2 for cornerbacks). So read WAR as what a player was worth
+this season, not as a forecast of the next one; it is not an input to our picks.</p>
+<p class="where">On the site: <a href="./nfl.html#stats">NFL Stats</a>, Wins above replacement.</p></dd>
 
 <dt id="play-calling">Play-calling tree</dt>
 <dd><p>How a team's drives open, drawn as a tree that reads left to right: the drive starts, the first play is

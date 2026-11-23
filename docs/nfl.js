@@ -754,6 +754,69 @@ function loadNflPlayCalling(){
 loadNflWhatIfFile("nfl_play_calling").then(data => { nflPlayCalling = data; renderNflTeamCalls() }).catch(() => {})
 }
 
+// The wins-above-replacement table on the Stats tab (nfl_player_value.js;
+// one data file per season, fetched when first chosen).
+const nflValue = {seasons: [], data: {}, state: {season: null}}
+
+function renderNflValue(controls = true){
+const table = document.getElementById("nflValueTable")
+if(!table){ return }
+nflValue.state = pvState(nflValue.state)
+if(controls){ document.getElementById("nflValueControls").innerHTML = pvControlsHtml(nflValue.seasons, nflValue.state) }
+const data = nflValue.data[nflValue.state.season]
+table.innerHTML = data ? pvTableHtml(data, nflValue.state) : "Loading..."
+if(typeof installVizTips === "function"){ installVizTips() }
+}
+
+function showNflValueSeason(season){
+nflValue.state.season = season
+if(nflValue.data[season]){ renderNflValue(); return }
+renderNflValue()
+loadNflWhatIfFile(`nfl_player_value_${season}`).then(data => { nflValue.data[season] = data; if(nflValue.state.season === season){ renderNflValue() } })
+.catch(() => { document.getElementById("nflValueTable").innerHTML = "Player values appear after the next weekly update." })
+}
+
+function loadNflValue(){
+if(!document.getElementById("nflValueTable")){ return }
+loadNflWhatIfFile("nfl_player_value").then(index => {
+nflValue.seasons = index.seasons || []
+if(nflValue.seasons.length){ showNflValueSeason(nflValue.seasons[0]) }
+}).catch(() => { document.getElementById("nflValueTable").innerHTML = "Player values appear after the next weekly update." })
+}
+
+function wireNflValue(){
+const controls = document.getElementById("nflValueControls"), table = document.getElementById("nflValueTable")
+if(!controls || !table){ return }
+const set = changes => { Object.assign(nflValue.state, changes, {limit: 50}); renderNflValue() }
+controls.addEventListener("click", e => {
+const side = e.target.closest("[data-pv-side]")
+if(side){ set({side: side.dataset.pvSide, pos: "all"}) }
+})
+controls.addEventListener("change", e => {
+const field = e.target.closest("select[data-pv]")
+if(!field){ return }
+if(field.dataset.pv === "season"){ showNflValueSeason(Number(field.value)) }
+else if(field.dataset.pv === "pos"){ set({pos: field.value, side: field.value === "all" ? nflValue.state.side : pvSideOf(field.value)}) }
+else{ set({[field.dataset.pv]: field.value}) }
+})
+// Typing redraws the table only, so the box keeps its cursor.
+controls.addEventListener("input", e => {
+const field = e.target.closest("input[data-pv='search']")
+if(field){ Object.assign(nflValue.state, {search: field.value, limit: 50}); renderNflValue(false) }
+})
+table.addEventListener("click", e => {
+const sort = e.target.closest("[data-sort]")
+if(sort){
+const key = sort.dataset.sort
+nflValue.state.dir = nflValue.state.sort === key ? -nflValue.state.dir : -1
+nflValue.state.sort = key
+renderNflValue(false)
+return
+}
+if(e.target.closest("[data-pv-more]")){ nflValue.state.limit = 100000; renderNflValue(false) }
+})
+}
+
 function wireNflTeamCalls(){
 const pick = (id, key, set) => {
 const group = document.getElementById(id)
@@ -1120,6 +1183,7 @@ const top = nflTeamRowsCache.slice().sort((a, b) => Number(b.net_epa_play) - Num
 if(top){ nflSelectedTeams = [top.team] }
 renderNflTeams()
 loadNflPlayCalling()
+loadNflValue()
 renderNflPlayers()
 const best = players.filter(p => p.position === "QB").sort((a, b) => Number(b.epa_db) - Number(a.epa_db))[0]
 showNflPlayer(best)
@@ -1130,6 +1194,7 @@ else{ document.getElementById("nflSchedulePicker").innerHTML = "Schedules appear
 installVizTips()
 wireNflStats()
 wireNflTeamCalls()
+wireNflValue()
 
 
 loadNflStats()
