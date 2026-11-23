@@ -2,7 +2,7 @@
 const test = require("node:test")
 const assert = require("node:assert/strict")
 global.teamName = require("./teams.js").teamName
-const { unitsTableHtml, sortUnitRows, unitCellClass, propUnitContext, unitsByTeam } = require("./nfl_units.js")
+const { unitsTableHtml, sortUnitRows, unitCellClass, propUnitContext, unitsByTeam, unitQbGap } = require("./nfl_units.js")
 
 const text = html => html.replace(/<\/t[dh]>/g, " ").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()
 
@@ -17,9 +17,9 @@ const ROWS = [
 
 test("units table: nicknames, opponent or bye, whole numbers, colour bands", () => {
   const html = unitsTableHtml(ROWS, "team")
-  assert.equal(text(html).split(" Bills")[0], "Team ▼ QB QB+ Receiving+ Rushing+ Pass D+ Run D+")
-  assert.ok(text(html).includes("Bills bye Josh Allen 118 115 110 90 -"))
-  assert.ok(text(html).includes("Chiefs vs Broncos Patrick Mahomes 112 104 96 108 88"))
+  assert.equal(text(html).split(" Bills")[0], "Team ▼ QB QB+ Receiving+ Rushing+ Pass D+ Run D+ QB − defense")
+  assert.ok(text(html).includes("Bills bye Josh Allen 118 115 110 90 - -"))
+  assert.ok(text(html).includes("Chiefs vs Broncos Patrick Mahomes 112 104 96 108 88 +14"))
   assert.equal(unitCellClass("100"), "")
   assert.equal(unitsTableHtml([], "team"), "Team unit ratings appear after the next weekly update.")
 })
@@ -125,4 +125,21 @@ test("one game's units for the Picks page: its differentials card, then both tea
   // A game the units file doesn't have (a bye team, or a week not rated yet): nothing.
   assert.equal(unitsMatchupHtml(rows, "KC", "BUF"), "")
   assert.equal(unitsMatchupHtml([], "KC", "DEN"), "")
+})
+
+test("QB minus defense sets a quarterback against his own defense and can be sorted on", () => {
+  const rows = [
+    { team: "CIN", opponent: "WAS", qb_name: "Joe Burrow", qb_plus: 150, receiving_plus: 120, rushing_plus: 100, pass_defense_plus: 70, run_defense_plus: 90 },
+    { team: "DEN", opponent: "LV", qb_name: "Bo Nix", qb_plus: 95, receiving_plus: 100, rushing_plus: 105, pass_defense_plus: 140, run_defense_plus: 130 },
+    { team: "NYJ", opponent: "", qb_name: "", qb_plus: "", receiving_plus: 90, rushing_plus: 95, pass_defense_plus: 100, run_defense_plus: 100 },
+  ]
+  assert.equal(unitQbGap(rows[0]), 70)
+  assert.equal(unitQbGap(rows[1]), -40)
+  assert.equal(unitQbGap(rows[2]), null)
+  const html = unitsTableHtml(rows, "qb_gap")
+  assert.ok(html.includes('data-units-sort="qb_gap"') && html.includes("QB − defense ▼"))
+  assert.ok(html.includes("<td>+70</td>") && html.includes("<td>−40</td>"))
+  // Biggest gap first; a team with no quarterback rating last.
+  assert.ok(html.indexOf("Joe Burrow") < html.indexOf("Bo Nix"))
+  assert.ok(html.indexOf("Bo Nix") < html.lastIndexOf("<td>-</td>"))
 })

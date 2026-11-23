@@ -31,6 +31,17 @@ if(n === null){ return "" }
 return n >= 100 + UNIT_POINTS_PER_SD ? "unitStrong" : n <= 100 - UNIT_POINTS_PER_SD ? "unitWeak" : ""
 }
 
+// "Betrayal": how far the quarterback stands above the defense behind him
+// - his QB+ less the average of his team's Pass D+ and Run D+ (user
+// request, 2026-11-23, after an index of that name elsewhere). Both are on
+// the same 100-is-average scale, so +30 is a quarterback one standard
+// deviation better than his defense. It is the two ratings set side by
+// side, not a new measurement.
+function unitQbGap(row){
+const qb = unitNum(row.qb_plus), pass = unitNum(row.pass_defense_plus), run = unitNum(row.run_defense_plus)
+return qb === null || pass === null || run === null ? null : qb - (pass + run) / 2
+}
+
 function sortUnitRows(rows, key){
 const sorted = rows.slice()
 if(!key || key === "team"){
@@ -41,19 +52,21 @@ return sorted.sort((a, b)=>(unitNum(b[key]) ?? -Infinity) - (unitNum(a[key]) ?? 
 
 function unitsTableHtml(rows, sortKey){
 if(!rows || !rows.length){ return "Team unit ratings appear after the next weekly update." }
-const header = [["team", "Team"], ["qb_name", "QB"], ...UNIT_COLUMNS]
+const header = [["team", "Team"], ["qb_name", "QB"], ...UNIT_COLUMNS, ["qb_gap", "QB − defense"]]
 .map(([key, label])=>{
 const sortable = key !== "qb_name"
 const marker = sortKey === key ? " ▼" : ""
-return `<th${sortable ? ` data-units-sort="${key}" style="cursor:pointer" title="Sort by ${label}"` : ""}>${label}${marker}</th>`
+const title = key === "qb_gap" ? "QB+ less the average of Pass D+ and Run D+: how far the quarterback stands above his own defense. Sort by it" : `Sort by ${label}`
+return `<th${sortable ? ` data-units-sort="${key}" style="cursor:pointer" title="${title}"` : ""}>${label}${marker}</th>`
 }).join("")
-const body = sortUnitRows(rows, sortKey).map(r=>{
+const body = sortUnitRows(rows.map(r => ({...r, qb_gap: unitQbGap(r)})), sortKey).map(r=>{
 const opponent = r.opponent ? `vs ${unitTeamName(r.opponent)}` : "bye"
 const cells = UNIT_COLUMNS.map(([key])=>{
 const n = unitNum(r[key])
 return `<td class="${unitCellClass(n)}">${n === null ? "-" : Math.round(n)}</td>`
 }).join("")
-return `<tr><td>${unitTeamName(r.team)} <span class="unitOpp">${opponent}</span></td><td>${r.qb_name || "-"}</td>${cells}</tr>`
+const gap = r.qb_gap === null ? "-" : `${r.qb_gap > 0 ? "+" : r.qb_gap < 0 ? "−" : ""}${Math.abs(Math.round(r.qb_gap))}`
+return `<tr><td>${unitTeamName(r.team)} <span class="unitOpp">${opponent}</span></td><td>${r.qb_name || "-"}</td>${cells}<td>${gap}</td></tr>`
 }).join("")
 return `<table class="unitsTable"><tr>${header}</tr>${body}</table>`
 }
@@ -220,7 +233,7 @@ return byTeam
 
 if (typeof module !== "undefined" && module.exports) {
 module.exports = {
-UNIT_COLUMNS, unitsTableHtml, sortUnitRows, unitCellClass, propUnitContext, unitsByTeam,
+UNIT_COLUMNS, unitsTableHtml, sortUnitRows, unitQbGap, unitCellClass, propUnitContext, unitsByTeam,
 matchupDifferentials, matchupGames, matchupCardHtml, matchupCardsHtml, unitsMatchupHtml, byeTableHtml, differentialCellClass, formatDifferential,
 unitsViewKey, unitsView,
 }
