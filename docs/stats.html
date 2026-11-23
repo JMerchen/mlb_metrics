@@ -83,6 +83,25 @@ href="./style.css">
 
 <p class="sectionIntro" data-help-label="About this page">What we calculate and what feeds the models: hit rates, WOPS, streaks, pitchers, team ratings and every team's season. Our picks are on the <a href="./predictive.html">Picks</a> page.</p>
 
+<h2>
+Wins above replacement
+</h2>
+
+<p class="sectionIntro">Our own measure of what each player was worth in a season. Every pitch changes how many runs the batting team can expect in that exact situation - the outs, the runners, the count - so a single with the bases loaded is worth more than one with nobody on. <b>Batting</b> is what a hitter added that way, graded for the pitchers and parks he faced. <b>Pitching</b> is the same from the other side. <b>Fielding</b> asks of every ball in play how often a ball hit that hard, at that angle, to that spot becomes an out: a fielder who turns a 30% ball into an out gets most of an out's worth, and one who lets a 90% ball fall loses nearly all of one. A hitter robbed by a great play is not charged for the out, and a pitcher is not credited for it.</p>
+<p class="sectionIntro">Each part is measured against the average at his position - a catcher's bat against catchers', a starter against starters. <b>Above replacement</b> adds the gap between average and the kind of player a team calls up when its roster runs out, and <b>WAR</b> divides by the runs a win takes (9.7). <b>What it cannot see:</b> where fielders were standing, so range is judged from where the ball went; a catcher's pitch framing; and baserunning. Click a heading to sort. <a href="./methodology.html#mlb-war">How it works</a>.</p>
+
+<div id="mlbWarSection">
+<div id="mlbWarControls" class="pvControls"></div>
+
+<div id="mlbWarTable">
+
+Loading...
+
+</div>
+</div>
+
+<hr>
+
 <div class="deep-only">
 <h2>
 Hitters
@@ -246,6 +265,8 @@ Loading...
 <script src="./mlb_render.js"></script>
 
 <script src="./app.js"></script>
+
+<script src="./mlb_war.js"></script>
 
 <script src="./install.js"></script>
 

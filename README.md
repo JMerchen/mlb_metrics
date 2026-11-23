@@ -5874,6 +5874,67 @@ between them are the worth of the sequence and nothing else.
   cores.
   Nothing on the site uses it yet.
 
+## MLB wins above replacement (`mlb_war.py`, `scripts/build_mlb_war.py`, `docs/mlb_war.js`)
+
+Why (2026-11-23, user request: "when a hit occurs and in what situation
+... when an out occurs and the situation for both a player batting and
+the player making the out. We could grade based on difficulty also ...
+composite these into a singular score and judge against the league
+average for that position and a particular situation. Almost like our own
+version of war"). Not an input to any pick.
+
+- **Situation**: a plate appearance's value is the sum of Statcast's
+  `delta_run_exp` over its pitches (the change in expected runs given
+  outs, runners and count). `truncated_pa` rows are dropped.
+- **Fielding** (`fielding_chances`, `fielding_credits`): two
+  gradient-boosted models on exit speed, launch angle, spray angle, batter
+  side and bunt - the chance a ball in play becomes an out, and (fit on
+  outs) which position makes it. Every ball is scored by models fit on
+  other games (5 folds by game). An out made is worth `1 - chance` to
+  the fielder who made it; a ball that falls costs `chance x share` to
+  each position by whose ball it was; an error is the named fielder's
+  alone. Runs = outs x what an out is worth over a hit for that kind of
+  ball (0.68-0.87). Home runs are nobody's.
+- **Batting and pitching** (`fit_plate_appearances`): the fielding part
+  comes out of each plate appearance first (`neutral_value`). A mixed
+  model (the NFL module's `mixed_fit`) with random effects for batter and
+  pitcher and fixed effects for park, same-handedness and each side's
+  level. A player's `runs` are his own plate appearances' values less the
+  park, the matchup and the fitted worth of the man across from him -
+  summed, not shrunk. (The first version used the shrunk effects
+  themselves: the best hitter lost 35% of his season, 37 runs for 58
+  produced. `talent` keeps that estimate.)
+- **Position**: where he played most games (fielding positions, DH when
+  he batted without fielding; SP/RP by share of games started). Batting
+  is against the average hitter at the position, fielding against the
+  average fielder there, pitching against the average starter or
+  reliever.
+- **Replacement** (`REPLACEMENT`): hitters past a team's 13th by plate
+  appearances, starters past its 6th, relievers past its 8th. Runs a
+  plate appearance below the average of their kind, 2025 and 2026:
+  hitters 0.042 / 0.035 -> 0.038 (23 runs per 600), starters 0.015 /
+  0.013 -> 0.014, relievers 0.023 / 0.026 -> 0.025.
+- **Runs per win** 9.7 (the usual rule at 4.5 runs a team a game; our 60
+  team-seasons alone say 11.3 +- 0.6).
+- **Checks** (`scripts/research_mlb_war.py`): out model log loss 0.351
+  against 0.611, calibrated (70-90% balls caught 83%). Team WAR against
+  wins r 0.88 / 0.89; players' runs above average against run
+  differential r 0.92, slope 0.96 / 1.09. League total 1,069 / 1,078 WAR
+  (two thirds hitters). Carry-over 2025 to 2026: batting 0.54, pitching
+  0.40, fielding 0.39, WAR 0.60.
+- **Not in it**: fielder positioning and speed; catcher framing and
+  blocking; baserunning (Statcast's per-pitch run value follows the count,
+  not a steal - checked: 5,613 pitches with a runner event, value +0.016
+  each).
+- **Names** come from the pitches (`player_names`): a pitcher's from
+  `player_name`, a batter's from the opening most of his plate
+  appearances' descriptions share. No register download.
+- **On the site**: MLB Stats, "Wins above replacement": everyone /
+  hitters / pitchers, season, position, age, league or division, name
+  search, sortable columns. One file per season
+  (`mlb_war_<season>.json`, about 225 KB); the daily update rebuilds the
+  latest season with pitches on disk (about 40 seconds).
+
 ## NFL wins above replacement (`nfl_player_value.py`, `scripts/build_nfl_player_value.py`, `docs/nfl_player_value.js`)
 
 Why (2026-11-23, user request: "having our own version of war for the nfl
