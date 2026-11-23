@@ -5874,6 +5874,18 @@ between them are the worth of the sequence and nothing else.
   cores.
   Nothing on the site uses it yet.
 
+## Team units: QB minus defense (`docs/nfl_units.js`, `unitQbGap`)
+
+Why (2026-11-23, user: "I just saw something called a betrayal index. It
+basically looks at a qb's epa and the defense's epa and looks at the
+difference ... is it worth adding to our stats page?"): worth a column,
+not a feature - both halves were already in the Team units table. The
+column is QB+ less the average of Pass D+ and Run D+ (all on the same
+100-is-average, 30-a-standard-deviation scale), computed on the page from
+whichever view is showing, sortable like the others. It is two ratings
+side by side and predicts nothing they don't; the help text and How it
+works say so.
+
 ## MLB wins above replacement (`mlb_war.py`, `scripts/build_mlb_war.py`, `docs/mlb_war.js`)
 
 Why (2026-11-23, user request: "when a hit occurs and in what situation
