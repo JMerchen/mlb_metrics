@@ -105,6 +105,14 @@ jobs:
             python scripts/build_nfl_play_calling.py
           fi
 
+      - name: Build wins above replacement (every rated player's value this season)
+        run: |
+          if [ -n "${{ inputs.season }}" ]; then
+            python scripts/build_nfl_player_value.py --season "${{ inputs.season }}"
+          else
+            python scripts/build_nfl_player_value.py
+          fi
+
       - name: Build ranges with a stated hit rate (totals, margins, player props)
         run: |
           if [ -n "${{ inputs.season }}" ]; then
@@ -135,7 +143,7 @@ jobs:
           # pick) - `git add` on a path that doesn't exist yet fails the
           # whole step under `bash -e`, so guard each one, the same way
           # consensus_rankings_update.yml's own commit step already does.
-          for f in data/predictions/nfl_prop_predictions.csv docs/data/nfl_player_props_results.csv docs/data/nfl_team_units.csv docs/data/nfl_team_schedule.csv docs/data/nfl_team_stats.csv docs/data/nfl_player_stats.csv docs/data/nfl_whatif.json docs/data/nfl_whatif_last_week.json docs/data/nfl_sim_profiles.json docs/data/nfl_pick_confidence.csv; do
+          for f in data/predictions/nfl_prop_predictions.csv docs/data/nfl_player_props_results.csv docs/data/nfl_team_units.csv docs/data/nfl_team_schedule.csv docs/data/nfl_team_stats.csv docs/data/nfl_player_stats.csv docs/data/nfl_whatif.json docs/data/nfl_whatif_last_week.json docs/data/nfl_sim_profiles.json docs/data/nfl_pick_confidence.csv docs/data/bet_evidence.json docs/data/nfl_ranges.json docs/data/nfl_play_calling.json docs/data/nfl_player_value.json docs/data/nfl_player_value_*.json; do
             [ -f "$f" ] && git add "$f"
           done
 

@@ -5874,6 +5874,64 @@ between them are the worth of the sequence and nothing else.
   cores.
   Nothing on the site uses it yet.
 
+## NFL wins above replacement (`nfl_player_value.py`, `scripts/build_nfl_player_value.py`, `docs/nfl_player_value.js`)
+
+Why (2026-11-23, user request: "having our own version of war for the nfl
+would be cool, especially if it could be in a viewable table that could be
+filtered by position or offense/defense or year in the league or
+conference/division"). Not an input to any pick.
+
+- **Offense** (follows nflWAR, Yurko, Ventura and Horowitz 2019). Each
+  dropback's EPA is split into three parts that add back to it: no-target
+  (a sack, scramble or throwaway, less an average throw's value), throw
+  (`air_epa + xyac_epa` on a completion, the whole play on an
+  incompletion) and after-catch (`yac_epa - xyac_epa`); a designed run is
+  one part. Each part is a mixed model (`mixed_fit`, EM, dense normal
+  equations) with a random effect per player-team and per team where
+  noted: no-target = QB + offense + defense; throw = QB + receiver +
+  defense; after-catch = receiver + QB + defense; run = runner + offense
+  + defense. Fixed effects: the player's position level, and bins of
+  `xpass` and win probability (what EPA does not know about a play's
+  setting).
+- **Tiers and replacement.** A starter is a team's top 1 QB, 2 RB (runs),
+  3 WR / 1 TE / 2 RB (targets) by plays in the role; everyone else is a
+  reserve = replacement level. A reserve's deficit a play
+  (`REPLACEMENT_GAP`) is pooled from ten seasons of fits with the tiers
+  left free: one season's estimate is mostly noise (WR throw gap 0.03 to
+  0.20 by season; with 2025's own gaps WRs summed to 10 wins league-wide
+  and RBs to 41, with the pooled ones 31 and 25). A reserve is pulled
+  toward a reserve's level, a starter toward a starter's.
+- **Defenders**: playmaking only. On every run or pass that lost the
+  offense expected points, the loss is split among the defenders named
+  (sack, tackle, tackle for loss, pass defended, interception, forced
+  fumble, QB hit). Per snap (`snap_counts`, crossed to the play-by-play's
+  ids through the roster), pulled toward the position's average with 600
+  snaps, against that average and a reserve (`DEFENSE_REPLACEMENT_GAP`),
+  times `DEFENSE_SCALE` 1.7 (a point of playmaking above average went
+  with 1.7 of team defensive EPA). Positions: DT, ED (DE, plus OLBs whose
+  credited plays are a quarter or more sacks and QB hits), LB, CB, S.
+- **Kickers**: 3 x (made - `fg_prob`) and (made - league rate) on extra
+  points, pulled toward zero with 200 kicks, fill-in gap 0.134 a kick.
+- **Wins**: 35 points (wins on point differential, 320 team-seasons).
+- **Checks** (`scripts/research_nfl_player_value.py`, full numbers in its
+  docstring): team sums track team offense at r 0.91 and team defense at
+  0.83. Carry-over is weak and the table says so: per-play value to next
+  season 0.19-0.34 for players who stay (plain EPA a play: 0.17-0.41),
+  about zero for players who change teams (both); points above
+  replacement 0.34-0.43 for players who stay. Defender rates carry at
+  0.20 (CB) to 0.42 (DT).
+- **Not rated**: offensive linemen (nothing says who blocked whom);
+  coverage that prevents a throw; receivers getting open.
+- **On the site**: NFL Stats tab, "Wins above replacement": tabs for
+  everyone / offense / defense / kickers, selects for season (one data
+  file per season, `nfl_player_value_<season>.json`, about 280 KB,
+  fetched when chosen; 2023 on), position, years in the league and
+  conference or division, a name search, sortable columns, 50 rows with
+  "Show all". The weekly update rebuilds the current season.
+- Also fixed here: the weekly job never committed `bet_evidence.json`,
+  `nfl_ranges.json` or `nfl_play_calling.json` (they were rebuilt and
+  thrown away), so those three had been stale since they were added.
+
 ## NFL play-calling tree (`nfl_play_sequencing.py`, `scripts/build_nfl_play_calling.py`, `docs/nfl_play_calling.js`)
 
 Why (2026-11-20, user request: "map play call sequencing tendencies per
