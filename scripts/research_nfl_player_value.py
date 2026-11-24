@@ -10,6 +10,8 @@
 4. DEFENDERS. Starter-to-reserve gaps, how much to pull a rate toward the
    position's average, and how playmaking relates to team defense.
 5. KICKERS, and points per win.
+6. TEAMS. How many games does a replacement team win, and is what a
+   team's rated players do not explain luck?
 
 RESULT (2026-11-23):
 
@@ -66,8 +68,25 @@ RESULT (2026-11-23):
   Points per win: wins on point differential, 320 team-seasons: 0.0283
   wins a point (r 0.89), 35.3 points a win.
 
+  Teams (320 team-seasons). A REPLACEMENT TEAM wins 2.7 of 17 (.157;
+  2.2 to 3.1 by season) built from the parts - an average team with the
+  average team's points above replacement taken off both sides, through
+  the Pythagorean curve; 2.07 by the books (the league's 8.25 wins less
+  the average team's 6.18 players' WAR); and the five real teams nearest
+  it won 3, 2, 3, 6 and 2. Wins on players' WAR added up: slope 1.35
+  (+-0.06), r 0.78 - the rated players' sum is narrower than real
+  records (spread 1.62 wins against 3.16), because linemen and coverage
+  are not in it and every player is pulled toward average. What is left
+  splits in two: NOT CREDITED (real points through the curve, less
+  expected wins; spread 1.34) and CLOSE GAMES (wins less real points
+  through the curve; 1.45). To the next season (288 pairs): wins carry
+  at 0.37, expected wins 0.37, not credited 0.31, close games 0.04. Next
+  season's wins on this season's three parts: 0.56 (+-0.12), 0.47
+  (+-0.14), 0.03 (+-0.12). So close games are luck, and not credited is
+  skill the play-by-play cannot hand to a player.
+
 Usage:
-  python scripts/research_nfl_player_value.py [--first 2016] [--last 2025]
+  python scripts/research_nfl_player_value.py [--first 2016] [--last 2025] [--only-teams]
 """
 
 import argparse
@@ -226,13 +245,51 @@ def points_per_win(seasons, raw_dir):
     print(f"Points per win ({len(t)} team-seasons): {slope:.4f} wins a point (r {corr(t['margin'], t['win']):.2f}), {1 / slope:.1f} points a win")
 
 
+def team_checks(seasons, raw_dir):
+    """The replacement team, and whether what a team's rated players do
+    not explain is luck: does it carry to the next season, and does it
+    predict it?"""
+    rows = []
+    for season in seasons:
+        d = v.build(season, raw_dir)
+        players = pd.DataFrame(d["players"]).groupby("team")["war"].sum()
+        rows.append(pd.DataFrame(d["teams"]).assign(season=season, rate=d["replacement_win_rate"]).join(players.rename("players"), on="team"))
+        print(f"  teams {season}", file=sys.stderr)
+    t = pd.concat(rows, ignore_index=True)
+    print(f"Teams ({len(t)} team-seasons): a replacement team wins {17 * t['rate'].mean():.1f} of 17 through the curve ({t['rate'].mean():.3f}; "
+          f"seasons {17 * t['rate'].min():.1f} to {17 * t['rate'].max():.1f}); by the books, the league's {t['wins'].mean():.2f} wins less the average team's "
+          f"{t['players'].mean():.2f} players' WAR = {t['wins'].mean() - t['players'].mean():.2f}")
+    x = np.column_stack([np.ones(len(t)), t["players"]])
+    b = np.linalg.lstsq(x, t["wins"], rcond=None)[0]
+    resid = t["wins"] - x @ b
+    se = np.sqrt(np.diag(np.linalg.inv(x.T @ x)) * resid.var(ddof=2))
+    print(f"  wins on players' WAR added up: intercept {b[0]:.2f} (+-{se[0]:.2f}), slope {b[1]:.2f} (+-{se[1]:.2f}), r {corr(t['players'], t['wins']):.2f}")
+    print(f"  spread of real wins {t['wins'].std():.2f}; of expected wins {t['expected'].std():.2f} (missing wins by {np.sqrt(((t['expected'] - t['wins']) ** 2).mean()):.2f}; "
+          f"real points through the curve miss by {np.sqrt((t['close'] ** 2).mean()):.2f}); leftovers: not credited {t['uncredited'].std():.2f}, close games {t['close'].std():.2f}")
+    worst = t.sort_values("war").head(5)
+    print("  the nearest things to a replacement team: " + "; ".join(f"{r.team} {r.season} WAR {r.war:.1f}, won {r.wins:g}" for r in worst.itertuples()))
+    later = t[["season", "team", "wins", "expected", "uncredited", "close"]].assign(season=t["season"] - 1)
+    m = t.merge(later, on=["season", "team"], suffixes=("", "_next"))
+    print(f"  to the next season ({len(m)} pairs): wins r {corr(m['wins'], m['wins_next']):.2f}; expected wins {corr(m['expected'], m['expected_next']):.2f}; "
+          f"not credited {corr(m['uncredited'], m['uncredited_next']):.2f}; close games {corr(m['close'], m['close_next']):.2f}")
+    x = np.column_stack([np.ones(len(m)), m["expected"] - m["expected"].mean(), m["uncredited"], m["close"]])
+    b = np.linalg.lstsq(x, m["wins_next"], rcond=None)[0]
+    resid = m["wins_next"] - x @ b
+    se = np.sqrt(np.diag(np.linalg.inv(x.T @ x)) * resid.var(ddof=4))
+    print(f"  next season's wins on this season's expected wins, not credited and close games: {b[1]:.2f} (+-{se[1]:.2f}), {b[2]:.2f} (+-{se[2]:.2f}), {b[3]:.2f} (+-{se[3]:.2f})")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--raw-dir", default=config.NFL_RAW_DATA_DIR)
     parser.add_argument("--first", type=int, default=2016)
     parser.add_argument("--last", type=int, default=2025)
+    parser.add_argument("--only-teams", action="store_true", help="Just the team checks (section 6).")
     args = parser.parse_args()
     seasons = list(range(args.first, args.last + 1))
+    if args.only_teams:
+        team_checks(seasons, args.raw_dir)
+        return
     replacement_gaps(seasons, args.raw_dir)
     effects, plays = offense_fits(seasons, args.raw_dir, v.REPLACEMENT_GAP)
     carry_over(effects)
@@ -240,6 +297,7 @@ def main():
     defenders(seasons, args.raw_dir)
     kickers(seasons, args.raw_dir)
     points_per_win(seasons, args.raw_dir)
+    team_checks(seasons, args.raw_dir)
 
 
 if __name__ == "__main__":

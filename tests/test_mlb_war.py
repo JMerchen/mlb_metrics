@@ -13,7 +13,7 @@ def _pitch(game, at_bat, number, **kw):
            "home_team": "NYY", "away_team": "BOS", "stand": "R", "p_throws": "R", "hit_location": None, "bb_type": None,
            "launch_speed": np.nan, "launch_angle": np.nan, "hc_x": np.nan, "hc_y": np.nan, "on_1b": None, "on_2b": None, "on_3b": None,
            "outs_when_up": 0, "balls": 0, "strikes": 0, "post_home_score": 0, "post_away_score": 0, "age_bat": 27, "age_pit": 30,
-           "player_name": "Sale, Chris", "des": None}
+           "player_name": "Sale, Chris", "des": None, "bat_score": 0, "post_bat_score": 0}
     row.update({f"fielder_{k}": 100 + k for k in range(2, 10)})
     row.update(kw)
     return row
@@ -178,7 +178,7 @@ def test_names_come_from_the_pitches_themselves():
 def test_every_team_is_in_a_division_and_an_empty_season_builds_nothing(tmp_path):
     assert len(w.TEAM_DIVISION) == 30 and all(len(teams) == 5 for teams in w.DIVISIONS.values())
     assert w.TEAM_DIVISION["ATH"] == "AL West" and w.TEAM_DIVISION["AZ"] == "NL West"
-    assert w.build(2031, str(tmp_path)) == {"season": 2031, "through": None, "runs_per_win": w.RUNS_PER_WIN, "players": []}
+    assert w.build(2031, str(tmp_path)) == {"season": 2031, "through": None, "runs_per_win": w.RUNS_PER_WIN, "players": [], "teams": []}
 
 
 def test_team_records_come_from_the_final_scores():
@@ -189,3 +189,106 @@ def test_team_records_come_from_the_final_scores():
     records = w.team_records(pitches)
     assert records.loc["NYY"].to_dict() == {"games": 2, "wins": 1, "scored": 7, "allowed": 6}
     assert records.loc["BOS"].to_dict() == {"games": 2, "wins": 1, "scored": 6, "allowed": 7}
+
+
+def _inning(game, plays, start=1):
+    """One half-inning as pitches: each play is (runners before as a dict
+    of base -> id, outs, runs in so far, event or None, extra columns)."""
+    rows = []
+    for i, (on, outs, score, event, extra) in enumerate(plays):
+        last = i == len(plays) - 1
+        rows.append(_pitch(game, start + (extra.get("at_bat", i)), extra.get("pitch", 1), on_1b=on.get(1), on_2b=on.get(2), on_3b=on.get(3),
+                           outs_when_up=outs, bat_score=score, post_bat_score=extra.get("post", score), events=event,
+                           hit_location=extra.get("field"), bb_type="ground_ball" if event in ("single", "field_out") else None))
+    return rows
+
+
+def test_run_expectancy_is_the_runs_that_follow_each_state():
+    rows = []
+    for game in range(40):
+        # Nobody on, nobody out: half the innings score one run later.
+        scored = game % 2
+        rows += _inning(game, [({}, 0, 0, "single", {}), ({1: 7}, 0, 0, "field_out", {}), ({1: 7}, 1, 0, "field_out", {}),
+                               ({1: 7}, 2, 0, "field_out", {"post": scored})])
+    table = w.run_expectancy(pd.DataFrame(rows))
+    assert table[(0, 0)] == pytest.approx(0.5) and table[(0, 1)] == pytest.approx(0.5) and table[(2, 1)] == pytest.approx(0.5)
+
+
+def _running_season():
+    """Innings where a runner on first either steals second during the
+    next plate appearance or stays; and singles with a man on first where
+    he ends on third (runner 7) or second (runner 8)."""
+    rows = []
+    for game in range(120):
+        fast = game % 2 == 0
+        runner = 7 if fast else 8
+        scores = game % 3 == 0
+        # A plate appearance of two pitches: after the first, the fast runner is on second.
+        rows += _inning(game, [
+            ({}, 0, 0, "single", {"at_bat": 0}),
+            ({1: runner}, 0, 0, None, {"at_bat": 1, "pitch": 1}),
+            ({2: runner} if fast else {1: runner}, 0, 0, "strikeout", {"at_bat": 1, "pitch": 2}),
+            ({2: runner} if fast else {1: runner}, 1, 0, "field_out", {"at_bat": 2}),
+            ({2: runner} if fast else {1: runner}, 2, 0, "field_out", {"at_bat": 3, "post": int(scores and fast)}),
+        ])
+        # Another inning: man on first, a single to right; the fast one takes third.
+        rows += [dict(r, inning=2) for r in _inning(game, [
+            ({1: runner}, 0, 0, "single", {"at_bat": 10, "field": 9}),
+            ({1: 30, 3: runner} if fast else {1: 30, 2: runner}, 0, 0, "field_out", {"at_bat": 11}),
+            ({1: 30, 3: runner} if fast else {1: 30, 2: runner}, 1, 0, "field_out", {"at_bat": 12}),
+            ({1: 30, 3: runner} if fast else {1: 30, 2: runner}, 2, 0, "field_out", {"at_bat": 13, "post": int(fast)}),
+        ])]
+        # A third inning that opens with a man on second and nobody out and always scores,
+        # so that state has a value to steal into.
+        rows += [dict(r, inning=3) for r in _inning(game, [
+            ({2: 40}, 0, 0, "field_out", {"at_bat": 20}), ({2: 40}, 1, 0, "field_out", {"at_bat": 21}),
+            ({2: 40}, 2, 0, "field_out", {"at_bat": 22, "post": 1})])]
+    return pd.DataFrame(rows)
+
+
+def test_baserunning_credits_the_steal_and_the_extra_base_and_nets_to_zero():
+    running = w.baserunning(_running_season()).set_index("player_id")
+    fast, slow = running.loc[7], running.loc[8]
+    # Only the fast runner steals: he is ahead of the average runner on first, and everyone else there is behind.
+    assert fast["steals"] > 0 > slow["steals"] and running.loc[30, "steals"] < 0
+    # First to third on the single, against first to second.
+    assert fast["advances"] > 0 > slow["advances"]
+    assert fast["running"] == pytest.approx(fast["steals"] + fast["advances"])
+    assert abs(running["steals"].sum()) < 1e-9 and abs(running["advances"].sum()) < 1e-9
+    assert fast["team"] == "BOS" and fast["times_on"] > 0
+
+
+def test_running_goes_into_a_players_runs_above_average():
+    rng = np.random.default_rng(4)
+    pa = _season(rng, 6000)
+    fit = w.fit_plate_appearances(pa, pa["value"])
+    credits = pd.DataFrame({"game_pk": [1], "player_id": [56], "team": ["NYY"], "position": ["SS"], "plays": [1.0], "outs_above": [0.0], "runs": [0.0]})
+    running = pd.DataFrame({"player_id": [1, 1], "team": ["BOS", "NYY"], "times_on": [100, 20], "steals": [2.0, 0.5], "advances": [1.0, 0.0], "running": [3.0, 0.5]})
+    with_running = w.player_table(pa, fit, credits, running).set_index("player_id")
+    without = w.player_table(pa, fit, credits).set_index("player_id")
+    assert with_running.loc[1, "running"] == pytest.approx(3.5) and with_running.loc[1, "times_on"] == 120      # both stints
+    assert with_running.loc[1, "raa"] == pytest.approx(without.loc[1, "raa"] + 3.5)
+    assert without.loc[1, "running"] == 0
+
+
+def test_the_team_table_turns_players_runs_into_wins_above_a_replacement_team():
+    records = pd.DataFrame({"games": [162, 162, 162], "wins": [100, 81, 62], "scored": [850, 720, 600], "allowed": [620, 720, 830]}, index=["A", "B", "C"])
+    runs = pd.DataFrame({"batting": [90.0, 0.0, -90.0], "running": [10.0, 0.0, -10.0], "pitching": [80.0, 0.0, -80.0], "fielding": [20.0, 0.0, -20.0]}, index=["A", "B", "C"])
+    time = pd.DataFrame({"pa": [6100.0] * 3, "bf_SP": [3400.0] * 3, "bf_RP": [2700.0] * 3}, index=["A", "B", "C"])
+    t = w.team_table(records, runs, time)
+    league = (850 + 720 + 600) / 486
+    # An average team's players add up to an even record.
+    assert t.loc["B", "expected"] == pytest.approx(81.0) and t.loc["B", "offense"] == 0
+    assert t.loc["A", "expected"] == pytest.approx(162 * w.pythagorean(league * 162 + 100, league * 162 - 100))
+    # The replacement team: a replacement hitter's runs off every plate appearance, a replacement pitcher's on every batter.
+    off = w.REPLACEMENT["bat"] * 6100 / 162
+    on = (w.REPLACEMENT["SP"] * 3400 + w.REPLACEMENT["RP"] * 2700) / 162
+    assert t.loc["B", "baseline"] == pytest.approx(162 * w.pythagorean(league - off, league + on))
+    assert 40 < t.loc["B", "baseline"] < 50
+    assert (t["baseline"] + t["war"] == t["expected"]).all()
+    # What is left: the real runs' wins less expected, and the record less the real runs' wins.
+    real = 162 * w.pythagorean(850, 620)
+    assert t.loc["A", "uncredited"] == pytest.approx(real - t.loc["A", "expected"]) and t.loc["A", "close"] == pytest.approx(100 - real)
+    assert (t["expected"] + t["uncredited"] + t["close"]).round(6).tolist() == [100.0, 81.0, 62.0]
+    # Through the curve, the best team is nearer the middle than adding runs at a flat rate would put it.
+    assert t.loc["A", "expected"] - 81 < 200 / w.RUNS_PER_WIN

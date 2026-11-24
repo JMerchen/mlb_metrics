@@ -484,9 +484,12 @@ valued by how much it changed the runs his team could expect in that
 exact situation. Hitters and pitchers are fit together, so each is graded
 for whom he faced and where. Fielders are graded ball by ball against how
 often a ball hit that way becomes an out, and that part is taken off the
-hitter's and the pitcher's ledgers. Each part is set against the average
+hitter's and the pitcher's ledgers. Runners are valued with our own table
+of what each base and out is worth. Each part is set against the average
 at his position, then against a call-up's, and 9.7 runs make a win.
-<a href="#mlb-war">The full method and what it cannot see</a>.</p>
+<a href="#mlb-war">The full method</a>, <a href="#team-war">teams and
+luck</a>, and <a href="#war-compared">how it compares with the public
+versions</a>.</p>
 </div>
 
 <div class="methodCard">
@@ -634,8 +637,9 @@ runner, his team and the defense - in one fit, so a receiver is measured
 after allowing for who threw to him. A player's points are compared with
 the average at his position and with a reserve's, and 35 points make a
 win. Defenders are rated on the plays they made per snap; linemen on
-offense are not rated. <a href="#nfl-war">The full method and what it
-cannot see</a>.</p>
+offense are not rated. <a href="#nfl-war">The full method</a>,
+<a href="#team-war">teams and luck</a>, and <a href="#war-compared">how
+it compares with other measures</a>.</p>
 </div>
 
 <div class="methodCard">
@@ -783,16 +787,118 @@ position: a shortstop's bat against shortstops', a starter against starters, a r
 thirteenth by playing time, starters past the sixth, relievers past the eighth. Over two seasons they were 23
 runs per 600 plate appearances below the average hitter, which is close to the figure the public versions
 use. <b>WAR</b> is runs above replacement divided by 9.7, the runs a win takes at today's scoring.</p>
+<p><span class="lbl">Running</span> The pitch data's own run value follows the count and the result, not the
+runners: a single with a man on first is worth the same to it whether he stops at second or takes third. So
+we built our own table of how many runs a team scores from each combination of outs and runners, and value
+what runners do with it. <b>Steals</b>: when a runner moves up, or is put out, during someone else's plate
+appearance, the change is his - set against what runners on that base average, so merely being on base when a
+wild pitch gets away is not a skill. <b>Advances</b>: on a ball in play, where the runners ended up against
+what is usual for that result with those runners, those outs and that part of the field - first to third on a
+single to right, a run scored from second, an out on the bases. The best runners add about 10 runs a season and
+the worst cost about 8, in line with the public versions.</p>
 <p><span class="lbl">How we checked it</span> A team's players, added up, track its wins (a correlation of
-0.88 and 0.89 in the two seasons) and its run differential (0.92, with one of our runs worth one real run).
+0.89 and 0.90 in the two seasons) and its run differential (0.95, with one of our runs worth one real run).
 The whole league comes to about 1,070 WAR a season against the 1,000 of the public versions. The out model is
 well calibrated: balls it gives 70 to 90% are caught 83% of the time. And unlike football's, it carries over: a
-hitter's batting runs correlate 0.54 from one season to the next, a pitcher's 0.40, a fielder's 0.39.</p>
+hitter's batting runs correlate 0.54 from one season to the next, a pitcher's 0.40, a fielder's 0.39, a
+runner's 0.34.</p>
 <p><span class="lbl">What it cannot see</span> Where the fielders were standing or how fast they ran, so range
-is judged from where the ball went, which is cruder than the tracking-camera versions. A catcher's framing
-and blocking. Baserunning: steals are not in the pitch-by-pitch number, and an extra base taken on a hit is
-credited to the hitter. It is not an input to our picks.</p>
+is judged from where the ball went, which is cruder than the tracking-camera versions. A catcher's framing,
+blocking and throwing. And the defensive side of baserunning: when a runner is held or thrown out, he is
+charged but the outfielder's arm or the pitcher's move is not credited. It is not an input to our picks.</p>
 <p class="where">On the site: <a href="./stats.html">MLB Stats</a>, Wins above replacement.</p></dd>
+
+<dt id="team-war">Team WAR, the replacement team, and luck against skill</dt>
+<dd><p><span class="lbl">The idea</span> A team made entirely of replacement players would still win some
+games. If we know how many, a team's season reads as a sum: the replacement team's wins, plus the wins its
+players add (its <b>Team WAR</b>), plus whatever is left over. An 81-81 baseball team is 44 wins of baseline
+and 37 of Team WAR.</p>
+<p><span class="lbl">How many games a replacement team wins</span> We did not assume the number; we got it three
+ways. <b>Built from the parts:</b> take an average team, take a replacement hitter's deficit off every plate
+appearance and put a replacement pitcher's on every batter faced, and turn the runs that team scores and allows
+into a record: 491 scored and 838 allowed is 44 wins in 162 (a .273 team). <b>By the books:</b> the league
+averages 81 wins and the average team's players add up to 36 WAR, leaving 45. <b>From a real one:</b> the 2025
+Rockies came out at 1.5 wins above a replacement team, an expected record of 46 wins - and won 43. The public
+versions put the line a little higher, at 48. In football the same three routes give about 3 wins in 17 (2.7
+built from the parts, 2.1 by the books; the five real teams nearest the line won 2, 2, 3, 3 and 6).</p>
+<p><span class="lbl">Why not just add the players up</span> Each extra run is worth a little less to a team
+already far from average: a great team gains less from one more run than an ordinary one does. Adding players'
+WAR one by one ignores that and overstates the best and worst teams: over our two seasons the added-up number
+spread teams 14% wider than their real records. So a team's <b>expected wins</b> take its players' runs
+together and turn them into wins the way runs really turn into wins (runs scored to a power, over that plus
+runs allowed to the same power). That missed real records by 5.4 wins a team, against 5.9 for adding up.</p>
+<p><span class="lbl">What is left over</span> Two things. <b>Not credited</b>: wins in the team's real scoring
+margin that no player's ledger holds. <b>Close games</b>: winning more or fewer than the margin says, because of
+how the runs or points fell across games. Whether a leftover is luck is a question you can test: luck does not
+come back next year.</p>
+<p><span class="lbl">Football: one of each</span> Over 320 team-seasons the two leftovers behaved completely
+differently. <b>Close games</b> did not carry to the next season at all (a correlation of 0.04) and did not
+predict it: luck. <b>Not credited</b> carried (0.31) and predicted the next season's wins nearly as well, win
+for win, as the players' own value did: that is real skill the play-by-play cannot hand to a player - the
+offensive line, coverage, coaching. So our football WAR explains a team's players, and says plainly that a
+team is more than the players it can rate.</p>
+<p><span class="lbl">Baseball: mostly luck, not proven</span> Players explain far more of a baseball team (a
+correlation of 0.9 with wins). From one half of a season to the other, expected wins carried at 0.51 and the
+two leftovers at 0.21 and 0.23; from 2025 to 2026, at 0.68, 0.22 and -0.04. That is what mostly-luck looks
+like. But a team's first-half record predicted its second half slightly better than our expected wins did
+(0.48 against 0.40), so with two seasons we cannot call either leftover pure luck, and some of "not credited"
+is simply what our WAR does not measure yet.</p>
+<p class="where">On the site: <a href="./stats.html">MLB Stats</a> and <a href="./nfl.html#stats">NFL Stats</a>, under each WAR table.</p></dd>
+
+<dt id="war-compared">Our WAR against the public ones</dt>
+<dd><p>There is no one WAR. The three best-known baseball versions - FanGraphs', Baseball-Reference's and
+Baseball Prospectus's - agree on the frame (batting, running, fielding, a position adjustment, pitching, a
+replacement level, runs to wins) and disagree inside almost every box. Ours uses the same frame. Where it
+differs, and whether that is better:</p>
+<table class="compareTable">
+<tr><th>Part</th><th>Ours</th><th>The public versions</th><th>Verdict</th></tr>
+<tr><td>Batting</td><td>Each plate appearance valued in its situation (outs, runners, count), then graded for
+the pitchers and parks faced.</td><td>FanGraphs and Baseball-Reference value each result the same whatever the
+situation, and adjust for park. Baseball Prospectus grades for opponents with a model much like ours.</td>
+<td><b>Different on purpose.</b> Ours says what a hitter did for his team's scoring; theirs says what his
+results are usually worth. Timing in the clutch mostly does not repeat, so theirs is the better guide to next
+year and ours the fuller account of this one.</td></tr>
+<tr><td>Pitching</td><td>Every plate appearance from the other side, with the fielders' part taken out ball by
+ball.</td><td>FanGraphs: strikeouts, walks and home runs only, ignoring balls in play. Baseball-Reference: runs
+allowed, adjusted by the team's fielding as a whole. Baseball Prospectus: a model of each event.</td>
+<td><b>Better, we think.</b> It sits between the two extremes: a pitcher is charged for the hard contact he
+allows, not for whether the shortstop got to it.</td></tr>
+<tr><td>Fielding</td><td>How often a ball hit that hard, at that angle, in that direction becomes an out.</td>
+<td>Tracking cameras that know where the fielder started and how far he ran (Statcast), or charted zones.</td>
+<td><b>Worse.</b> Without the fielder's starting spot we cannot separate range from positioning.</td></tr>
+<tr><td>Luck on balls in play</td><td>The same number that credits the fielder is taken off the hitter and the
+pitcher.</td><td>Fielding and batting are separate ledgers: a hitter robbed by a great catch is charged the
+out.</td><td><b>Better.</b> One play, counted once, and it adds up: our players' runs match real team run
+differentials one for one.</td></tr>
+<tr><td>Running</td><td>Steals, and where runners end up on balls in play, against the usual.</td><td>The same
+idea, with more detail and with double plays avoided counted too.</td><td><b>About the same</b>; ours counts
+advances on wild pitches, and credits no fielder for stopping a runner.</td></tr>
+<tr><td>Position</td><td>Against the average hitter at the position that season.</td><td>A fixed number of runs
+per position, worked out from players who moved between positions.</td><td><b>Worse for catchers and
+shortstops.</b> Shortstops hit nearly as well as anyone now, so comparing them with each other gives the
+position less credit than its difficulty deserves.</td></tr>
+<tr><td>Replacement level</td><td>Measured: what the players past each team's roster actually produced (23 runs
+per 600 plate appearances below average; a .273 team).</td><td>Set by agreement so the league totals 1,000 WAR
+(20 runs; a .294 team).</td><td><b>Close.</b> Ours is a measurement, theirs a convention; they land within a
+few wins.</td></tr>
+<tr><td>Catchers</td><td>Their bat, their fielding of batted balls.</td><td>Baseball Prospectus and FanGraphs add
+pitch framing, worth 10 to 20 runs for the best.</td><td><b>Worse.</b> The biggest thing missing.</td></tr>
+<tr><td>Teams</td><td>Players' runs turned into wins together, with a tested baseline and the leftover split.</td>
+<td>Player WAR added up.</td><td><b>Better</b> for reading a team's season.</td></tr>
+<tr><td>History</td><td>2025 and 2026.</td><td>Back to the 1800s.</td><td><b>Worse.</b></td></tr>
+</table>
+<p><span class="lbl">Football</span> There is no standard football WAR. <b>nflWAR</b> (an academic method,
+2019) is the one ours is built on: it splits each play's value among quarterback, receiver, runner and team
+with a model. We changed three things: the reserve's level comes from ten seasons pooled rather than one, the
+model allows for how obvious the pass was and how decided the game, and we added defenders (on plays made),
+kickers and teams. <b>PFF's WAR</b> starts from human graders scoring every player on every play, so it covers
+the positions ours cannot - linemen, cornerbacks who are never thrown at - but the grades are judgment calls
+and the method is closed. <b>Approximate Value</b> (Pro Football Reference) covers every position by sharing
+out team success from box-score totals; it is rougher than either. <b>DYAR</b> rates skill players against
+replacement but gives each of them the whole play, which is the problem a WAR exists to solve; ESPN's
+<b>QBR</b> does split credit, using charting, but only for quarterbacks. Ours is open and checkable and splits credit with a model; it is
+blind to the line and to coverage, and it says so in the table.</p>
+<p class="where">On the site: <a href="./stats.html">MLB Stats</a> and <a href="./nfl.html#stats">NFL Stats</a>.</p></dd>
 
 <dt id="pave">PAVE and PAVE+</dt>
 <dd><p>PAVE is the batting average hitters manage against a pitcher, blended over the same windows as WAVE.
@@ -917,6 +1023,10 @@ everyone (0.2 to 0.4 for players who stay with their team), and close to no guid
 changes teams - our number does no better there than plain EPA per play. A defender's playmaking rate carries
 over a little better (0.4 for interior linemen, 0.2 for cornerbacks). So read WAR as what a player was worth
 this season, not as a forecast of the next one; it is not an input to our picks.</p>
+<p><span class="lbl">Teams, and other WARs</span> A replacement-level team wins about 3 games in 17, and a
+team's season splits into its rated players, skill we cannot credit to a player, and close-game luck:
+<a href="#team-war">Team WAR</a>. How this compares with the other football value measures:
+<a href="#war-compared">our WAR against the public ones</a>.</p>
 <p class="where">On the site: <a href="./nfl.html#stats">NFL Stats</a>, Wins above replacement.</p></dd>
 
 <dt id="play-calling">Play-calling tree</dt>

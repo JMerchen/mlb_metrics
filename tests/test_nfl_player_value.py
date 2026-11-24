@@ -193,5 +193,30 @@ def test_a_kicker_is_measured_against_the_chance_of_each_kick():
 def test_every_team_is_in_a_division_and_a_missing_season_builds_nothing(tmp_path):
     assert len(v.TEAM_DIVISION) == 32 and all(len(teams) == 4 for teams in v.DIVISIONS.values())
     assert v.TEAM_DIVISION["LA"] == "NFC West" and v.TEAM_ALIASES["LAR"] == "LA"
-    assert v.build(2031, str(tmp_path)) == {"season": 2031, "through_week": 0, "points_per_win": v.POINTS_PER_WIN, "players": []}
+    assert v.build(2031, str(tmp_path)) == {"season": 2031, "through_week": 0, "points_per_win": v.POINTS_PER_WIN, "players": [], "teams": []}
     assert v.position_group("FB") == "RB" and v.position_group("OL") == "OTH"
+
+
+def test_team_records_count_a_tie_as_half_a_win():
+    schedules = pd.DataFrame({"game_type": ["REG", "REG", "REG", "POST", "REG"], "home_team": ["KC", "KC", "BUF", "KC", "KC"],
+                              "away_team": ["BUF", "LAR", "KC", "BUF", "BUF"], "home_score": [27, 20, 17, 30, np.nan],
+                              "away_score": [20, 20, 24, 10, np.nan]})
+    records = v.team_records(schedules)
+    assert records.loc["KC"].to_dict() == {"games": 3, "wins": 2.5, "scored": 71, "allowed": 57}       # the playoff game and the unplayed one are left out
+    assert records.loc["LA", "wins"] == 0.5 and records.loc["BUF", "wins"] == 0
+
+
+def test_the_team_table_turns_players_points_into_wins_above_a_replacement_team():
+    records = pd.DataFrame({"games": [17, 17, 17], "wins": [13.0, 8.5, 4.0], "scored": [480, 380, 280], "allowed": [300, 380, 460]}, index=["A", "B", "C"])
+    points = pd.DataFrame({"offense": [260.0, 165.0, 70.0], "defense": [90.0, 50.0, 10.0]}, index=["A", "B", "C"])
+    t = v.team_table(records, points)
+    league = 1140 / 51
+    assert t.loc["B", "offense"] == 0 and t.loc["B", "defense"] == 0 and t.loc["B", "expected"] == pytest.approx(8.5)
+    assert t.loc["A", "offense"] == pytest.approx(95) and t.loc["A", "defense"] == pytest.approx(40)
+    assert t.loc["A", "expected"] == pytest.approx(17 * v.pythagorean(league * 17 + 95, league * 17 - 40))
+    # A replacement team: the average team's points above replacement taken away on both sides.
+    assert t.loc["B", "baseline"] == pytest.approx(17 * v.pythagorean(league - 165 / 17, league + 50 / 17))
+    assert 1.5 < t.loc["B", "baseline"] < 4
+    assert (t["baseline"] + t["war"] == t["expected"]).all()
+    assert (t["expected"] + t["uncredited"] + t["close"]).round(6).tolist() == [13.0, 8.5, 4.0]
+    assert t.loc["A", "close"] == pytest.approx(13 - 17 * v.pythagorean(480, 300))

@@ -56,8 +56,8 @@ test("sorting: biggest first by default, a missing value last, names A to Z", ()
 
 test("the columns follow who is shown", () => {
   const keys = state => mwColumns(mwState(state)).map(c => c[0])
-  assert.deepStrictEqual(keys({}), ["games", "pa", "bf", "war", "rar", "raa", "batting", "fielding", "pitching"])
-  assert.deepStrictEqual(keys({ kind: "hitter" }), ["games", "pa", "war", "rar", "raa", "batting", "fielding"])
+  assert.deepStrictEqual(keys({}), ["games", "pa", "bf", "war", "rar", "raa", "batting", "running", "fielding", "pitching"])
+  assert.deepStrictEqual(keys({ kind: "hitter" }), ["games", "pa", "war", "rar", "raa", "batting", "running", "fielding"])
   assert.deepStrictEqual(keys({ pos: "RP" }), ["games", "bf", "war", "rar", "raa", "fielding", "pitching"])
 })
 
@@ -72,7 +72,7 @@ test("the table ranks the filtered players and says what is left out", () => {
   const html = mwTableHtml(DATA, {})
   const t = text(html)
   assert.ok(t.includes("8 players · 2026 season through 2026-09-27 · 9.7 runs = 1 win"))
-  assert.ok(t.includes("Baserunning and a catcher's framing are not in it yet."))
+  assert.ok(t.includes("A catcher's framing and throwing are not in it yet."))
   assert.ok(t.indexOf("Pete Crow-Armstrong") < t.indexOf("Zach Neto") && t.indexOf("Zach Neto") < t.indexOf("Some Reliever"))
   assert.ok(t.includes("CHC · CF · age 24") && t.includes("NYY · RP"))
   assert.ok(t.includes("8.97") && t.includes("−0.40") && t.includes("WAR ▼"))

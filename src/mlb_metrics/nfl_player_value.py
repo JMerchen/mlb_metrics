@@ -528,9 +528,80 @@ TEAM_ALIASES = {"LAR": "LA", "OAK": "LV", "SD": "LAC", "STL": "LA", "JAC": "JAX"
 MIN_OFFENSE_PLAYS, MIN_DEFENSE_SNAPS, MIN_KICKS = 15, 100, 5
 
 
+# Wins from points scored and allowed: scored^x / (scored^x + allowed^x),
+# the exponent long used for the NFL.
+PYTHAGOREAN_EXPONENT = 2.37
+
+
+def pythagorean(scored, allowed, exponent: float = PYTHAGOREAN_EXPONENT):
+    """The share of games a team scoring and allowing these points wins."""
+    return scored ** exponent / (scored ** exponent + allowed ** exponent)
+
+
+def team_records(schedules: pd.DataFrame) -> pd.DataFrame:
+    """Games, wins (a tie is half), points scored and allowed per team
+    from the regular-season games played."""
+    g = schedules[(schedules["game_type"] == "REG") & schedules["home_score"].notna()]
+    rows = []
+    for side, other in (("home", "away"), ("away", "home")):
+        margin = g[f"{side}_score"] - g[f"{other}_score"]
+        rows.append(pd.DataFrame({"team": g[f"{side}_team"].replace(TEAM_ALIASES), "scored": g[f"{side}_score"], "allowed": g[f"{other}_score"],
+                                  "wins": (margin > 0) + 0.5 * (margin == 0)}))
+    if not rows or not len(g):
+        return pd.DataFrame(columns=["games", "wins", "scored", "allowed"])
+    t = pd.concat(rows)
+    return t.groupby("team").agg(games=("wins", "size"), wins=("wins", "sum"), scored=("scored", "sum"), allowed=("allowed", "sum"))
+
+
+def team_table(records: pd.DataFrame, points: pd.DataFrame) -> pd.DataFrame:
+    """Each team's season as its rated players explain it, and what is
+    left over. `points` has each team's players' points above replacement
+    on offense (kickers with them) and defense. One row per team:
+
+      wins, losses, scored, allowed   what happened
+      offense, defense   its rated players' points against the league's
+                         average team
+      expected           the wins those points make: a league-average
+                         team plus them, through the Pythagorean curve
+      baseline           the wins of a REPLACEMENT TEAM: an average team
+                         with the average team's points above replacement
+                         taken away on both sides, through the same curve
+      war                expected - baseline: wins above a replacement
+                         team. baseline + war = expected.
+      uncredited         the wins its real points make, less expected:
+                         what the team did that no rated player's ledger
+                         holds - the line, coverage, coaching
+      close              wins - what its real points make: how its points
+                         fell across games
+
+    What the leftovers are was tested on 320 team-seasons
+    (scripts/research_nfl_player_value.py): `close` does not carry to
+    the next season (r 0.04) and does not predict it - luck. `uncredited`
+    carries (0.31) and predicts next season's wins nearly as well per win
+    as `expected` does - skill the play-by-play cannot hand to a player.
+    """
+    t = records.copy()
+    games = t["games"]
+    league = t["scored"].sum() / games.sum()
+    p = points.reindex(t.index).fillna(0.0)
+    per_game = {side: p[side].sum() / games.sum() for side in ("offense", "defense")}
+    for side in ("offense", "defense"):
+        t[side] = p[side] - per_game[side] * games
+    t["expected"] = games * pythagorean(league * games + t["offense"], league * games - t["defense"])
+    t["baseline"] = games * pythagorean(league - per_game["offense"], league + per_game["defense"])
+    t["war"] = t["expected"] - t["baseline"]
+    t["losses"] = games - t["wins"]
+    actual = games * pythagorean(t["scored"], t["allowed"])
+    t["uncredited"] = actual - t["expected"]
+    t["close"] = t["wins"] - actual
+    return t
+
+
 def build(season: int, raw_dir: str | None = None) -> dict:
     """The table's data for one season: {season, through_week,
-    points_per_win, players: [...]}, one entry per rated player -
+    points_per_win, replacement_win_rate (the share of games a
+    replacement team wins), players: [...], teams: [...] (team_table's
+    columns)}. Players: one entry per rated player -
     quarterbacks, backs, receivers and tight ends from the offense model,
     defenders from their playmaking, kickers from kicks over expected.
 
@@ -545,7 +616,7 @@ def build(season: int, raw_dir: str | None = None) -> dict:
     pbp = load_table("pbp", season, raw_dir)
     rosters = load_table("rosters_weekly", season, raw_dir)
     if pbp.empty or rosters.empty:
-        return {"season": int(season), "through_week": 0, "points_per_win": POINTS_PER_WIN, "players": []}
+        return {"season": int(season), "through_week": 0, "points_per_win": POINTS_PER_WIN, "players": [], "teams": []}
     pbp = pbp[pbp["season_type"] == "REG"]
     roster = roster_facts(rosters)
     depth = rosters[rosters["gsis_id"].notna()].groupby("gsis_id")["depth_chart_position"].agg(
@@ -563,6 +634,9 @@ def build(season: int, raw_dir: str | None = None) -> dict:
     plays = offense_plays(pbp)
     effects = fit_offense(plays, roster["position"])
     offense = offense_value(effects)
+    # Each team's points above replacement: offense by the team a player was on for each play.
+    points = pd.DataFrame({"offense": ((effects["effect"] - effects["replacement"]) * effects["plays"]).groupby(effects["team"].replace(TEAM_ALIASES)).sum()})
+    points["defense"] = 0.0
     main_team = effects.groupby(["player_id", "team"])["plays"].sum().reset_index().sort_values("plays", ascending=False) \
         .drop_duplicates("player_id").set_index("player_id")["team"]
     games = pd.concat([plays[["game_id", c]].rename(columns={c: "player_id"}) for c in ("qb", "receiver", "rusher")]) \
@@ -582,6 +656,8 @@ def build(season: int, raw_dir: str | None = None) -> dict:
 
     snaps = defense_snaps(load_table("snap_counts", season, raw_dir), roster)
     defense = defense_value(defense_table(defense_credits(pbp), snaps, roster, depth)) if not snaps.empty else pd.DataFrame()
+    if len(defense):
+        points["defense"] = points["defense"].add(defense.groupby(defense["team"].replace(TEAM_ALIASES))["par"].sum(), fill_value=0.0)
     for row in defense.itertuples():
         if row.snaps < MIN_DEFENSE_SNAPS:
             continue
@@ -592,7 +668,10 @@ def build(season: int, raw_dir: str | None = None) -> dict:
                       "tackles_for_loss": int(row.tackles_for_loss), "forced_fumbles": int(row.forced_fumbles), "tackles": int(row.tackles)})
         players.append(entry)
 
-    for row in kicker_value(pbp).itertuples():
+    kickers = kicker_value(pbp)
+    if len(kickers):
+        points["offense"] = points["offense"].add(kickers.groupby(kickers["team"].replace(TEAM_ALIASES))["par"].sum(), fill_value=0.0)
+    for row in kickers.itertuples():
         if row.kicks < MIN_KICKS:
             continue
         entry = base(row.player_id, row.team, "K", "special")
@@ -600,4 +679,15 @@ def build(season: int, raw_dir: str | None = None) -> dict:
                       "fg_made": int(row.fg_made), "fg_tried": int(row.fg_tried)})
         players.append(entry)
     players.sort(key=lambda e: -e["war"])
-    return {"season": int(season), "through_week": int(pbp["week"].max()), "points_per_win": POINTS_PER_WIN, "players": players}
+    schedules = load_table("schedules", season, raw_dir)
+    records = team_records(schedules) if not schedules.empty else pd.DataFrame()
+    teams, rate = [], None
+    if len(records):
+        table = team_table(records, points.fillna(0.0))
+        rate = round(float((table["baseline"] / table["games"]).mean()), 4)
+        teams = [{"team": team, "div": TEAM_DIVISION.get(team, ""), "games": int(row.games), "wins": float(row.wins), "losses": float(row.losses),
+                  "scored": int(row.scored), "allowed": int(row.allowed), "war": round(row.war, 1), "expected": round(row.expected, 1),
+                  "offense": round(row.offense, 0), "defense": round(row.defense, 0), "uncredited": round(row.uncredited, 1),
+                  "close": round(row.close, 1)} for team, row in table.sort_values("expected", ascending=False).iterrows()]
+    return {"season": int(season), "through_week": int(pbp["week"].max()), "points_per_win": POINTS_PER_WIN,
+            "replacement_win_rate": rate, "players": players, "teams": teams}
