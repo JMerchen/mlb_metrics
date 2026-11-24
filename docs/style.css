@@ -2397,6 +2397,24 @@ html.helpOn p.sectionIntro,html.helpOn p.helpText{display:none;}
 .pvTable .rankWho b,.pvTable .rankWho small{white-space:normal;overflow:visible;}
 .pvTable td.num{font-variant-numeric:tabular-nums;}
 .pvMore{margin:10px 0 0;}
+/* How it works: our WAR against the public ones. */
+.compareTable{width:100%;table-layout:fixed;border-collapse:collapse;margin:10px 0 14px;font-size:13.5px;}
+.compareTable th,.compareTable td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--border);white-space:normal;overflow-wrap:anywhere;line-height:1.45;}
+.compareTable th:first-child{width:13%;}
+.compareTable th:nth-child(2),.compareTable th:nth-child(3){width:27%;}
+.compareTable th{font-size:12px;color:var(--text-dim);font-weight:600;}
+.compareTable td:first-child{font-weight:600;}
+@media (max-width:760px){
+.compareTable,.compareTable tbody,.compareTable tr,.compareTable td{display:block;}
+.compareTable tr:first-child{display:none;}
+.compareTable td{border-bottom:none;padding:3px 0;}
+.compareTable tr{padding:10px 0;border-bottom:1px solid var(--border);}
+}
+/* Team WAR in context (war_teams.js): what a team's leftovers did for it. */
+.wtTable td.wtUp{color:var(--success);font-weight:600;}
+.wtTable td.wtDown{color:var(--danger);font-weight:600;}
+.wtTable .rankWho b{display:flex;align-items:center;gap:6px;}
+.wtTable th:first-child,.wtTable td:first-child{min-width:170px;}
 .pvEmpty{color:var(--text-dim);font-size:14px;}
 @media (max-width:760px){
 .pvSelects label{flex:1 1 44%;}

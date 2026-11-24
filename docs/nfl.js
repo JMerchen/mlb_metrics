@@ -756,7 +756,14 @@ loadNflWhatIfFile("nfl_play_calling").then(data => { nflPlayCalling = data; rend
 
 // The wins-above-replacement table on the Stats tab (nfl_player_value.js;
 // one data file per season, fetched when first chosen).
-const nflValue = {seasons: [], data: {}, state: {season: null}}
+const nflValue = {seasons: [], data: {}, state: {season: null}, teamSort: "expected", teamDir: -1}
+
+function renderNflValueTeams(){
+const el = document.getElementById("nflValueTeams"), data = nflValue.data[nflValue.state.season]
+if(!el || typeof wtTeamsHtml !== "function"){ return }
+el.innerHTML = data ? wtTeamsHtml(data, {unit: "points", seasonGames: 17, sort: nflValue.teamSort, dir: nflValue.teamDir,
+name: code => teamName(code, "nfl"), logo: code => nflLogo(code, "xs")}) : ""
+}
 
 function renderNflValue(controls = true){
 const table = document.getElementById("nflValueTable")
@@ -765,6 +772,7 @@ nflValue.state = pvState(nflValue.state)
 if(controls){ document.getElementById("nflValueControls").innerHTML = pvControlsHtml(nflValue.seasons, nflValue.state) }
 const data = nflValue.data[nflValue.state.season]
 table.innerHTML = data ? pvTableHtml(data, nflValue.state) : "Loading..."
+renderNflValueTeams()
 if(typeof installVizTips === "function"){ installVizTips() }
 }
 
@@ -815,6 +823,15 @@ return
 }
 if(e.target.closest("[data-pv-more]")){ nflValue.state.limit = 100000; renderNflValue(false) }
 })
+const teams = document.getElementById("nflValueTeams")
+if(teams){ teams.addEventListener("click", e => {
+const sort = e.target.closest("[data-team-sort]")
+if(!sort){ return }
+nflValue.teamDir = nflValue.teamSort === sort.dataset.teamSort ? -nflValue.teamDir : -1
+nflValue.teamSort = sort.dataset.teamSort
+renderNflValueTeams()
+if(typeof installVizTips === "function"){ installVizTips() }
+}) }
 }
 
 function wireNflTeamCalls(){

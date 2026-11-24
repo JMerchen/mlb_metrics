@@ -5886,6 +5886,63 @@ whichever view is showing, sortable like the others. It is two ratings
 side by side and predicts nothing they don't; the help text and How it
 works say so.
 
+## WAR, round two: baserunning, teams in context, and how ours compares (2026-11-23)
+
+User: "let's explore and build the base running component"; "make war
+work in context and explain a team's luck versus skill ... an mlb team
+that is 81-81 should have combined war of 31 with 50 being replacement
+level wins ... That number should be tested and built a smart manner";
+"explain the components of our war and how it compares to other wars".
+
+- **Baserunning** (`mlb_war.baserunning`, `run_expectancy`). Checked
+  first whether it was already counted: it is not - Statcast's per-pitch
+  run value follows the count and the result, not the runners (a single
+  with a man on first: 0.45 when he takes third, 0.43 when he stops at
+  second). So it needed our own run-expectancy table (runs to the end of
+  the half-inning from each of the 24 out-and-runner states). Steals: the
+  change in state during a plate appearance, to the runners who moved,
+  against the average runner on that base. Advances: on a ball in play,
+  the change against the usual for that result, runners, outs and part of
+  the field (25+ plays, else without the field), shared by the runners on
+  base. Best +10, worst -8 runs; carries over at 0.34. Nothing comes off
+  the batter or pitcher, because nothing was there. Not credited: the
+  arm or the catcher that stopped a runner.
+- **Team WAR in context** (`mlb_war.team_table`,
+  `nfl_player_value.team_table`, `docs/war_teams.js`). A team's players'
+  runs (or points), by the team each was playing for at the time, go
+  through the Pythagorean curve together to make EXPECTED wins; the
+  REPLACEMENT TEAM is an average team with the replacement deficits
+  applied, through the same curve; Team WAR = expected - baseline. The
+  leftover is split: NOT CREDITED (real margin through the curve, less
+  expected) and CLOSE GAMES (wins less real margin through the curve).
+  - Replacement team, three ways. MLB: 44.2 of 162 from the parts, 45.2
+    by the books (league wins less mean players' WAR), and the 2025
+    Rockies (team WAR 1.5, expected 45.7, won 43). NFL: 2.7 of 17 from
+    the parts, 2.1 by the books, and the five nearest real teams won 2
+    to 6. The user's 50 and 2 were illustrations; 44 and 3 are the
+    answers.
+  - Why the curve: adding players' WAR overstates extreme teams (MLB
+    spread 12.9 against 11.3 real; wins on added-up WAR has slope 0.78).
+    Through the curve: spread 10.3, error 5.40 against 5.92. Player WAR
+    itself stays linear at 9.7 runs.
+  - Tried and dropped: a "skill" number from the model's pulled-toward-
+    average estimates. It predicted the second half of a season worse
+    than the record did (0.40 against 0.48) and its "luck" carried at
+    0.37 - so it is not the basis for luck against skill.
+  - Is the leftover luck? NFL (320 team-seasons): close games carry at
+    0.04 and predict nothing - luck; not credited carries at 0.31 and
+    predicts next season nearly as well per win as expected wins (0.47
+    against 0.56) - unmeasured skill (line, coverage, coaching). MLB (60
+    team-seasons): both carry at about 0.2 half to half; mostly luck but
+    not proven, and the page says so.
+- **Comparison** (How it works, `#war-compared`): a part-by-part table
+  against FanGraphs, Baseball-Reference and Baseball Prospectus with a
+  verdict on each (better: pitching between FIP and runs allowed,
+  fielding luck counted once, teams; worse: fielding range, catcher
+  framing, position adjustment, history; different on purpose: batting
+  in its situation), and football against nflWAR, PFF, Approximate Value
+  and DYAR / QBR.
+
 ## MLB wins above replacement (`mlb_war.py`, `scripts/build_mlb_war.py`, `docs/mlb_war.js`)
 
 Why (2026-11-23, user request: "when a hit occurs and in what situation

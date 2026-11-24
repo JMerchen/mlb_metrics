@@ -35,11 +35,15 @@ A player's runs are compared with the average at his position - a
 catcher's bat with catchers', a starter with starters - then with a
 reserve's (REPLACEMENT), and RUNS_PER_WIN turns runs into wins.
 
+  RUNNING   What a runner adds on the bases: a steal or a caught
+            stealing, and where he ends up on a teammate's hit or out
+            against what is usual for that play (baserunning).
+
 What it cannot see: where the fielders were standing or how fast they
-ran, so range is judged from where the ball went; a catcher's framing and
-blocking; and baserunning - Statcast's per-pitch number moves with the
-count, not with a steal, and an extra base taken on a hit is on the
-batter's ledger. scripts/research_mlb_war.py has the checks.
+ran, so range is judged from where the ball went; a catcher's framing,
+blocking and throwing; and the outfield arm or the pitcher's move behind
+a runner held or thrown out - the runner is charged, nobody is credited.
+scripts/research_mlb_war.py has the checks.
 """
 
 import numpy as np
@@ -52,7 +56,7 @@ PITCH_COLUMNS = [
     "delta_run_exp", "inning", "inning_topbot", "home_team", "away_team", "stand", "p_throws", "hit_location", "bb_type",
     "launch_speed", "launch_angle", "hc_x", "hc_y", "on_1b", "on_2b", "on_3b", "outs_when_up", "balls", "strikes",
     "fielder_2", "fielder_3", "fielder_4", "fielder_5", "fielder_6", "fielder_7", "fielder_8", "fielder_9",
-    "post_home_score", "post_away_score", "age_bat", "age_pit", "player_name", "des",
+    "post_home_score", "post_away_score", "age_bat", "age_pit", "player_name", "des", "bat_score", "post_bat_score",
 ]
 # Ball-in-play results where the defense got an out, and where it did not.
 OUT_EVENTS = {"field_out", "force_out", "grounded_into_double_play", "double_play", "fielders_choice_out", "sac_fly",
@@ -252,6 +256,7 @@ def fit_plate_appearances(pa: pd.DataFrame, neutral: pd.Series) -> dict:
     pitcher_total = pitch_levels[pt] + fit["random"]["pitcher"][p]
     out = {"variance": fit["variance"], "noise": fit["noise"], "same_hand": float(fit["fixed"]["same_hand"][0]),
            "park": pd.Series(fit["fixed"]["park"] - fit["fixed"]["park"].mean(), index=codes(pa["home_team"].to_numpy())[2])}
+    teams = {}
     for name, c, index, tier_codes, tier_index, levels, total, other, sign in (
             ("batters", b, b_index, bt, bt_index, bat_levels, batter_total, pitcher_total, 1.0),
             ("pitchers", p, p_index, pt, pt_index, pitch_levels, pitcher_total, batter_total, -1.0)):
@@ -260,6 +265,8 @@ def fit_plate_appearances(pa: pd.DataFrame, neutral: pd.Series) -> dict:
         tiers = pd.DataFrame({"player": c, "tier": tier_codes}).groupby(["player", "tier"]).size().unstack(fill_value=0).idxmax(axis=1).to_numpy()
         left = y - setting - other
         left = left - left.mean()
+        # The same runs by the team he was playing for at the time.
+        teams[name] = sign * pd.Series(left).groupby(pa["bat_team" if name == "batters" else "field_team"].to_numpy()).sum()
         center = float(total.mean())
         out[name] = pd.DataFrame({
             "player_id": pd.Series(index).astype(int), "pa": n, "tier": np.asarray(tier_index)[tiers],
@@ -268,7 +275,116 @@ def fit_plate_appearances(pa: pd.DataFrame, neutral: pd.Series) -> dict:
             "talent": sign * (np.bincount(c, weights=total, minlength=len(index)) / n - center),
             "raw": np.bincount(c, weights=pa["value"].to_numpy(), minlength=len(index)) / n,
         })
+    out["teams"] = pd.DataFrame({"batting": teams["batters"], "pitching": teams["pitchers"]}).fillna(0.0)
     return out
+
+
+# ---- baserunning ----
+
+# The fewest plays of a kind (same result, runners, outs and part of the
+# field) for its own average to be what runners are measured against;
+# below it, the average over every part of the field.
+RUNNING_MIN_PLAYS = 25
+IN_PLAY_EVENTS = OUT_EVENTS | SAFE_EVENTS
+
+
+def run_expectancy(pitches: pd.DataFrame) -> pd.Series:
+    """Runs a team scores on average from each (outs, runners) state to
+    the end of the half-inning, measured at the start of every plate
+    appearance. Runners are coded 1 for first, 2 for second, 4 for third,
+    added up; three outs is worth nothing."""
+    p = pitches[pitches["game_type"] == "R"]
+    start = p.sort_values(["game_pk", "at_bat_number", "pitch_number"]).groupby(["game_pk", "at_bat_number"]).head(1)
+    end = p.groupby(["game_pk", "inning", "inning_topbot"])["post_bat_score"].max().rename("end")
+    start = start.join(end, on=["game_pk", "inning", "inning_topbot"])
+    bases = start["on_1b"].notna().astype(int) + 2 * start["on_2b"].notna().astype(int) + 4 * start["on_3b"].notna().astype(int)
+    return (start["end"] - start["bat_score"]).groupby([start["outs_when_up"].astype(int), bases]).mean()
+
+
+def baserunning(pitches: pd.DataFrame) -> pd.DataFrame:
+    """What each runner added on the bases, in runs, one row per player
+    and team: times_on (plate appearances that began with him on base), steals
+    (runs from moving up or being put out DURING a plate appearance - a
+    steal, a caught stealing, a pickoff, a wild pitch taken - against
+    what runners on the same base average) and advances (runs from where
+    the runners ended up on a ball in play against what is usual for that
+    result with those runners, those outs and that part of the field: a
+    first-to-third on a single, a run scored from second, an out on the
+    bases), and running, their sum.
+
+    Why it has to be built here: Statcast's own run value for a pitch
+    follows the count and the result, not the runners - a single with a
+    man on first is worth the same to it whether he stops at second or
+    takes third - so none of this is in the batting or pitching ledgers.
+    A play's value is the change in run_expectancy plus the runs that
+    scored on it. A play's share goes to the runners who moved (during a
+    plate appearance) or evenly to the runners on base (on a ball in
+    play)."""
+    p = pitches[pitches["game_type"] == "R"].sort_values(["game_pk", "at_bat_number", "pitch_number"]).reset_index(drop=True)
+    expectancy = run_expectancy(p)
+    half = ["game_pk", "inning", "inning_topbot"]
+    bases = (p["on_1b"].notna().astype(int) + 2 * p["on_2b"].notna().astype(int) + 4 * p["on_3b"].notna().astype(int)).to_numpy()
+    outs = p["outs_when_up"].astype(int).to_numpy()
+    same_half = (p[half] == p[half].shift(-1)).all(axis=1).to_numpy()
+    next_bases, next_outs = np.roll(bases, -1), np.roll(outs, -1)
+    next_score = np.roll(p["bat_score"].to_numpy(dtype=float), -1)
+    end_score = p.groupby(half)["post_bat_score"].transform("max").to_numpy(dtype=float)
+    score = p["bat_score"].to_numpy(dtype=float)
+    lookup = expectancy.to_dict()
+    before = np.array([lookup.get(key, 0.0) for key in zip(outs, bases)])
+    after = np.where(same_half, np.array([lookup.get(key, 0.0) for key in zip(next_outs, next_bases)]), 0.0)
+    change = after - before + np.where(same_half, next_score - score, end_score - score)
+    ended = p["events"].notna().to_numpy()
+    runners = p[["on_1b", "on_2b", "on_3b"]].to_numpy(dtype=float)
+    bat_team = np.where(p["inning_topbot"] == "Top", p["away_team"], p["home_team"])
+    next_runners = np.roll(runners, -1, axis=0)
+    rows = []
+
+    # During a plate appearance: the count's part is the batter's and the
+    # pitcher's already; the runners' part is the whole change in state.
+    moved = ~ended & same_half & ((next_bases != bases) | (next_outs != outs) | (next_score != score))
+    for i in np.flatnonzero(moved):
+        gone = [(base, r) for base, r in enumerate(runners[i]) if not np.isnan(r) and not (next_runners[i][base] == r)]
+        gone = gone or [(base, r) for base, r in enumerate(runners[i]) if not np.isnan(r)]
+        for base, runner in gone:
+            rows.append((int(runner), bat_team[i], base, change[i] / len(gone)))
+    steals = pd.DataFrame(rows, columns=["player_id", "team", "base", "runs"])
+
+    # On a ball in play: against the usual for that result in that spot.
+    play = ended & p["events"].isin(IN_PLAY_EVENTS).to_numpy() & (bases > 0)
+    plays = pd.DataFrame({"event": p.loc[play, "events"].to_numpy(), "bases": bases[play], "outs": outs[play],
+                          "field": pd.to_numeric(p.loc[play, "hit_location"], errors="coerce").fillna(0).astype(int).to_numpy(),
+                          "change": change[play]}, index=np.flatnonzero(play))
+    fine = plays.groupby(["event", "bases", "outs", "field"])["change"].transform("mean")
+    count = plays.groupby(["event", "bases", "outs", "field"])["change"].transform("size")
+    coarse = plays.groupby(["event", "bases", "outs"])["change"].transform("mean")
+    rare = (count < RUNNING_MIN_PLAYS).to_numpy()
+    plays["extra"] = plays["change"] - np.where(rare, coarse, fine)
+    # Rare spots are not a fair sample of their coarser group, so set them
+    # against their own average too: nobody is ahead or behind on the whole.
+    plays.loc[rare, "extra"] -= plays[rare].groupby("event")["extra"].transform("mean")
+    rows = []
+    for i, extra in zip(plays.index, plays["extra"]):
+        on = [r for r in runners[i] if not np.isnan(r)]
+        for runner in on:
+            rows.append((int(runner), bat_team[i], extra / len(on)))
+    advances = pd.DataFrame(rows, columns=["player_id", "team", "runs"])
+
+    # Times on base, by base, to set steals against the average runner there.
+    first = p.groupby(["game_pk", "at_bat_number"]).head(1)
+    first_team = pd.Series(bat_team, index=p.index).loc[first.index]
+    on_base = pd.concat([first[[column]].assign(team=first_team).dropna(subset=[column]).rename(columns={column: "player_id"}).assign(base=base)
+                         for base, column in enumerate(["on_1b", "on_2b", "on_3b"])])
+    on_base["player_id"] = on_base["player_id"].astype(int)
+    key = ["player_id", "team"]
+    times = on_base.groupby(key + ["base"]).size().rename("times").reset_index()
+    usual = steals.groupby("base")["runs"].sum() / times.groupby("base")["times"].sum()
+    times["usual"] = times["times"] * times["base"].map(usual).fillna(0.0)
+    out = pd.DataFrame({"times_on": times.groupby(key)["times"].sum()})
+    out["steals"] = steals.groupby(key)["runs"].sum().reindex(out.index).fillna(0.0) - times.groupby(key)["usual"].sum()
+    out["advances"] = advances.groupby(key)["runs"].sum().reindex(out.index).fillna(0.0)
+    out["running"] = out["steals"] + out["advances"]
+    return out.reset_index()
 
 
 # ---- positions, replacement and wins ----
@@ -305,10 +421,11 @@ REPLACEMENT = {"bat": 0.038, "SP": 0.014, "RP": 0.025}
 RUNS_PER_WIN = 9.7
 
 
-def player_table(pa: pd.DataFrame, fit: dict, credits: pd.DataFrame) -> pd.DataFrame:
+def player_table(pa: pd.DataFrame, fit: dict, credits: pd.DataFrame, running: pd.DataFrame | None = None) -> pd.DataFrame:
     """One row per player: position (where he played most; SP or RP for a
     pitcher), games, pa, batting (runs against the average hitter at his
-    position), fielding (runs against the average fielder at each
+    position), running (runs on the bases against the average runner, from
+    `baserunning`), fielding (runs against the average fielder at each
     position he played), bf, pitching (runs saved against the average
     starter or reliever), raa (their sum), replacement (the runs between
     average and a replacement player over his playing time), rar and war.
@@ -316,7 +433,9 @@ def player_table(pa: pd.DataFrame, fit: dict, credits: pd.DataFrame) -> pd.DataF
     games = games_by_position(pa)
     batters = fit["batters"].set_index("player_id")
     pitchers = fit["pitchers"].set_index("player_id")
-    out = pd.DataFrame(index=sorted(set(batters.index) | set(pitchers.index) | set(credits["player_id"])))
+    runners = running.groupby("player_id")[["running", "times_on"]].sum() if running is not None and len(running) \
+        else pd.DataFrame(columns=["running", "times_on"])
+    out = pd.DataFrame(index=sorted(set(batters.index) | set(pitchers.index) | set(credits["player_id"]) | set(runners.index)))
     out.index.name = "player_id"
     out["pa"] = batters["pa"].reindex(out.index).fillna(0).astype(int)
     out["bf"] = pitchers["pa"].reindex(out.index).fillna(0).astype(int)
@@ -345,7 +464,9 @@ def player_table(pa: pd.DataFrame, fit: dict, credits: pd.DataFrame) -> pd.DataF
     saved = pitchers["runs"].reindex(out.index).fillna(0.0)
     by_role = pd.DataFrame({"runs": pitchers["runs"], "bf": pitchers["pa"], "role": pitchers["tier"].str.split(" ").str[0]}).groupby("role")[["runs", "bf"]].sum()
     out["pitching"] = saved - role.map(by_role["runs"] / by_role["bf"]).fillna(0.0) * out["bf"]
-    out["raa"] = out["batting"] + out["fielding"] + out["pitching"]
+    out["running"] = runners["running"].reindex(out.index).fillna(0.0).astype(float)
+    out["times_on"] = runners["times_on"].reindex(out.index).fillna(0).astype(int)
+    out["raa"] = out["batting"] + out["running"] + out["fielding"] + out["pitching"]
     out["replacement"] = REPLACEMENT["bat"] * out["pa"] + role.map(REPLACEMENT).fillna(0.0) * out["bf"]
     out["rar"] = out["raa"] + out["replacement"]
     out["war"] = out["rar"] / RUNS_PER_WIN
@@ -419,22 +540,113 @@ def player_names(pitches: pd.DataFrame) -> pd.Series:
     return pd.Series(names)
 
 
+# Wins from runs scored and allowed: scored^x / (scored^x + allowed^x),
+# the exponent the game has long used.
+PYTHAGOREAN_EXPONENT = 1.83
+
+
+def pythagorean(scored, allowed, exponent: float = PYTHAGOREAN_EXPONENT):
+    """The share of games a team scoring and allowing these runs wins."""
+    return scored ** exponent / (scored ** exponent + allowed ** exponent)
+
+
+def team_table(records: pd.DataFrame, team_runs: pd.DataFrame, playing_time: pd.DataFrame) -> pd.DataFrame:
+    """Each team's season as its players' value explains it, and what is
+    left over. One row per team:
+
+      wins, losses, scored, allowed   what happened
+      offense, defense   its players' runs against the league - batting
+                         and running; pitching and fielding - by the team
+                         each was playing for at the time
+      expected           the wins those runs make: a league-average team
+                         plus them, through the Pythagorean curve
+      baseline           the wins of a REPLACEMENT TEAM: an average team
+                         with a replacement hitter's runs taken off every
+                         plate appearance and a replacement pitcher's put
+                         on every batter faced (REPLACEMENT), through the
+                         same curve
+      war                expected - baseline: wins above a replacement
+                         team. So baseline + war = expected, and across
+                         the league expected averages the league's wins.
+      uncredited         the wins its real run differential makes, less
+                         expected: runs no player's ledger explains
+                         (catchers, arms, wild pitches, what the models
+                         miss)
+      close              wins - what its real runs make: how its runs
+                         fell across games
+
+    Why through the curve and not by adding players' WAR: each extra run
+    is worth less to a team already far from average, so adding up
+    overstates the best and worst teams (over 2025-26 the added-up number
+    spread teams 14% wider than their real wins; through the curve, 9%
+    narrower, and it missed real wins by 5.4 a team against 5.9).
+
+    Whether the two leftovers are luck was tested as far as two seasons
+    allow (scripts/research_mlb_war.py): half to half they carry at 0.21
+    and 0.23 against 0.51 for `expected`; 2025 to 2026 at 0.22 and -0.04
+    against 0.68. Mostly luck, by that - but a team's first-half record
+    predicted its second half a little better than `expected` did (0.48
+    against 0.40), so neither is proven to be."""
+    t = records.copy()
+    games = t["games"]
+    league = t["scored"].sum() / games.sum()
+    runs = team_runs.reindex(t.index).fillna(0.0)
+    t["offense"] = runs["batting"] + runs["running"]
+    t["defense"] = runs["pitching"] + runs["fielding"]
+    for side in ("offense", "defense"):
+        t[side] = t[side] - (t[side].sum() / games.sum()) * games
+    t["expected"] = games * pythagorean(league * games + t["offense"], league * games - t["defense"])
+    time = playing_time.reindex(t.index).fillna(0.0)
+    hitters = REPLACEMENT["bat"] * time["pa"].sum() / games.sum()
+    pitchers = (REPLACEMENT["SP"] * time["bf_SP"].sum() + REPLACEMENT["RP"] * time["bf_RP"].sum()) / games.sum()
+    t["baseline"] = games * pythagorean(league - hitters, league + pitchers)
+    t["war"] = t["expected"] - t["baseline"]
+    t["losses"] = games - t["wins"]
+    actual = games * pythagorean(t["scored"], t["allowed"])
+    t["uncredited"] = actual - t["expected"]
+    t["close"] = t["wins"] - actual
+    return t
+
+
+def evaluate(pitches: pd.DataFrame) -> dict:
+    """Everything for one set of pitches (a season, or part of one):
+    {"table": player_table's rows, "records": team_records' rows, "teams":
+    team_table's rows, "pa": the plate appearances, and the pieces they
+    were made from: "balls", "credits", "fit", "running"}."""
+    pa = plate_appearances(pitches)
+    balls = fielding_chances(pa)
+    credits = fielding_credits(balls)
+    fit = fit_plate_appearances(pa, neutral_value(pa, balls))
+    running = baserunning(pitches)
+    table = player_table(pa, fit, credits, running)
+    records = team_records(pitches)
+    team_runs = fit["teams"].copy()
+    team_runs["running"] = running.groupby("team")["running"].sum()
+    by_field = credits.groupby("position")[["runs", "plays"]].sum()
+    above = credits["runs"] - credits["plays"] * credits["position"].map(by_field["runs"] / by_field["plays"])
+    team_runs["fielding"] = above.groupby(credits["team"]).sum()
+    roles = pa["pitcher"].map(pitcher_roles(pa))
+    playing_time = pd.DataFrame({"pa": pa.groupby("bat_team").size(), "bf_SP": pa[roles == "SP"].groupby("field_team").size(),
+                                 "bf_RP": pa[roles == "RP"].groupby("field_team").size()}).fillna(0.0)
+    return {"table": table, "records": records, "teams": team_table(records, team_runs.fillna(0.0), playing_time), "pa": pa,
+            "balls": balls, "credits": credits, "fit": fit, "running": running}
+
+
 def build(season: int, raw_dir: str = "data/raw") -> dict:
     """The table's data for one season: {season, through, runs_per_win,
-    players: [...]}. Every entry: name, pos, kind ("hitter" or
+    replacement_win_rate (the share of games a replacement team wins),
+    players: [...], teams: [...] (team_table's columns)}. Every player: name, pos, kind ("hitter" or
     "pitcher"), team, div ("AL East"; the league is its first word), age,
     games, pa, bf, war, raa (runs above the average at his position), rar
-    (above replacement), and the parts of raa he has: batting, fielding,
-    pitching."""
+    (above replacement), and the parts of raa he has: batting, running,
+    fielding, pitching."""
     from mlb_metrics import data
 
     pitches = data.load_persisted_statcast(raw_dir, season, PITCH_COLUMNS)
     if pitches is None or pitches.empty or not (pitches["game_type"] == "R").any():
-        return {"season": int(season), "through": None, "runs_per_win": RUNS_PER_WIN, "players": []}
-    pa = plate_appearances(pitches)
-    balls = fielding_chances(pa)
-    credits = fielding_credits(balls)
-    table = player_table(pa, fit_plate_appearances(pa, neutral_value(pa, balls)), credits)
+        return {"season": int(season), "through": None, "runs_per_win": RUNS_PER_WIN, "players": [], "teams": []}
+    result = evaluate(pitches)
+    table, pa = result["table"], result["pa"]
     names = player_names(pitches[pitches["game_type"] == "R"])
     players = []
     for row in table.itertuples():
@@ -447,11 +659,19 @@ def build(season: int, raw_dir: str = "data/raw") -> dict:
                  "war": round(row.war, 2), "raa": round(row.raa, 1), "rar": round(row.rar, 1)}
         if row.pa:
             entry.update({"pa": int(row.pa), "batting": round(row.batting, 1)})
+        if row.times_on:
+            entry["running"] = round(row.running, 1)
         if row.chances >= 1:
             entry["fielding"] = round(row.fielding, 1)
         if row.bf:
             entry.update({"bf": int(row.bf), "pitching": round(row.pitching, 1)})
         players.append(entry)
     players.sort(key=lambda e: -e["war"])
+    teams = [{"team": team, "div": TEAM_DIVISION.get(team, ""), "wins": int(row.wins), "losses": int(row.losses),
+              "scored": int(row.scored), "allowed": int(row.allowed), "war": round(row.war, 1), "expected": round(row.expected, 1),
+              "offense": round(row.offense, 0), "defense": round(row.defense, 0), "uncredited": round(row.uncredited, 1),
+              "close": round(row.close, 1)} for team, row in result["teams"].sort_values("expected", ascending=False).iterrows()]
+    baseline = result["teams"]["baseline"] / result["teams"]["games"]
     through = pd.to_datetime(pa["game_date"]).max()
-    return {"season": int(season), "through": through.strftime("%Y-%m-%d"), "runs_per_win": RUNS_PER_WIN, "players": players}
+    return {"season": int(season), "through": through.strftime("%Y-%m-%d"), "runs_per_win": RUNS_PER_WIN,
+            "replacement_win_rate": round(float(baseline.mean()), 4), "players": players, "teams": teams}

@@ -88,7 +88,7 @@ Wins above replacement
 </h2>
 
 <p class="sectionIntro">Our own measure of what each player was worth in a season. Every pitch changes how many runs the batting team can expect in that exact situation - the outs, the runners, the count - so a single with the bases loaded is worth more than one with nobody on. <b>Batting</b> is what a hitter added that way, graded for the pitchers and parks he faced. <b>Pitching</b> is the same from the other side. <b>Fielding</b> asks of every ball in play how often a ball hit that hard, at that angle, to that spot becomes an out: a fielder who turns a 30% ball into an out gets most of an out's worth, and one who lets a 90% ball fall loses nearly all of one. A hitter robbed by a great play is not charged for the out, and a pitcher is not credited for it.</p>
-<p class="sectionIntro">Each part is measured against the average at his position - a catcher's bat against catchers', a starter against starters. <b>Above replacement</b> adds the gap between average and the kind of player a team calls up when its roster runs out, and <b>WAR</b> divides by the runs a win takes (9.7). <b>What it cannot see:</b> where fielders were standing, so range is judged from where the ball went; a catcher's pitch framing; and baserunning. Click a heading to sort. <a href="./methodology.html#mlb-war">How it works</a>.</p>
+<p class="sectionIntro">Each part is measured against the average at his position - a catcher's bat against catchers', a starter against starters. <b>Above replacement</b> adds the gap between average and the kind of player a team calls up when its roster runs out, and <b>WAR</b> divides by the runs a win takes (9.7). <b>Running</b> is what a runner adds on the bases: steals, and extra bases (or outs) on teammates' hits against what is usual for that play. <b>What it cannot see:</b> where fielders were standing, so range is judged from where the ball went, and a catcher's pitch framing and throwing. Click a heading to sort. <a href="./methodology.html#mlb-war">How it works</a>, and <a href="./methodology.html#war-compared">how it compares with the public versions</a>.</p>
 
 <div id="mlbWarSection">
 <div id="mlbWarControls" class="pvControls"></div>
@@ -99,6 +99,12 @@ Loading...
 
 </div>
 </div>
+
+<h3 class="matchupHeading">Teams: what the players add up to, and what is left</h3>
+
+<p class="sectionIntro">A team made of replacement players would still win some games - about 44 of 162. <b>Team WAR</b> is the wins a team's players add on top of that, so the baseline plus Team WAR is its <b>expected wins</b>: what its hitters, runners, fielders and pitchers were worth, turned into wins. (The players' runs go through the runs-to-wins curve together rather than being added up player by player, because an extra run is worth less to a team already far from average.) The gap to its real record is split in two. <b>Not credited</b> is wins in its real run differential that no player's ledger holds: catchers, throwing arms, wild pitches, and whatever our models miss. <b>Close games</b> is how its runs fell across games - winning more than its runs say. Over our two seasons neither leftover carried strongly from one half of a season to the other (about 0.2, against 0.5 for expected wins), which is what luck looks like, but two seasons are too few to call either one pure luck. Click a heading to sort. <a href="./methodology.html#team-war">How it works</a>.</p>
+
+<div id="mlbWarTeams"></div>
 
 <hr>
 
@@ -265,6 +271,8 @@ Loading...
 <script src="./mlb_render.js"></script>
 
 <script src="./app.js"></script>
+
+<script src="./war_teams.js"></script>
 
 <script src="./mlb_war.js"></script>
 

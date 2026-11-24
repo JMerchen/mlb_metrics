@@ -28,6 +28,7 @@ const MW_COLUMNS = [
 ["rar", "Above replacement", "vs. repl.", 1, "Runs he was worth over a replacement player in his playing time", "all hitter pitcher"],
 ["raa", "Above average", "vs. avg.", 1, "Runs he was worth over the average player at his position", "all hitter pitcher"],
 ["batting", "Batting", "Bat", 1, "Runs at the plate against the average hitter at his position, each plate appearance valued in its situation and graded for the pitchers and parks he faced", "all hitter"],
+["running", "Running", "Run", 1, "Runs on the bases against the average runner: steals and caught stealings, and extra bases (or outs) on teammates' hits and outs against what is usual for that play", "all hitter"],
 ["fielding", "Fielding", "Fld", 1, "Runs in the field against the average at his position: outs made over what balls hit that way usually become", "all hitter pitcher"],
 ["pitching", "Pitching", "Pit", 1, "Runs saved against the average starter or reliever, with his fielders' part taken out", "all pitcher"],
 ]
@@ -129,7 +130,7 @@ return `<div class="tabGroup pvSides">${MW_KINDS.map(([key, label]) => `<button 
 function mwSummaryHtml(data, count){
 const through = data.through ? ` through ${mwEsc(data.through)}` : ""
 return `<div class="pvSummary"><span><b>${count}</b> player${count === 1 ? "" : "s"} · ${mwEsc(data.season)} season${through} · ${mwNumber(data.runs_per_win, 1)} runs = 1 win</span>
-<span class="pvNote">Baserunning and a catcher's framing are not in it yet.</span></div>`
+<span class="pvNote">A catcher's framing and throwing are not in it yet.</span></div>`
 }
 
 function mwTableHtml(data, state){
@@ -157,7 +158,7 @@ module.exports = { MW_POSITIONS, MW_AGES, MW_DIVISIONS, mwKindOf, mwState, mwSho
 // ---- the page ----
 
 if(typeof document !== "undefined"){ (function(){
-const view = {seasons: [], data: {}, state: {season: null}}
+const view = {seasons: [], data: {}, state: {season: null}, teamSort: "expected", teamDir: -1}
 const controls = () => document.getElementById("mlbWarControls")
 const table = () => document.getElementById("mlbWarTable")
 const fetchJson = async file => {
@@ -172,7 +173,14 @@ view.state = mwState(view.state)
 if(withControls){ controls().innerHTML = mwControlsHtml(view.seasons, view.state) }
 const data = view.data[view.state.season]
 table().innerHTML = data ? mwTableHtml(data, view.state) : "Loading..."
+renderTeams()
 if(typeof installVizTips === "function"){ installVizTips() }
+}
+
+function renderTeams(){
+const el = document.getElementById("mlbWarTeams"), data = view.data[view.state.season]
+if(!el || typeof wtTeamsHtml !== "function"){ return }
+el.innerHTML = data ? wtTeamsHtml(data, {unit: "runs", seasonGames: 162, sort: view.teamSort, dir: view.teamDir, name: mwTeam, logo: mwLogo}) : ""
 }
 
 function showSeason(season){
@@ -213,6 +221,15 @@ return
 }
 if(e.target.closest("[data-mw-more]")){ view.state.limit = 100000; render(false) }
 })
+const teams = document.getElementById("mlbWarTeams")
+if(teams){ teams.addEventListener("click", e => {
+const sort = e.target.closest("[data-team-sort]")
+if(!sort){ return }
+view.teamDir = view.teamSort === sort.dataset.teamSort ? -view.teamDir : -1
+view.teamSort = sort.dataset.teamSort
+renderTeams()
+if(typeof installVizTips === "function"){ installVizTips() }
+}) }
 fetchJson("mlb_war").then(index => {
 view.seasons = index.seasons || []
 if(view.seasons.length){ showSeason(view.seasons[0]) }

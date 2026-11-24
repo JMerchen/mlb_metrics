@@ -83,6 +83,9 @@ jobs:
       - name: Run mlb_war.js unit tests
         run: node --test docs/mlb_war.test.js
 
+      - name: Run war_teams.js unit tests
+        run: node --test docs/war_teams.test.js
+
       - name: Run the simulator fit's unit tests
         run: node --test docs/nfl_sim_fit.test.js
 
