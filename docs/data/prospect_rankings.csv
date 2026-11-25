@@ -1,7 +1,7 @@
 consensus_rank,rank,player_name,team,position,highest_level,age,eta,fv,source_url,consensus_score,sources_ranked_by,source_ranks
 1,1.0,Jesús Made,Milwaukee Brewers,SS,AA,19,2027,65,https://www.mlb.com/prospects/stats/top-prospects,1.3333333333333333,3,"{'MLB Pipeline': 1.0, 'Just Baseball': 1.0, 'FanGraphs': 2.0}"
 2,3.0,Leo De Vries,Athletics,SS,AA,20,2027,60,https://www.mlb.com/prospects/stats/top-prospects,4.0,3,"{'MLB Pipeline': 3.0, 'Just Baseball': 3.0, 'FanGraphs': 6.0}"
-3,2.0,Franklin Arias,Boston Red Sox,SS,AAA,20,2026,60+,https://www.mlb.com/prospects/stats/top-prospects,6.0,3,"{'MLB Pipeline': 2.0, 'Just Baseball': 2.0, 'FanGraphs': 14.0}"
+3,2.0,Franklin Arias,Boston Red Sox,SS,AAA,21,2026,60+,https://www.mlb.com/prospects/stats/top-prospects,6.0,3,"{'MLB Pipeline': 2.0, 'Just Baseball': 2.0, 'FanGraphs': 14.0}"
 4,4.0,Josue De Paula,Los Angeles Dodgers,OF,AA,21,2027,60,https://www.mlb.com/prospects/stats/top-prospects,10.333333333333334,3,"{'MLB Pipeline': 4.0, 'Just Baseball': 10.0, 'FanGraphs': 17.0}"
 5,6.0,Eli Willits,Washington Nationals,SS,A+,18,2028,55+,https://www.mlb.com/prospects/stats/top-prospects,11.0,3,"{'MLB Pipeline': 6.0, 'Just Baseball': 12.0, 'FanGraphs': 15.0}"
 6,4.0,Ryan Sloan,Seattle Mariners,RHP,AA,20,2027,60,https://www.justbaseball.com/prospects/top-100-mlb-prospects/,11.666666666666666,3,"{'MLB Pipeline': 11.0, 'Just Baseball': 4.0, 'FanGraphs': 20.0}"
