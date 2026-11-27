@@ -26,7 +26,8 @@ whether the game is under a roof. Tested and NOT helping: points
 scored/allowed, success rate, early-down EPA, separate pass/rush EPA,
 neutral-situation pass rate, drives per game, red-zone TD rate,
 turnovers, a season-to-date league scoring level, gradient boosting on
-all of them. Temperature and wind help on history (10.57 with the QB
+all of them, and (2026-11-27, scripts/backtest_nfl_totals_team_run.py)
+how far each team has run over or under its predictions so far. Temperature and wind help on history (10.57 with the QB
 term) but weren't published before kickoff - see the weather note below.
 Two seasons of QB history instead of one: 10.63, not worth it.
 Given the market's total the prediction still adds nothing (coefficient

@@ -73,16 +73,27 @@ RESULT (2026-11-23):
   average team's points above replacement taken off both sides, through
   the Pythagorean curve; 2.07 by the books (the league's 8.25 wins less
   the average team's 6.18 players' WAR); and the five real teams nearest
-  it won 3, 2, 3, 6 and 2. Wins on players' WAR added up: slope 1.35
+  it won 3, 3, 3, 2 and 4. Wins on players' WAR added up: slope 1.35
   (+-0.06), r 0.78 - the rated players' sum is narrower than real
-  records (spread 1.62 wins against 3.16), because linemen and coverage
-  are not in it and every player is pulled toward average. What is left
-  splits in two: NOT CREDITED (real points through the curve, less
-  expected wins; spread 1.34) and CLOSE GAMES (wins less real points
-  through the curve; 1.45). To the next season (288 pairs): wins carry
-  at 0.37, expected wins 0.37, not credited 0.31, close games 0.04. Next
-  season's wins on this season's three parts: 0.56 (+-0.12), 0.47
-  (+-0.14), 0.03 (+-0.12). So close games are luck, and not credited is
+  records, because linemen and coverage are not in it, every player is
+  pulled toward average, and a defender is rated only on plays made.
+
+  So the team table takes the DEFENSE AS A UNIT (2026-11-27): what the
+  offenses it faced did, less what their own players, blocking and the
+  setting explain (fit_offense's attrs["defense"]; r 0.97-0.99 with plain
+  EPA saved). With defenders added up instead, expected wins spread 1.62
+  against 3.16 for real wins and missed them by 2.13; with the unit,
+  2.33 and 1.89 (real points through the curve miss by 1.45). 2026
+  through week 11: Dallas third of 32 by defenders added up (-19
+  points), fifteenth by the unit (-92).
+
+  What is left splits in two: NOT CREDITED (real points through the
+  curve, less expected wins; spread 1.12) and CLOSE GAMES (wins less
+  real points through the curve; 1.45). To the next season (288 pairs):
+  wins carry at 0.37, expected wins 0.37, not credited 0.17, close games
+  0.04. Next season's wins on this season's three parts: 0.51 (+-0.08),
+  0.61 (+-0.16), 0.03 (+-0.12). So close games are luck, and not
+  credited - now the offensive line, special teams and the like - is
   skill the play-by-play cannot hand to a player.
 
 Usage:

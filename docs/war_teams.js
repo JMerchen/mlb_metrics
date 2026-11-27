@@ -61,7 +61,8 @@ expected: `The wins its players' ${unit} make: an average team plus what its pla
 uncredited: `Wins in its real ${unit === "runs" ? "run" : "point"} differential that no player's ledger holds`,
 close: `Wins beyond what its ${unit} scored and allowed make: how they fell across games`,
 offense: `Its players' ${unit} on offense against the league's average team`,
-defense: `Its players' ${unit} saved on defense against the league's average team`,
+defense: unit === "points" ? "Points its defense, as a unit, took off the offenses it faced, against the league's average defense"
+: `Its players' ${unit} saved on defense against the league's average team`,
 }
 }
 
