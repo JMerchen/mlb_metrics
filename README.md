@@ -5932,7 +5932,9 @@ level wins ... That number should be tested and built a smart manner";
   - Is the leftover luck? NFL (320 team-seasons): close games carry at
     0.04 and predict nothing - luck; not credited carries at 0.31 and
     predicts next season nearly as well per win as expected wins (0.47
-    against 0.56) - unmeasured skill (line, coverage, coaching). MLB (60
+    against 0.56) - unmeasured skill (line, coverage, coaching).
+    (Superseded 2026-11-27: with the defense as a unit, 0.17 and 0.61
+    against 0.51 - see "The Cowboys question" below.) MLB (60
     team-seasons): both carry at about 0.2 half to half; mostly luck but
     not proven, and the page says so.
 - **Comparison** (How it works, `#war-compared`): a part-by-part table
@@ -5942,6 +5944,46 @@ level wins ... That number should be tested and built a smart manner";
   framing, position adjustment, history; different on purpose: batting
   in its situation), and football against nflWAR, PFF, Approximate Value
   and DYAR / QBR.
+
+## The Cowboys question: NFL team WAR's defense, and totals for a team on a run (2026-11-27)
+
+Why (user: "Why do we evaluate the cowboys so highly? ... Why can't our
+model adjust to how bad they are?", then "Fix the Team WAR table and look
+at the totals"). Through 11 games Dallas was 5-6, third in scoring and
+last in points allowed.
+
+- **The picks were not the problem.** Our average Dallas win chance over
+  those 11 games was 58%, the market's 59%; the power ranking had them
+  14th. On history, shootout teams (top-6 offense, bottom-6 defense) won
+  55% where we said 52%, and 70%+ favourites won 80%.
+- **The Team WAR table was** (fixed). A defender is rated only on the
+  plays he makes, so a team's defenders added up cannot see a bad
+  defense: it had Dallas third in expected wins. `team_table` now takes
+  the offense from its rated players and the defense as a unit -
+  `fit_offense(...).attrs["defense"]`, what the offenses it faced did
+  less what their own players, blocking and the setting explain (r
+  0.97-0.99 with plain EPA saved). The replacement baseline still uses
+  the defenders' points above replacement. Dallas: fifteenth. Ten
+  seasons (`research_nfl_player_value.py --only-teams`): expected wins
+  spread 2.33 (was 1.62; real 3.16) and miss real wins by 1.89 (was
+  2.13; real points through the curve 1.45); replacement team 2.7 of 17,
+  unchanged. Not credited now means the line, special teams and
+  penalties: it carries to the next season at 0.17 (was 0.31) but still
+  predicts next season's wins at 0.61 (+-0.16) a win against 0.51
+  (+-0.08) for expected wins; close games 0.04 and 0.03 - luck. Player
+  ratings are untouched.
+- **The totals: looked, and left alone**
+  (`scripts/backtest_nfl_totals_team_run.py`). Dallas's games averaged
+  62.5 against our 51 and the market's 52. On 2,127 games our totals are
+  not compressed in general (actual on ours has a slope of 0.82), and
+  shootout-team games came in at 48.5 against our 47.9 and the market's
+  49.1. A team 10+ a game over our totals through 11 games is 2% of
+  team-seasons. A team's run so far does predict a little of its next
+  miss against us (teams running 6+ over: ours 46.3, market 48.1, actual
+  48.9) and nothing against the market - but teaching the model that,
+  walk-forward on 1,615 games, made it worse at every setting (MAE
+  10.360 -> 10.386-10.402; over/under leans of 5+ right 63.7% -> 61.6%),
+  because most runs do not continue. Not adopted.
 
 ## MLB wins above replacement (`mlb_war.py`, `scripts/build_mlb_war.py`, `docs/mlb_war.js`)
 

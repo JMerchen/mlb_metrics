@@ -255,11 +255,16 @@ def fit_offense(plays: pd.DataFrame, positions: pd.Series, context: bool = True,
     his position's level and a reserve toward that level less the gap, and
     replacement is the level less the gap. With gaps=None each tier's
     level is estimated from the season itself - how the gaps were
-    measured."""
+    measured.
+
+    The frame's attrs["defense"] has, per defense, the points the unit
+    took off the offenses it faced, against the league's average defense
+    (team_table uses it; a defender's own rating does not)."""
     plays = plays.copy()
     tier_of = {"pass": _tiers(plays, "qb", "pass", positions), "rush": _tiers(plays, "rusher", "rush", positions),
                "catch": _tiers(plays, "receiver", "catch", positions)}
     out = []
+    defense = pd.Series(dtype=float)
     for part, spec in PARTS.items():
         rows = plays["kind"].isin(spec["rows"])
         if spec.get("complete"):
@@ -294,6 +299,17 @@ def fit_offense(plays: pd.DataFrame, positions: pd.Series, context: bool = True,
                 codes, levels_n, _ = _codes(d[column].astype(str))
                 fixed.append((column, codes - 1, max(levels_n - 1, 0)))
         fit = mixed_fit(target, fixed, random)
+        # What the offense across from it explains of each play; the rest
+        # is the defense's (and chance). Summed by defense below.
+        explained = np.zeros(len(d))
+        for name, codes, _ in fixed + random:
+            if name == "team_defteam":
+                continue
+            effects = (fit["fixed"] if name in fit["fixed"] else fit["random"])[name]
+            on = np.asarray(codes) >= 0
+            explained[on] += effects[np.asarray(codes)[on]]
+        left = target - explained
+        defense = defense.add(pd.Series(left - left.mean()).groupby(d["defteam"].to_numpy()).sum(), fill_value=0.0)
         for column, role, codes, index, level_codes, level_index, tier, deficit in players:
             level_effect = fit["fixed"][f"{column}_level"]
             if len(level_effect) < len(level_index):
@@ -323,8 +339,14 @@ def fit_offense(plays: pd.DataFrame, positions: pd.Series, context: bool = True,
                 "effect": total - center, "average": average - center, "replacement": replacement - center,
                 "raw": raw - float(y.mean()),
             }))
-    return pd.concat(out, ignore_index=True) if out else pd.DataFrame(
+    result = pd.concat(out, ignore_index=True) if out else pd.DataFrame(
         columns=["player_id", "team", "part", "role", "tier", "plays", "effect", "average", "replacement", "raw"])
+    # Points each defense, as a unit, took off the offenses it faced: what
+    # those offenses did against it, less what their own players, blocking
+    # and the setting explain - summed, not pulled toward average, and set
+    # against the league (so it sums to zero).
+    result.attrs["defense"] = -defense
+    return result
 
 
 def offense_value(effects: pd.DataFrame) -> pd.DataFrame:
@@ -554,41 +576,50 @@ def team_records(schedules: pd.DataFrame) -> pd.DataFrame:
 
 
 def team_table(records: pd.DataFrame, points: pd.DataFrame) -> pd.DataFrame:
-    """Each team's season as its rated players explain it, and what is
-    left over. `points` has each team's players' points above replacement
-    on offense (kickers with them) and defense. One row per team:
+    """Each team's season as its players explain it, and what is left
+    over. `points` has, per team: offense (its rated offensive players'
+    and kicker's points above replacement), defense (the points its
+    defense took off the offenses it faced, against the league's average
+    defense - fit_offense's attrs["defense"]) and defenders (its rated
+    defenders' points above replacement). One row per team:
 
       wins, losses, scored, allowed   what happened
-      offense, defense   its rated players' points against the league's
-                         average team
-      expected           the wins those points make: a league-average
-                         team plus them, through the Pythagorean curve
+      offense, defense   those points against the league's average team
+      expected           the wins they make: a league-average team plus
+                         them, through the Pythagorean curve
       baseline           the wins of a REPLACEMENT TEAM: an average team
                          with the average team's points above replacement
                          taken away on both sides, through the same curve
       war                expected - baseline: wins above a replacement
                          team. baseline + war = expected.
       uncredited         the wins its real points make, less expected:
-                         what the team did that no rated player's ledger
-                         holds - the line, coverage, coaching
+                         what neither its rated offensive players nor its
+                         defense's results on runs and passes hold - the
+                         offensive line, special teams, penalties
       close              wins - what its real points make: how its points
                          fell across games
 
+    Why the defense is the unit and not its defenders added up
+    (2026-11-27, user: "Why do we evaluate the cowboys so highly?"): a
+    defender is rated only on the plays he makes, so the sum of a team's
+    defenders cannot see a bad defense. Through week 11 of 2026 Dallas's
+    defenders summed to 19 points below average while the unit - last in
+    the league - had given up far more, and the table ranked Dallas third.
+    A defender's own WAR is unchanged; only its league average is still
+    used here, for how far a replacement defense sits below an average
+    one.
+
     What the leftovers are was tested on 320 team-seasons
-    (scripts/research_nfl_player_value.py): `close` does not carry to
-    the next season (r 0.04) and does not predict it - luck. `uncredited`
-    carries (0.31) and predicts next season's wins nearly as well per win
-    as `expected` does - skill the play-by-play cannot hand to a player.
-    """
+    (scripts/research_nfl_player_value.py)."""
     t = records.copy()
     games = t["games"]
     league = t["scored"].sum() / games.sum()
     p = points.reindex(t.index).fillna(0.0)
-    per_game = {side: p[side].sum() / games.sum() for side in ("offense", "defense")}
+    per_game = {side: p[side].sum() / games.sum() for side in ("offense", "defense", "defenders")}
     for side in ("offense", "defense"):
         t[side] = p[side] - per_game[side] * games
     t["expected"] = games * pythagorean(league * games + t["offense"], league * games - t["defense"])
-    t["baseline"] = games * pythagorean(league - per_game["offense"], league + per_game["defense"])
+    t["baseline"] = games * pythagorean(league - per_game["offense"], league + per_game["defenders"])
     t["war"] = t["expected"] - t["baseline"]
     t["losses"] = games - t["wins"]
     actual = games * pythagorean(t["scored"], t["allowed"])
@@ -636,7 +667,8 @@ def build(season: int, raw_dir: str | None = None) -> dict:
     offense = offense_value(effects)
     # Each team's points above replacement: offense by the team a player was on for each play.
     points = pd.DataFrame({"offense": ((effects["effect"] - effects["replacement"]) * effects["plays"]).groupby(effects["team"].replace(TEAM_ALIASES)).sum()})
-    points["defense"] = 0.0
+    points["defense"] = effects.attrs["defense"].rename(index=TEAM_ALIASES).groupby(level=0).sum()
+    points["defenders"] = 0.0
     main_team = effects.groupby(["player_id", "team"])["plays"].sum().reset_index().sort_values("plays", ascending=False) \
         .drop_duplicates("player_id").set_index("player_id")["team"]
     games = pd.concat([plays[["game_id", c]].rename(columns={c: "player_id"}) for c in ("qb", "receiver", "rusher")]) \
@@ -657,7 +689,7 @@ def build(season: int, raw_dir: str | None = None) -> dict:
     snaps = defense_snaps(load_table("snap_counts", season, raw_dir), roster)
     defense = defense_value(defense_table(defense_credits(pbp), snaps, roster, depth)) if not snaps.empty else pd.DataFrame()
     if len(defense):
-        points["defense"] = points["defense"].add(defense.groupby(defense["team"].replace(TEAM_ALIASES))["par"].sum(), fill_value=0.0)
+        points["defenders"] = points["defenders"].add(defense.groupby(defense["team"].replace(TEAM_ALIASES))["par"].sum(), fill_value=0.0)
     for row in defense.itertuples():
         if row.snaps < MIN_DEFENSE_SNAPS:
             continue

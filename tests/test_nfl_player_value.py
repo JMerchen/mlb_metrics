@@ -208,15 +208,35 @@ def test_team_records_count_a_tie_as_half_a_win():
 
 def test_the_team_table_turns_players_points_into_wins_above_a_replacement_team():
     records = pd.DataFrame({"games": [17, 17, 17], "wins": [13.0, 8.5, 4.0], "scored": [480, 380, 280], "allowed": [300, 380, 460]}, index=["A", "B", "C"])
-    points = pd.DataFrame({"offense": [260.0, 165.0, 70.0], "defense": [90.0, 50.0, 10.0]}, index=["A", "B", "C"])
+    # Offense above replacement; the defense as a unit against the league's average; its defenders above replacement.
+    points = pd.DataFrame({"offense": [260.0, 165.0, 70.0], "defense": [40.0, 0.0, -40.0], "defenders": [60.0, 50.0, 40.0]}, index=["A", "B", "C"])
     t = v.team_table(records, points)
     league = 1140 / 51
     assert t.loc["B", "offense"] == 0 and t.loc["B", "defense"] == 0 and t.loc["B", "expected"] == pytest.approx(8.5)
     assert t.loc["A", "offense"] == pytest.approx(95) and t.loc["A", "defense"] == pytest.approx(40)
     assert t.loc["A", "expected"] == pytest.approx(17 * v.pythagorean(league * 17 + 95, league * 17 - 40))
-    # A replacement team: the average team's points above replacement taken away on both sides.
+    # A replacement team: the average team's points above replacement taken away on both sides -
+    # the defenders' average, since the unit's own number is against an average defense.
     assert t.loc["B", "baseline"] == pytest.approx(17 * v.pythagorean(league - 165 / 17, league + 50 / 17))
     assert 1.5 < t.loc["B", "baseline"] < 4
     assert (t["baseline"] + t["war"] == t["expected"]).all()
     assert (t["expected"] + t["uncredited"] + t["close"]).round(6).tolist() == [13.0, 8.5, 4.0]
     assert t.loc["A", "close"] == pytest.approx(13 - 17 * v.pythagorean(480, 300))
+
+
+def test_a_defense_is_measured_as_a_unit_by_what_the_offenses_it_faced_did():
+    rng = np.random.default_rng(5)
+    season = _season(rng)
+    # Every play against Buffalo's defense is worth 0.3 more to the offense: a bad unit,
+    # though no defender is named anywhere.
+    season.loc[season["defteam"] == "BUF", "epa"] += 0.3
+    season["air_epa"] = np.where(season["complete_pass"] == 1, season["epa"] * 0.6, np.nan)
+    season["yac_epa"] = np.where(season["complete_pass"] == 1, season["epa"] * 0.4, np.nan)
+    effects = v.fit_offense(v.offense_plays(season), _positions())
+    unit = effects.attrs["defense"]
+    against_buffalo = (season["defteam"] == "BUF").sum()
+    assert unit["BUF"] < 0 < unit["KC"] and abs(unit.sum()) < 1e-6          # against the league: sums to zero
+    # The truth is 0.15 a play worse than the average of the two. In a two-team league Kansas City's
+    # offense only ever faces this defense, so the model cannot tell them apart and splits it: the
+    # defense must still be charged a good part of it, and not more than all of it.
+    assert -0.15 * against_buffalo * 1.1 < unit["BUF"] < -0.15 * against_buffalo * 0.3
